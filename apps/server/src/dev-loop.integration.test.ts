@@ -7,6 +7,7 @@ import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
 import {
   acme,
+  addLlmKey,
   alice,
   bob,
   failedWith,
@@ -279,6 +280,7 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
   )
   expect(await setDevLoop(alice, { ...defaultDevLoopSettings, checkRounds: 2 })).toEqual(succeeded)
   await stack.agentHost('Interrupted loop host', { routesModelCalls: true })
+  await addLlmKey(lee, 'Anthropic')
   await connectGitHub(alice)
   const { id } = await newDevChat()
   await workspaceWithChecks(id, { checks: { Slow: 'sleep 3 && exit 1' } })
