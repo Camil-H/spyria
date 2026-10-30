@@ -1,6 +1,7 @@
 import type { ChatId, HarnessId, MemberId, RuntimeHostId, RuntimeId, WorkspaceId } from '@spyria/kernel'
 import type { HostLoad, IdleCutoffs, Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
+import type { PackageCacheScope } from './sandbox-provider.ts'
 
 type HostSecret = 'claimCode' | 'token'
 
@@ -30,6 +31,7 @@ export type RuntimeRepository = {
   lockIdle(workspaceId: WorkspaceId, cutoffs: IdleCutoffs): Promise<Runtime[]>
   findByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
   localHarnessOf(runtime: Runtime): Promise<HarnessId | undefined>
+  packageCacheScopeOf(runtime: Runtime): Promise<PackageCacheScope | undefined>
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
   delete(runtime: Runtime): Promise<void>

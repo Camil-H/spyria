@@ -43,6 +43,28 @@ test.each([
 
 const contentId = `sha256:${'b'.repeat(64)}`
 
+const packageCacheKey = '0123456789abcdef0123456789abcdef'
+
+test('a create with a package cache key mounts that cache volume at the package cache directory; without one, no cache is mounted', () => {
+  expect(parseCommand('create', { ...create, packageCacheKey })).toEqual({ op: 'create', ...create, packageCacheKey })
+  const mountsOf = (body: ReturnType<typeof containerBodyOf>) =>
+    body.HostConfig.Mounts.map(({ Source, Target }) => [Source, Target])
+  expect(mountsOf(containerBodyOf({ prefix: 'spyria-', ...create, packageCacheKey }))).toContainEqual([
+    `spyria-cache-${packageCacheKey}`,
+    '/var/cache/spyria',
+  ])
+  expect(mountsOf(containerBodyOf({ prefix: 'spyria-', ...create })).map(([, target]) => target)).not.toContain(
+    '/var/cache/spyria',
+  )
+})
+
+test.each(['../spyria-host', packageCacheKey.toUpperCase(), `${packageCacheKey}0`, 'short', 42])(
+  'refuses the package cache key %p',
+  (refusedKey) => {
+    expect(() => parseCommand('create', { ...create, packageCacheKey: refusedKey })).toThrow('refused')
+  },
+)
+
 test('a workspace create sets only the session key in the environment, a personal one adds the harness paths', () => {
   expect(containerBodyOf({ prefix: 'spyria-', ...create }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
   expect(containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).Env).toEqual([

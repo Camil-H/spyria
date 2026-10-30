@@ -33,11 +33,12 @@ Removing a host (or a member's machine) disconnects it: `spyria-host` logs "This
 docker rm -f spyria-host
 docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
 docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-cache-)
 docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
 docker volume rm spyria-host
 ```
 
-The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads, and runtimes do not remove them when they are removed. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
 
 ## Where a chat runs
 
@@ -54,7 +55,7 @@ While the agent is working, both ask for confirmation, because they stop the cur
 
 When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. That output is redacted like the rest of the agent's output and kept in the agent's logs.
 
-Each runtime has three volumes (its workspace, its home and its temporary directory), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
+Each runtime has three volumes (its workspace, its home and its temporary directory), plus, for a dev chat, the package cache its owner shares across their runtimes on the same repository (`<deployment>-cache-*`), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
 
 ## Isolation and egress
 

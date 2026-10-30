@@ -788,7 +788,7 @@ export const startAgentStack = async ({
 export type { ContainerAgent, FakeContainer, Launch, ModelCall }
 
 const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
-type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string }
+type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string; packageCacheKey?: string }
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 
 export const asMember = async (userId: string, method: string, path: string, body?: object, workspaceId = acme) => {
@@ -872,6 +872,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       ownerId,
       signedIn = [],
       relayLimitMilliseconds,
+      relayVersion,
     }: {
       memoryGibibytes?: number
       containerAgent?: ContainerAgent
@@ -879,6 +880,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       ownerId?: string
       signedIn?: string[]
       relayLimitMilliseconds?: number
+      relayVersion?: number
     } = {},
   ) => {
     const id = crypto.randomUUID()
@@ -1065,6 +1067,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
+          ...(relayVersion && { relayVersion }),
           ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {
             cpus: 4,

@@ -18,6 +18,8 @@ export class Refused extends Error {
 const imagePattern = /^sha256:[a-f0-9]{64}$/
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
+const packageCacheKeyPattern = /^[a-f0-9]{32}$/
+const packageCacheTarget = '/var/cache/spyria'
 const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
@@ -33,7 +35,7 @@ type ContainerInfo = {
   State?: { Running?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
-type CreateRequest = { runtimeId: string; image: string; apiKey: string }
+type CreateRequest = { runtimeId: string; image: string; apiKey: string; packageCacheKey?: string }
 export type Command =
   | ({ op: 'create' } & CreateRequest)
   | { op: 'prepare'; image: string }
@@ -50,7 +52,7 @@ export const parseCommand = (op: unknown, args: unknown): Command => {
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
   const allowedFields = {
-    create: ['runtimeId', 'image', 'apiKey'],
+    create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
     prepare: ['image'],
     installed: ['runtimeId', 'harness'],
     install: ['runtimeId', 'harness'],
@@ -70,6 +72,9 @@ export const parseCommand = (op: unknown, args: unknown): Command => {
     runtimeId,
     image: imageOf(),
     apiKey: fieldOf(fields, 'apiKey', apiKeyPattern, 'invalid API key'),
+    ...(fields.packageCacheKey !== undefined && {
+      packageCacheKey: fieldOf(fields, 'packageCacheKey', packageCacheKeyPattern, 'invalid package cache key'),
+    }),
   }
 }
 
@@ -81,6 +86,7 @@ export const containerBodyOf = ({
   runtimeId,
   image,
   apiKey,
+  packageCacheKey,
   personal = false,
 }: CreateRequest & { prefix: string; personal?: boolean }) => {
   const name = containerNameOf(prefix, runtimeId)
@@ -117,6 +123,9 @@ export const containerBodyOf = ({
             Target: target,
           }),
         ),
+        ...(packageCacheKey
+          ? [{ Type: 'volume', Source: `${prefix}cache-${packageCacheKey}`, Target: packageCacheTarget } as const]
+          : []),
         ...(personal ? [...credentialsMountsOf(prefix), harnessesMountOf(prefix)] : []),
       ],
     },
@@ -184,12 +193,12 @@ export const createCommandRunner = ({
     })
     if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
-  const create = async ({ runtimeId, image, apiKey }: CreateRequest) => {
-    await Promise.all([createNetwork(networkNameOf(prefix, runtimeId)), prepare(image)])
+  const create = async (request: CreateRequest) => {
+    await Promise.all([createNetwork(networkNameOf(prefix, request.runtimeId)), prepare(request.image)])
     await docker(
       'POST',
-      `/containers/create?name=${containerNameOf(prefix, runtimeId)}`,
-      containerBodyOf({ prefix, runtimeId, image, apiKey, personal }),
+      `/containers/create?name=${containerNameOf(prefix, request.runtimeId)}`,
+      containerBodyOf({ prefix, ...request, personal }),
     )
   }
   const run = async (command: Command) => {
