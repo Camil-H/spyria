@@ -330,7 +330,9 @@ test.describe('Sidebar', () => {
       await sendMessage(page, 'Question to the agent')
       await composerOf(page).fill('Draft for later')
       await chatLinkOf(page, 'Welcome').click()
-      await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
+      await expect(
+        chatLinkOf(page, 'Setup helper').getByRole('img', { name: 'Unread messages · The agent is done' }),
+      ).toBeVisible()
       await expect(draftIconOf(page, 'Setup helper')).toBeVisible()
 
       await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
