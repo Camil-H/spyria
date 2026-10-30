@@ -1,7 +1,7 @@
 import { runCommand } from './checkout.ts'
 
 export type CheckResult = { name: string; command: string; exitCode?: number; output: string }
-export type ChecksRun = { state: 'idle' | 'running' | 'finished'; results: CheckResult[] }
+export type ChecksRun = { state: 'idle' | 'running' | 'finished'; names: string[]; results: CheckResult[] }
 type Check = { name: string; command: string; timeoutMilliseconds: number }
 
 const shownOutputLines = 80
@@ -37,7 +37,7 @@ export const createChecksRunner = ({
   cwd: string
   environment: () => Record<string, string>
 }) => {
-  let run: ChecksRun = { state: 'idle', results: [] }
+  let run: ChecksRun = { state: 'idle', names: [], results: [] }
   const resultOf = async ({ name, command, timeoutMilliseconds }: Check): Promise<CheckResult> => {
     try {
       const { exitCode, output } = await runCommand(command, cwd, environment(), timeoutMilliseconds, () => undefined)
@@ -55,7 +55,7 @@ export const createChecksRunner = ({
       if (run.state === 'running') return run
       const checks = checksOf(body)
       if ('failure' in checks) return checks
-      run = { state: 'running', results: [] }
+      run = { state: 'running', names: checks.map(({ name }) => name), results: [] }
       void runAll(run, checks)
       return run
     },

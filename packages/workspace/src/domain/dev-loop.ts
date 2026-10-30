@@ -1,4 +1,11 @@
-import type { DevLoopPipeline, DevLoopSettings, DevLoopStepConfig, DevLoopStepKind } from '@spyria/kernel'
+import {
+  type DevLoopPipeline,
+  type DevLoopSettings,
+  type DevLoopStepConfig,
+  type DevLoopStepKind,
+  isDevLoopSettings,
+  isInPublishingOrder,
+} from '@spyria/kernel'
 
 export const stepKindLabels: Record<DevLoopStepKind, string> = {
   command: 'Command',
@@ -35,7 +42,7 @@ export const withStepMoved = (steps: readonly DevLoopStepConfig[], index: number
   if (target < 0 || target >= steps.length) return steps
   const moved = [...steps]
   ;[moved[index], moved[target]] = [moved[target] as DevLoopStepConfig, moved[index] as DevLoopStepConfig]
-  return moved
+  return isInPublishingOrder(moved) ? moved : steps
 }
 
 export const withStepChanged = (
@@ -58,3 +65,6 @@ export const withoutPipeline = (settings: DevLoopSettings, repository: string) =
   ...settings,
   pipelines: settings.pipelines.filter((pipeline) => pipeline.repository !== repository),
 })
+
+export const invalidPipelineOf = (settings: DevLoopSettings) =>
+  settings.pipelines.find((pipeline) => !isDevLoopSettings({ ...settings, pipelines: [pipeline] }))

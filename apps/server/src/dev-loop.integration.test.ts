@@ -346,3 +346,11 @@ test('As a chat owner, Stop stops the dev loop while it runs a command, and turn
     ).map(({ payload }) => payload.settings.isOn),
   ).toContain(false)
 })
+
+test('As a member setting up the dev loop, I see the names of the checks GitHub reports on a branch, each once', async () => {
+  for (const name of ['unit', 'lint', 'unit']) pushCheckRun('main', name, 'success')
+  expect(await request(alice, 'GET', '/api/github/check-names?repository=acme%2Fapp&branch=main')).toEqual({
+    status: 200,
+    body: { names: ['lint', 'unit'] },
+  })
+})

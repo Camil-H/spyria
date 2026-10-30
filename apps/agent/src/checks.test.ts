@@ -29,14 +29,15 @@ const finishedChecks = async (call: ReturnType<typeof started>['call']) => {
 
 test('the checks the server sends run one after the other in the background, each with its exit code and the end of its output, both streams together', async () => {
   const { call } = started({ workspaceDirectory: workspaceNamed('two-checks') })
-  expect((await call('GET', '/api/workspace/checks')).body).toEqual({ state: 'idle', results: [] })
+  expect((await call('GET', '/api/workspace/checks')).body).toEqual({ state: 'idle', names: [], results: [] })
   const checks = [check('Lint', 'echo linted'), check('Types', 'echo "src/a.ts: type error" >&2 && exit 2')]
   expect(await call('POST', '/api/workspace/checks', { checks })).toMatchObject({
     status: 200,
-    body: { state: 'running' },
+    body: { state: 'running', names: ['Lint', 'Types'] },
   })
   expect(await finishedChecks(call)).toEqual({
     state: 'finished',
+    names: ['Lint', 'Types'],
     results: [
       { name: 'Lint', command: 'echo linted', exitCode: 0, output: 'linted' },
       {

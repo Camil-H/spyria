@@ -1,6 +1,14 @@
 import { expect, test } from 'bun:test'
 import { type DevLoopStepConfig, defaultDevLoopPipeline, defaultDevLoopSettings } from '@spyria/kernel'
-import { addableKindsOf, withoutPipeline, withoutStep, withPipeline, withStep, withStepMoved } from './dev-loop.ts'
+import {
+  addableKindsOf,
+  invalidPipelineOf,
+  withoutPipeline,
+  withoutStep,
+  withPipeline,
+  withStep,
+  withStepMoved,
+} from './dev-loop.ts'
 
 const lint: DevLoopStepConfig = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 }
 const review: DevLoopStepConfig = { kind: 'review', fixes: 2 }
@@ -24,6 +32,8 @@ test('commands can always be added; review, pull request and CI once each, and C
 test('a step moves up or down, never past either end; removing the pull request removes CI with it', () => {
   expect(withStepMoved([lint, review], 1, -1)).toEqual([review, lint])
   expect(withStepMoved([lint, review], 0, -1)).toEqual([lint, review])
+  expect(withStepMoved([lint, pullRequest, ci], 2, -1)).toEqual([lint, pullRequest, ci])
+  expect(withStepMoved([lint, pullRequest], 0, 1)).toEqual([lint, pullRequest])
   expect(withoutStep([lint, pullRequest, ci], 1)).toEqual([lint])
   expect(withoutStep([lint, pullRequest, ci], 0)).toEqual([pullRequest, ci])
 })
@@ -34,4 +44,10 @@ test('a pipeline replaces the one of its repository or is added; a repository pi
   expect(added.pipelines).toEqual([defaultDevLoopPipeline, app])
   expect(withPipeline(added, { ...app, steps: [] }).pipelines).toEqual([defaultDevLoopPipeline, { ...app, steps: [] }])
   expect(withoutPipeline(added, 'acme/app').pipelines).toEqual([defaultDevLoopPipeline])
+})
+
+test('the first pipeline that cannot be saved is found, so its tab can be shown', () => {
+  const broken = { repository: 'acme/app', setupCommand: null, steps: [{ ...lint, command: '' }] }
+  expect(invalidPipelineOf(withPipeline(defaultDevLoopSettings, broken))).toBe(broken)
+  expect(invalidPipelineOf(defaultDevLoopSettings)).toBeUndefined()
 })

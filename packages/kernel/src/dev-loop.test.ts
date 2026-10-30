@@ -60,6 +60,12 @@ test.each([
     withPipelines({ ...appPipeline, steps: [{ kind: 'ci', checks: null, fixes: 1 }, { kind: 'pull_request' }] }),
     false,
   ],
+  [
+    'a review after the pull request',
+    withPipelines({ ...appPipeline, steps: [{ kind: 'pull_request' }, { kind: 'review', fixes: 1 }] }),
+    false,
+  ],
+  ['two commands with one name', withPipelines({ ...appPipeline, steps: [lint, { ...lint, name: 'lint ' }] }), false],
   ['two pipelines for one repository', withPipelines(appPipeline, appPipeline), false],
   ['a cost limit of 0', { ...defaultDevLoopSettings, costLimitMicros: 0 }, false],
   ['no switch', { ...defaultDevLoopSettings, isOn: undefined }, false],

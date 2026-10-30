@@ -21,7 +21,8 @@ Nothing in Spyria started a turn without a member's prompt, and publishing was r
 
 ## Consequences
 
-- Publishing is no longer only on the owner's typed prompt: the loop pushes, but only after `finish_work`, green checks and a review without important findings. The owner agreed to it by working in a dev chat of a workspace whose admin turned the loop on.
+- Publishing is no longer only on the owner's typed prompt: the loop pushes, but only after `finish_work` and once every step the pipeline puts before the pull request has passed. The owner agreed to it by working in a dev chat of a workspace whose admin turned the loop on.
+- The setup command moves from the repository to the settings: anyone who can connect GitHub runs a command at the start of every dev chat's runtime, on Spyria's hosts and on members' machines, as anyone who could write `.spyria/setup.sh` did before; that file still runs when the pipeline sets no command. Every member can read the pipelines, so they hold no secret.
 - An App that has not accepted `actions: read` gives the loop annotations only, as it does `read_checks`.
 - CI logs and test output reach the owner's model provider. GitHub masks the secrets it knows about; anything else a job prints goes along.
 - Setup scripts must be safe to run twice.
