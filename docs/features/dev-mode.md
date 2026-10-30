@@ -123,7 +123,9 @@ When an admin turns the dev loop on, the agent of a dev chat checks its own work
 1. **Runs the checks** of `.spyria/dev-loop.json` in the runtime, one after the other, each with 20 minutes and the setup script's environment. A failing check goes back to the agent with the end of its output.
 2. **Has the diff reviewed**: it asks the agent to start a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review), guided by the repository's `REVIEW.md` and `AGENTS.md`, and to report each finding with `report_review` as important, nit or pre-existing. Important findings that were not reported before go back to the agent; nits and pre-existing defects do not.
 3. **Pushes the branch and opens the pull request**, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
-4. **Waits for CI**: every minute it reads the checks of the pushed commit, and once every counted check has finished, it sends the failing ones back to the agent, as `read_checks` shows them. When no check reports within 15 minutes, it hands over.
+4. **Waits for CI**: every minute it reads the checks of the pushed commit, and once every counted check has finished, it sends the failing ones back to the agent, as `read_checks` shows them. When no counted check reports within 15 minutes, it hands over.
+
+If the agent commits during the review turn, that commit goes through the checks and the review again before anything is pushed.
 
 ```json
 {
@@ -134,15 +136,16 @@ When an admin turns the dev loop on, the agent of a dev chat checks its own work
 
 `checks` maps each check's name to a command; without the file there are no checks. `ci` lists the CI checks that count; without it, every check of the pushed commit counts. An invalid file stops the loop with the reason.
 
-Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows where the loop is, the checks, the rounds used and the review findings. The loop hands over to the owner, with a notice, when:
+Each message the loop sends is the owner's, marked **Sent by the dev loop**, and runs on the owner's key; in the audit log it reads as the system acting for the owner. A **Dev loop** card in the chat shows where the loop is, the checks, the rounds used and how many review findings there were. The loop hands over to the owner, with a notice, when:
 
 - everything passed: "Ready for your review on pull request #N";
 - a phase still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again;
 - the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
-- the loop reaches its time limit, its cost limit, or the owner's monthly budget;
-- any member writes in the chat: the loop stops, and the message it had queued is not sent.
+- the loop reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
+- the owner presses **Stop**, or an admin turns the loop off;
+- any member writes in the chat, even before the loop starts: the loop stops, and the message it had queued is not sent.
 
-Only the owner's own prompts start a loop: `finish_work` from another member's prompt is refused. The loop works the same on a member's machine, except that a subscription is not metered, so the cost limit does not apply there.
+Only the owner's own prompts start a loop: `finish_work` from another member's prompt is refused. The loop works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
 
 Admins set the loop in **Workspace settings > Dev loop**, with the **Connect GitHub** permission: on or off, how many times the agent may fix failing checks (3), review findings (3, 0 turns the review off) and failing CI (2, 0 does not wait for CI), the time limit of a loop (4 hours) and an optional cost limit. See [decision 0025](../decisions/0025-dev-loop.md).
 
