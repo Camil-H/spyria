@@ -43,7 +43,7 @@ test.each([
 
 const contentId = `sha256:${'b'.repeat(64)}`
 
-const packageCacheKey = '0123456789abcdef0123456789abcdef'
+const packageCacheKey = 'c'.repeat(32)
 
 test('a create with a package cache key mounts that cache volume at the package cache directory; without one, no cache is mounted', () => {
   expect(parseCommand('create', { ...create, packageCacheKey })).toEqual({ op: 'create', ...create, packageCacheKey })
