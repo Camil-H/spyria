@@ -30,8 +30,7 @@ export type RuntimeRepository = {
   lockWaitingOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
   lockIdle(workspaceId: WorkspaceId, cutoffs: IdleCutoffs): Promise<Runtime[]>
   findByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
-  localHarnessOf(runtime: Runtime): Promise<HarnessId | undefined>
-  packageCacheScopeOf(runtime: Runtime): Promise<PackageCacheScope | undefined>
+  launchOptionsOf(runtime: Runtime): Promise<{ harness?: HarnessId; packageCache?: PackageCacheScope }>
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
   delete(runtime: Runtime): Promise<void>
