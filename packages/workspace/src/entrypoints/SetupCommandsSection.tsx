@@ -6,29 +6,31 @@ import {
   fieldClass,
   ghostButtonClass,
   LabelledSection,
-  smallGhostButtonClass,
+  labelClass,
   useGuardedAction,
 } from '@spyria/ui'
 import { useEffect, useRef, useState } from 'react'
-import { listedRepositoriesOf, type RepositoryListing, repositoryPromptOf } from '../domain/github.ts'
+import type { RepositoryListing } from '../domain/github.ts'
 import { setupCommandsOf } from '../queries/get-setup-commands.ts'
 import { useWorkspaceCommands } from './providers.tsx'
+import { NewRepositoryPicker, newRepositoryTab, type RepositoryTab, RepositoryTabs } from './RepositoryTabs.tsx'
 
 type Row = { repository: string | null; command: string }
 
+const defaultLabel = 'Default setup command'
 const rowsOf = (commands: readonly SetupCommand[]): Row[] => [
   { repository: null, command: commands.find(({ repository }) => repository === null)?.command ?? '' },
   ...commands.filter(({ repository }) => repository !== null),
 ]
 const commandsOf = (rows: Row[]) => rows.filter(({ command }) => command.trim() !== '')
+const repositoriesOf = (rows: Row[]) => rows.flatMap(({ repository }) => (repository === null ? [] : [repository]))
 
 export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
   const stored = useQuery(setupCommandsOf, workspaceId)
   const [rows, setRows] = useState(rowsOf(stored))
+  const [selected, setSelected] = useState<RepositoryTab>(null)
   const [listing, setListing] = useState<RepositoryListing>({ state: 'loading' })
-  const repositories = listedRepositoriesOf(listing)
-  const [added, setAdded] = useState('')
   const [isSaved, setIsSaved] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
   const [blankRepository, setBlankRepository] = useState<string | null>(null)
@@ -41,8 +43,11 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
     )
   }, [commands, workspaceId])
   useEffect(() => {
-    if (!isDirty) setRows(rowsOf(stored))
-  }, [stored, isDirty])
+    if (isDirty) return
+    setRows(rowsOf(stored))
+    const isKnown = selected === newRepositoryTab || stored.some(({ repository }) => repository === selected)
+    if (!isKnown) setSelected(null)
+  }, [stored, isDirty, selected])
   const edit = (next: Row[]) => {
     edits.current += 1
     setRows(next)
@@ -52,7 +57,10 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
   }
   const save = () => {
     const blank = rows.find(({ repository, command }) => repository !== null && command.trim() === '')
-    if (blank?.repository) return setBlankRepository(blank.repository)
+    if (blank?.repository) {
+      setSelected(blank.repository)
+      return setBlankRepository(blank.repository)
+    }
     const savedEdits = edits.current
     return run(async () => {
       await commands.setSetupCommands({ workspaceId, commands: commandsOf(rows) })
@@ -60,7 +68,8 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
       if (edits.current === savedEdits) setIsDirty(false)
     })
   }
-  const withoutOwn = repositories.filter(({ fullName }) => !rows.some(({ repository }) => repository === fullName))
+  const repositories = repositoriesOf(rows)
+  const row = rows.find(({ repository }) => repository === selected)
   return (
     <LabelledSection title="Setup commands">
       <p className="text-sm text-muted">
@@ -69,73 +78,68 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
         logic in a script of the repository, such as sh .spyria/setup.sh, and make it safe to run twice. Every member
         can read these commands: never put a secret in one.
       </p>
+      <RepositoryTabs
+        label="Setup commands"
+        defaultLabel={defaultLabel}
+        newLabel="New repository setup command"
+        repositories={repositories}
+        selected={selected}
+        onSelect={setSelected}
+      />
       <form
-        className="flex flex-col gap-3"
+        className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault()
           save()
         }}
       >
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <select
-            aria-label="Repository"
-            className={fieldClass}
-            disabled={withoutOwn.length === 0}
-            value={added}
-            onChange={(event) => setAdded(event.target.value)}
-          >
-            <option value="">{repositoryPromptOf(listing, withoutOwn.length, 'setup command')}</option>
-            {withoutOwn.map(({ fullName }) => (
-              <option key={fullName} value={fullName}>
-                {fullName}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className={ghostButtonClass}
-            disabled={!added}
-            onClick={() => {
-              edit([...rows, { repository: added, command: '' }])
-              setAdded('')
+        {selected === newRepositoryTab || !row ? (
+          <NewRepositoryPicker
+            label="New repository setup command"
+            listing={listing}
+            taken={repositories}
+            own="setup command"
+            note="Repositories without a setup command of their own run the default one."
+            onPick={(repository) => {
+              edit([...rows, { repository, command: '' }])
+              setSelected(repository)
             }}
-          >
-            Add
-          </button>
-        </div>
-        <ul aria-label="Setup commands" className="flex flex-col gap-2">
-          {rows.map((row) => (
-            <li key={row.repository ?? 'default'} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="w-48 shrink-0">{row.repository ?? 'Default'}</span>
+          />
+        ) : (
+          <div role="tabpanel" aria-label={row.repository ?? defaultLabel} className="flex flex-col gap-5">
+            <label className={labelClass}>
+              Setup command
               <input
-                aria-label={row.repository ? `Setup command of ${row.repository}` : 'Default setup command'}
                 placeholder={row.repository ? 'sh .spyria/setup.sh' : 'None'}
                 maxLength={2_000}
-                className={`${fieldClass} min-w-64 flex-1 font-mono`}
+                className={`${fieldClass} font-mono`}
                 value={row.command}
                 onChange={(event) =>
                   edit(rows.map((known) => (known === row ? { ...row, command: event.target.value } : known)))
                 }
               />
-              {row.repository !== null && (
-                <button
-                  type="button"
-                  className={smallGhostButtonClass}
-                  onClick={() => edit(rows.filter((known) => known !== row))}
-                >
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+            </label>
+            {row.repository !== null && (
+              <button
+                type="button"
+                className={`self-start ${ghostButtonClass}`}
+                onClick={() => {
+                  edit(rows.filter((known) => known !== row))
+                  setSelected(null)
+                }}
+              >
+                Delete the setup command of {row.repository}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <button type="submit" className={buttonClass} disabled={isPending}>
             Save
           </button>
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
-        {blankRepository && <ErrorMessage message={`Give ${blankRepository} a setup command, or remove it`} />}
+        {blankRepository && <ErrorMessage message={`Give ${blankRepository} a setup command, or delete it`} />}
       </form>
       <ErrorMessage message={errorMessage} />
     </LabelledSection>
