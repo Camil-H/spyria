@@ -61,22 +61,36 @@ const RulesFields = ({ rules, onChange }: { rules: DevLoopRules; onChange: (rule
           }
         />
       </label>
-      <label className={labelClass}>
-        Cost limit ($, sessions on an API key)
-        <input
-          type="number"
-          min={0.01}
-          step="0.01"
-          inputMode="decimal"
-          placeholder="No limit"
-          className={`${fieldClass} w-36`}
-          value={dollarsOf(rules.costLimitMicros)}
-          onChange={(event) => onChange({ ...rules, costLimitMicros: microsOf(event.target.value) })}
-        />
-      </label>
+      <CostField
+        key={rules.repository ?? 'default'}
+        micros={rules.costLimitMicros}
+        onChange={(costLimitMicros) => onChange({ ...rules, costLimitMicros })}
+      />
     </fieldset>
   </div>
 )
+
+const CostField = ({ micros, onChange }: { micros: number | null; onChange: (micros: number | null) => void }) => {
+  const [dollars, setDollars] = useState(dollarsOf(micros))
+  return (
+    <label className={labelClass}>
+      Cost limit ($, sessions on an API key)
+      <input
+        type="number"
+        min={0.01}
+        step="0.01"
+        inputMode="decimal"
+        placeholder="No limit"
+        className={`${fieldClass} w-36`}
+        value={dollars}
+        onChange={(event) => {
+          setDollars(event.target.value)
+          onChange(microsOf(event.target.value))
+        }}
+      />
+    </label>
+  )
+}
 
 export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
@@ -206,7 +220,7 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         </div>
         {invalidRules !== undefined && (
           <ErrorMessage
-            message={`The ${invalidRules === null ? 'default rules' : `rules of ${invalidRules}`} cannot be saved: each command needs a name of its own, a command and a timeout of 1 to 120 minutes, each failure rule 1 to 10 times, the time limit 10 minutes to 24 hours, and only CI may follow the pull request, in at most 20 gates`}
+            message={`The ${invalidRules === null ? 'default rules' : `rules of ${invalidRules}`} cannot be saved: each command needs a name of its own, a command and a timeout of 1 to 120 minutes, each failure rule 1 to 10 times, the time limit 10 minutes to 24 hours, a cost limit above 0, and only CI may follow the pull request, in at most 20 gates`}
           />
         )}
       </form>
