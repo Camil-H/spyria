@@ -9,7 +9,8 @@ import {
   type Json,
   liveOutputCharacters,
 } from './acp.ts'
-import { checkOut, lastLinesOf, type Repository, runSetup, setupCommand } from './checkout.ts'
+import { checkOut, lastLinesOf, type Repository, runCommand, setupCommand } from './checkout.ts'
+import { createChecksRunner } from './checks.ts'
 import { connectPi } from './pi.ts'
 import { redacted } from './redaction.ts'
 import { createScreenshotTaker } from './screenshots.ts'
@@ -101,10 +102,10 @@ const terminalToolStatuses = ['completed', 'failed']
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
-const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status)$/
+const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
 const workspaceActions = { bundle: bundleOf, commit: commitOf, fetch: fetchOf, merge: mergeOf, pushed: pushedOf }
-const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot)$/
+const workspaceActionRoute = /^\/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/
 const setupToolCallId = 'spyria-setup'
 const setupCall = { toolCallId: setupToolCallId, title: setupCommand, kind: 'execute' }
 const setupStart = { sessionUpdate: 'tool_call', ...setupCall, status: 'in_progress' }
@@ -223,6 +224,7 @@ export const startAgent = ({
   authTimeoutMilliseconds = 5_000,
   requestTimeoutMilliseconds = 60_000,
   setupTimeoutMilliseconds = 45 * 60_000,
+  checkTimeoutMilliseconds = 20 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
 }: {
@@ -233,10 +235,20 @@ export const startAgent = ({
   authTimeoutMilliseconds?: number
   requestTimeoutMilliseconds?: number
   setupTimeoutMilliseconds?: number
+  checkTimeoutMilliseconds?: number
   workspaceDirectory?: string
   browserDirectory?: string
 }) => {
-  const actions = { ...workspaceActions, screenshot: createScreenshotTaker(browserDirectory) }
+  const checksRunner = createChecksRunner({
+    cwd: workspaceDirectory,
+    environment: () => adapterEnvironmentOf({}),
+    timeoutMilliseconds: checkTimeoutMilliseconds,
+  })
+  const actions = {
+    ...workspaceActions,
+    screenshot: createScreenshotTaker(browserDirectory),
+    checks: async () => checksRunner.start(),
+  }
   const conversations = new Map<string, Conversation>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
@@ -441,13 +453,18 @@ export const startAgent = ({
     const startedAt = performance.now()
     runningSetups.add(cwd)
     emitToCheckout(cwd, setupStart)
-    const { exitCode, output } = await runSetup(cwd, adapterEnvironmentOf({}), setupTimeoutMilliseconds, (soFar) =>
-      emitToCheckout(cwd, {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: setupToolCallId,
-        status: 'in_progress',
-        rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
-      }),
+    const { exitCode, output } = await runCommand(
+      setupCommand,
+      cwd,
+      adapterEnvironmentOf({}),
+      setupTimeoutMilliseconds,
+      (soFar) =>
+        emitToCheckout(cwd, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: setupToolCallId,
+          status: 'in_progress',
+          rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
+        }),
     ).finally(() => runningSetups.delete(cwd))
     log.info({
       event: 'agent.setup',
@@ -502,6 +519,7 @@ export const startAgent = ({
   const readWorkspace = async (read: string, parameters: URLSearchParams) => {
     const environment = adapterEnvironmentOf({})
     const path = parameters.get('path') ?? ''
+    if (read === 'checks') return Response.json(checksRunner.status())
     if (read === 'tree') return Response.json(await treeOf(workspaceDirectory, path, environment))
     if (read === 'changes' || read === 'commits' || read === 'status')
       return Response.json(await branchReads[read](workspaceDirectory, parameters.get('base') ?? '', environment))
