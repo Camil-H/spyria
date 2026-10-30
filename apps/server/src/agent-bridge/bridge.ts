@@ -24,6 +24,7 @@ import { schema } from '@spyria/db/zero'
 import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
 import { can, chatId, log, type MemberId, type MessageId, messageId, workspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '@spyria/runtime/server'
+import { createBudgetGuard } from '@spyria/usage/server'
 import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
@@ -48,6 +49,7 @@ export const createAgentBridge = ({
   sessionClassifierOf,
   now,
   resumeAfterMilliseconds,
+  devLoopPollMilliseconds,
   approvalWindowMilliseconds,
   spyriaAgentImage,
   reopenDelayMilliseconds = 1000,
@@ -59,6 +61,7 @@ export const createAgentBridge = ({
   sessionClassifierOf?: (database: Database) => SessionClassifier
   now?: () => number
   resumeAfterMilliseconds?: number
+  devLoopPollMilliseconds?: number
   approvalWindowMilliseconds?: number
   spyriaAgentImage?: string
   reopenDelayMilliseconds?: number
@@ -168,6 +171,7 @@ export const createAgentBridge = ({
       for (const viewer of viewersOf(chat)) sendText(viewer, text)
     }
     const transact: Transact = (work) => zeroDrizzle(schema, database).transaction(work)
+    const usedUpBudgetOf = createBudgetGuard(transact)
     const handlers = createAgentHandlers({
       transact,
       sandboxProvider,
@@ -175,10 +179,12 @@ export const createAgentBridge = ({
       classifier: sessionClassifierOf?.(database),
       now,
       resumeAfterMilliseconds,
+      devLoopPollMilliseconds,
       approvalWindowMilliseconds,
       spyriaAgentImage,
       checkouts: repositoryCheckoutsOf?.(database),
       deployment,
+      isBudgetUsedUp: async (workspace, member) => (await usedUpBudgetOf(workspace, member)) !== null,
       eventSockets: {
         showQuestion: (chat, frame) => {
           shownQuestions.set(
@@ -469,6 +475,8 @@ export const createAgentBridge = ({
       readRuntimeMedia: handlers.readRuntimeMedia,
       publishBranch: handlers.publishBranch,
       callGitHubTool: handlers.callGitHubTool,
+      callDevLoopTool: handlers.callDevLoopTool,
+      githubToolsOf: handlers.githubToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,
       runGitAction: handlers.runGitAction,
       recordPullRequest: handlers.recordPullRequest,

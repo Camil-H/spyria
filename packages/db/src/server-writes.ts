@@ -1004,3 +1004,15 @@ export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) =
     [userIds],
   )
 }
+
+export const modelCallCostSince = async (tx: Transaction, workspaceId: string, chatId: string, since: number) =>
+  Number(
+    (
+      await firstOnServer<{ costMicros: string | null }>(
+        tx,
+        `select sum(cost_micros)::text as "costMicros" from model_calls
+         where workspace_id = $1 and chat_id = $2 and called_at >= to_timestamp($3::double precision / 1000)`,
+        [workspaceId, chatId, since],
+      )
+    )?.costMicros ?? 0,
+  )

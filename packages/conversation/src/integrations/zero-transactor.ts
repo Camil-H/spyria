@@ -22,6 +22,7 @@ import {
   lockChatTurn,
   lockPendingAttachments,
   memberModelsOf,
+  modelCallCostSince,
   openTaskStepsOf,
   pendingPrompts,
   redactDeletedMessageEvents,
@@ -195,6 +196,19 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
+  const ownedStepCard = async (id: ChatId, type: 'pull_request' | 'dev_loop') => {
+    const row = await tx.run(
+      zql.messages
+        .where('workspaceId', contextWorkspaceId)
+        .where('chatId', id)
+        .where('kind', 'step')
+        .where('authorId', 'IS NOT', null)
+        .where('body', type)
+        .orderBy('seq', 'desc')
+        .one(),
+    )
+    return row?.step?.type === type ? toMessage(row) : undefined
+  }
   const waitingPromptIds = (id: ChatId) => pendingPrompts(tx, contextWorkspaceId, id, waitingNotices)
   const getMessage = async (id: MessageId) => {
     const row = await messageRow(id)
@@ -264,18 +278,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               deletedAt: timeOrNull(deletedAt),
             }),
           ),
-      pullRequestCard: async (id) => {
-        const row = await tx.run(
-          zql.messages
-            .where('workspaceId', contextWorkspaceId)
-            .where('chatId', id)
-            .where('kind', 'step')
-            .where('authorId', 'IS NOT', null)
-            .orderBy('seq', 'desc')
-            .one(),
-        )
-        return row?.step?.type === 'pull_request' ? toMessage(row) : undefined
-      },
+      pullRequestCard: (id) => ownedStepCard(id, 'pull_request'),
+      devLoopCard: (id) => ownedStepCard(id, 'dev_loop'),
       seedFor: async (prompt) => {
         const memberMessages = zql.messages
           .where('workspaceId', contextWorkspaceId)
@@ -463,6 +467,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       settings: async () =>
         devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
       setSettings: (settings) => tx.mutate.workspaces.update({ workspaceId: contextWorkspaceId, devLoop: settings }),
+      costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
+      enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
     },
     toolCalls: {
       record: async (call) => {
