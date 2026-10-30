@@ -10,6 +10,7 @@ import {
   alice,
   bob,
   failedWith,
+  lee,
   sessionTokenOf,
   startAgentStack,
   succeeded,
@@ -72,7 +73,7 @@ const newDevChat = async () => {
     runsOn: 'runtime',
   })
   await database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${bob}, 'editor')`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${lee}, 'editor')`
   const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
   return { id, branch: String(branch) }
 }
@@ -284,13 +285,13 @@ test('As a member, writing in the chat stops the dev loop; another member’s pr
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(id, 'Fix the totals')
   await loopStateIs(id, 'checking')
-  const bobsPrompt = await stack.prompt(id, 'Wait, use the ledger instead', { workspaceId: acme, userId: bob })
-  expect((await loopOf(id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped: Bob wrote in the chat' })
-  await stack.answered(bobsPrompt)
+  const leesPrompt = await stack.prompt(id, 'Wait, use the ledger instead', { workspaceId: acme, userId: lee })
+  expect((await loopOf(id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped: Lee wrote in the chat' })
+  await stack.answered(leesPrompt)
   await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
   const refusals = (
     await database.$client`
-      select tool, status from tool_calls where chat_id = ${id} and prompter_id = ${bob} order by called_at`
+      select tool, status from tool_calls where chat_id = ${id} and prompter_id = ${lee} order by called_at`
   ).map(({ tool, status }) => ({ tool, status }))
   expect(refusals).toEqual([{ tool: 'finish_work', status: 'refused' }])
   expect((await loopOf(id))?.step.state).toBe('stopped')
