@@ -31,11 +31,12 @@ const readSnapshot = async () => {
   const answeredIds = new Set(messages.map((message) => message.replyToId))
   return {
     workspaces: (await database.select().from(tables.workspaces)).map(
-      ({ workspaceId, name, localSessions, aiProviderAllowList }) => ({
+      ({ workspaceId, name, localSessions, aiProviderAllowList, devLoop }) => ({
         id: workspaceId,
         name,
         localSessions,
         aiProviderAllowList,
+        devLoop,
       }),
     ),
     memberships: memberships.map((membership) => ({
