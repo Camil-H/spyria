@@ -51,17 +51,17 @@ const stepArgument = z.union([
   }),
   z.object({ kind: z.literal('review'), fixes: z.number() }),
   z.object({ kind: z.literal('pull_request') }),
-  z.object({ kind: z.literal('ci'), checks: z.nullable(z.array(z.string())), fixes: z.number() }),
+  z.object({ kind: z.literal('ci'), fixes: z.number() }),
 ])
 export const setupCommandsArgument = z.array(z.object({ repository: z.nullable(z.string()), command: z.string() }))
 export const devLoopArgument = z.nullable(
   z.object({
-    isOn: z.boolean(),
-    timeLimitMinutes: z.number(),
-    costLimitMicros: z.nullable(z.number()),
-    pipelines: z.array(
+    rules: z.array(
       z.object({
         repository: z.nullable(z.string()),
+        isOn: z.boolean(),
+        timeLimitMinutes: z.number(),
+        costLimitMicros: z.nullable(z.number()),
         steps: z.array(stepArgument),
       }),
     ),

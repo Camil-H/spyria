@@ -7,6 +7,7 @@ import {
   mainOf,
   newChatDialogOf,
   openMyConnections,
+  openSettings,
   panelTabOf,
 } from '../fixtures.ts'
 
@@ -32,4 +33,17 @@ export const newDevChat = async (page: Page, name: string, repository: string, b
   await chooseRunsOn(page, 'Spyria runtime')
   await panelTabOf(page, 'Files').click()
   return page.url().split('/').at(-1) ?? ''
+}
+export const setSetupCommand = async (page: Page, repository: string, command: string) => {
+  await openSettings(page, 'Connect runtime')
+  const section = mainOf(page).getByRole('region', { name: 'Setup commands' })
+  const field = section.getByLabel(`Setup command of ${repository}`)
+  if ((await field.count()) === 0) {
+    await section.getByRole('combobox', { name: 'Repository' }).selectOption(repository)
+    await section.getByRole('button', { name: 'Add', exact: true }).click()
+  }
+  await field.fill(command)
+  await section.getByRole('button', { name: 'Save' }).click()
+  await expect(section.getByText('Saved')).toBeVisible()
+  await page.goto('/')
 }

@@ -1,4 +1,4 @@
-import { type DevLoopSettings, type MemberId, messageId, pipelineOf, systemActor } from '@spyria/kernel'
+import { type DevLoopRules, type MemberId, messageId, rulesOf, systemActor } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -18,7 +18,7 @@ import { devLoopActor, type Loop, loopOfPrompt, saveLoop } from './dev-loop-turn
 
 type Dependencies = Pick<AgentDependencies, 'transactor'>
 type Input = { chat: AgentChat; memberId: MemberId; name: string; input: unknown }
-type Turn = { chat: ConversationChat; prompt: Message; loop: Loop | undefined; settings: DevLoopSettings }
+type Turn = { chat: ConversationChat; prompt: Message; loop: Loop | undefined; rules: DevLoopRules }
 
 const refused = (text: string) => ({ isRefused: true, text })
 const answered = (text: string) => ({ isRefused: false, text })
@@ -27,11 +27,7 @@ const finishedWorkText =
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
 
-const startLoop = async (
-  unitOfWork: UnitOfWork,
-  { chat, prompt, settings }: Turn,
-  summary: Loop['step']['summary'],
-) => {
+const startLoop = async (unitOfWork: UnitOfWork, { chat, prompt, rules }: Turn, summary: Loop['step']['summary']) => {
   if (!prompt.authorId || prompt.authorId !== chat.ownerId || chat.isOwnerRemoved) {
     const ownerName = chat.ownerId ? await unitOfWork.members.displayNameOf(chat.ownerId) : 'the owner'
     return refused(`Only ${ownerName}'s prompts start quality gates: tell the members here that the work is done`)
@@ -46,7 +42,7 @@ const startLoop = async (
       kind: 'step',
       authorId: prompt.authorId,
       body: MessageBody('dev_loop'),
-      step: newDevLoop(prompt.id, prompt.createdAt.getTime(), settings, pipelineOf(settings, chat.repository), summary),
+      step: newDevLoop(prompt.id, prompt.createdAt.getTime(), chat.repository, rules, summary),
       createdAt: new Date(),
       replyToId: null,
     }),
@@ -86,20 +82,21 @@ const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, inpu
 
 export const callDevLoopTool = ({ transactor }: Dependencies, { chat, name, input }: Input) =>
   transactor.run(async (unitOfWork) => {
-    const settings = await unitOfWork.devLoop.settings()
-    if (!settings?.isOn) return refused('Quality gates are off in this workspace')
     const stored = await unitOfWork.chats.get(chat.chatId)
     if (!stored.baseBranch) return refused('This chat has no repository')
+    const rules = rulesOf(await unitOfWork.devLoop.settings(), stored.repository)
+    if (!rules.isOn) return refused('Quality gates are off for this repository')
     const promptId = await unitOfWork.agentTurns.lock(chat.chatId)
     if (!promptId) return refused('This runtime has no active turn')
     const prompt = await unitOfWork.messages.get(promptId)
-    const turn = { chat: stored, prompt, loop: await loopOfPrompt(unitOfWork, prompt), settings }
+    const turn = { chat: stored, prompt, loop: await loopOfPrompt(unitOfWork, prompt), rules }
     return name === reportReviewTool.name ? reportReview(unitOfWork, turn, input) : finishWork(unitOfWork, turn, input)
   })
 
 export const githubToolsOf = ({ transactor }: Dependencies, chat: AgentChat) =>
-  transactor.run(async ({ devLoop, chats }) =>
-    (await devLoop.settings())?.isOn && (await chats.get(chat.chatId)).baseBranch
+  transactor.run(async ({ devLoop, chats }) => {
+    const { baseBranch, repository } = await chats.get(chat.chatId)
+    return baseBranch && rulesOf(await devLoop.settings(), repository).isOn
       ? { tools: [...githubTools, ...devLoopTools], instructions: `${githubToolsInstructions} ${devLoopInstructions}` }
-      : { tools: githubTools, instructions: githubToolsInstructions },
-  )
+      : { tools: githubTools, instructions: githubToolsInstructions }
+  })

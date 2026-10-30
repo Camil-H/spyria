@@ -1,7 +1,6 @@
-import { type DevLoopPipeline, type DevLoopStepConfig, devLoopRange } from '@spyria/kernel'
+import { type DevLoopStepConfig, devLoopRange } from '@spyria/kernel'
 import { fieldClass, iconButtonClass, labelClass, smallGhostButtonClass } from '@spyria/ui'
-import { ArrowDown, ArrowUp, GitPullRequest, Plus, ScanSearch, Terminal, Trash2, Workflow } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowDown, ArrowUp, GitPullRequest, Plus, ScanSearch, ShieldCheck, Terminal, Trash2 } from 'lucide-react'
 import {
   addableKindsOf,
   stepKindLabels,
@@ -13,8 +12,8 @@ import {
 
 type Change = (change: Partial<Record<string, unknown>>) => void
 
-const kindIcons = { command: Terminal, review: ScanSearch, pull_request: GitPullRequest, ci: Workflow }
-const failureLabels = { command: 'If it fails', review: 'If it finds a defect', ci: 'If it fails' }
+const kindIcons = { command: Terminal, review: ScanSearch, pull_request: GitPullRequest, ci: ShieldCheck }
+const failureLabels = { command: 'If it fails', review: 'If it finds a defect', ci: 'If a check fails' }
 
 const numberOf = (value: string) => (value === '' ? Number.NaN : Number(value))
 
@@ -58,85 +57,7 @@ const FailureRule = ({
   </div>
 )
 
-const CheckNames = ({
-  checks,
-  suggestions,
-  change,
-}: {
-  checks: readonly string[] | null
-  suggestions: readonly string[]
-  change: Change
-}) => {
-  const [name, setName] = useState('')
-  const add = () => {
-    const trimmed = name.trim()
-    if (trimmed && !checks?.includes(trimmed)) change({ checks: [...(checks ?? []), trimmed] })
-    setName('')
-  }
-  return (
-    <div className="flex flex-col gap-2 text-sm">
-      <span className="text-muted">
-        {checks === null ? 'Every check on the pull request counts.' : 'Only these checks count:'}
-      </span>
-      {checks !== null && (
-        <ul aria-label="Checks that count" className="flex flex-wrap gap-2">
-          {checks.map((check) => (
-            <li key={check} className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5">
-              {check}
-              <button
-                type="button"
-                aria-label={`Stop counting ${check}`}
-                className={iconButtonClass}
-                onClick={() =>
-                  change({
-                    checks: checks.filter((known) => known !== check).length
-                      ? checks.filter((known) => known !== check)
-                      : null,
-                  })
-                }
-              >
-                <Trash2 aria-hidden size={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="flex items-center gap-2">
-        <input
-          list="dev-loop-check-names"
-          aria-label="Check that counts"
-          placeholder={suggestions.length > 0 ? 'Pick or type a check name' : 'Type a check name'}
-          className={`${fieldClass} w-64`}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            event.preventDefault()
-            add()
-          }}
-        />
-        <datalist id="dev-loop-check-names">
-          {suggestions.map((suggestion) => (
-            <option key={suggestion} value={suggestion} />
-          ))}
-        </datalist>
-        <button type="button" className={smallGhostButtonClass} onClick={add}>
-          Count it
-        </button>
-      </div>
-    </div>
-  )
-}
-
-const StepFields = ({
-  step,
-  checkNames,
-  change,
-}: {
-  step: DevLoopStepConfig
-  checkNames: readonly string[]
-  change: Change
-}) => {
+const StepFields = ({ step, change }: { step: DevLoopStepConfig; change: Change }) => {
   if (step.kind === 'pull_request')
     return (
       <p className="text-sm text-muted">
@@ -155,7 +76,9 @@ const StepFields = ({
   if (step.kind === 'ci')
     return (
       <>
-        <CheckNames checks={step.checks} suggestions={checkNames} change={change} />
+        <p className="text-sm text-muted">
+          Every check GitHub reports on the pushed commit must pass. A skipped check counts as passed.
+        </p>
         <FailureRule step={step} label={failureLabels.ci} change={change} />
       </>
     )
@@ -202,91 +125,80 @@ const StepFields = ({
 }
 
 export const DevLoopPipelineEditor = ({
-  pipeline,
-  checkNames,
+  steps,
   onChange,
 }: {
-  pipeline: DevLoopPipeline
-  checkNames: readonly string[]
-  onChange: (pipeline: DevLoopPipeline) => void
-}) => {
-  const setSteps = (steps: readonly DevLoopStepConfig[]) => onChange({ ...pipeline, steps })
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted">
-        Keep each check's logic in a script in the repository, such as a package script or scripts/check.sh: a gate only
-        runs it, so developers and agents run the same thing. Every member can read the gates: never put a secret in a
-        command.
-      </p>
-      <ol aria-label="Gates" className="flex flex-col gap-2">
-        {pipeline.steps.map((step, index) => {
-          const Icon = kindIcons[step.kind]
-          const name = step.kind === 'command' && step.name ? step.name : stepKindLabels[step.kind]
-          return (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: steps have no identity, and a key from their content would remount the field being typed in
-              key={`${step.kind}-${index}`}
-              aria-label={`Gate ${index + 1}: ${name}`}
-              className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-3"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted">{index + 1}</span>
-                <Icon aria-hidden size={16} className="text-muted" />
-                <span className="font-medium">{stepKindLabels[step.kind]}</span>
-                <span className="ml-auto flex gap-1">
-                  <button
-                    type="button"
-                    aria-label={`Move ${name} up`}
-                    className={iconButtonClass}
-                    disabled={withStepMoved(pipeline.steps, index, -1) === pipeline.steps}
-                    onClick={() => setSteps(withStepMoved(pipeline.steps, index, -1))}
-                  >
-                    <ArrowUp aria-hidden size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${name} down`}
-                    className={iconButtonClass}
-                    disabled={withStepMoved(pipeline.steps, index, 1) === pipeline.steps}
-                    onClick={() => setSteps(withStepMoved(pipeline.steps, index, 1))}
-                  >
-                    <ArrowDown aria-hidden size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${name}`}
-                    className={iconButtonClass}
-                    onClick={() => setSteps(withoutStep(pipeline.steps, index))}
-                  >
-                    <Trash2 aria-hidden size={14} />
-                  </button>
-                </span>
-              </div>
-              <StepFields
-                step={step}
-                checkNames={checkNames}
-                change={(change) => setSteps(withStepChanged(pipeline.steps, index, change))}
-              />
-            </li>
-          )
-        })}
-      </ol>
-      {pipeline.steps.length === 0 && (
-        <p className="text-sm text-muted">No gate: the owner reviews the work as it is.</p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {addableKindsOf(pipeline.steps).map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            className={`flex items-center gap-1 ${smallGhostButtonClass}`}
-            onClick={() => setSteps(withStep(pipeline.steps, kind))}
+  steps: readonly DevLoopStepConfig[]
+  onChange: (steps: readonly DevLoopStepConfig[]) => void
+}) => (
+  <div className="flex flex-col gap-4">
+    <p className="text-sm text-muted">
+      Keep each check's logic in a script in the repository, such as a package script or scripts/check.sh: a gate only
+      runs it, so developers and agents run the same thing. Every member can read the gates: never put a secret in a
+      command.
+    </p>
+    <ol aria-label="Gates" className="flex flex-col gap-2">
+      {steps.map((step, index) => {
+        const Icon = kindIcons[step.kind]
+        const name = step.kind === 'command' && step.name ? step.name : stepKindLabels[step.kind]
+        return (
+          <li
+            // biome-ignore lint/suspicious/noArrayIndexKey: gates have no identity, and a key from their content would remount the field being typed in
+            key={`${step.kind}-${index}`}
+            aria-label={`Gate ${index + 1}: ${name}`}
+            className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-3"
           >
-            <Plus aria-hidden size={12} />
-            {stepKindLabels[kind]}
-          </button>
-        ))}
-      </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">{index + 1}</span>
+              <Icon aria-hidden size={16} className="text-muted" />
+              <span className="font-medium">{stepKindLabels[step.kind]}</span>
+              <span className="ml-auto flex gap-1">
+                <button
+                  type="button"
+                  aria-label={`Move ${name} up`}
+                  className={iconButtonClass}
+                  disabled={withStepMoved(steps, index, -1) === steps}
+                  onClick={() => onChange(withStepMoved(steps, index, -1))}
+                >
+                  <ArrowUp aria-hidden size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${name} down`}
+                  className={iconButtonClass}
+                  disabled={withStepMoved(steps, index, 1) === steps}
+                  onClick={() => onChange(withStepMoved(steps, index, 1))}
+                >
+                  <ArrowDown aria-hidden size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${name}`}
+                  className={iconButtonClass}
+                  onClick={() => onChange(withoutStep(steps, index))}
+                >
+                  <Trash2 aria-hidden size={14} />
+                </button>
+              </span>
+            </div>
+            <StepFields step={step} change={(change) => onChange(withStepChanged(steps, index, change))} />
+          </li>
+        )
+      })}
+    </ol>
+    {steps.length === 0 && <p className="text-sm text-muted">No gate: the owner reviews the work as it is.</p>}
+    <div className="flex flex-wrap items-center gap-2">
+      {addableKindsOf(steps).map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          className={`flex items-center gap-1 ${smallGhostButtonClass}`}
+          onClick={() => onChange(withStep(steps, kind))}
+        >
+          <Plus aria-hidden size={12} />
+          {stepKindLabels[kind]}
+        </button>
+      ))}
     </div>
-  )
-}
+  </div>
+)

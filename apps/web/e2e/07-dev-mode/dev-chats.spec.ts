@@ -6,6 +6,7 @@ import {
   newDevChat,
   type Page,
   sendMessage,
+  setSetupCommand,
   test,
   workingIndicatorOf,
 } from './fixtures'
@@ -38,10 +39,11 @@ test.describe('Dev chats', () => {
     await expect(branchOf(page)).toHaveText(workingBranch)
   })
 
-  test('As a member, I see a failing .spyria/setup.sh as a notice with its last output lines, and the session still answers', {
+  test('As a member, I see a failing setup command as a notice with its last output lines, and the session still answers', {
     tag: ['@spec-39'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
+    await setSetupCommand(page, 'acme/docs', 'sh .spyria/setup.sh')
     await newDevChat(page, 'Docs work', 'acme/docs')
     await sendMessage(page, 'stub:ls')
     const notice = messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127')
@@ -50,10 +52,11 @@ test.describe('Dev chats', () => {
     await expect(workingIndicatorOf(page)).toHaveCount(0)
   })
 
-  test('As a member, my first message waits for a slow .spyria/setup.sh, whose output streams into its conversation step, and is answered once it ends', {
+  test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step, and is answered once it ends', {
     tag: ['@spec-40', '@slow'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
+    await setSetupCommand(page, 'acme/docs', 'sh .spyria/setup.sh')
     await newDevChat(page, 'Docs setup', 'acme/docs')
     await sendMessage(page, 'stub:ls')
     const setup = await openCommandStep(page, 'sh .spyria/setup.sh')

@@ -1,4 +1,4 @@
-import type { DevLoopPipeline, DevLoopSettings, DevLoopStepConfig, DevLoopStepKind, MessageId } from '@spyria/kernel'
+import type { DevLoopRules, DevLoopStepConfig, DevLoopStepKind, MessageId } from '@spyria/kernel'
 import type { CheckRun } from './github-tools.ts'
 import { type CheckState, checkStateOf } from './pull-requests.ts'
 
@@ -16,6 +16,7 @@ export type ReviewFinding = {
 }
 export type DevLoopStep = {
   type: 'dev_loop'
+  repository: string | null
   startPromptId: MessageId
   startedAt: number
   lastPromptId: MessageId
@@ -64,22 +65,23 @@ export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step
 export const newDevLoop = (
   startPromptId: MessageId,
   startedAt: number,
-  settings: DevLoopSettings,
-  pipeline: DevLoopPipeline,
+  repository: string | null,
+  rules: DevLoopRules,
   summary: DevLoopStep['summary'],
 ): DevLoopStep => ({
   type: 'dev_loop',
+  repository,
   startPromptId,
   startedAt,
   lastPromptId: startPromptId,
   state: 'working',
   next: 'run',
   position: 0,
-  pipeline: pipeline.steps,
-  timeLimitMinutes: settings.timeLimitMinutes,
-  costLimitMicros: settings.costLimitMicros,
-  rounds: pipeline.steps.map(() => 0),
-  outcomes: pipeline.steps.map(() => null),
+  pipeline: rules.steps,
+  timeLimitMinutes: rules.timeLimitMinutes,
+  costLimitMicros: rules.costLimitMicros,
+  rounds: rules.steps.map(() => 0),
+  outcomes: rules.steps.map(() => null),
   summary,
   findings: [],
   reportedFindings: null,
@@ -210,7 +212,7 @@ export const pausedOutcome = 'The agent stopped without saying its work is done:
 export const memberWroteOutcomeOf = (name: string) => `Stopped: ${name} wrote in the chat`
 export const memberWroteNoticeOf = (name: string) => `Not sent: ${name} wrote in the meantime`
 export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the quality gates`
-export const turnedOffOutcome = 'Stopped: quality gates were turned off in this workspace'
+export const turnedOffOutcome = 'Stopped: quality gates were turned off for this repository'
 export const notRunOutcome = 'Stopped: a message of the quality gates could not run: over to you'
 const listOf = (parts: string[]) =>
   parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
@@ -300,14 +302,9 @@ export const devLoopTools = [finishWorkTool, reportReviewTool]
 export const devLoopInstructions =
   'This workspace runs quality gates: when the work the owner asked for is done and committed, call finish_work instead of pushing or opening a pull request yourself.'
 export const isDevLoopTool = (name: string) => devLoopTools.some((tool) => tool.name === name)
-export const countedRunsOf = (checks: readonly string[] | null, runs: CheckRun[]) =>
-  checks === null ? runs : runs.filter((run) => checks.includes(run.name))
-
-export const ciVerdictOf = (checks: readonly string[] | null, runs: CheckRun[]): CheckState | 'none' => {
-  const counted = countedRunsOf(checks, runs)
-  if (counted.length === 0) return 'none'
-  const states = counted.map((run) => checkStateOf(run.isCompleted, run.conclusion))
-  const isEveryNameReported = checks === null || checks.every((name) => counted.some((run) => run.name === name))
-  if (!isEveryNameReported || states.includes('pending')) return 'pending'
+export const ciVerdictOf = (runs: CheckRun[]): CheckState | 'none' => {
+  if (runs.length === 0) return 'none'
+  const states = runs.map((run) => checkStateOf(run.isCompleted, run.conclusion))
+  if (states.includes('pending')) return 'pending'
   return states.includes('failing') ? 'failing' : 'passing'
 }

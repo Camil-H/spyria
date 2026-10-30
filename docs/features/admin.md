@@ -122,11 +122,11 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 
 **Connect runtime** lists the workspace's runtime hosts, adds new ones, and holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
 
-Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: one for each repository that needs its own, and one for every other repository. Without one, the runtime runs `.spyria/setup.sh` when the repository has it. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
+Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: one for each repository that needs its own, and a default for the others. Nothing runs without one, even a repository's `.spyria/setup.sh`. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
 
 ## Quality gates
 
-**Quality gates** turns on the gates the work of dev chat agents goes through before it reaches the owner, sets the limits of a run (time and cost), and defines the gates: for each repository that needs its own, and for every other one. Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
+**Quality gates** sets the gates the work of dev chat agents goes through before it reaches the owner: the **Default rules**, and rules for each repository that needs its own, each with its own switch, its gates and the limits of a run (time and cost). Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
 
 ## Shared tools
 

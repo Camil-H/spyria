@@ -68,11 +68,8 @@ const commandStep = (name: string, command: string, fixes = 3): Step => ({
   timeoutMinutes: 5,
   fixes,
 })
-const settingsWith = (steps: Step[]): DevLoopSettings => ({
-  isOn: true,
-  timeLimitMinutes: 240,
-  costLimitMicros: null,
-  pipelines: [{ repository: 'acme/app', steps }],
+const settingsWith = (steps: Step[], isOn = true): DevLoopSettings => ({
+  rules: [{ repository: 'acme/app', isOn, timeLimitMinutes: 240, costLimitMicros: null, steps }],
 })
 const setSetupCommands = (userId: string, commands: { repository: string | null; command: string }[]) =>
   stack.mutate({ workspaceId: acme, userId }, 'workspace.setSetupCommands', { workspaceId: acme, commands })
@@ -139,7 +136,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
         commandStep('Totals', 'grep -q fixed src/app.ts', 2),
         { kind: 'review', fixes: 1 },
         { kind: 'pull_request' },
-        { kind: 'ci', checks: ['unit'], fixes: 1 },
+        { kind: 'ci', fixes: 1 },
       ]),
     ),
   ).toEqual(succeeded)
@@ -207,7 +204,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   )[0]?.body
   expect(ciPrompt).toContain('CI failed on the pull request (attempt 1 of 1)')
   expect(ciPrompt).toContain('src/app.test.ts:3 failure: totals add up')
-  expect(ciPrompt).not.toContain('- lint:')
+  expect(ciPrompt).toContain('- lint: failure')
 
   await waitFor(async () => {
     const step = (await loopOf(id))?.step
@@ -344,23 +341,15 @@ test('As a chat owner, Stop stops the quality gates while it runs a command, and
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(turnedOffChat.id, 'Fix the totals')
   await loopStateIs(turnedOffChat.id, 'running')
-  expect(await setDevLoop(alice, { ...slow, isOn: false })).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)], false))).toEqual(succeeded)
   await loopStateIs(turnedOffChat.id, 'stopped')
   expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe(
-    'Stopped: quality gates were turned off in this workspace',
+    'Stopped: quality gates were turned off for this repository',
   )
   expect(await loopPromptsOf(turnedOffChat.id)).toEqual([])
   expect(
     (
       await database.$client`select payload from workspace_events where type = 'dev_loop.changed' order by created_at`
-    ).map(({ payload }) => payload.settings.isOn),
+    ).map(({ payload }) => payload.settings.rules[0].isOn),
   ).toContain(false)
-})
-
-test('As a member setting up quality gates, I see the names of the checks GitHub reports on a branch, each once', async () => {
-  for (const name of ['unit', 'lint', 'unit']) pushCheckRun('main', name, 'success')
-  expect(await request(alice, 'GET', '/api/github/check-names?repository=acme%2Fapp&branch=main')).toEqual({
-    status: 200,
-    body: { names: ['lint', 'unit'] },
-  })
 })

@@ -32,7 +32,13 @@ const bareRepository = (name: string, files: Record<string, string>) => {
 const launchIn = (name: string, url: string, extra: object = {}) => {
   const workingDirectory = join(directory, `${name}-workspace`)
   const environmentFile = join(directory, `${name}-environment`)
-  const repository = { url, token, base_branch: 'main', working_branch: 'spyria/fix-totals-1a2b3c' }
+  const repository = {
+    url,
+    token,
+    base_branch: 'main',
+    working_branch: 'spyria/fix-totals-1a2b3c',
+    setup_command: 'sh .spyria/setup.sh',
+  }
   const command = ['sh', '-c', `env > ${environmentFile}; exec "$@"`, 'sh', ...stubCommand]
   return {
     launch: {
@@ -330,4 +336,16 @@ test('a setup command given with the repository runs instead of .spyria/setup.sh
   })
   expect(existsSync(join(workingDirectory, 'configured.txt'))).toBe(true)
   expect(existsSync(join(workingDirectory, 'from-file.txt'))).toBe(false)
+})
+
+test('a repository’s .spyria/setup.sh does not run on its own: only a setup command given with the repository runs', async () => {
+  const url = bareRepository('unasked', { '.spyria/setup.sh': 'echo ran > ran.txt\n' })
+  const { open, create } = started()
+  const { launch, workingDirectory } = launchIn('unasked', url)
+  const { setup_command: _, ...repository } = launch.repository
+  const socket = open(await create({ ...launch, repository }))
+  await socket.until(kindOf('workspace'))
+  await Bun.sleep(300)
+  expect(socket.events.some(isSetup)).toBe(false)
+  expect(existsSync(join(workingDirectory, 'ran.txt'))).toBe(false)
 })
