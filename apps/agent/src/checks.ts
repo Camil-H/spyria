@@ -48,16 +48,16 @@ export const createChecksRunner = ({
   timeoutMilliseconds: number
 }) => {
   let run: ChecksRun = { state: 'idle', results: [] }
-  const runAll = async (current: ChecksRun, checks: DevLoopConfig['checks']) => {
-    for (const [name, command] of checks) {
+  const resultOf = async (name: string, command: string): Promise<CheckResult> => {
+    try {
       const { exitCode, output } = await runCommand(command, cwd, environment(), timeoutMilliseconds, () => undefined)
-      current.results.push({
-        name,
-        command,
-        ...(exitCode !== undefined && { exitCode }),
-        output: shownOutputOf(output),
-      })
+      return { name, command, ...(exitCode !== undefined && { exitCode }), output: shownOutputOf(output) }
+    } catch (error) {
+      return { name, command, output: `The check could not start: ${error instanceof Error ? error.message : error}` }
     }
+  }
+  const runAll = async (current: ChecksRun, checks: DevLoopConfig['checks']) => {
+    for (const [name, command] of checks) current.results.push(await resultOf(name, command))
     current.state = 'finished'
   }
   return {

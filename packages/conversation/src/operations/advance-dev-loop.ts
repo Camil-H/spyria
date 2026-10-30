@@ -1,5 +1,5 @@
 import { type MemberId, type MessageId, messageId, systemActor, type WorkspaceId } from '@spyria/kernel'
-import type { AgentChat } from '../contracts/agent.ts'
+import type { AgentChat, AgentEndpoint } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
   blockingFindingsOf,
@@ -23,12 +23,14 @@ import {
   limitOutcomeOf,
   newFindingsOf,
   noCiOutcomeOf,
+  notRunOutcome,
   pausedOutcome,
   readyOutcomeOf,
   reconsiderPromptOf,
   reviewFixPromptOf,
   reviewRequestOf,
   stopped,
+  turnedOffOutcome,
 } from '../domain/dev-loop.ts'
 import { checkRunsTextOf } from '../domain/github-tools.ts'
 import { type Message, newMessage } from '../domain/message.ts'
@@ -144,7 +146,9 @@ const withLoop = <Result>(
   dependencies.transactor.run(async (unitOfWork) => {
     const loop = await lockedLoopOf(unitOfWork, loopId)
     if (!loop || !states.includes(loop.step.state)) return undefined
-    const outcome = await limitOrBudgetOutcomeOf(dependencies, unitOfWork, loop)
+    const outcome = (await unitOfWork.devLoop.settings())
+      ? await limitOrBudgetOutcomeOf(dependencies, unitOfWork, loop)
+      : turnedOffOutcome
     if (outcome) {
       await endLoop(unitOfWork, loop, stopped(loop.step, outcome))
       return undefined
@@ -177,7 +181,8 @@ export const continueLoopAfterTurn = (dependencies: Dependencies, job: LoopJob) 
         reviewFixPromptOf(blocking, round, limit),
       )
     }
-    return endLoop(unitOfWork, loop, stopped(step, pausedOutcome))
+    const hasRun = await unitOfWork.agentTurns.hasReply(step.lastPromptId)
+    return endLoop(unitOfWork, loop, stopped(step, hasRun ? pausedOutcome : notRunOutcome))
   })
 
 const endpointOfLoop = async ({ runtimes }: Dependencies, loop: Loop | undefined) =>
@@ -188,7 +193,9 @@ export const startLoopChecks = async (dependencies: Dependencies, job: LoopJob) 
   if (loop?.step.state !== 'checking') return
   const endpoint = await endpointOfLoop(dependencies, loop)
   const started = endpoint
-    ? await dependencies.agentClient.actOnWorkspace(endpoint, 'checks', {})
+    ? await dependencies.agentClient
+        .actOnWorkspace(endpoint, 'checks', {})
+        .catch(() => ({ failure: 'The runtime could not start the checks: over to you' }))
     : { failure: 'The runtime stopped before the checks ran: over to you' }
   if ('failure' in started)
     return withLoop(dependencies, job, ['checking'], (unitOfWork, current) =>
@@ -220,30 +227,47 @@ const judgeChecks = (
     return reviewOrPublish(unitOfWork, { ...loop, step }, step, baseBranch ?? '')
   })
 
+const headOf = async ({ transactor, agentClient }: Dependencies, loop: Loop, endpoint: AgentEndpoint) => {
+  const { baseBranch } = await transactor.run(({ chats }) => chats.get(loop.card.chatId))
+  const status = await agentClient
+    .readWorkspace(endpoint, agentWorkspacePathOf('status', '', baseBranch ?? ''))
+    .catch(() => undefined)
+  return runtimeHeadsOf(status)[0] ?? null
+}
+
+const keepPolling = (dependencies: Dependencies, job: LoopJob, state: DevLoopStep['state'], every: number) =>
+  withLoop(dependencies, job, [state], async () => ({ retryInMilliseconds: every }))
+
 export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await dependencies.transactor.run(async ({ messages }) => loopOf(await messages.find(job.loopId)))
   if (loop?.step.state !== 'checking') return undefined
   const endpoint = await endpointOfLoop(dependencies, loop)
-  const run = endpoint
-    ? ((await dependencies.agentClient.readWorkspace(endpoint, '/api/workspace/checks')) as ChecksRun | undefined)
-    : undefined
-  if (run?.state === 'running') return { retryInMilliseconds: checksPollOf(dependencies) }
-  if (run?.state !== 'finished' || !endpoint)
+  if (!endpoint)
     return withLoop(dependencies, job, ['checking'], (unitOfWork, current) =>
       endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime stopped: over to you')),
     )
-  const { baseBranch } = await dependencies.transactor.run(({ chats }) => chats.get(loop.card.chatId))
-  const status = await dependencies.agentClient.readWorkspace(
-    endpoint,
-    agentWorkspacePathOf('status', '', baseBranch ?? ''),
-  )
-  await judgeChecks(dependencies, job, run, runtimeHeadsOf(status)[0] ?? null)
+  const run = (await dependencies.agentClient
+    .readWorkspace(endpoint, '/api/workspace/checks')
+    .catch(() => undefined)) as ChecksRun | undefined
+  if (run?.state === 'idle')
+    return withLoop(dependencies, job, ['checking'], (unitOfWork, current) =>
+      endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime restarted: over to you')),
+    )
+  if (run?.state !== 'finished') return keepPolling(dependencies, job, 'checking', checksPollOf(dependencies))
+  await judgeChecks(dependencies, job, run, await headOf(dependencies, loop, endpoint))
   return undefined
 }
 
 export const publishLoop = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await dependencies.transactor.run(async ({ messages }) => loopOf(await messages.find(job.loopId)))
   if (loop?.step.state !== 'publishing') return
+  const endpoint = await endpointOfLoop(dependencies, loop)
+  const head = endpoint ? await headOf(dependencies, loop, endpoint) : null
+  if (head !== null && loop.step.checkedHead !== null && head !== loop.step.checkedHead)
+    return withLoop(dependencies, job, ['publishing'], async (unitOfWork, current) => {
+      await saveLoop(unitOfWork, current, { ...current.step, state: 'checking' })
+      await unitOfWork.devLoop.enqueue(devLoopJobTypes.checks, current.card.id)
+    })
   const published = await publishBranch(dependencies, {
     chat: chatOf(loop),
     actor: systemActor(devLoopActor, loop.ownerId),
@@ -275,7 +299,7 @@ const ciRunsOf = async ({ checkouts }: Dependencies, loop: Loop) =>
 export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await dependencies.transactor.run(async ({ messages }) => loopOf(await messages.find(job.loopId)))
   if (loop?.step.state !== 'waiting_for_ci') return undefined
-  const checks = await ciRunsOf(dependencies, loop)
+  const checks = await ciRunsOf(dependencies, loop).catch(() => undefined)
   const isCurrent = checks !== undefined && checks.headSha === loop.step.pushedHead
   const verdict = isCurrent ? ciVerdictOf(loop.step, checks.runs) : 'pending'
   const isQuiet = verdict === 'none' && Date.now() - (loop.step.publishedAt ?? 0) >= ciQuietMilliseconds

@@ -3,7 +3,7 @@ import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {
   Members: ['member.invited', 'invite.revoked', 'member.joined', 'member.role_changed', 'member.removed'],
-  Workspace: ['workspace.deleted', 'workspace.restored', 'ai_providers.changed'],
+  Workspace: ['workspace.deleted', 'workspace.restored', 'ai_providers.changed', 'dev_loop.changed'],
   'Sign-in': ['sso.configured', 'sso.secret_rotated', 'sso.domain_verified'],
   GitHub: ['github.configured', 'github.secret_rotated'],
   Connections: ['connection.added', 'connection.updated', 'connection.removed', 'connection.restricted'],
@@ -83,6 +83,7 @@ const actionByKind: Record<string, string> = {
   'workspace.deleted': 'Deleted the workspace',
   'workspace.restored': 'Restored the workspace',
   'ai_providers.changed': 'Changed the allowed AI providers',
+  'dev_loop.changed': 'Changed the dev loop',
 }
 
 export type AuditRecord = {
