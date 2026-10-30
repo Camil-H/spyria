@@ -23,6 +23,7 @@ export type FakeLlmScript = {
   hold?: string
   cache?: { read: number; write: number }
   held?: (name: string) => Promise<unknown>
+  whenPrompted?: { includes: string; script: FakeLlmScript }[]
 }
 type CompletionRequest = {
   model?: string
@@ -347,7 +348,10 @@ export const createFakeLlm = (
           },
           400,
         )
-      const chatScript = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+      const sharedScript = (await scriptOf(context.req.raw, Boolean(request.response_format))) ?? {}
+      const lastPrompt = JSON.stringify(request.messages?.findLast((message) => message.role === 'user')?.content ?? '')
+      const promptedScript = sharedScript.whenPrompted?.find(({ includes }) => lastPrompt.includes(includes))?.script
+      const chatScript = promptedScript ? { ...promptedScript, held: sharedScript.held } : sharedScript
       const script =
         !request.response_format && isSubagentCall(request, chatScript)
           ? { ...chatScript.subagents?.[request.model?.split('/').at(-1) ?? ''], held: chatScript.held }

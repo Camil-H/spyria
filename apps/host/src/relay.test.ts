@@ -174,12 +174,14 @@ test.each([
   ['GET', '/api/workspace/changes?base=main'],
   ['GET', '/api/workspace/commits?base=main'],
   ['GET', '/api/workspace/status?base=main'],
+  ['GET', '/api/workspace/checks'],
   ['POST', '/api/workspace/bundle'],
   ['POST', '/api/workspace/commit'],
   ['POST', '/api/workspace/fetch'],
   ['POST', '/api/workspace/merge'],
   ['POST', '/api/workspace/pushed'],
   ['POST', '/api/workspace/screenshot'],
+  ['POST', '/api/workspace/checks'],
 ])('a personal host forwards %s %s', async (method, path) => {
   const { relay, nextOf } = personalRelay()
   await relay.handle({ type: 'http', sid: 3, runtimeId: 'runtime-1', method, path })

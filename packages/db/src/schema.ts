@@ -4,6 +4,7 @@ import {
   type ChatPermission,
   type ChatVisibility,
   type CredentialId,
+  type DevLoopSettings,
   type HarnessId,
   type MemberId,
   type MessageId,
@@ -11,6 +12,7 @@ import {
   permissionsOf,
   type RuntimeHostId,
   type RuntimeId,
+  type SetupCommand,
   type WorkspaceId,
   type WorkspacePermission,
 } from '@spyria/kernel'
@@ -20,6 +22,8 @@ type WorkspaceRow = {
   name: string
   localSessions: boolean
   aiProviderAllowList: AiProviderAllowList | null
+  devLoop: DevLoopSettings | null
+  setupCommands: readonly SetupCommand[]
 }
 type MembershipRow = {
   memberId: MemberId

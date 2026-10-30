@@ -11,13 +11,16 @@ import type {
   SessionClassifier,
 } from '../contracts/agent.ts'
 import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import { devLoopJobTypes } from '../domain/dev-loop.ts'
 import type { WorkspaceRead } from '../domain/workspace-reads.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSpyriaAgentClient } from '../integrations/spyria-agent-client.ts'
 import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
+import { continueLoopAfterTurn, judgeLoopCi, pollLoopChecks, runLoop } from '../operations/advance-dev-loop.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
+import { callDevLoopTool, githubToolsOf } from '../operations/call-dev-loop-tool.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
 import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
 import { awaitTask, checkTask, delegateTask } from '../operations/delegate-task.ts'
@@ -55,6 +58,7 @@ const restartSessionPayload = z.object({
   chatId: z.pipe(id, z.transform(chatId)),
   memberId: z.pipe(id, z.transform(memberId)),
 })
+const loopPayload = z.object({ loopId: z.pipe(id, z.transform(messageId)) })
 const memberRemovedPayload = z.object({
   memberId: z.pipe(id, z.transform(memberId)),
   actorId: z.pipe(id, z.transform(memberId)),
@@ -68,10 +72,12 @@ export const createAgentHandlers = ({
   eventSockets,
   now = Date.now,
   resumeAfterMilliseconds,
+  devLoopPollMilliseconds,
   approvalWindowMilliseconds,
   spyriaAgentImage,
   checkouts,
   deployment,
+  isBudgetUsedUp,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -80,10 +86,12 @@ export const createAgentHandlers = ({
   eventSockets: AgentEventSockets
   now?: () => number
   resumeAfterMilliseconds?: number
+  devLoopPollMilliseconds?: number
   approvalWindowMilliseconds?: number
   spyriaAgentImage?: string
   checkouts?: RepositoryCheckouts
   deployment?: string
+  isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { spyriaAgentImage })
   const agentClient = createSpyriaAgentClient()
@@ -97,8 +105,10 @@ export const createAgentHandlers = ({
     checkouts,
     fixedLlm: llm,
     resumeAfterMilliseconds,
+    devLoopPollMilliseconds,
     approvalWindowMilliseconds,
     deployment,
+    isBudgetUsedUp,
   })
   return {
     jobs: {
@@ -117,6 +127,14 @@ export const createAgentHandlers = ({
         restartAgentSession(dependenciesOf(workspaceId), { workspaceId, ...restartSessionPayload.parse(payload) }),
       [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
+      [devLoopJobTypes.afterTurn]: ({ workspaceId, payload }: AgentJob) =>
+        continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+      [devLoopJobTypes.run]: ({ workspaceId, payload }: AgentJob) =>
+        runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+      [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
+        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+      [devLoopJobTypes.ci]: ({ workspaceId, payload }: AgentJob) =>
+        judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>
         interruptOwnedTurns(dependenciesOf(workspaceId), { workspaceId, ...memberRemovedPayload.parse(payload) }),
     },
@@ -153,6 +171,9 @@ export const createAgentHandlers = ({
       publishBranch(dependenciesOf(input.chat.workspaceId), input),
     callSpyriaTool: (input: Parameters<typeof callSpyriaTool>[1]) =>
       callSpyriaTool(dependenciesOf(input.chat.workspaceId), input),
+    callDevLoopTool: (input: Parameters<typeof callDevLoopTool>[1]) =>
+      callDevLoopTool(dependenciesOf(input.chat.workspaceId), input),
+    githubToolsOf: (chat: AgentChat) => githubToolsOf(dependenciesOf(chat.workspaceId), chat),
     callGitHubTool: (input: Parameters<typeof callGitHubTool>[1]) =>
       callGitHubTool(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>

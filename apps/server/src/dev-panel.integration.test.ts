@@ -5,7 +5,16 @@ import { type ChatId, chatId } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
-import { acme, alice, bob, sessionTokenOf, startAgentStack, testSecretsKey, waitFor } from './testing/testing.ts'
+import {
+  acme,
+  alice,
+  bob,
+  sessionTokenOf,
+  startAgentStack,
+  succeeded,
+  testSecretsKey,
+  waitFor,
+} from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
 const fakeGitHub = startFakeGitHub()
@@ -219,6 +228,12 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
 
 test('a slow .spyria/setup.sh no longer holds the launch past the relay limit: the session answers, the setup streams as a command step and its failure stays a notice', async () => {
   await stack.agentHost('slow setup host', { relayLimitMilliseconds: 2000 })
+  expect(
+    await stack.mutate({ workspaceId: acme, userId: alice }, 'workspace.setSetupCommands', {
+      workspaceId: acme,
+      commands: [{ repository: 'acme/docs', command: 'sh .spyria/setup.sh' }],
+    }),
+  ).toEqual(succeeded)
   const id = await newDevChat('acme/docs')
   const { frames } = await stack.openStream(id)
   const replies = await promptAndWait(id, 'stub:ls')
@@ -246,6 +261,6 @@ test('a slow .spyria/setup.sh no longer holds the launch past the relay limit: t
       ({ body }) => body,
     ),
   ).toEqual([
-    'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+    'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
   ])
 })

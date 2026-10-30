@@ -337,6 +337,12 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
   expect(gitConfig).toContain(`name = Alice\n\temail = ${alice}@users.noreply.spyria`)
 
+  expect(
+    await stack.mutate({ workspaceId: acme, userId: alice }, 'workspace.setSetupCommands', {
+      workspaceId: acme,
+      commands: [{ repository: 'acme/docs', command: 'sh .spyria/setup.sh' }],
+    }),
+  ).toEqual(succeeded)
   const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
   expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
   const notices = async () => (await stack.repliesTo(failing.promptId)).filter(({ kind }) => kind === 'notice')
@@ -344,7 +350,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(await notices()).toEqual([
     {
       kind: 'notice',
-      body: 'The setup script .spyria/setup.sh failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
+      body: 'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
     },
   ])
   expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)

@@ -8,6 +8,7 @@ import {
   githubSettingsFrom,
   organizationLoginOf,
   repositoryNameOf,
+  repositoryPromptOf,
   workingBranchOf,
 } from './github.ts'
 
@@ -50,4 +51,21 @@ test('a GitHub App name fits the 34 characters GitHub allows, an organization lo
   for (const outside of ['acme/x', '-acme', 'acme corp', '../settings'])
     expect(() => organizationLoginOf(outside)).toThrow(InvalidGitHubSettings)
   expect(githubLabelOf('pull_request_review_comment')).toBe('Pull request review comment')
+})
+
+test('the repository picker says whether repositories are loading, failed, missing, all taken or available', () => {
+  const app = { fullName: 'acme/app', defaultBranch: 'main' }
+  expect(repositoryPromptOf({ state: 'loading' }, 0, 'gates')).toBe('Listing repositories…')
+  expect(repositoryPromptOf({ state: 'failed' }, 0, 'gates')).toBe(
+    'The repositories could not be listed: check Connect GitHub',
+  )
+  expect(repositoryPromptOf({ state: 'listed', repositories: [] }, 0, 'gates')).toBe(
+    'No repository yet: connect GitHub and grant it repositories',
+  )
+  expect(repositoryPromptOf({ state: 'listed', repositories: [app] }, 0, 'gates')).toBe(
+    'Every repository has its own gates',
+  )
+  expect(repositoryPromptOf({ state: 'listed', repositories: [app] }, 1, 'setup command')).toBe(
+    'Give a repository its own setup command…',
+  )
 })

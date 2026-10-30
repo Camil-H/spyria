@@ -607,6 +607,7 @@ export const startAgentStack = async ({
     llm,
     now,
     resumeAfterMilliseconds,
+    devLoopPollMilliseconds: 100,
     approvalWindowMilliseconds,
     spyriaAgentImage,
     sessionClassifierOf: routing ? sessionClassifierOf(llmGateway, { timeoutMilliseconds: 300 }) : undefined,

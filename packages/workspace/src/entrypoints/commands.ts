@@ -2,8 +2,10 @@ import type {
   ChatId,
   ChatPermission,
   ChatVisibility,
+  DevLoopSettings,
   MemberId,
   ProjectId,
+  SetupCommand,
   WorkspaceId,
   WorkspacePermission,
 } from '@spyria/kernel'
@@ -39,6 +41,8 @@ export type WorkspaceCommands = {
   updateWorkspaceRole: Command<{ roleId: string; name: string; permissions: readonly WorkspacePermission[] }>
   deleteWorkspaceRole: Command<{ roleId: string }>
   deleteWorkspace: Command<{ confirmation: 'DELETE' }>
+  setDevLoop: Command<{ settings: DevLoopSettings | null }>
+  setSetupCommands: Command<{ commands: readonly SetupCommand[] }>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   saveSsoSettings: (input: SsoSettingsInput & { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   sendDomainVerification: (input: {

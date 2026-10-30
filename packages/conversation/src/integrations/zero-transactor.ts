@@ -22,6 +22,7 @@ import {
   lockChatTurn,
   lockPendingAttachments,
   memberModelsOf,
+  modelCallCostSince,
   openTaskStepsOf,
   pendingPrompts,
   redactDeletedMessageEvents,
@@ -48,6 +49,7 @@ import {
   ChatNotFound,
   type ChatPermission,
   chatId,
+  devLoopSettingsFrom,
   ForeignWorkspace,
   type HarnessId,
   isAllowedModel,
@@ -56,6 +58,8 @@ import {
   memberActor,
   memberId,
   messageId,
+  setupCommandOf,
+  setupCommandsFrom,
   type WorkspaceId,
   workspaceId,
 } from '@spyria/kernel'
@@ -192,6 +196,19 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
+  const ownedStepCard = async (id: ChatId, type: 'pull_request' | 'dev_loop') => {
+    const row = await tx.run(
+      zql.messages
+        .where('workspaceId', contextWorkspaceId)
+        .where('chatId', id)
+        .where('kind', 'step')
+        .where('authorId', 'IS NOT', null)
+        .where('body', type)
+        .orderBy('seq', 'desc')
+        .one(),
+    )
+    return row?.step?.type === type ? toMessage(row) : undefined
+  }
   const waitingPromptIds = (id: ChatId) => pendingPrompts(tx, contextWorkspaceId, id, waitingNotices)
   const getMessage = async (id: MessageId) => {
     const row = await messageRow(id)
@@ -261,18 +278,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
               deletedAt: timeOrNull(deletedAt),
             }),
           ),
-      pullRequestCard: async (id) => {
-        const row = await tx.run(
-          zql.messages
-            .where('workspaceId', contextWorkspaceId)
-            .where('chatId', id)
-            .where('kind', 'step')
-            .where('authorId', 'IS NOT', null)
-            .orderBy('seq', 'desc')
-            .one(),
-        )
-        return row?.step?.type === 'pull_request' ? toMessage(row) : undefined
-      },
+      pullRequestCard: (id) => ownedStepCard(id, 'pull_request'),
+      devLoopCard: (id) => ownedStepCard(id, 'dev_loop'),
       seedFor: async (prompt) => {
         const memberMessages = zql.messages
           .where('workspaceId', contextWorkspaceId)
@@ -456,6 +463,12 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         await insertRoutingDecision(tx, { workspaceId: contextWorkspaceId, ...decision })
       },
     },
+    devLoop: {
+      settings: async () =>
+        devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
+      costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
+      enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
+    },
     toolCalls: {
       record: async (call) => {
         await insertToolCall(tx, { workspaceId: contextWorkspaceId, ...call })
@@ -517,6 +530,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           harness: row.harness ?? null,
           ownerId: row.ownerUserId ? memberId(row.ownerUserId) : null,
           localSession: row.localSession ?? null,
+          repository: row.repository ?? null,
           baseBranch: row.baseBranch ?? null,
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
@@ -552,6 +566,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       },
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
+      setupCommandOf: async (repository) =>
+        setupCommandOf(
+          setupCommandsFrom(
+            (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.setupCommands,
+          ),
+          repository,
+        ),
       hasAgentSession: async (id) =>
         Boolean(
           (await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one()))?.agentTurnMessageId,

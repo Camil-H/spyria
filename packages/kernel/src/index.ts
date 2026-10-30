@@ -1,6 +1,7 @@
 export * from './actors.ts'
 export * from './chat-access.ts'
 export * from './deployment.ts'
+export * from './dev-loop.ts'
 export * from './errors.ts'
 export * from './harnesses.ts'
 export * from './ids.ts'

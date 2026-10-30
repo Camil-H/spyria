@@ -7,6 +7,7 @@ import type {
   BrowserPageRepository,
   ChatRepository,
   DelegationRepository,
+  DevLoopRepository,
   MemberDirectory,
   MessageRepository,
   ReadMarkerRepository,
@@ -27,6 +28,7 @@ export type UnitOfWork = {
   routing: RoutingRepository
   delegations: DelegationRepository
   toolCalls: ToolCallRepository
+  devLoop: DevLoopRepository
 }
 
 export type ConversationTransactor = Transactor<UnitOfWork>
