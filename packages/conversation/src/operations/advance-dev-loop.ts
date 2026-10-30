@@ -47,7 +47,7 @@ type Dependencies = Pick<
   'transactor' | 'runtimes' | 'agentClient' | 'checkouts' | 'isBudgetUsedUp' | 'devLoopPollMilliseconds'
 >
 type LoopJob = { workspaceId: WorkspaceId; loopId: MessageId }
-type ChecksRun = { state?: string; names?: string[]; results?: CheckResult[] }
+type ChecksRun = { state?: string; id?: string | null; results?: CheckResult[] }
 
 const chatOf = ({ card }: Loop): AgentChat => ({ workspaceId: card.workspaceId, chatId: card.chatId })
 const checksPollOf = ({ devLoopPollMilliseconds }: Dependencies) => devLoopPollMilliseconds ?? checksPollMilliseconds
@@ -184,14 +184,6 @@ export const continueLoopAfterTurn = (dependencies: Dependencies, job: LoopJob) 
     return endLoop(unitOfWork, loop, stopped(step, hasRun ? pausedOutcome : notRunOutcome))
   })
 
-const groupNamesOf = ({ step }: Loop) =>
-  commandGroupAt(step.pipeline, step.position).map((index) => {
-    const config = step.pipeline[index]
-    return config ? stepNameOf(config) : ''
-  })
-
-const isRunOf = (run: ChecksRun, loop: Loop) => (run.names ?? []).join('\n') === groupNamesOf(loop).join('\n')
-
 const startCommands = async (dependencies: Dependencies, job: LoopJob, loop: Loop, group: number[]) => {
   const endpoint = await endpointOfLoop(dependencies, loop)
   const checks = group.flatMap((index) => {
@@ -200,19 +192,21 @@ const startCommands = async (dependencies: Dependencies, job: LoopJob, loop: Loo
       ? [{ name: config.name, command: config.command, timeout_minutes: config.timeoutMinutes }]
       : []
   })
+  const runId = crypto.randomUUID()
   const started = endpoint
     ? await dependencies.agentClient
-        .actOnWorkspace(endpoint, 'checks', { checks })
+        .actOnWorkspace(endpoint, 'checks', { checks, run_id: runId })
         .catch(() => ({ failure: 'The runtime could not start the checks: over to you' }))
     : { failure: 'The runtime stopped before the checks ran: over to you' }
   if ('failure' in started)
     return withLoop(dependencies, job, ['running'], (unitOfWork, current) =>
       endLoop(unitOfWork, current, stopped(current.step, String(started.failure))),
     )
-  if (!isRunOf(started as ChecksRun, loop)) return keepPolling(dependencies, job, 'running', checksPollOf(dependencies))
-  return dependencies.transactor.run(({ devLoop }) =>
-    devLoop.enqueue(devLoopJobTypes.pollChecks, job.loopId, checksPollOf(dependencies)),
-  )
+  if ((started as ChecksRun).id !== runId) return keepPolling(dependencies, job, 'running', checksPollOf(dependencies))
+  return withLoop(dependencies, job, ['running'], async (unitOfWork, current) => {
+    await saveLoop(unitOfWork, current, { ...current.step, checksRunId: runId })
+    await unitOfWork.devLoop.enqueue(devLoopJobTypes.pollChecks, job.loopId, checksPollOf(dependencies))
+  })
 }
 
 const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => {
@@ -326,7 +320,7 @@ export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) =
     return withLoop(dependencies, job, ['running'], (unitOfWork, current) =>
       endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime restarted: over to you')),
     )
-  if (run && !isRunOf(run, loop)) return runLoop(dependencies, job)
+  if (run && run.id !== loop.step.checksRunId) return runLoop(dependencies, job)
   if (run?.state !== 'finished') return keepPolling(dependencies, job, 'running', checksPollOf(dependencies))
   await judgeCommands(dependencies, job, run.results ?? [], await headOf(dependencies, loop, endpoint))
   return undefined

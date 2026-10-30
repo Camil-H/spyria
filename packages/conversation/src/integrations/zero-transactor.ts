@@ -41,8 +41,6 @@ import {
   type Transact,
   transactingTransactor,
   transactorOver,
-  workspacePermissionsOf,
-  type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
 import {
