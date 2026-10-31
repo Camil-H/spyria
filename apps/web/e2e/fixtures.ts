@@ -343,6 +343,7 @@ export const configureGitHubApp = async (page: Page) => {
   const app = (await (await fetch(`${serverUrl}/test/github-app`)).json()) as Record<string, string>
   await openSettings(page, 'Connect GitHub')
   const section = githubSectionOf(page)
+  await section.getByRole('button', { name: /^(Create it manually|Change the App credentials)$/ }).click()
   await section.getByLabel('App id').fill(app.appId ?? '')
   await section.getByLabel('Client id').fill(app.clientId ?? '')
   await section.getByLabel('Private key').fill(app.privateKey ?? '')

@@ -27,6 +27,7 @@ test.describe('GitHub setup', () => {
       'acme/docsmain',
     ])
     await page.reload()
+    await section.getByRole('button', { name: 'Change the App credentials' }).click()
     for (const label of ['Private key', 'Client secret', 'Webhook secret']) {
       await expect(section.getByLabel(label)).toHaveValue('')
       await expect(section.getByLabel(label)).toHaveAttribute('placeholder', 'Set: enter a new value to replace it')
@@ -46,6 +47,7 @@ test.describe('GitHub setup', () => {
     const section = githubSectionOf(page)
     await expect(section.getByText('GitHub App connected')).toHaveCount(0)
     const creation = section.getByRole('form', { name: 'Create the GitHub App' })
+    await expect(creation.getByRole('radio', { name: 'Private account' })).toBeChecked()
     await creation.getByRole('radio', { name: 'An organization' }).check()
     await creation.getByLabel('Organization login').fill('acme-corp')
     await creation.getByRole('button', { name: 'Create the GitHub App on GitHub' }).click()
@@ -94,12 +96,16 @@ test.describe('GitHub setup', () => {
     await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with GitHub App connected')
   })
 
-  test("As an admin, I see how to create the GitHub App manually with this workspace's webhook and callback URLs, folded until I open it", {
+  test("As an admin, I choose to create the GitHub App manually and see how, with this workspace's webhook and callback URLs, folded until I open it", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
     await openSettings(page, 'Connect GitHub')
     const section = githubSectionOf(page)
     const appOrigin = new URL(page.url()).origin
+    await expect(section.getByText('How to create the GitHub App')).toHaveCount(0)
+    await expect(section.getByLabel('App id')).toHaveCount(0)
+    await section.getByRole('button', { name: 'Create it manually' }).click()
+    await expect(section.getByLabel('App id')).toBeVisible()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
     await section.getByText('How to create the GitHub App').click()
     for (const url of [appOrigin, `${appOrigin}/auth/github/callback`, `${appOrigin}/api/github/webhooks`])
@@ -114,6 +120,7 @@ test.describe('GitHub setup', () => {
     )
     await configureGitHubApp(page)
     await page.reload()
+    await section.getByRole('button', { name: 'Change the App credentials' }).click()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
     await section.getByText('How to create the GitHub App').click()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()
