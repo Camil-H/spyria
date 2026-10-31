@@ -20,6 +20,8 @@ export type DevLoopStep = {
   startPromptId: MessageId
   startedAt: number
   lastPromptId: MessageId
+  round: number
+  roundPromptId: MessageId
   state: DevLoopState
   next: DevLoopNext | null
   position: number
@@ -74,6 +76,8 @@ export const newDevLoop = (
   startPromptId,
   startedAt,
   lastPromptId: startPromptId,
+  round: 0,
+  roundPromptId: startPromptId,
   state: 'working',
   next: 'run',
   position: 0,
@@ -115,10 +119,21 @@ export const withOutcomes = (step: DevLoopStep, outcomes: [index: number, outcom
 
 export const restarted = (step: DevLoopStep): DevLoopStep => ({
   ...step,
+  round: step.round + 1,
+  roundPromptId: step.lastPromptId,
   position: 0,
   checkedHead: null,
   outcomes: step.pipeline.map(() => null),
 })
+
+export const restartLabelOf = (step: DevLoopStep) => {
+  const first = step.pipeline[0]
+  return step.round > 1 && step.state === 'running' && step.position === 0 && first
+    ? `Starting again from ${stepNameOf(first)} (round ${step.round})`
+    : undefined
+}
+
+export const movedCardLabelOf = (step: DevLoopStep) => `Quality gates: round ${step.round}, see below`
 
 const fixesOf = (config: DevLoopStepConfig | undefined) => (config && 'fixes' in config ? config.fixes : 0)
 

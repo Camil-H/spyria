@@ -1,6 +1,6 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, stepNameOf } from '../domain/dev-loop.ts'
+import { type DevLoopState, type DevLoopStep, restartLabelOf, stepNameOf } from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -39,6 +39,7 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const important = step.findings.filter((finding) => finding.severity === 'important').length
+  const restart = restartLabelOf(step)
   return (
     <section
       aria-label="Quality gates"
@@ -50,6 +51,7 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
         <span className={`rounded-full px-2 py-0.5 text-xs ${stateClasses[step.state]}`}>
           {stateLabels[step.state]}
         </span>
+        {restart && <span className="text-xs text-muted">{restart}</span>}
       </div>
       <ol aria-label="Steps" className="flex flex-col gap-1 text-xs">
         {step.pipeline.map((config, index) => {
