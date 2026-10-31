@@ -152,12 +152,15 @@ describe('the history written by the rebuild test, then drifted', () => {
   test('rebuilding repairs a drifted projection, only in the given scope', async () => {
     const live = await allMessages()
     await database.$client`update messages set body = 'drifted' where id in ('message-history-1', 'message-general-1')`
+    await database.$client`update messages set step = '{"type":"tool","name":"Drifted","result":null}'::jsonb
+    where id = 'message-history-reply'`
     await database.$client`delete from messages where id = 'message-history-4'`
     await database.$client`insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
     values (${acme}, 'chat-standup', 'message-without-event', 999, 'member', ${alice}, 'Ghost', now())`
     await rebuild({ workspaceId: acme, chatId: 'chat-standup' })
     const afterChatRebuild = await allMessages()
     expect(afterChatRebuild.find((message) => message.id === 'message-history-1')?.body).toBe('First, edited')
+    expect(afterChatRebuild.find((message) => message.id === 'message-history-reply')?.step).toBeNull()
     expect(afterChatRebuild.find((message) => message.id === 'message-without-event')).toBeUndefined()
     expect(afterChatRebuild.find((message) => message.id === 'message-history-4')).toBeUndefined()
     expect(afterChatRebuild.find((message) => message.id === 'message-general-1')?.body).toBe('drifted')
