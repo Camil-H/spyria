@@ -1,3 +1,4 @@
+import type { RuntimeHostRow } from '@spyria/db'
 import { useQuery } from '@spyria/db/react'
 import {
   type HarnessId,
@@ -13,7 +14,7 @@ import { useSession } from '@spyria/session'
 import { buttonClass, Dialog, ErrorMessage, ghostButtonClass, LabelledSection, useGuardedAction } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
-import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice } from './HostCommandDialog.tsx'
+import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice, useCloseOnceDone } from './HostCommandDialog.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
 
@@ -57,9 +58,70 @@ const StartMachine = ({
   )
 }
 
+const StartMachineDialog = ({
+  workspaceId,
+  machine,
+  onClose,
+}: {
+  workspaceId: WorkspaceId
+  machine: RuntimeHostRow
+  onClose: () => void
+}) => {
+  useCloseOnceDone(machine.status === 'online', onClose)
+  return (
+    <Dialog label="Start my machine" closeLabel="Close" onClose={onClose}>
+      <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>
+      <StartMachine workspaceId={workspaceId} hostId={machine.id} />
+    </Dialog>
+  )
+}
+
+const UseToolDialog = ({
+  workspaceId,
+  machine,
+  tool,
+  code,
+  onClose,
+}: {
+  workspaceId: WorkspaceId
+  machine: RuntimeHostRow | undefined
+  tool: HarnessId
+  code: string | null
+  onClose: () => void
+}) => {
+  const { deployment } = useSession()
+  const toolName = harnesses[tool].name
+  const isOnline = machine?.status === 'online'
+  const isSignedIn = isOnline && machine.capacity?.signedIn?.includes(tool) === true
+  useCloseOnceDone(isSignedIn, onClose)
+  return (
+    <Dialog label={`Use ${toolName}`} closeLabel="Close" onClose={onClose}>
+      {machine && <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>}
+      {isOnline ? (
+        isSignedIn ? (
+          <p className="text-sm">
+            {toolName} is ready: in a new Runtime chat, set Runs on to Local · {toolName}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-muted">Sign in to {toolName} on your machine:</p>
+            <CommandBox command={signInCommandOf(tool, deployment)} />
+          </>
+        )
+      ) : code ? (
+        <>
+          <PersonalNotice toolName={toolName} />
+          <HostCommand code={code} personal signIn={tool} />
+        </>
+      ) : (
+        machine && <StartMachine workspaceId={workspaceId} hostId={machine.id} signIn={tool} />
+      )}
+    </Dialog>
+  )
+}
+
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
-  const { deployment } = useSession()
   const machine = useQuery(getMachine, workspaceId, memberId)
   const localSessions = useQuery(localSessionsOf, workspaceId)
   const [code, setCode] = useState<string | null>(null)
@@ -121,38 +183,25 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>
       )}
       {openDialog === 'add' && code && (
-        <HostCommandDialog label="Add my machine" code={code} personal onClose={() => setOpenDialog(null)} />
+        <HostCommandDialog
+          label="Add my machine"
+          code={code}
+          personal
+          isConnected={isOnline}
+          onClose={() => setOpenDialog(null)}
+        />
       )}
       {connectingTool && (
-        <Dialog label={`Use ${harnesses[connectingTool].name}`} closeLabel="Close" onClose={() => setOpenDialog(null)}>
-          {machine && <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>}
-          {isOnline ? (
-            machine.capacity?.signedIn?.includes(connectingTool) ? (
-              <p className="text-sm">
-                {harnesses[connectingTool].name} is ready: in a new Runtime chat, set Runs on to Local ·{' '}
-                {harnesses[connectingTool].name}
-              </p>
-            ) : (
-              <>
-                <p className="text-sm text-muted">Sign in to {harnesses[connectingTool].name} on your machine:</p>
-                <CommandBox command={signInCommandOf(connectingTool, deployment)} />
-              </>
-            )
-          ) : code ? (
-            <>
-              <PersonalNotice toolName={harnesses[connectingTool].name} />
-              <HostCommand code={code} personal signIn={connectingTool} />
-            </>
-          ) : (
-            machine && <StartMachine workspaceId={workspaceId} hostId={machine.id} signIn={connectingTool} />
-          )}
-        </Dialog>
+        <UseToolDialog
+          workspaceId={workspaceId}
+          machine={machine}
+          tool={connectingTool}
+          code={code}
+          onClose={() => setOpenDialog(null)}
+        />
       )}
       {openDialog === 'start' && machine && (
-        <Dialog label="Start my machine" closeLabel="Close" onClose={() => setOpenDialog(null)}>
-          <p className="text-sm">Your machine: {statusLabelOf(machine)}</p>
-          <StartMachine workspaceId={workspaceId} hostId={machine.id} />
-        </Dialog>
+        <StartMachineDialog workspaceId={workspaceId} machine={machine} onClose={() => setOpenDialog(null)} />
       )}
       {openDialog === 'remove' && machine && (
         <Dialog label="Remove my machine" onClose={() => setOpenDialog(null)}>
