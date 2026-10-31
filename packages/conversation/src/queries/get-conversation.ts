@@ -25,6 +25,7 @@ import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.t
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf, taskReportOf } from '../domain/delegation.ts'
+import { movedCardLabelOf } from '../domain/dev-loop.ts'
 import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
@@ -237,6 +238,37 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
   return messages.flatMap((message) => itemsByStepId.get(message.id) ?? [{ type: 'message', message }])
 }
 
+const isWorkOfTurn = (promptId: MessageId) => (item: ConversationItem) =>
+  item.type === 'fold'
+    ? item.promptId === promptId
+    : item.message.kind !== 'notice' && (item.message.id === promptId || item.message.replyToId === promptId)
+
+const withLoopCardAfterItsRound = (items: readonly ConversationItem[], card: ConversationMessage) => {
+  if (card.step?.type !== 'dev_loop' || card.step.round < 2) return items
+  const cardIndex = items.findIndex((item) => item.type === 'message' && item.message.id === card.id)
+  const roundEnd = items.findLastIndex(isWorkOfTurn(card.step.roundPromptId))
+  if (cardIndex === -1 || roundEnd <= cardIndex) return items
+  const marker: ConversationMessage = {
+    ...card,
+    id: messageId(`${card.id}-round`),
+    kind: 'notice',
+    body: movedCardLabelOf(card.step),
+    step: null,
+  }
+  return [
+    ...items.slice(0, cardIndex),
+    { type: 'message' as const, message: marker },
+    ...items.slice(cardIndex + 1, roundEnd + 1),
+    { type: 'message' as const, message: card },
+    ...items.slice(roundEnd + 1),
+  ]
+}
+
+export const withLoopCardsAfterTheirRound = (items: readonly ConversationItem[]) =>
+  items
+    .flatMap((item) => (item.type === 'message' && item.message.step?.type === 'dev_loop' ? [item.message] : []))
+    .reduce(withLoopCardAfterItsRound, items)
+
 export const getConversation =
   (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId, spyriaRuntimeAvailable?: boolean) =>
   (snapshot: Snapshot): Conversation | null => {
@@ -399,6 +431,6 @@ export const getConversation =
       hasActiveTurn,
       isReadMarkerBehind: flowMessages.some((message) => message.seq > lastReadSeq),
       messages,
-      items: turnItemsOf(messages.flatMap(withThoughtsApart)),
+      items: withLoopCardsAfterTheirRound(turnItemsOf(messages.flatMap(withThoughtsApart))),
     }
   }

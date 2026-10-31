@@ -67,6 +67,7 @@ export type AgentScript = {
   delegateRoute?: object | string
   subagents?: Record<string, object>
   summary?: string
+  whenPrompted?: { includes: string; script: AgentScript }[]
 }
 
 const aliceMemberId = 'member-alice'
