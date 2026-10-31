@@ -88,7 +88,7 @@ test.describe('Models', () => {
     for (const provider of ['Google', 'xAI', 'DeepSeek', 'Z.ai', 'Meta']) await addLlmKey(bobPage, provider)
     await openChat(bobPage, 'Bob on OpenRouter')
     await openSession(bobPage)
-    for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7', 'Llama 4 Scout'])
+    for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7', 'Muse Spark 1.3'])
       await expect(sessionOf(bobPage).getByLabel('Main model').getByRole('option', { name, exact: true })).toHaveCount(
         1,
       )

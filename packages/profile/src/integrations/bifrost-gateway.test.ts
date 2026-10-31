@@ -61,7 +61,7 @@ test.each([
     {
       provider: 'meta',
       keys: [],
-      network_config: { base_url: 'https://api.llama.com/compat/v1' },
+      network_config: { base_url: 'https://api.meta.ai/v1' },
       custom_provider_config: {
         base_provider_type: 'openai',
         request_path_overrides: {

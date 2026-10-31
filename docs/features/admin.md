@@ -151,7 +151,7 @@ When an agent acts, it uses the chat owner's access. On a guest's prompt it uses
 
 **Allow every provider** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
 
-The page lists the providers in two groups: labs (Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, Meta and TypeSafe, whose decision models route turns) and routers (OpenRouter), listed once in `packages/kernel/src/models.ts`. Meta is reached through the OpenAI-compatible Llama API.
+The page lists the providers in two groups: labs (Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, Meta and TypeSafe, whose decision models route turns) and routers (OpenRouter), listed once in `packages/kernel/src/models.ts`. Meta is reached through the OpenAI-compatible Meta Model API (`api.meta.ai`), with Muse Wonder as its large model and Muse Spark as its medium one.
 
 ## Spend
 

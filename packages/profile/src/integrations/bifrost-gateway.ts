@@ -50,7 +50,7 @@ const providersCreatedOnDemand: Record<string, object> = {
   xai: {},
   deepseek: {},
   zai: openAiCompatibleProviderAt('https://api.z.ai/api/paas/v4'),
-  meta: openAiCompatibleProviderAt('https://api.llama.com/compat/v1'),
+  meta: openAiCompatibleProviderAt('https://api.meta.ai/v1'),
 }
 const modelListMilliseconds = 60 * 60 * 1000
 const modelListSize = 5000
