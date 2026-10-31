@@ -179,7 +179,8 @@ const findingLineOf = ({ severity, path, line, title, detail }: ReviewFinding) =
 export const reviewRequestOf = (step: DevLoopStep, baseBranch: string) =>
   [
     'Quality gates review your work before it is published.',
-    `Start a subagent with a fresh context to review ${step.reviewedHead ? `only what changed since the last review: \`git diff ${step.reviewedHead}..HEAD\`` : `the diff of this branch: \`git diff origin/${baseBranch}...HEAD\``}. Give it the repository's REVIEW.md and AGENTS.md (or CLAUDE.md) when they exist, and ask it to look for real defects: bugs, security holes, broken rules of the repository. Each finding needs a file and a line, and it must check each finding against the code before reporting it.`,
+    `Start a subagent with a fresh context to review ${step.reviewedHead ? `only what changed since the last review: \`git diff ${step.reviewedHead}..HEAD\`` : `the diff of this branch: \`git diff origin/${baseBranch}...HEAD\``}. Ask it to look for real defects: bugs, security holes, broken rules of the repository. Each finding needs a file and a line, and it must check each finding against the code before reporting it.`,
+    'In Claude Code, start it as a general-purpose subagent: Explore and Plan do not load CLAUDE.md.',
     'If you cannot start a subagent, review the diff yourself as a strict reviewer who did not write it. Do not change any file in this turn.',
     'Then call report_review with every finding: severity important (a defect this diff introduces), nit (style or taste) or pre_existing (a defect in code this diff did not change). An empty list is a valid report.',
     ...(step.findings.length > 0

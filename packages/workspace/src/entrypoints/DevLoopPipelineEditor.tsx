@@ -67,9 +67,7 @@ const StepFields = ({ step, change }: { step: DevLoopStepConfig; change: Change 
   if (step.kind === 'review')
     return (
       <>
-        <p className="text-sm text-muted">
-          A subagent with a fresh context reviews the diff against the repository's REVIEW.md and AGENTS.md.
-        </p>
+        <p className="text-sm text-muted">A subagent with a fresh context reviews the diff.</p>
         <FailureRule step={step} label={failureLabels.review} change={change} />
       </>
     )
