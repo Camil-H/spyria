@@ -120,6 +120,21 @@ export const withOutcomes = (step: DevLoopStep, outcomes: [index: number, outcom
   outcomes: step.outcomes.map((known, index) => outcomes.find(([at]) => at === index)?.[1] ?? known),
 })
 
+export const withFinishedChecks = (step: DevLoopStep, results: CheckResult[]): DevLoopStep | undefined => {
+  const finishedCommands = commandGroupAt(step.pipeline, step.position).slice(0, results.length)
+  const checked = withOutcomes(
+    step,
+    finishedCommands.map((index, offset) => [index, results[offset]?.exitCode === 0 ? 'passed' : 'failed']),
+  )
+  return checked.outcomes.every((outcome, index) => outcome === step.outcomes[index]) ? undefined : checked
+}
+
+const activeStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
+export const runningIndexOf = (step: DevLoopStep) =>
+  activeStates.includes(step.state)
+    ? step.outcomes.findIndex((outcome, index) => index >= step.position && outcome === null)
+    : -1
+
 export const restarted = (step: DevLoopStep): DevLoopStep => ({
   ...step,
   position: 0,

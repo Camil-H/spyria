@@ -30,6 +30,7 @@ import {
   stopOutcomeOf,
   stopped,
   turnedOffOutcome,
+  withFinishedChecks,
   withOutcomes,
 } from '../domain/dev-loop.ts'
 import { checkRunsTextOf } from '../domain/github-tools.ts'
@@ -311,6 +312,13 @@ const judgeCommands = (dependencies: Dependencies, job: LoopJob, results: CheckR
 const keepPolling = (dependencies: Dependencies, job: LoopJob, state: DevLoopStep['state'], every: number) =>
   withLoop(dependencies, job, [state], async () => ({ retryInMilliseconds: every }))
 
+const recordFinishedChecks = (dependencies: Dependencies, job: LoopJob, run: ChecksRun | undefined) =>
+  withLoop(dependencies, job, ['running'], async (unitOfWork, loop) => {
+    const checked = run?.id === loop.step.checksRunId ? withFinishedChecks(loop.step, run.results ?? []) : undefined
+    if (checked) await saveLoop(unitOfWork, loop, checked)
+    return { retryInMilliseconds: checksPollOf(dependencies) }
+  })
+
 export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await loopIn(dependencies, job)
   if (loop?.step.state !== 'running') return undefined
@@ -327,7 +335,7 @@ export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) =
       endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime restarted: over to you')),
     )
   if (run && run.id !== loop.step.checksRunId) return runLoop(dependencies, job)
-  if (run?.state !== 'finished') return keepPolling(dependencies, job, 'running', checksPollOf(dependencies))
+  if (run?.state !== 'finished') return recordFinishedChecks(dependencies, job, run)
   await judgeCommands(dependencies, job, run.results ?? [], await headOf(dependencies, loop, endpoint))
   return undefined
 }
