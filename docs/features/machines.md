@@ -15,7 +15,7 @@ There are two kinds of host:
 | Model calls | the prompter's API key through Spyria's gateway | the owner's subscription, directly from the machine |
 | Started with | `spyria-host <claim URL>` | `spyria-host --personal <claim URL>` |
 
-Hosts never pull images: the runtime image is built on the server's machine with `bun run agent:build`, and each host must hold it. Until it is built, a prompt answers "Spyria's runtime image is not built: run bun run agent:build".
+A host runs only the runtime image the server names: on a published deployment the `spyria-agent` image of the server's version, pulled by digest from the deployment's registry the first time a runtime starts on the host (any other registry, name or tag is refused); on a deployment built from a clone, the local content ID that `bun run agent:build` wrote on the server's machine, which each host must hold. Until the image is there, a prompt answers "Spyria's runtime image is not built: run bun run agent:build".
 
 ## Adding a workspace runtime host
 

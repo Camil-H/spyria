@@ -107,4 +107,4 @@ When a turn delegates work, `spyria-agent` runs sub-conversations in the same ru
 
 ## Deployment shape
 
-One Docker Compose file (`deploy/compose.prod.yml`) runs Postgres, the migrations, the server with the built web app, zero-cache and the gateway, with optional services for a runtime host on the same machine and a tunnel. A single HTTPS origin routes `/zero/*` to zero-cache and everything else to the server. Runtime hosts and members' machines connect to that origin from wherever they are. See [self-hosting](../guides/self-hosting.md).
+One Docker Compose file (`deploy/compose.prod.yml`) runs Postgres, the migrations, the server with the built web app, zero-cache and the gateway, with optional services for a runtime host on the same machine and a tunnel. A single HTTPS origin routes everything to the server, which forwards `/zero/*` to zero-cache; the images are published on GHCR per version, and hosts pull the runtime image by digest. Runtime hosts and members' machines connect to that origin from wherever they are. See [self-hosting](../guides/self-hosting.md).

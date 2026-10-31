@@ -7,7 +7,7 @@ Self-hosters range from one person on a spare machine to a team with its own pla
 ## Decision
 
 - One Docker Compose file, `deploy/compose.prod.yml`, runs a production instance, reading `.env.prod`. Optional services sit behind Compose profiles: `host` (a runtime host on the same machine) and `cloudflare` (a Cloudflare tunnel).
-- The server serves the built web app itself, so the app, the API, sign-in and webhooks share one HTTPS origin. Only `/zero/*` goes to zero-cache.
+- The server serves the built web app itself, so the app, the API, sign-in and webhooks share one HTTPS origin. Only `/zero/*` goes to zero-cache (since [decision 0026](0026-published-images-one-entry-point.md), through the server).
 - A `migrate` service applies migrations, and the server starts only after it succeeds.
 - The server refuses to start in production until its settings pass a check, listing every problem at once.
 - The docs stay provider-neutral: any HTTPS front, any OIDC provider, any SMTP service. Cloudflare appears as one worked example.

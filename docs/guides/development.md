@@ -54,7 +54,7 @@ Every setting is listed with its dev default and a comment in `.env.example`. To
 
 ## The model gateway in development
 
-`bun run dev` starts `spyria-gateway` (Bifrost, pinned by digest, configured by `infra/bifrost.json`) on `127.0.0.1:8180`. On its first start, the one-shot `spyria-gateway-database` container creates a `bifrost` role and database on `spyria-postgres`, outside Spyria's migrations. The gateway's own data lives in the `spyria-gateway-data` volume.
+`bun run dev` starts `spyria-gateway` (Bifrost, pinned by digest, configured by `deploy/bifrost.json`, shared with production) on `127.0.0.1:8180`. On its first start, the one-shot `spyria-gateway-database` container creates a `bifrost` role and database on `spyria-postgres`, outside Spyria's migrations. The gateway's own data lives in the `spyria-gateway-data` volume.
 
 Members' API keys are stored in the gateway only; Spyria keeps a reference and the last 4 characters. The gateway's dev secrets come from `SPYRIA_GATEWAY_ENCRYPTION_KEY`, `SPYRIA_GATEWAY_SETUP_TOKEN`, `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` and `SPYRIA_GATEWAY_DB_PASSWORD`, with dev defaults in `infra/docker-compose.yml`. The encryption key can never change without wiping the gateway's database, because every stored key is encrypted with it.
 
@@ -128,7 +128,7 @@ Agents run in runtimes (containers of Spyria's runtime image with spyria-agent) 
 
 ### Build the runtime image
 
-Runtime hosts never pull images. Build Spyria's runtime image before the first runtime:
+In development nothing is pulled: hosts run the image built here, by its content ID (a published deployment pulls `spyria-agent` by digest instead, see [self-hosting](./self-hosting.md#install)). Build Spyria's runtime image before the first runtime:
 
 ```sh
 bun run agent:build          # compile spyria-agent and build the image; cached by Docker
@@ -211,8 +211,8 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | `packages/usage` | Usage metering, spend, budgets and the audit log. |
 | `packages/onboarding` | The setup checklist: which tasks a member sees, what is done or skipped. |
 | `packages/kernel`, `packages/db`, `packages/ui`, `packages/session` | The shared layer: kernel types and logging, the database client and Zero schema, UI components, the signed-in member. |
-| `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`, `bifrost.json`. |
-| `deploy/` | The production Compose file `compose.prod.yml`. |
+| `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`. |
+| `deploy/` | Production: `compose.prod.yml` (published images), `compose.build.yml` (the override that builds from this clone), `bifrost.json` (the gateway's configuration, shared with the dev stack). |
 | `scripts/` | Checks and tooling: `check-all.ts`, `check-related.ts`, `check-bundle.ts`, `check-locks.ts`, `check-licenses.ts`, `agent-image.ts`, `smoke-prod.ts`. |
 
 ## Where to start reading
