@@ -563,6 +563,8 @@ const runsOnChoicesOf = ({
       signedIn,
     },
     runningRuntimes: 0,
+    hostVersion: null,
+    protocolVersion: 1,
     ownerId,
   })
   return getConversation(

@@ -303,7 +303,10 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
   const connectionRestrictionsOf = mappedRows(withMemberId<ZeroRows['connectionRestrictions'][number]>)
   const runtimeHostsOf = mappedRows(
-    ({ lastSeenAt, createdBy, createdAt, removedAt, ...host }: ZeroRows['runtimeHosts'][number]) => host,
+    ({ lastSeenAt, createdBy, createdAt, removedAt, protocolVersion, ...host }: ZeroRows['runtimeHosts'][number]) => ({
+      ...host,
+      protocolVersion: protocolVersion ?? 0,
+    }),
   )
   const machineCountsOf = mappedRows((counts: ZeroRows['machineCounts'][number]) => counts)
   const runtimesOf = mappedRows(

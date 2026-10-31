@@ -15,13 +15,25 @@ type ConnectedHost = { workspaceId: WorkspaceId; hostId: RuntimeHostId }
 type Input = Partial<HostDeclaration> & {
   token: string
   system: HostSystem
+  hostVersion?: string
+  protocolVersion?: number
   now: number
   beforeOnline?: (host: ConnectedHost) => void
 }
 
 export const recordHostHello = async (
   { transactor }: Dependencies,
-  { token, system, personal = false, signedIn, credentialsChangedAt, now, beforeOnline }: Input,
+  {
+    token,
+    system,
+    personal = false,
+    signedIn,
+    credentialsChangedAt,
+    hostVersion,
+    protocolVersion = 0,
+    now,
+    beforeOnline,
+  }: Input,
 ) => {
   const tokenHash = await hashSecret(token)
   return transactor.run(async ({ runtimeHosts, runtimes }) => {
@@ -35,6 +47,8 @@ export const recordHostHello = async (
     await runtimeHosts.save({
       ...host,
       status: 'online',
+      hostVersion: hostVersion ?? null,
+      protocolVersion,
       capacity: {
         ...capacityOf(system),
         ...(personal && { personal, ...signInsOf({ signedIn, credentialsChangedAt }, host.capacity?.expiredSignIns) }),

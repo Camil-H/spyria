@@ -14,6 +14,7 @@ import {
   redacted,
   runCredentialsCommand,
 } from './personal.ts'
+import { hostVersion, hostProtocolVersion as protocolVersion } from './protocol.ts'
 import { proxyOf, takeProxySettings, webSocketThrough } from './proxy.ts'
 import { createRelay, type Frame, frameTextOf, messageOf, relayVersion } from './relay.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
@@ -181,7 +182,7 @@ const connect = () => {
     const system = await systemOf(docker)
     const declared = await declaration()
     if (socket.readyState !== WebSocket.OPEN) return
-    send({ type: 'hello', token, gatewayUrl, system, relayVersion, ...declared })
+    send({ type: 'hello', token, gatewayUrl, system, relayVersion, hostVersion, protocolVersion, ...declared })
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)

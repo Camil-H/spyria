@@ -61,6 +61,8 @@ export type RuntimeHostRow = {
   claimExpiresAt: number | null
   capacity: RuntimeHostCapacity | null
   runningRuntimes: number
+  hostVersion: string | null
+  protocolVersion: number
   ownerId: MemberId | null
 }
 export type MachineCountsRow = { workspaceId: WorkspaceId; machines: number; claudeCode: number; codex: number }

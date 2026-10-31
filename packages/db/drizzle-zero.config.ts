@@ -64,6 +64,8 @@ export default drizzleZeroConfig(tables, {
       status: true,
       capacity: true,
       runningRuntimes: true,
+      hostVersion: true,
+      protocolVersion: true,
       lastSeenAt: true,
       createdBy: true,
       ownerId: true,
