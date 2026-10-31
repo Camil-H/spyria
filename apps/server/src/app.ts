@@ -146,6 +146,7 @@ import { contextOf, withSpan } from './telemetry.ts'
 import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
+import { createZeroForwarding, zeroPathPrefix } from './zero-forwarding.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -249,6 +250,7 @@ export const createApp = ({
   rateLimits = rateBudgets,
   rateLimiter: limit = createRateLimiter(rateLimits),
   trustedProxy,
+  zeroUrl,
 }: {
   database: Database
   tokenSecret: string
@@ -270,6 +272,7 @@ export const createApp = ({
   rateLimits?: RateBudgets
   rateLimiter?: RateLimiter
   trustedProxy?: TrustedProxy
+  zeroUrl?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
@@ -362,11 +365,18 @@ export const createApp = ({
               (response) => response.ok,
             ),
         }),
+        ...(zeroUrl && {
+          zero: () =>
+            fetch(new URL('/keepalive', zeroUrl), { signal: AbortSignal.timeout(healthCheckMilliseconds) }).then(
+              (response) => response.ok,
+            ),
+        }),
       })
       const passed = await Promise.all(checks.map(([, check]) => passesWithinTimeout(check)))
       const failing = checks.flatMap(([name], index) => (passed[index] ? [] : [name]))
       return failing.length === 0 ? context.json({ status: 'ok' }) : context.json({ status: 'degraded', failing }, 503)
     })
+    .all(`${zeroPathPrefix}/*`, zeroUrl ? createZeroForwarding(zeroUrl) : (context) => context.notFound())
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
