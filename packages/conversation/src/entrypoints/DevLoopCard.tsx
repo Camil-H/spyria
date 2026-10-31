@@ -1,6 +1,6 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, restartLabelOf, stepNameOf } from '../domain/dev-loop.ts'
+import { type DevLoopState, type DevLoopStep, isGateRunning, restartLabelOf, stepNameOf } from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -20,7 +20,6 @@ const stateClasses: Record<DevLoopState, string> = {
   done: 'bg-added text-ink',
   stopped: 'bg-removed text-ink',
 }
-const activeStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
 type StepStatus = 'passed' | 'failed' | 'running' | 'waiting'
 const statusIcons = {
   passed: CircleCheck,
@@ -30,7 +29,7 @@ const statusIcons = {
 } satisfies Record<StepStatus, unknown>
 
 const statusOf = (step: DevLoopStep, index: number): StepStatus =>
-  index === step.position && activeStates.includes(step.state) ? 'running' : (step.outcomes[index] ?? 'waiting')
+  isGateRunning(step, index) ? 'running' : (step.outcomes[index] ?? 'waiting')
 
 const fixesOf = (config: DevLoopStepConfig, round: number) =>
   'fixes' in config && config.fixes > 0 && round > 0

@@ -63,6 +63,9 @@ const finishedStates: DevLoopState[] = ['done', 'stopped']
 const shownFindingDetailCharacters = 1_000
 
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
+const gateRunningStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
+export const isGateRunning = (step: DevLoopStep, index: number) =>
+  index === step.position && gateRunningStates.includes(step.state)
 
 export const newDevLoop = (
   startPromptId: MessageId,
@@ -128,7 +131,7 @@ export const restarted = (step: DevLoopStep): DevLoopStep => ({
 
 export const restartLabelOf = (step: DevLoopStep) => {
   const first = step.pipeline[0]
-  return step.round > 1 && step.state === 'running' && step.position === 0 && first
+  return step.round > 1 && isGateRunning(step, 0) && first
     ? `Starting again from ${stepNameOf(first)} (round ${step.round})`
     : undefined
 }
