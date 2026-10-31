@@ -7,13 +7,14 @@ type DevLoopNext = 'run' | 'review_verdict'
 type StepOutcome = 'passed' | 'failed' | null
 export type CheckResult = { name: string; command: string; exitCode?: number; output: string }
 type FindingSeverity = 'important' | 'nit' | 'pre_existing'
-export type ReviewFinding = {
+export type ReportedFinding = {
   severity: FindingSeverity
   path: string
   line: number | null
   title: string
   detail: string
 }
+export type ReviewFinding = ReportedFinding & { id: string; isResolved: boolean }
 export type DevLoopStep = {
   type: 'dev_loop'
   repository: string | null
@@ -30,7 +31,8 @@ export type DevLoopStep = {
   outcomes: StepOutcome[]
   summary: { title: string; body: string }
   findings: ReviewFinding[]
-  reportedFindings: ReviewFinding[] | null
+  reportedFindings: ReportedFinding[] | null
+  reportedUnresolved: string[] | null
   checkedHead: string | null
   checksRunId: string | null
   reviewedHead: string | null
@@ -60,6 +62,10 @@ export const ciQuietMilliseconds = 15 * 60_000
 const finishedStates: DevLoopState[] = ['done', 'stopped']
 const shownFindingDetailCharacters = 1_000
 
+export const isBlocking = (finding: ReportedFinding) => finding.severity === 'important'
+export const findingsToVerifyOf = (step: DevLoopStep) =>
+  step.findings.filter((finding) => isBlocking(finding) && !finding.isResolved)
+
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
 
 export const newDevLoop = (
@@ -85,6 +91,7 @@ export const newDevLoop = (
   summary,
   findings: [],
   reportedFindings: null,
+  reportedUnresolved: null,
   checkedHead: null,
   checksRunId: null,
   reviewedHead: null,
@@ -173,8 +180,10 @@ export const checksFixPromptOf = (results: CheckResult[], attempts: Map<string, 
     }),
   ].join('\n\n')
 
-const findingLineOf = ({ severity, path, line, title, detail }: ReviewFinding) =>
-  `- [${severity}] ${path}${line === null ? '' : `:${line}`}: ${title}\n  ${detail.slice(0, shownFindingDetailCharacters).replaceAll('\n', '\n  ')}`
+const findingLineOf = ({ id, severity, path, line, title, detail }: ReviewFinding) =>
+  `- [${id}] [${severity}] ${path}${line === null ? '' : `:${line}`}: ${title}\n  ${detail.slice(0, shownFindingDetailCharacters).replaceAll('\n', '\n  ')}`
+const sectionOf = (heading: string, findings: ReviewFinding[]) =>
+  findings.length === 0 ? [] : [heading, ...findings.map(findingLineOf)]
 
 export const reviewRequestOf = (step: DevLoopStep, baseBranch: string) =>
   [
@@ -182,16 +191,29 @@ export const reviewRequestOf = (step: DevLoopStep, baseBranch: string) =>
     `Start a subagent with a fresh context to review ${step.reviewedHead ? `only what changed since the last review: \`git diff ${step.reviewedHead}..HEAD\`` : `the diff of this branch: \`git diff origin/${baseBranch}...HEAD\``}. Give it the repository's REVIEW.md and AGENTS.md (or CLAUDE.md) when they exist, and ask it to look for real defects: bugs, security holes, broken rules of the repository. Each finding needs a file and a line, and it must check each finding against the code before reporting it.`,
     'If you cannot start a subagent, review the diff yourself as a strict reviewer who did not write it. Do not change any file in this turn.',
     'Then call report_review with every finding: severity important (a defect this diff introduces), nit (style or taste) or pre_existing (a defect in code this diff did not change). An empty list is a valid report.',
-    ...(step.findings.length > 0
-      ? ['Already reported, do not report again:', ...step.findings.map(findingLineOf)]
-      : []),
+    ...sectionOf(
+      'These findings sent the work back. Ask the subagent to check each one against the current code, not only the diff, and pass the id of each one that is not fixed to report_review as unresolved (an empty list when all are fixed):',
+      findingsToVerifyOf(step),
+    ),
+    ...sectionOf(
+      'Already reported, do not report again:',
+      step.findings.filter((finding) => !isBlocking(finding)),
+    ),
   ].join('\n\n')
 
-export const reviewFixPromptOf = (findings: ReviewFinding[], round: number, limit: number) =>
-  [
-    `The review found ${findings.length} important ${findings.length === 1 ? 'defect' : 'defects'} in this diff (${attemptOf(round, limit)}). Fix every instance of each, not only the line shown, commit, then call finish_work again.`,
-    ...findings.map(findingLineOf),
+export const reviewFixPromptOf = (
+  { reopened, introduced }: { reopened: ReviewFinding[]; introduced: ReviewFinding[] },
+  round: number,
+  limit: number,
+) => {
+  const count = reopened.length + introduced.length
+  return [
+    `The review found ${count} important ${count === 1 ? 'defect' : 'defects'} in this diff (${attemptOf(round, limit)}). Fix every instance of each, not only the line shown, commit, then call finish_work again.`,
+    ...(reopened.length > 0
+      ? [...sectionOf('Still not fixed since the last review:', reopened), ...sectionOf('New:', introduced)]
+      : introduced.map(findingLineOf)),
   ].join('\n\n')
+}
 
 export const ciFixPromptOf = (checksText: string, round: number, limit: number) =>
   [
@@ -225,23 +247,43 @@ export const readyOutcomeOf = (step: DevLoopStep) => {
 export const noCiOutcomeOf = (minutes: number) =>
   `No CI check reported within ${minutes} minutes: ready for your review`
 
-const isSameFinding = (first: ReviewFinding, second: ReviewFinding) =>
+const isSameFinding = (first: ReportedFinding, second: ReportedFinding) =>
   first.path === second.path && first.title.trim().toLowerCase() === second.title.trim().toLowerCase()
 
-export const newFindingsOf = (step: DevLoopStep, reported: ReviewFinding[]) =>
-  reported.filter(
-    (finding, index) =>
-      !step.findings.some((known) => isSameFinding(known, finding)) &&
-      reported.findIndex((other) => isSameFinding(other, finding)) === index,
+export const reviewVerdictOf = (step: DevLoopStep) => {
+  const reported = step.reportedFindings ?? []
+  const unresolved = step.reportedUnresolved ?? []
+  const isReopened = (known: ReviewFinding) =>
+    unresolved.includes(known.id) || reported.some((finding) => isSameFinding(known, finding))
+  const known = step.findings.map((finding) =>
+    isBlocking(finding) ? { ...finding, isResolved: !isReopened(finding) } : finding,
   )
-
-export const blockingFindingsOf = (findings: ReviewFinding[]) =>
-  findings.filter((finding) => finding.severity === 'important')
+  const fresh = reported
+    .filter(
+      (finding, index) =>
+        !step.findings.some((other) => isSameFinding(other, finding)) &&
+        reported.findIndex((other) => isSameFinding(other, finding)) === index,
+    )
+    .map((finding, index) => ({ ...finding, id: `F${step.findings.length + index + 1}`, isResolved: false }))
+  return {
+    findings: [...known, ...fresh],
+    reopened: known.filter((finding) => isBlocking(finding) && !finding.isResolved),
+    introduced: fresh.filter(isBlocking),
+  }
+}
 
 const severities: FindingSeverity[] = ['important', 'nit', 'pre_existing']
 const maximumFindings = 50
 
-export const reviewFindingsOf = (input: unknown): ReviewFinding[] | undefined => {
+export const unresolvedIdsOf = (input: unknown, step: DevLoopStep): string[] | undefined => {
+  const unresolved = (input as { unresolved?: unknown } | undefined)?.unresolved
+  const idsToVerify = findingsToVerifyOf(step).map(({ id }) => id)
+  if (unresolved === undefined) return idsToVerify.length === 0 ? [] : undefined
+  if (!Array.isArray(unresolved) || !unresolved.every((id) => idsToVerify.includes(id))) return undefined
+  return [...new Set<string>(unresolved)]
+}
+
+export const reviewFindingsOf = (input: unknown): ReportedFinding[] | undefined => {
   const findings = (input as { findings?: unknown } | undefined)?.findings
   if (!Array.isArray(findings) || findings.length > maximumFindings) return undefined
   const parsed = findings.map((finding) => {
@@ -276,7 +318,7 @@ const finishWorkTool = {
 export const reportReviewTool = {
   name: 'report_review',
   description:
-    'Report the findings of the review the quality gates asked for, then end your turn. An empty list means the review found nothing.',
+    'Report the findings of the review the quality gates asked for, then end your turn. An empty list means the review found nothing. When the review request lists findings to check, unresolved holds the id of each one that is not fixed.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -293,6 +335,11 @@ export const reportReviewTool = {
           },
           required: ['severity', 'path', 'title'],
         },
+      },
+      unresolved: {
+        type: 'array',
+        description: 'The ids of the findings the review request asked to check that are not fixed',
+        items: { type: 'string' },
       },
     },
     required: ['findings'],
