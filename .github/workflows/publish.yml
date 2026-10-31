@@ -1,0 +1,137 @@
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.names.outputs.version }}
+      images: ${{ steps.names.outputs.images }}
+    steps:
+      - id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "images=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  agent:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            target: bun-linux-x64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-agent:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun build --compile --minify --target=${{ matrix.target }} src/main.ts --outfile dist/spyria-agent
+        working-directory: apps/agent
+      - run: docker build --pull -t spyria-agent:candidate apps/agent
+      - run: bun scripts/check-licenses.ts spyria-agent:candidate
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - run: docker tag spyria-agent:candidate "$IMAGE" && docker push "$IMAGE"
+
+  host:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-host:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - env:
+          IMAGES: ${{ needs.version.outputs.images }}
+        run: docker build --pull --build-arg "SPYRIA_IMAGES=$IMAGES" -t "$IMAGE" apps/host && docker push "$IMAGE"
+
+  agent-manifest:
+    needs: [version, agent]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-agent
+      version: ${{ needs.version.outputs.version }}
+
+  host-manifest:
+    needs: [version, host]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-host
+      version: ${{ needs.version.outputs.version }}
+
+  server:
+    needs: [version, agent-manifest]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-server:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+      AGENT_IMAGE: ${{ needs.version.outputs.images }}/spyria-agent@${{ needs.agent-manifest.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - run: docker build --pull --build-arg "SPYRIA_AGENT_IMAGE=$AGENT_IMAGE" -f apps/server/Dockerfile -t "$IMAGE" . && docker push "$IMAGE"
+
+  server-manifest:
+    needs: [version, server]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-server
+      version: ${{ needs.version.outputs.version }}
