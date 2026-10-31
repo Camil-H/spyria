@@ -47,8 +47,8 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
 
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
 const connectionsTabOf = (page: Page, tabName: 'Shared with me' | 'My connections') =>
-  sectionOf(page, 'Connections').getByRole('tab', { name: tabName })
-const connectionsPanelOf = (page: Page) => sectionOf(page, 'Connections').getByRole('tabpanel')
+  sectionOf(page, 'Tool connections').getByRole('tab', { name: tabName })
+const connectionsPanelOf = (page: Page) => sectionOf(page, 'Tool connections').getByRole('tabpanel')
 const openMyConnectionsTab = async (page: Page) => {
   await connectionsTabOf(page, 'My connections').click()
   await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
@@ -64,13 +64,18 @@ test.describe('Personal tools', () => {
   }) => {
     await openProfile(page)
 
-    await test.step('shows the two tabs with Shared with me selected first', async () => {
-      await expect(sectionOf(page, 'Connections').getByRole('tablist', { name: 'Connections' })).toBeVisible()
-      await expect(sectionOf(page, 'Connections').getByRole('tab')).toHaveText(['Shared with me', 'My connections'])
-      await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
+    await test.step('shows the two tabs with My connections selected first', async () => {
+      await expect(sectionOf(page, 'Tool connections').getByRole('tablist', { name: 'Tool connections' })).toBeVisible()
+      await expect(sectionOf(page, 'Tool connections').getByRole('tab')).toHaveText([
+        'My connections',
+        'Shared with me',
+      ])
+      await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
+      await expect(connectionsPanelOf(page)).toContainText('GitHub')
     })
 
     await test.step('lists the shared connections with the tools of the member, read-only', async () => {
+      await connectionsTabOf(page, 'Shared with me').click()
       const sharedSection = connectionsPanelOf(page)
       await expect(sharedSection.getByRole('listitem')).toHaveText(['CRMlookup, update'])
       await expect(sharedSection.getByRole('button')).toHaveCount(0)
@@ -80,12 +85,12 @@ test.describe('Personal tools', () => {
       await connectionsTabOf(page, 'My connections').click()
       await expect(connectionsPanelOf(page)).toContainText('GitHub')
       await expect(connectionsPanelOf(page)).not.toContainText('lookup, update')
-      await connectionsTabOf(page, 'Shared with me').focus()
+      await connectionsTabOf(page, 'My connections').focus()
       await page.keyboard.press('ArrowRight')
-      await expect(connectionsTabOf(page, 'My connections')).toBeFocused()
-      await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
-      await page.keyboard.press('ArrowLeft')
+      await expect(connectionsTabOf(page, 'Shared with me')).toBeFocused()
       await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
+      await page.keyboard.press('ArrowLeft')
+      await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('lists every server of the catalog as not connected, each with Connect', async () => {

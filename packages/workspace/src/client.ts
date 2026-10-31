@@ -2,6 +2,7 @@ export { DeleteWorkspaceSection } from './entrypoints/DeleteWorkspaceSection.tsx
 export { DevLoopSection } from './entrypoints/DevLoopSection.tsx'
 export { GitHubSection, useIsGitHubConfigured } from './entrypoints/GitHubSection.tsx'
 export { MembersSection } from './entrypoints/MembersSection.tsx'
+export { NoChatSelected } from './entrypoints/NoChatSelected.tsx'
 export { WorkspaceProvider } from './entrypoints/providers.tsx'
 export { RolesSection } from './entrypoints/RolesSection.tsx'
 export { SetupCommandsSection } from './entrypoints/SetupCommandsSection.tsx'

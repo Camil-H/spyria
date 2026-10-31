@@ -146,7 +146,7 @@ test.describe('Workspace hosts', () => {
     })
   })
 
-  test('As a member who can manage runtime hosts, I see an expired code refused and marked Code expired, and New command pairs the same row', {
+  test('As a member who can manage runtime hosts, I see an expired code refused and marked Code expired, and New command pairs the same row and closes once it is online', {
     tag: ['@spec-07'],
   }, async ({ page, hosts, workerStack }) => {
     await openSettings(page, 'Connect runtime')
@@ -160,9 +160,9 @@ test.describe('Workspace hosts', () => {
     await hostRowOf(page, 'Home server').getByRole('button', { name: 'New command' }).click()
     const freshUrl = urlOf(await commandOf(page, 'New command').inputValue())
     expect(freshUrl).not.toBe(expiredUrl)
-    await page.getByRole('dialog', { name: 'New command' }).getByRole('button', { name: 'Close' }).click()
     await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
     hosts.start(freshUrl)
+    await expect(page.getByRole('dialog', { name: 'New command' })).toHaveCount(0, { timeout: 10_000 })
     await expectOnline(page, 'Home server')
     await expect(hostsSectionOf(page).getByRole('listitem')).toHaveCount(1)
   })

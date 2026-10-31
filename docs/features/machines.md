@@ -21,7 +21,7 @@ Hosts never pull images: the runtime image is built on the server's machine with
 
 1. As an admin, open **Workspace settings**, **Connect runtime**, then **Add runtime host**, give it a name and copy the command.
 2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. When Spyria's origin is `localhost` (local development), the command builds the host image itself and points the container at `host.docker.internal`.
-3. The row turns **Online** within seconds. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
+3. The row turns **Online** within seconds, and the command dialog closes by itself. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
 
 Each host row shows its CPUs, memory, how many runtimes run against its cap, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
 
@@ -48,7 +48,7 @@ The runtime's status shows in the chat: **Not started**, **Starting…**, **Inst
 
 When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
 
-- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. Use it when the agent stops answering, for example after its process died.
+- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. The chip reads **Restarting…** until the new session has started, then **Session restarted** for a few seconds; when no session was running, or the agent could not restart it, it reads **New session on your next message** instead. Use it when the agent stops answering, for example after its process died.
 - **Stop runtime** puts the runtime to sleep as the idle stop does; the next prompt starts it again.
 
 While the agent is working, both ask for confirmation, because they stop the current turn. Other participants see the status without the menu, and the server refuses both actions to them.
@@ -73,7 +73,7 @@ A member can run Claude Code on their Claude subscription, or Codex on their Cha
 2. Sign in once, in a terminal:
    - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code.
    - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first, in its **Security** settings.
-3. The button turns to "✓ Claude Code connected" (or Codex) as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+3. The dialog closes and the button turns to "✓ Claude Code connected" (or Codex) as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
 
 The sign-in waits until `spyria-host --personal` has connected to Spyria once ("Waiting for spyria-host to connect to Spyria…"), since Spyria tells it which runtime image to sign in with. If it never connects, the sign-in stops after 15 minutes and points to `docker logs spyria-host`.
 
@@ -81,7 +81,7 @@ The container name follows the deployment name (`<deployment>-host`); the defaul
 
 **Never run it on a machine others use.** The agent on that machine runs as you and can read your Claude and ChatGPT sign-ins.
 
-When your machine shows **Offline** (Docker was not running when your computer started, or the container was stopped), **Start** shows the command that starts it again, `docker start spyria-host`; it reconnects within seconds. If it stays offline, **Set up again** gives a new command that installs it afresh: the old connection stops working, and your sign-ins are kept.
+When your machine shows **Offline** (Docker was not running when your computer started, or the container was stopped), **Start** shows the command that starts it again, `docker start spyria-host`; it reconnects within seconds, and the dialog closes by itself once the machine is online. If it stays offline, **Set up again** gives a new command that installs it afresh: the old connection stops working, and your sign-ins are kept.
 
 ### Sign-ins
 
@@ -103,7 +103,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 
 ## Turning members' machines off
 
-Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime** (on by default). The page also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
+Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime > Member local runtimes** (on by default). The section also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
 
 ## Several deployments on one machine
 

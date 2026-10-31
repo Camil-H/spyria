@@ -1,6 +1,6 @@
 import type { MachineCountsRow, RuntimeHostRow } from '@spyria/db'
 import { useQuery } from '@spyria/db/react'
-import type { WorkspaceId } from '@spyria/kernel'
+import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   Dialog,
@@ -20,7 +20,7 @@ import { useRuntimeCommands } from './providers.tsx'
 
 type OpenDialog =
   | { kind: 'add' }
-  | { kind: 'command'; label: string; code: string }
+  | { kind: 'command'; label: string; hostId: RuntimeHostId; code: string }
   | { kind: 'remove'; host: RuntimeHostRow }
   | null
 
@@ -60,14 +60,29 @@ const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>;
   )
 }
 
+export const MemberLocalRuntimesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const commands = useRuntimeCommands()
+  const localSessions = useQuery(localSessionsOf, workspaceId)
+  const machineCounts = useQuery(machineCountsOf, workspaceId)
+  return (
+    <LabelledSection title="Member local runtimes">
+      <Switch
+        label="Members can run sessions on their own machine"
+        isOn={localSessions}
+        onToggle={() => commands.setLocalSessions({ workspaceId, isOn: !localSessions })}
+      />
+      {machineCounts.machines > 0 && <p className="text-sm text-muted">{machineUsageOf(machineCounts)}</p>}
+    </LabelledSection>
+  )
+}
+
 export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useRuntimeCommands()
   const hosts = useQuery(listRuntimeHosts, workspaceId)
-  const localSessions = useQuery(localSessionsOf, workspaceId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
-  const machineCounts = useQuery(machineCountsOf, workspaceId)
   const closeDialog = () => setOpenDialog(null)
-  const showCommand = (label: string, code: string) => setOpenDialog({ kind: 'command', label, code })
+  const showCommand = (label: string, hostId: RuntimeHostId, code: string) =>
+    setOpenDialog({ kind: 'command', label, hostId, code })
   return (
     <LabelledSection title="Runtime hosts">
       <button type="button" className={`self-start ${buttonClass}`} onClick={() => setOpenDialog({ kind: 'add' })}>
@@ -109,7 +124,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
                       type="button"
                       className={ghostButtonClass}
                       onClick={async () =>
-                        showCommand('New command', await commands.renewCode({ workspaceId, hostId: host.id }))
+                        showCommand('New command', host.id, await commands.renewCode({ workspaceId, hostId: host.id }))
                       }
                     >
                       New command
@@ -128,20 +143,22 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
           })}
         </ul>
       )}
-      {machineCounts.machines > 0 && <p className="text-sm text-muted">{machineUsageOf(machineCounts)}</p>}
-      <Switch
-        label="Members can run sessions on their own machine"
-        isOn={localSessions}
-        onToggle={() => commands.setLocalSessions({ workspaceId, isOn: !localSessions })}
-      />
       {openDialog?.kind === 'add' && (
         <AddHostDialog
-          add={async (name) => showCommand('Add runtime host', (await commands.addHost({ workspaceId, name })).code)}
+          add={async (name) => {
+            const { id, code } = await commands.addHost({ workspaceId, name })
+            showCommand('Add runtime host', id, code)
+          }}
           onClose={closeDialog}
         />
       )}
       {openDialog?.kind === 'command' && (
-        <HostCommandDialog label={openDialog.label} code={openDialog.code} onClose={closeDialog} />
+        <HostCommandDialog
+          label={openDialog.label}
+          code={openDialog.code}
+          isConnected={hosts.some((host) => host.id === openDialog.hostId && host.status === 'online')}
+          onClose={closeDialog}
+        />
       )}
       {openDialog?.kind === 'remove' && (
         <Dialog label="Remove runtime host" subject={openDialog.host.name} onClose={closeDialog}>

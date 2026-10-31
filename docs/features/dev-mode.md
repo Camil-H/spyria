@@ -7,7 +7,7 @@ A dev chat is a runtime chat attached to a GitHub repository: the agent works in
 | Piece | Who sets it up | What it is used for |
 |---|---|---|
 | The workspace's GitHub App | An admin (**Workspace settings** > **Connect GitHub**) | Lists the repositories the workspace may use, clones them and fetches base branches with short-lived read-only installation tokens, receives webhooks |
-| A member's GitHub account | Each member (**Profile** > **Connections** > **My connections** > **Connect GitHub account**) | Pushes and pull requests, so GitHub shows the member as the author |
+| A member's GitHub account | Each member (**Profile** > **Tool connections** > **My connections** > **Connect GitHub account**) | Pushes and pull requests, so GitHub shows the member as the author |
 | The runtime | Started by the chat's first prompt | Holds the clone; the agent edits, builds and commits there |
 | The Spyria server | Always | Pushes the branch and talks to GitHub's API; GitHub tokens never enter a runtime |
 

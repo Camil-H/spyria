@@ -9,16 +9,22 @@ export type ListedModel = Readonly<{
 export type Model = RoutableModel & Omit<ListedModel, 'id'>
 
 export const aiProviders = [
-  { id: 'anthropic', name: 'Anthropic', aliases: [] },
-  { id: 'openai', name: 'OpenAI', aliases: [] },
-  { id: 'gemini', name: 'Google Gemini', aliases: ['google'] },
-  { id: 'mistral', name: 'Mistral', aliases: [] },
-  { id: 'xai', name: 'xAI', aliases: [] },
-  { id: 'deepseek', name: 'DeepSeek', aliases: [] },
-  { id: 'zai', name: 'Z.ai', aliases: ['z.ai'] },
-  { id: 'openrouter', name: 'OpenRouter', aliases: [] },
-  { id: 'typesafe', name: 'TypeSafe', aliases: [] },
-] as const satisfies readonly { id: string; name: string; aliases: readonly string[] }[]
+  { id: 'anthropic', name: 'Anthropic', aliases: [], kind: 'lab' },
+  { id: 'openai', name: 'OpenAI', aliases: [], kind: 'lab' },
+  { id: 'gemini', name: 'Google Gemini', aliases: ['google'], kind: 'lab' },
+  { id: 'mistral', name: 'Mistral', aliases: [], kind: 'lab' },
+  { id: 'xai', name: 'xAI', aliases: [], kind: 'lab' },
+  { id: 'deepseek', name: 'DeepSeek', aliases: [], kind: 'lab' },
+  { id: 'zai', name: 'Z.ai', aliases: ['z.ai'], kind: 'lab' },
+  { id: 'meta', name: 'Meta', aliases: ['muse', 'meta ai'], kind: 'lab' },
+  { id: 'openrouter', name: 'OpenRouter', aliases: [], kind: 'router' },
+  { id: 'typesafe', name: 'TypeSafe', aliases: [], kind: 'lab' },
+] as const satisfies readonly {
+  id: string
+  name: string
+  aliases: readonly string[]
+  kind: 'lab' | 'router'
+}[]
 export type AiProviderId = (typeof aiProviders)[number]['id']
 export type AiProviderAllowList = readonly string[]
 
@@ -58,6 +64,8 @@ const routableModels: readonly RoutableModel[] = [
   { id: 'zai/glm-5.3', name: 'GLM-5.3', tier: 'large' },
   { id: 'zai/glm-4.7', name: 'GLM-4.7', tier: 'medium' },
   { id: 'zai/glm-5.3-flash', name: 'GLM-5.3 Flash', tier: 'small' },
+  { id: 'meta/muse-wonder-1.0', name: 'Muse Wonder', tier: 'large' },
+  { id: 'meta/muse-spark-1.3', name: 'Muse Spark 1.3', tier: 'medium' },
   { id: 'openrouter/anthropic/claude-opus-5.5', name: 'OpenRouter Opus 5.5', tier: 'large' },
   { id: 'openrouter/anthropic/claude-sonnet-5.5', name: 'OpenRouter Sonnet 5.5', tier: 'medium' },
   { id: 'openrouter/anthropic/claude-haiku-5.5', name: 'OpenRouter Haiku 5.5', tier: 'small' },

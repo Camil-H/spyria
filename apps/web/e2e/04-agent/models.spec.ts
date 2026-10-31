@@ -58,7 +58,7 @@ test.describe('Models', () => {
     await bobPage.context().close()
   })
 
-  test('As a member with an OpenRouter key, I get a routed OpenRouter model that answers, search the full listing, and keys for Google, xAI, DeepSeek and Z.ai add their curated models', {
+  test('As a member with an OpenRouter key, I get a routed OpenRouter model that answers, search the full listing, and keys for Google, xAI, DeepSeek, Z.ai and Meta add their curated models', {
     tag: ['@spec-25', '@stage-f'],
   }, async ({ browser, workerStack, agentScript }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -85,10 +85,10 @@ test.describe('Models', () => {
     await bobPage.keyboard.press('Escape')
     await promptAndWait(bobPage, 'Carry on with Kimi', 2)
 
-    for (const provider of ['Google', 'xAI', 'DeepSeek', 'Z.ai']) await addLlmKey(bobPage, provider)
+    for (const provider of ['Google', 'xAI', 'DeepSeek', 'Z.ai', 'Meta']) await addLlmKey(bobPage, provider)
     await openChat(bobPage, 'Bob on OpenRouter')
     await openSession(bobPage)
-    for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7'])
+    for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7', 'Muse Spark 1.3'])
       await expect(sessionOf(bobPage).getByLabel('Main model').getByRole('option', { name, exact: true })).toHaveCount(
         1,
       )

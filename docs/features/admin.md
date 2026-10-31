@@ -120,7 +120,7 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 
 ## Runtime hosts and members' machines
 
-**Connect runtime** lists the workspace's runtime hosts, adds new ones, and holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
+**Connect runtime** lists the workspace's runtime hosts, adds new ones, and, in its **Member local runtimes** section, holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
 
 Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: a **Default setup command** tab for the repositories without one of their own, a tab for each repository that has its own, and a **New repository setup command** tab to add one, as the quality gates do. Nothing runs without one, even a repository's `.spyria/setup.sh`. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
 
@@ -137,7 +137,7 @@ After registration, Spyria lists the server's tools, each marked read-only or wr
 - **Allowed tools** decides which of them the workspace may use (all by default).
 - **Member access** narrows them per member: all allowed tools, some, or none.
 
-Each member's gateway key is given exactly the workspace's connections with the allowed tools minus their restrictions, and the gateway enforces it on every call. Connections of one workspace are invisible to other workspaces. Adding, changing or removing a connection reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Members see what they may use in **Profile** > **Connections** > **Shared with me**.
+Each member's gateway key is given exactly the workspace's connections with the allowed tools minus their restrictions, and the gateway enforces it on every call. Connections of one workspace are invisible to other workspaces. Adding, changing or removing a connection reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Members see what they may use in **Profile** > **Tool connections** > **Shared with me**.
 
 When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only what both the owner and the guest may use on shared connections, never the owner's personal connections, and write calls wait for the owner's approval (see [Agents](./agents.md)).
 
@@ -151,7 +151,7 @@ When an agent acts, it uses the chat owner's access. On a guest's prompt it uses
 
 **Allow every provider** removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
 
-The providers are Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, OpenRouter and TypeSafe (decision models for routing), listed once in `packages/kernel/src/models.ts`.
+The page lists the providers in two groups: labs (Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, Meta and TypeSafe, whose decision models route turns) and routers (OpenRouter), listed once in `packages/kernel/src/models.ts`. Meta is reached through the OpenAI-compatible Meta Model API (`api.meta.ai`), with Muse Wonder as its large model and Muse Spark as its medium one.
 
 ## Spend
 

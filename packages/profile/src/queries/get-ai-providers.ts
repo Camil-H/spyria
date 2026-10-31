@@ -6,6 +6,11 @@ export const getAiProviders = (workspaceId: WorkspaceId) => (snapshot: Snapshot)
     snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.aiProviderAllowList ?? null
   return {
     allowList,
-    providers: aiProviders.map(({ id, name }) => ({ id, name, isAllowed: isAllowedProvider(allowList, id) })),
+    providers: aiProviders.map(({ id, name, kind }) => ({
+      id,
+      name,
+      kind,
+      isAllowed: isAllowedProvider(allowList, id),
+    })),
   }
 }
