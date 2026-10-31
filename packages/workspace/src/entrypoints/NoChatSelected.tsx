@@ -27,7 +27,7 @@ export const NoChatSelected = () => {
         <SpiresBackground />
       </div>
       <section className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-card-edge bg-raised/80 p-8 text-center shadow-xl shadow-card-glow backdrop-blur-md">
-        <h1 className="text-xl font-medium">Select a chat</h1>
+        <h2 className="text-xl font-medium">Select a chat</h2>
         <p className="text-sm text-muted">{greeting}</p>
         <div className="mt-2 flex flex-col items-start gap-1.5 text-sm text-muted">
           <ShortcutHint keys="c" label="Start a new chat" />
