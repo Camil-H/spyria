@@ -15,6 +15,8 @@ RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/browser && npm cache clean 
   && node /usr/local/lib/spyria/browser/screenshot.mjs install
 COPY dist/spyria-agent /usr/local/bin/spyria-agent
 COPY pi/*.ts /usr/local/lib/spyria/pi/
+ARG SPYRIA_VERSION=
+ENV SPYRIA_VERSION=${SPYRIA_VERSION}
 WORKDIR /workspace/project
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/spyria-agent"]
