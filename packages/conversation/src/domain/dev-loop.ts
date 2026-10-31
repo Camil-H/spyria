@@ -21,6 +21,8 @@ export type DevLoopStep = {
   startPromptId: MessageId
   startedAt: number
   lastPromptId: MessageId
+  round: number
+  roundPromptId: MessageId
   state: DevLoopState
   next: DevLoopNext | null
   position: number
@@ -67,6 +69,10 @@ export const findingsToVerifyOf = (step: DevLoopStep) =>
   step.findings.filter((finding) => isBlocking(finding) && !finding.isResolved)
 
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
+const gateRunningStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
+export const isGateRunning = (step: DevLoopStep, index: number) =>
+  gateRunningStates.includes(step.state) &&
+  index === step.outcomes.findIndex((outcome, at) => at >= step.position && outcome === null)
 
 export const newDevLoop = (
   startPromptId: MessageId,
@@ -80,6 +86,8 @@ export const newDevLoop = (
   startPromptId,
   startedAt,
   lastPromptId: startPromptId,
+  round: 0,
+  roundPromptId: startPromptId,
   state: 'working',
   next: 'run',
   position: 0,
@@ -129,18 +137,23 @@ export const withFinishedChecks = (step: DevLoopStep, results: CheckResult[]): D
   return checked.outcomes.every((outcome, index) => outcome === step.outcomes[index]) ? undefined : checked
 }
 
-const activeStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
-export const runningIndexOf = (step: DevLoopStep) =>
-  activeStates.includes(step.state)
-    ? step.outcomes.findIndex((outcome, index) => index >= step.position && outcome === null)
-    : -1
-
 export const restarted = (step: DevLoopStep): DevLoopStep => ({
   ...step,
+  round: step.round + 1,
+  roundPromptId: step.lastPromptId,
   position: 0,
   checkedHead: null,
   outcomes: step.pipeline.map(() => null),
 })
+
+export const restartLabelOf = (step: DevLoopStep) => {
+  const first = step.pipeline[0]
+  return step.round > 1 && isGateRunning(step, 0) && first
+    ? `Starting again from ${stepNameOf(first)} (round ${step.round})`
+    : undefined
+}
+
+export const movedCardLabelOf = (step: DevLoopStep) => `Quality gates: round ${step.round}, see below`
 
 const fixesOf = (config: DevLoopStepConfig | undefined) => (config && 'fixes' in config ? config.fixes : 0)
 
