@@ -48,7 +48,7 @@ The runtime's status shows in the chat: **Not started**, **Starting…**, **Inst
 
 When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
 
-- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. Use it when the agent stops answering, for example after its process died.
+- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. The chip reads **Restarting…** until the new session has started, then **Session restarted** for a few seconds. Use it when the agent stops answering, for example after its process died.
 - **Stop runtime** puts the runtime to sleep as the idle stop does; the next prompt starts it again.
 
 While the agent is working, both ask for confirmation, because they stop the current turn. Other participants see the status without the menu, and the server refuses both actions to them.

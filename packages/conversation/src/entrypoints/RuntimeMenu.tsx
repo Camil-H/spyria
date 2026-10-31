@@ -7,13 +7,15 @@ import {
   focusRing,
   menuContentClass,
   menuItemClass,
+  Spinner,
   useGuardedAction,
 } from '@spyria/ui'
 import { ChevronDown } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
-import { useConversationCommands } from './providers.tsx'
+import { type ReactNode, useEffect, useState } from 'react'
+import { useAgentStream, useConversationCommands } from './providers.tsx'
 
 type RuntimeAction = 'restartSession' | 'stopRuntime'
+type Restart = 'restarting' | 'restarted' | null
 
 const actionLabels: Record<RuntimeAction, string> = {
   restartSession: 'Restart session',
@@ -23,6 +25,31 @@ const actionLabels: Record<RuntimeAction, string> = {
 const confirmations: Record<RuntimeAction, string> = {
   restartSession: 'The agent is working. Restarting the session stops this turn; the conversation is kept.',
   stopRuntime: 'The agent is working. Stopping the runtime stops this turn; your next message starts it again.',
+}
+
+const restartedNoticeMilliseconds = 3_000
+const restartGiveUpMilliseconds = 60_000
+
+const useRestartFeedback = (workspaceId: WorkspaceId, chatId: ChatId) => {
+  const agentStream = useAgentStream()
+  const [restart, setRestart] = useState<Restart>(null)
+  useEffect(() => {
+    if (restart !== 'restarting') return
+    const giveUp = setTimeout(() => setRestart(null), restartGiveUpMilliseconds)
+    const unsubscribe = agentStream.subscribe(workspaceId, chatId, (frame) => {
+      if ('sessionStarted' in frame) setRestart('restarted')
+    })
+    return () => {
+      clearTimeout(giveUp)
+      unsubscribe()
+    }
+  }, [agentStream, workspaceId, chatId, restart])
+  useEffect(() => {
+    if (restart !== 'restarted') return
+    const hide = setTimeout(() => setRestart(null), restartedNoticeMilliseconds)
+    return () => clearTimeout(hide)
+  }, [restart])
+  return { restart, setRestart }
 }
 
 export const RuntimeMenu = ({
@@ -39,17 +66,31 @@ export const RuntimeMenu = ({
   const commands = useConversationCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
   const [confirming, setConfirming] = useState<RuntimeAction | null>(null)
-  const act = (action: RuntimeAction) => run(() => commands[action]({ workspaceId, chatId }))
+  const { restart, setRestart } = useRestartFeedback(workspaceId, chatId)
+  const act = async (action: RuntimeAction) => {
+    if (action === 'restartSession') setRestart('restarting')
+    const isDone = await run(() => commands[action]({ workspaceId, chatId }))
+    if (!isDone && action === 'restartSession') setRestart(null)
+  }
   const choose = (action: RuntimeAction) => (isAgentWorking ? setConfirming(action) : void act(action))
   return (
     <>
       <Root>
         <Trigger
           aria-label="Runtime actions"
-          disabled={isPending}
+          disabled={isPending || restart === 'restarting'}
           className={`flex items-center gap-1 rounded-md px-1 hover:bg-selected ${focusRing}`}
         >
-          {children}
+          {restart === 'restarting' ? (
+            <>
+              <Spinner />
+              Restarting…
+            </>
+          ) : restart === 'restarted' ? (
+            'Session restarted'
+          ) : (
+            children
+          )}
           <ChevronDown aria-hidden className="size-3 text-muted" />
         </Trigger>
         <Content align="start" className={menuContentClass}>
