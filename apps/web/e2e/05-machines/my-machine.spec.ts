@@ -134,6 +134,7 @@ test.describe('My machine', () => {
       await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
+      await expect(machineSectionOf(page)).toContainText('In a new Runtime chat, set Runs on to Local · Claude Code')
     })
 
     test('As a member whose machine is offline, I get Start with the command that starts it again, or set it up again with a new command that pairs it and closes the dialog once online', {

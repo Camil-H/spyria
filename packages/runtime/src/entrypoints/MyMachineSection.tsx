@@ -92,6 +92,7 @@ const UseToolDialog = ({
   const { deployment } = useSession()
   const toolName = harnesses[tool].name
   const isOnline = machine?.status === 'online'
+  const connectedTools = isOnline ? harnessIds.filter((tool) => machine.capacity?.signedIn?.includes(tool)) : []
   const isSignedIn = isOnline && machine.capacity?.signedIn?.includes(tool) === true
   useCloseOnceDone(isSignedIn, onClose)
   return (
@@ -130,6 +131,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
     if (location.hash === `#${myMachineAnchor}`) document.getElementById(myMachineAnchor)?.scrollIntoView()
   }, [])
   const isOnline = machine?.status === 'online'
+  const connectedTools = isOnline ? harnessIds.filter((tool) => machine.capacity?.signedIn?.includes(tool)) : []
   const open = async (dialog: 'add' | HarnessId) => {
     setOpenDialog(dialog)
     if (!machine) setCode((await commands.addMachine({ workspaceId })).code)
@@ -181,6 +183,12 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         </div>
       ) : (
         <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>
+      )}
+      {localSessions && connectedTools.length > 0 && (
+        <p className="text-sm text-muted">
+          In a new Runtime chat, set Runs on to{' '}
+          {connectedTools.map((tool) => `Local · ${harnesses[tool].name}`).join(' or ')}
+        </p>
       )}
       {openDialog === 'add' && code && (
         <HostCommandDialog
