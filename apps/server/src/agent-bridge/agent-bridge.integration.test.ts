@@ -293,6 +293,23 @@ test('a browser that leaves and reopens a chat on the same socket gets each stre
   expect(texts.join('')).toBe(replyOf(1).body)
 })
 
+test('a started agent session reaches viewers live as sessionStarted and is still stored', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  await answered(await prompt(chat, 'Hello'))
+  await turnEnded(chat)
+  const sessionStartsIn = (frames: string[]) =>
+    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.sessionStarted !== undefined)
+  await waitFor(() => sessionStartsIn(viewer.frames).length === 1)
+  expect(sessionStartsIn(viewer.frames)).toEqual([{ chatId: chat, sessionStarted: true }])
+  const storedUpdates = (await storedAgentEventsOf(chat)).map(
+    (event) => (event.payload as { event: { update?: { sessionUpdate?: string } } }).event.update?.sessionUpdate,
+  )
+  expect(storedUpdates).toContain('session_started')
+})
+
 test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer but not to a closed one, and is never stored', async () => {
   await agentHost()
   const chat = await newRuntimeChat()

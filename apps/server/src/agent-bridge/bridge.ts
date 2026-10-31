@@ -367,6 +367,7 @@ export const createAgentBridge = ({
             broadcast(chat, { promptId: chatSocket.promptId, question: update })
             return
           }
+          if (update?.sessionUpdate === 'session_started') broadcast(chat, { sessionStarted: true })
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update
             broadcast(chat, { workspace: update })
