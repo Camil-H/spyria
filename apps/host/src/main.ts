@@ -26,6 +26,7 @@ const [claimUrlArgument] = givenArguments.filter((argument) => argument !== '--p
 const dockerSocket = process.env.DOCKER_SOCKET ?? '/var/run/docker.sock'
 const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
 const prefix = `${deployment}-`
+const publishedImages = process.env.SPYRIA_IMAGES || undefined
 const docker = createDocker(dockerSocket)
 const signInsChangedSignal = 'SIGUSR2'
 const containerHostPid = 1
@@ -198,7 +199,11 @@ const connect = () => {
       {},
       async () => {
         try {
-          send({ type: 'res', id: frame.id, data: (await runner.run(parseCommand(frame.op, frame.args))) ?? null })
+          send({
+            type: 'res',
+            id: frame.id,
+            data: (await runner.run(parseCommand(frame.op, frame.args, publishedImages))) ?? null,
+          })
           log.info({
             event: 'host.command',
             body: 'Host command done',
