@@ -28,7 +28,7 @@ const confirmations: Record<RuntimeAction, string> = {
 }
 
 const restartedNoticeMilliseconds = 3_000
-const restartGiveUpMilliseconds = 60_000
+const restartGiveUpMilliseconds = 20_000
 
 const useRestartFeedback = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const agentStream = useAgentStream()
