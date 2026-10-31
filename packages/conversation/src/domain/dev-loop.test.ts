@@ -4,7 +4,9 @@ import {
   checksFixPromptOf,
   ciVerdictOf,
   commandGroupAt,
+  devLoopStepOf,
   failedAt,
+  findingsToVerifyOf,
   limitOutcomeOf,
   newDevLoop,
   type ReportedFinding,
@@ -259,4 +261,15 @@ test('the hand-over names the steps that passed and the pull request; the last r
   expect(reconsiderPromptOf('Lint', 3)).toBe(
     'Lint still fails after 3 attempts to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.',
   )
+})
+
+test('findings recorded before they had ids read as resolved, with the id of their place, so they are not checked again', () => {
+  const recordedEarlier = [reported(), reported({ severity: 'nit', path: 'src/a.ts', title: 'Long name' })]
+  const step = devLoopStepOf({ ...loop, findings: [...recordedEarlier, finding({ id: 'F3' })] as ReviewFinding[] })
+  expect(step.findings.map(({ id, isResolved }) => [id, isResolved])).toEqual([
+    ['F1', true],
+    ['F2', true],
+    ['F3', false],
+  ])
+  expect(findingsToVerifyOf(step).map(({ id }) => id)).toEqual(['F3'])
 })

@@ -1,6 +1,6 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, isBlocking, stepNameOf } from '../domain/dev-loop.ts'
+import { type DevLoopState, type DevLoopStep, devLoopStepOf, isBlocking, stepNameOf } from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -37,9 +37,9 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
     ? `sent back ${Math.min(round, config.fixes)} of ${config.fixes} times`
     : undefined
 
-const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
+const DevLoopCard = ({ step: stored }: { step: DevLoopStep }) => {
+  const step = devLoopStepOf(stored)
   const blocking = step.findings.filter(isBlocking)
-  const marked = blocking.filter((finding) => typeof finding.isResolved === 'boolean')
   return (
     <section
       aria-label="Quality gates"
@@ -81,9 +81,9 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
           )
         })}
       </ol>
-      {marked.length > 0 && (
+      {blocking.length > 0 && (
         <ul aria-label="Important findings" className="flex flex-col gap-1 text-xs">
-          {marked.map((finding) => {
+          {blocking.map((finding) => {
             const Icon = finding.isResolved ? CircleCheck : CircleX
             return (
               <li key={finding.id} className="flex items-start gap-1.5">
