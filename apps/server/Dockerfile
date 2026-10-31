@@ -9,8 +9,9 @@ WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile --production && rm -rf /root/.bun/install/cache
 COPY --from=web /app/apps/web/dist apps/web/dist
-ARG SPYRIA_AGENT_IMAGE=
-ENV SPYRIA_ENV=production SPYRIA_WEB_DIST=/app/apps/web/dist PORT=3000 SPYRIA_AGENT_IMAGE=${SPYRIA_AGENT_IMAGE}
+ARG SPYRIA_AGENT_IMAGE= SPYRIA_VERSION= SPYRIA_IMAGES=
+ENV SPYRIA_ENV=production SPYRIA_WEB_DIST=/app/apps/web/dist PORT=3000 \
+  SPYRIA_AGENT_IMAGE=${SPYRIA_AGENT_IMAGE} SPYRIA_VERSION=${SPYRIA_VERSION} SPYRIA_IMAGES=${SPYRIA_IMAGES}
 USER bun
 EXPOSE 3000
 CMD ["bun", "apps/server/src/index.ts"]

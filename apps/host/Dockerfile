@@ -8,8 +8,8 @@ RUN bun build --compile --minify src/main.ts --outfile rootfs/usr/local/bin/spyr
   && install -D -m 644 /etc/ssl/certs/ca-certificates.crt rootfs/etc/ssl/certs/ca-certificates.crt
 
 FROM gcr.io/distroless/cc-debian12:nonroot
-ARG SPYRIA_IMAGES=
+ARG SPYRIA_IMAGES= SPYRIA_VERSION=
 COPY --from=build /build/rootfs/ /
-ENV SPYRIA_IMAGES=${SPYRIA_IMAGES}
+ENV SPYRIA_IMAGES=${SPYRIA_IMAGES} SPYRIA_VERSION=${SPYRIA_VERSION}
 USER 65532
 ENTRYPOINT ["/usr/local/bin/spyria-host"]
