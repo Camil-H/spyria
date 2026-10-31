@@ -1,0 +1,23 @@
+x-server-build: &server-build
+  context: ..
+  dockerfile: apps/server/Dockerfile
+
+services:
+  migrate:
+    build: *server-build
+    image: ${SPYRIA_DEPLOYMENT}-server
+
+  server:
+    build: *server-build
+    image: ${SPYRIA_DEPLOYMENT}-server
+    volumes:
+      - type: bind
+        source: ../apps/agent/image-id
+        target: /app/apps/agent/image-id
+        read_only: true
+        bind:
+          create_host_path: false
+
+  host:
+    build: ../apps/host
+    image: ${SPYRIA_DEPLOYMENT}-host
