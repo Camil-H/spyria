@@ -1,6 +1,13 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, isBlocking, stepNameOf } from '../domain/dev-loop.ts'
+import {
+  type DevLoopState,
+  type DevLoopStep,
+  isBlocking,
+  isGateRunning,
+  restartLabelOf,
+  stepNameOf,
+} from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -20,7 +27,6 @@ const stateClasses: Record<DevLoopState, string> = {
   done: 'bg-added text-ink',
   stopped: 'bg-removed text-ink',
 }
-const activeStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
 type StepStatus = 'passed' | 'failed' | 'running' | 'waiting'
 const statusIcons = {
   passed: CircleCheck,
@@ -30,7 +36,7 @@ const statusIcons = {
 } satisfies Record<StepStatus, unknown>
 
 const statusOf = (step: DevLoopStep, index: number): StepStatus =>
-  index === step.position && activeStates.includes(step.state) ? 'running' : (step.outcomes[index] ?? 'waiting')
+  isGateRunning(step, index) ? 'running' : (step.outcomes[index] ?? 'waiting')
 
 const fixesOf = (config: DevLoopStepConfig, round: number) =>
   'fixes' in config && config.fixes > 0 && round > 0
@@ -39,6 +45,7 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const blocking = step.findings.filter(isBlocking)
+  const restart = restartLabelOf(step)
   return (
     <section
       aria-label="Quality gates"
@@ -50,6 +57,7 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
         <span className={`rounded-full px-2 py-0.5 text-xs ${stateClasses[step.state]}`}>
           {stateLabels[step.state]}
         </span>
+        {restart && <span className="text-xs text-muted">{restart}</span>}
       </div>
       <ol aria-label="Steps" className="flex flex-col gap-1 text-xs">
         {step.pipeline.map((config, index) => {
