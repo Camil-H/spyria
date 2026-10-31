@@ -1,9 +1,9 @@
 # Operations
 
-What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [self-hosting](./self-hosting.md). The commands below use the production Compose file; to shorten them, define an alias:
+What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [self-hosting](./self-hosting.md). The commands below run in the install folder with the production Compose file (`deploy/compose.prod.yml` in a clone); to shorten them, define an alias:
 
 ```sh
-alias spyria='docker compose --env-file .env.prod -f deploy/compose.prod.yml'
+alias spyria='docker compose --env-file .env.prod -f compose.prod.yml'
 ```
 
 ## Logs
@@ -37,17 +37,18 @@ On `SIGTERM` or `SIGINT` the server stops accepting requests, lets the job worke
 
 ## Upgrades and migrations
 
+Set `SPYRIA_VERSION` in `.env.prod` to the new release, then:
+
 ```sh
-git pull
-bun run agent:build
-spyria up -d --build
+spyria pull
+spyria up -d
 ```
 
-The `migrate` service runs Drizzle's migrations against the database and exits; the server starts only after it succeeded, and zero-cache waits for it too (it needs the publication the migrations create). A failed migration leaves the old server down and the reason in `spyria logs migrate`. Migrations are never edited once shipped, so applying them in order is always safe.
+(From a clone with `compose.build.yml`: `git pull`, `bun run agent:build`, then `spyria up -d --build`.) The `migrate` service runs Drizzle's migrations against the database and exits; the server starts only after it succeeded, and zero-cache waits for it too (it needs the publication the migrations create). A failed migration leaves the old server down and the reason in `spyria logs migrate`. Migrations are never edited once shipped, so applying them in order is always safe.
 
 When a pull changes the gateway image, the gateway migrates its `bifrost` database on start, and some of its migrations cannot be reverted. Take a [backup](#backups) before `up`; going back to the previous gateway image means restoring that backup with it.
 
-A new runtime image (`agent:build`) applies to runtimes started after the server restarts; running ones keep theirs. If you run hosts on other machines, rebuild their host image and load the new runtime image there too (see [self-hosting](./self-hosting.md#other-machines)).
+Each version's server names its runtime image by digest; a host pulls it when the first runtime starts on it after the upgrade, and running runtimes keep theirs. Hosts on other machines keep their host image until you pull the new version there too (see [self-hosting](./self-hosting.md#other-machines)); from a clone, rebuild their host image and load the new runtime image there as well.
 
 ## Jobs
 
@@ -70,7 +71,7 @@ Postgres allows 200 connections (`max_connections`). The stack uses at most abou
 |---|---|---|
 | Server | 20 | `DATABASE_POOL_MAX` |
 | zero-cache | 56 | upstream 20 plus its replication stream, CVR 30, change 5 (`ZERO_*_MAX_CONNS`) |
-| Gateway | 20 | two stores of 10 in `infra/bifrost.json` |
+| Gateway | 20 | two stores of 10 in `deploy/bifrost.json` |
 | Migrations | a few, one-off | |
 
 zero-cache needs at least one connection per sync worker in each pool. On a machine with more than 20 cores, raise its pools and `max_connections` together.
