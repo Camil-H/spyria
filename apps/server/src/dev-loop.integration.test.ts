@@ -416,3 +416,27 @@ test('As a chat owner whose agent does not fix what the review found, the next r
   )
   expect(await noticesOf(id)).toContain(handOver)
 })
+
+test('As a chat owner, the quality gates card shows each command of a group pass or fail as soon as it finishes while the next one runs, and the verdict waits for the last command', async () => {
+  const commands = [commandStep('Quick', 'true'), commandStep('Broken', 'exit 1', 0), commandStep('Slow', 'sleep 3')]
+  expect(await setDevLoop(alice, settingsWith(commands))).toEqual(succeeded)
+  await stack.agentHost('Command progress host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(id, 'Fix the totals')
+
+  await waitFor(async () => {
+    const step = (await loopOf(id))?.step
+    return step?.state === 'running' && (step.outcomes as unknown[])[1] !== null
+  }, 60_000)
+  const midRun = (await loopOf(id))?.step
+  expect(midRun).toMatchObject({ state: 'running', position: 0, outcomes: ['passed', 'failed', null] })
+
+  await loopStateIs(id, 'stopped')
+  expect((await loopOf(id))?.step).toMatchObject({
+    outcomes: ['passed', 'failed', 'passed'],
+    outcome: 'Broken failed: over to you',
+  })
+})
