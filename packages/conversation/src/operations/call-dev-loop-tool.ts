@@ -4,10 +4,12 @@ import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
   devLoopInstructions,
   devLoopTools,
+  findingsToVerifyOf,
   isActiveLoop,
   newDevLoop,
   reportReviewTool,
   reviewFindingsOf,
+  unresolvedIdsOf,
 } from '../domain/dev-loop.ts'
 import { githubTools, githubToolsInstructions } from '../domain/github-tools.ts'
 import type { ConversationChat } from '../domain/message.ts'
@@ -68,6 +70,13 @@ const finishWork = async (unitOfWork: UnitOfWork, turn: Turn, input: unknown) =>
   return answered(finishedWorkText)
 }
 
+const unresolvedRefusalOf = (step: Loop['step']) => {
+  const ids = findingsToVerifyOf(step).map(({ id }) => id)
+  return ids.length === 0
+    ? 'No finding was given to check in this review: leave unresolved empty'
+    : `Say which findings are not fixed: unresolved lists ids among ${ids.join(', ')}, or is empty when all are fixed`
+}
+
 const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, input: unknown) => {
   if (!loop || loop.step.state !== 'reviewing' || loop.step.lastPromptId !== prompt.id)
     return refused('No review was asked for in this turn')
@@ -76,7 +85,14 @@ const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, inpu
     return refused(
       'The findings are not valid: each needs a severity (important, nit or pre_existing), a path and a title, with at most 50 findings',
     )
-  await saveLoop(unitOfWork, loop, { ...loop.step, reportedFindings: findings, next: 'review_verdict' })
+  const unresolved = unresolvedIdsOf(input, loop.step)
+  if (!unresolved) return refused(unresolvedRefusalOf(loop.step))
+  await saveLoop(unitOfWork, loop, {
+    ...loop.step,
+    reportedFindings: findings,
+    reportedUnresolved: unresolved,
+    next: 'review_verdict',
+  })
   return answered(`Recorded ${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}. End your turn now.`)
 }
 

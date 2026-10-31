@@ -1,22 +1,24 @@
 import { expect, test } from 'bun:test'
 import { type DevLoopRules, type DevLoopStepConfig, defaultDevLoopRules, messageId } from '@spyria/kernel'
 import {
-  blockingFindingsOf,
   checksFixPromptOf,
   ciVerdictOf,
   commandGroupAt,
   failedAt,
   limitOutcomeOf,
   newDevLoop,
-  newFindingsOf,
+  type ReportedFinding,
   type ReviewFinding,
   readyOutcomeOf,
   reconsiderPromptOf,
   restarted,
   restartLabelOf,
   reviewFindingsOf,
+  reviewFixPromptOf,
   reviewRequestOf,
+  reviewVerdictOf,
   stopped,
+  unresolvedIdsOf,
   withOutcomes,
 } from './dev-loop.ts'
 
@@ -38,12 +40,18 @@ const loop = newDevLoop(messageId('prompt-1'), startedAt, 'acme/app', pipeline, 
   title: 'Fix totals',
   body: '',
 })
-const finding = (overrides: Partial<ReviewFinding> = {}): ReviewFinding => ({
+const reported = (overrides: Partial<ReportedFinding> = {}): ReportedFinding => ({
   severity: 'important',
   path: 'src/totals.ts',
   line: 12,
   title: 'Rounds down negative totals',
   detail: 'Math.floor on a negative total',
+  ...overrides,
+})
+const finding = (overrides: Partial<ReviewFinding> = {}): ReviewFinding => ({
+  ...reported(),
+  id: 'F1',
+  isResolved: false,
   ...overrides,
 })
 
@@ -112,27 +120,101 @@ test('the fix prompt lists only the failed checks with their attempt and their o
   expect(prompt).not.toContain('Lint')
 })
 
-test('the review request covers the whole branch first, then only what changed since the last review, and lists what was already reported', () => {
+test('the review request covers the whole branch first, then only what changed since the last review, and lists nits and pre-existing findings as already reported', () => {
   expect(reviewRequestOf(loop, 'develop')).toContain('`git diff origin/develop...HEAD`')
-  const again = reviewRequestOf({ ...loop, reviewedHead: 'abc1234', findings: [finding()] }, 'develop')
+  const again = reviewRequestOf(
+    { ...loop, reviewedHead: 'abc1234', findings: [finding({ severity: 'nit' })] },
+    'develop',
+  )
   expect(again).toContain('`git diff abc1234..HEAD`')
   expect(again).toContain(
-    'Already reported, do not report again:\n\n- [important] src/totals.ts:12: Rounds down negative totals',
+    'Already reported, do not report again:\n\n- [F1] [nit] src/totals.ts:12: Rounds down negative totals',
   )
+  expect(again).not.toContain('These findings sent the work back')
 })
 
-test('findings already reported, or repeated within one report, are not new; only important ones block', () => {
-  const known = { ...loop, findings: [finding()] }
-  const reported = [
-    finding({ title: 'rounds down NEGATIVE totals ' }),
-    finding({ path: 'src/tax.ts', title: 'Tax applied twice' }),
-    finding({ path: 'src/tax.ts', title: 'Tax applied twice', line: 40 }),
-    finding({ path: 'src/old.ts', title: 'Old bug', severity: 'pre_existing' }),
-    finding({ path: 'src/a.ts', title: 'Long name', severity: 'nit' }),
-  ]
-  const fresh = newFindingsOf(known, reported)
-  expect(fresh.map(({ path }) => path)).toEqual(['src/tax.ts', 'src/old.ts', 'src/a.ts'])
-  expect(blockingFindingsOf(fresh).map(({ title }) => title)).toEqual(['Tax applied twice'])
+test('after a send-back, the review request asks to check each blocking finding still open by its id, and no longer lists it as already reported', () => {
+  const sentBack = {
+    ...loop,
+    reviewedHead: 'abc1234',
+    findings: [
+      finding(),
+      finding({ id: 'F2', path: 'src/tax.ts', title: 'Tax applied twice', isResolved: true }),
+      finding({ id: 'F3', path: 'src/a.ts', title: 'Long name', severity: 'nit' }),
+    ],
+  }
+  const request = reviewRequestOf(sentBack, 'develop')
+  expect(request).toContain(
+    'pass the id of each one that is not fixed to report_review as unresolved (an empty list when all are fixed):\n\n- [F1] [important] src/totals.ts:12: Rounds down negative totals',
+  )
+  expect(request).not.toContain('Tax applied twice')
+  expect(request).toContain('Already reported, do not report again:\n\n- [F3] [nit] src/a.ts:12: Long name')
+})
+
+test('a review verdict resolves the blocking findings not reported unresolved, reopens those listed or reported again, and numbers only new findings', () => {
+  const step = {
+    ...loop,
+    findings: [
+      finding(),
+      finding({ id: 'F2', path: 'src/tax.ts', title: 'Tax applied twice' }),
+      finding({ id: 'F3', path: 'src/fees.ts', title: 'Fee lost' }),
+      finding({ id: 'F4', path: 'src/a.ts', title: 'Long name', severity: 'nit' }),
+    ],
+    reportedUnresolved: ['F1'],
+    reportedFindings: [
+      reported({ path: 'src/tax.ts', title: 'tax applied TWICE ' }),
+      reported({ path: 'src/a.ts', title: 'Long name', severity: 'important' }),
+      reported({ path: 'src/rates.ts', title: 'Rate rounded' }),
+      reported({ path: 'src/rates.ts', title: 'Rate rounded', line: 40 }),
+      reported({ path: 'src/old.ts', title: 'Old bug', severity: 'pre_existing' }),
+    ],
+  }
+  const { findings, reopened, introduced } = reviewVerdictOf(step)
+  expect(findings.map(({ id, isResolved }) => [id, isResolved])).toEqual([
+    ['F1', false],
+    ['F2', false],
+    ['F3', true],
+    ['F4', false],
+    ['F5', false],
+    ['F6', false],
+  ])
+  expect(reopened.map(({ id }) => id)).toEqual(['F1', 'F2'])
+  expect(introduced.map(({ id, path }) => [id, path])).toEqual([['F5', 'src/rates.ts']])
+})
+
+test('the fix prompt after a verified review lists what is still not fixed apart from what is new', () => {
+  const prompt = reviewFixPromptOf(
+    { reopened: [finding()], introduced: [finding({ id: 'F2', path: 'src/tax.ts', title: 'Tax applied twice' })] },
+    2,
+    2,
+  )
+  expect(prompt).toContain('The review found 2 important defects in this diff (attempt 2 of 2).')
+  expect(prompt).toContain(
+    'Found again after your last fix:\n\n- [F1] [important] src/totals.ts:12: Rounds down negative totals',
+  )
+  expect(prompt).toContain('New:\n\n- [F2] [important] src/tax.ts:12: Tax applied twice')
+  expect(reviewFixPromptOf({ reopened: [], introduced: [finding()] }, 1, 2)).not.toContain('New:')
+})
+
+test.each([
+  [{}, [], []],
+  [{ unresolved: [] }, ['F1'], []],
+  [{ unresolved: ['F1', 'F1'] }, ['F1'], ['F1']],
+  [{}, ['F1'], undefined],
+  [{ unresolved: ['F9'] }, ['F1'], undefined],
+  [{ unresolved: ['F2'] }, ['F1'], undefined],
+  [{ unresolved: ['F1'] }, [], undefined],
+  [{ unresolved: 'F1' }, ['F1'], undefined],
+  [{ unresolved: null }, [], []],
+])('unresolved in %o, with %o to check, reads as %o', (input, toCheck, expected) => {
+  const step = {
+    ...loop,
+    findings: [
+      finding({ isResolved: !(toCheck as string[]).includes('F1') }),
+      finding({ id: 'F2', path: 'src/tax.ts', title: 'Tax applied twice', isResolved: true }),
+    ],
+  }
+  expect(unresolvedIdsOf(input, step)).toEqual(expected)
 })
 
 test.each([
@@ -147,7 +229,7 @@ test.each([
   [{ findings: 'none' }, undefined],
   [{ findings: Array.from({ length: 51 }, () => ({ severity: 'nit', path: 'a.ts', title: 'x' })) }, undefined],
 ])('a review report %o reads as %o', (input, expected) => {
-  expect(reviewFindingsOf(input)).toEqual(expected as ReviewFinding[] | undefined)
+  expect(reviewFindingsOf(input)).toEqual(expected as ReportedFinding[] | undefined)
 })
 
 const run = (name: string, isCompleted: boolean, conclusion: string | null = null) => ({
