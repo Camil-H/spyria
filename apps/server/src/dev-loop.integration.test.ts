@@ -190,7 +190,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
     position: 3,
     rounds: [1, 0, 0, 0],
     outcomes: ['passed', 'passed', 'passed', null],
-    findings: [{ severity: 'nit', path: 'src/app.ts', title: 'Name the constant' }],
+    findings: [{ id: 'F1', severity: 'nit', path: 'src/app.ts', title: 'Name the constant' }],
     pullRequestNumber: opened?.number,
   })
 
@@ -352,4 +352,67 @@ test('As a chat owner, Stop stops the quality gates while it runs a command, and
       await database.$client`select payload from workspace_events where type = 'dev_loop.changed' order by created_at`
     ).map(({ payload }) => payload.settings.rules[0].isOn),
   ).toContain(false)
+})
+
+test('As a chat owner whose agent does not fix what the review found, the next review checks it again and sends it back, then hands over after the review’s fixes', async () => {
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'review', fixes: 2 }]))).toEqual(succeeded)
+  await stack.agentHost('Unfixed review host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  const reportReview = (report: Record<string, unknown>) => ({
+    steps: [{ tool: 'report_review', arguments: report }],
+    text: 'Reviewed.',
+  })
+  stack.setFakeLlmScript({
+    steps: [committing('export const total = 3', 'Change the totals'), finish],
+    text: 'Done.',
+    whenPrompted: [
+      { includes: 'These findings sent the work back', script: reportReview({ findings: [], unresolved: ['F1'] }) },
+      {
+        includes: 'Quality gates review your work',
+        script: reportReview({
+          findings: [{ severity: 'important', path: 'src/app.ts', line: 1, title: 'Total is hard-coded' }],
+        }),
+      },
+      { includes: 'The review found', script: { steps: [finish], text: 'Fixed.' } },
+      { includes: 'Do not fix again', script: { text: 'The totals need a ledger.' } },
+    ],
+  })
+
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'stopped')
+  const handOver = 'Code review still failed after 2 attempts to fix: over to you'
+  expect((await loopOf(id))?.step).toMatchObject({
+    rounds: [3],
+    outcomes: ['failed'],
+    findings: [{ id: 'F1', severity: 'important', title: 'Total is hard-coded', isResolved: false }],
+    outcome: handOver,
+  })
+  expect((await loopPromptsOf(id)).map(({ phase, body }) => ({ phase, body }))).toEqual([
+    { phase: 'review_request', body: 'Quality gates review your work before it is published.' },
+    {
+      phase: 'review',
+      body: 'The review found 1 important defect in this diff (attempt 1 of 2). Fix every instance of each, not only the line shown, commit, then call finish_work again.',
+    },
+    { phase: 'review_request', body: 'Quality gates review your work before it is published.' },
+    {
+      phase: 'review',
+      body: 'The review found 1 important defect in this diff (attempt 2 of 2). Fix every instance of each, not only the line shown, commit, then call finish_work again.',
+    },
+    { phase: 'review_request', body: 'Quality gates review your work before it is published.' },
+    {
+      phase: 'review',
+      body: 'Code review still fails after 2 attempts to fix. Do not fix again: write for the owner what you think is wrong with the approach, what you would change, and what you need from them. Do not call finish_work.',
+    },
+  ])
+  const prompts = (
+    await database.$client`select body from messages where chat_id = ${id} and step->>'type' = 'dev_loop_prompt' order by seq`
+  ).map(({ body }) => String(body))
+  expect(prompts[2]).toContain('These findings sent the work back.')
+  expect(prompts[2]).toContain('- [F1] [important] src/app.ts:1: Total is hard-coded')
+  expect(prompts[3]).toContain(
+    'Found again after your last fix:\n\n- [F1] [important] src/app.ts:1: Total is hard-coded',
+  )
+  expect(await noticesOf(id)).toContain(handOver)
 })
