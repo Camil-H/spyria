@@ -121,7 +121,7 @@ test('the fix prompt lists only the failed checks with their attempt and their o
 test('the review request covers the whole branch first, then only what changed since the last review, and lists nits and pre-existing findings as already reported', () => {
   expect(reviewRequestOf(loop, 'develop')).toContain('`git diff origin/develop...HEAD`')
   const again = reviewRequestOf(
-    { ...loop, reviewedHead: 'abc1234', findings: [finding({ severity: 'nit', isResolved: false })] },
+    { ...loop, reviewedHead: 'abc1234', findings: [finding({ severity: 'nit' })] },
     'develop',
   )
   expect(again).toContain('`git diff abc1234..HEAD`')
@@ -188,7 +188,7 @@ test('the fix prompt after a verified review lists what is still not fixed apart
   )
   expect(prompt).toContain('The review found 2 important defects in this diff (attempt 2 of 2).')
   expect(prompt).toContain(
-    'Still not fixed since the last review:\n\n- [F1] [important] src/totals.ts:12: Rounds down negative totals',
+    'Found again after your last fix:\n\n- [F1] [important] src/totals.ts:12: Rounds down negative totals',
   )
   expect(prompt).toContain('New:\n\n- [F2] [important] src/tax.ts:12: Tax applied twice')
   expect(reviewFixPromptOf({ reopened: [], introduced: [finding()] }, 1, 2)).not.toContain('New:')
@@ -203,6 +203,7 @@ test.each([
   [{ unresolved: ['F2'] }, ['F1'], undefined],
   [{ unresolved: ['F1'] }, [], undefined],
   [{ unresolved: 'F1' }, ['F1'], undefined],
+  [{ unresolved: null }, [], []],
 ])('unresolved in %o, with %o to check, reads as %o', (input, toCheck, expected) => {
   const step = {
     ...loop,
