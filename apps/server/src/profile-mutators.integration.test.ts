@@ -263,6 +263,7 @@ test.each([
   ['xAI', 'xai'],
   ['DeepSeek', 'deepseek'],
   ['Z.ai', 'zai'],
+  ['Meta', 'meta'],
 ])(
   'adding a %s key stores it on the gateway’s %s provider and binds it to the member virtual key',
   async (provider, gatewayProvider) => {
