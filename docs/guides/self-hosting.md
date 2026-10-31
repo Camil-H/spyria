@@ -199,7 +199,7 @@ Webhooks arrive on `/api/github/webhooks`; Spyria checks each delivery's `X-Hub-
 
 ## Tool servers in the gateway
 
-Members connect tools (MCP servers) in **Profile > Connections**; their OAuth tokens stay in the gateway. A tool server is set up once per deployment by an operator before members see it. The setup prints a login URL: log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter. When a member connects, Spyria first deletes the member's sign-in to that server and checks none is left, then starts a new one by calling a tool the server marks read-only, or its first tool when it marks none. With no sign-in, the gateway asks for one before the call reaches the server.
+Members connect tools (MCP servers) in **Profile > Tool connections**; their OAuth tokens stay in the gateway. A tool server is set up once per deployment by an operator before members see it. The setup prints a login URL: log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter. When a member connects, Spyria first deletes the member's sign-in to that server and checks none is left, then starts a new one by calling a tool the server marks read-only, or its first tool when it marks none. With no sign-in, the gateway asks for one before the call reaches the server.
 
 - **GitHub:** create a GitHub OAuth App with the callback URL `<origin>/gateway-oauth/api/oauth/callback`, then run:
 

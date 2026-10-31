@@ -19,7 +19,9 @@ test.describe('Profile', () => {
       await expect(sectionOf(page, 'Display name').getByRole('textbox', { name: 'Display name' })).toBeVisible()
       await expect(sectionOf(page, 'Display name').getByText('Display name', { exact: true })).toBeVisible()
       await expect(llmSectionOf(page).getByRole('heading', { level: 2, name: 'LLM access' })).toBeVisible()
-      await expect(sectionOf(page, 'Connections').getByRole('heading', { level: 2, name: 'Connections' })).toBeVisible()
+      await expect(
+        sectionOf(page, 'Tool connections').getByRole('heading', { level: 2, name: 'Tool connections' }),
+      ).toBeVisible()
     })
 
     await test.step('is prefilled and Save is disabled while unchanged or blank', async () => {
@@ -58,7 +60,7 @@ test.describe('Profile', () => {
       const pageTitleColor = await mainOf(page)
         .getByRole('heading', { level: 1 })
         .evaluate((element) => getComputedStyle(element).color)
-      for (const sectionName of ['LLM access', 'Connections']) {
+      for (const sectionName of ['LLM access', 'Tool connections']) {
         const headingColor = await sectionOf(page, sectionName)
           .getByRole('heading', { level: 2, name: sectionName })
           .evaluate((element) => getComputedStyle(element).color)
