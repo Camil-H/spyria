@@ -103,7 +103,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 
 ## Turning members' machines off
 
-Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime** (on by default). The page also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
+Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime > Member local runtimes** (on by default). The section also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
 
 ## Several deployments on one machine
 

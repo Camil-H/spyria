@@ -3,8 +3,8 @@ import {
   answerNewAiChat,
   chipOf,
   expect,
-  hostsSectionOf,
   llmSectionOf,
+  localRuntimesSectionOf,
   machineSectionOf,
   mainOf,
   messageContaining,
@@ -24,7 +24,7 @@ test.describe('Policy', () => {
   const turnedOffNotice = "Your workspace turned off sessions on members' machines"
   const sessionNotice = "Sessions on members' machines are turned off for this workspace"
 
-  const switchOf = (page: Page) => hostsSectionOf(page).getByRole('switch', { name: switchName })
+  const switchOf = (page: Page) => localRuntimesSectionOf(page).getByRole('switch', { name: switchName })
 
   const setLocalSessions = async (page: Page, isOn: boolean) => {
     await openSettings(page, 'Connect runtime')

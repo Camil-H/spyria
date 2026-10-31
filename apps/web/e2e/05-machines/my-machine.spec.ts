@@ -3,6 +3,7 @@ import {
   expect,
   hostsSectionOf,
   llmSectionOf,
+  localRuntimesSectionOf,
   machineSectionOf,
   machineToolOf,
   mainOf,
@@ -68,7 +69,7 @@ test.describe('My machine', () => {
 
       const adminPage = await openPageAs(browser, workerStack, 'member-alice')
       await openSettings(adminPage, 'Connect runtime')
-      await expect(hostsSectionOf(adminPage)).toContainText(
+      await expect(localRuntimesSectionOf(adminPage)).toContainText(
         '1 member uses their machine: 1 signed in to Claude Code, 0 to Codex',
       )
       await expect(hostsSectionOf(adminPage).getByRole('listitem')).toHaveCount(0)
