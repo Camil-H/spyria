@@ -68,6 +68,7 @@ test.describe('Sidebar', () => {
         ['Onboarding', 'Welcome', 'Channel'],
       ] as const)
         await expect(async () => {
+          await mainOf(page).hover({ position: { x: 10, y: 10 } })
           await chatRowIn(projectGroupOf(page, groupName), chatName).getByRole('img', { name: typeName }).hover()
           await expect(page.getByRole('tooltip', { name: typeName })).toBeVisible({ timeout: 2_000 })
         }).toPass()
