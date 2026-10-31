@@ -78,6 +78,12 @@ test.describe('Quality gates settings', () => {
     await expect(switchOf(page)).toHaveAttribute('aria-checked', 'false')
     await expect(tabOf(page, 'acme/app')).toHaveCount(0)
   })
+})
+
+test.describe('Quality gates card', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+  })
 
   test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint"', {
     tag: ['@spec-57'],
@@ -91,7 +97,7 @@ test.describe('Quality gates settings', () => {
     }
     const rules = { repository: 'acme/app', isOn: true, timeLimitMinutes: 240, costLimitMicros: null, steps: [lint] }
     await workerStack.database.$client`
-      update workspaces set dev_loop = ${JSON.stringify({ rules: [rules] })}::jsonb where id = 'workspace-acme'`
+      update workspaces set dev_loop = ${JSON.stringify({ rules: [rules] })}::jsonb where workspace_id = 'workspace-acme'`
     await configureGitHubApp(page)
     await connectGitHub(page)
     const chatId = await newDevChat(page, 'Gated totals', 'acme/app')
