@@ -64,7 +64,7 @@ const shownFindingDetailCharacters = 1_000
 
 export const isBlocking = (finding: ReportedFinding) => finding.severity === 'important'
 export const findingsToVerifyOf = (step: DevLoopStep) =>
-  step.findings.filter((finding) => isBlocking(finding) && !finding.isResolved)
+  step.findings.filter((finding) => isBlocking(finding) && finding.isResolved === false)
 
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
 
@@ -210,7 +210,7 @@ export const reviewFixPromptOf = (
   return [
     `The review found ${count} important ${count === 1 ? 'defect' : 'defects'} in this diff (${attemptOf(round, limit)}). Fix every instance of each, not only the line shown, commit, then call finish_work again.`,
     ...(reopened.length > 0
-      ? [...sectionOf('Still not fixed since the last review:', reopened), ...sectionOf('New:', introduced)]
+      ? [...sectionOf('Found again after your last fix:', reopened), ...sectionOf('New:', introduced)]
       : introduced.map(findingLineOf)),
   ].join('\n\n')
 }
@@ -278,7 +278,7 @@ const maximumFindings = 50
 export const unresolvedIdsOf = (input: unknown, step: DevLoopStep): string[] | undefined => {
   const unresolved = (input as { unresolved?: unknown } | undefined)?.unresolved
   const idsToVerify = findingsToVerifyOf(step).map(({ id }) => id)
-  if (unresolved === undefined) return idsToVerify.length === 0 ? [] : undefined
+  if (unresolved === undefined || unresolved === null) return idsToVerify.length === 0 ? [] : undefined
   if (!Array.isArray(unresolved) || !unresolved.every((id) => idsToVerify.includes(id))) return undefined
   return [...new Set<string>(unresolved)]
 }

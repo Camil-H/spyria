@@ -39,6 +39,7 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const blocking = step.findings.filter(isBlocking)
+  const marked = blocking.filter((finding) => typeof finding.isResolved === 'boolean')
   return (
     <section
       aria-label="Quality gates"
@@ -80,9 +81,9 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
           )
         })}
       </ol>
-      {blocking.length > 0 && (
+      {marked.length > 0 && (
         <ul aria-label="Important findings" className="flex flex-col gap-1 text-xs">
-          {blocking.map((finding) => {
+          {marked.map((finding) => {
             const Icon = finding.isResolved ? CircleCheck : CircleX
             return (
               <li key={finding.id} className="flex items-start gap-1.5">

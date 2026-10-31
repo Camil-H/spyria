@@ -412,7 +412,7 @@ test('As a chat owner whose agent does not fix what the review found, the next r
   expect(prompts[2]).toContain('These findings sent the work back.')
   expect(prompts[2]).toContain('- [F1] [important] src/app.ts:1: Total is hard-coded')
   expect(prompts[3]).toContain(
-    'Still not fixed since the last review:\n\n- [F1] [important] src/app.ts:1: Total is hard-coded',
+    'Found again after your last fix:\n\n- [F1] [important] src/app.ts:1: Total is hard-coded',
   )
   expect(await noticesOf(id)).toContain(handOver)
 })
