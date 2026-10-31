@@ -92,7 +92,6 @@ const UseToolDialog = ({
   const { deployment } = useSession()
   const toolName = harnesses[tool].name
   const isOnline = machine?.status === 'online'
-  const connectedTools = isOnline ? harnessIds.filter((tool) => machine.capacity?.signedIn?.includes(tool)) : []
   const isSignedIn = isOnline && machine.capacity?.signedIn?.includes(tool) === true
   useCloseOnceDone(isSignedIn, onClose)
   return (
