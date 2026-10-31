@@ -169,18 +169,6 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         ) : (
           <div role="tabpanel" aria-label={rulesLabelOf(selected)} className="flex flex-col gap-5">
             <RulesFields rules={rulesOf(draft, selected)} onChange={(rules) => edit(withRules(draft, rules))} />
-            {selected !== null && (
-              <button
-                type="button"
-                className={`self-start ${ghostButtonClass}`}
-                onClick={() => {
-                  edit(withoutRules(draft, selected))
-                  setSelected(null)
-                }}
-              >
-                Delete the rules of {selected}
-              </button>
-            )}
           </div>
         )}
         <div className="flex items-center gap-3">
@@ -188,6 +176,18 @@ export const DevLoopSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
             Save
           </button>
           {isSaved && <span className="text-sm text-muted">Saved</span>}
+          {selected !== null && selected !== newRepositoryTab && (
+            <button
+              type="button"
+              className={ghostButtonClass}
+              onClick={() => {
+                edit(withoutRules(draft, selected))
+                setSelected(null)
+              }}
+            >
+              Delete the rules of {selected}
+            </button>
+          )}
         </div>
         {invalidRules !== undefined && (
           <ErrorMessage
