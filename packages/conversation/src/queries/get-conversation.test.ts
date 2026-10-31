@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, bob, createMockSnapshot, lee, type Snapshot } from '@spyria/db'
-import { chatId, messageId, runtimeHostId, runtimeId } from '@spyria/kernel'
+import { chatId, defaultDevLoopRules, messageId, runtimeHostId, runtimeId } from '@spyria/kernel'
 import { cancelledTaskOf, stillRunningOf, taskProgressOf } from '../domain/delegation.ts'
+import { type DevLoopStep, newDevLoop, restarted, stopped } from '../domain/dev-loop.ts'
 import type { RunsOn } from '../domain/session-routing.ts'
 import { durationLabelOf, getConversation } from './get-conversation.ts'
 
@@ -133,7 +134,7 @@ const command = (exitCode: number | null) => ({
   thought,
 })
 const edit = { type: 'file', operation: 'edit', path: 'totals.ts', added: 2, removed: 1, diff: [] } as const
-const conversationWith = (rows: ReturnType<typeof replyRow>[], isTurnActive = false) => {
+const conversationWith = (rows: Snapshot['messages'], isTurnActive = false) => {
   const snapshot = snapshotWith({ turn: isTurnActive, waiting: false })
   return getConversation(acme, research, alice)({ ...snapshot, messages: [...snapshot.messages, ...rows] })
 }
@@ -854,4 +855,70 @@ test('a reply shows the message it quotes with its author, a deleted one as dele
     { kind: 'agent', canQuote: true },
   ])
   expect(invoiceBugFor(lee)?.map(({ canQuote }) => canQuote)).toEqual([false, false, false, false])
+})
+
+const lintRules = {
+  ...defaultDevLoopRules,
+  steps: [{ kind: 'command' as const, name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 2 }],
+}
+const fixPrompt = messageId('message-fix')
+const memberRow = (seq: number, body: string, id = messageId(`message-${seq}`)) => ({
+  ...replyRow(seq, 'agent', { body, replyToId: null }),
+  id,
+  kind: 'member' as const,
+  authorId: alice,
+})
+const loopConversationWith = (step: DevLoopStep, rows: Snapshot['messages'] = []) =>
+  conversationWith([
+    replyRow(2, 'step', { step: edit }),
+    replyRow(3, 'step', { step, replyToId: null }),
+    replyRow(4, 'agent', { body: 'Done.' }),
+    memberRow(5, 'Lint failed', fixPrompt),
+    replyRow(6, 'agent', { body: 'Fixed.', replyToId: fixPrompt }),
+    ...rows,
+  ])
+const firstRound = restarted(newDevLoop(prompt, turnStart, 'acme/app', lintRules, { title: 'Fix totals', body: '' }))
+const secondRound = restarted({ ...firstRound, lastPromptId: fixPrompt })
+
+test('the quality gates card stays where its first round started', () => {
+  expect(itemSummaryOf(loopConversationWith(firstRound))).toEqual([
+    'member',
+    'step file',
+    'step dev_loop',
+    'agent',
+    'member',
+    'agent',
+  ])
+})
+
+test('when the gates start again, the card shows after the turn that started the round, with a marker where it was', () => {
+  const conversation = loopConversationWith(secondRound)
+  expect(itemSummaryOf(conversation)).toEqual([
+    'member',
+    'step file',
+    'notice',
+    'agent',
+    'member',
+    'agent',
+    'step dev_loop',
+  ])
+  expect(conversation?.items[2]).toMatchObject({ message: { body: 'Quality gates: round 2, see below' } })
+})
+
+test('an ended loop’s card stays after its last round, above the outcome and what came after', () => {
+  const conversation = loopConversationWith(stopped(secondRound, 'Lint failed: over to you'), [
+    replyRow(7, 'notice', { body: 'Lint failed: over to you', replyToId: fixPrompt }),
+    memberRow(8, 'Thanks'),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual([
+    'member',
+    'step file',
+    'notice',
+    'agent',
+    'member',
+    'agent',
+    'step dev_loop',
+    'notice',
+    'member',
+  ])
 })
