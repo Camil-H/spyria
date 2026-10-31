@@ -1,7 +1,15 @@
 import type { HarnessId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { CopyButton, Dialog, ghostButtonClass } from '@spyria/ui'
+import { useEffect, useState } from 'react'
 import { hostCommandOf } from '../domain/host-command.ts'
+
+export const useCloseOnceDone = (isDone: boolean, close: () => void) => {
+  const [wasDoneWhenOpened] = useState(isDone)
+  useEffect(() => {
+    if (isDone && !wasDoneWhenOpened) close()
+  }, [isDone, wasDoneWhenOpened, close])
+}
 
 export const PersonalNotice = ({ toolName }: { toolName?: string }) => (
   <p className="text-sm text-muted">
@@ -42,15 +50,20 @@ export const HostCommandDialog = ({
   label,
   code,
   personal = false,
+  isConnected,
   onClose,
 }: {
   label: string
   code: string
   personal?: boolean
+  isConnected: boolean
   onClose: () => void
-}) => (
-  <Dialog label={label} closeLabel="Close" onClose={onClose}>
-    {personal && <PersonalNotice />}
-    <HostCommand code={code} personal={personal} />
-  </Dialog>
-)
+}) => {
+  useCloseOnceDone(isConnected, onClose)
+  return (
+    <Dialog label={label} closeLabel="Close" onClose={onClose}>
+      {personal && <PersonalNotice />}
+      <HostCommand code={code} personal={personal} />
+    </Dialog>
+  )
+}

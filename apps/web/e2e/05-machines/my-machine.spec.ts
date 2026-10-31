@@ -3,6 +3,7 @@ import {
   expect,
   hostsSectionOf,
   llmSectionOf,
+  localRuntimesSectionOf,
   machineSectionOf,
   machineToolOf,
   mainOf,
@@ -68,7 +69,7 @@ test.describe('My machine', () => {
 
       const adminPage = await openPageAs(browser, workerStack, 'member-alice')
       await openSettings(adminPage, 'Connect runtime')
-      await expect(hostsSectionOf(adminPage)).toContainText(
+      await expect(localRuntimesSectionOf(adminPage)).toContainText(
         '1 member uses their machine: 1 signed in to Claude Code, 0 to Codex',
       )
       await expect(hostsSectionOf(adminPage).getByRole('listitem')).toHaveCount(0)
@@ -104,7 +105,7 @@ test.describe('My machine', () => {
       await expect(machineSectionOf(page)).not.toContainText('Signed in to')
     })
 
-    test('As a member without a machine, I use Claude Code through one command that starts my machine and signs in, followed to Online and ready', {
+    test('As a member without a machine, I use Claude Code through one command that starts my machine and signs in, and the dialog closes once Claude Code is ready', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
       await openProfile(page)
@@ -127,19 +128,16 @@ test.describe('My machine', () => {
       await expect(dialog).toContainText('Your machine: Online')
       await expect(commandBox).toHaveValue('docker exec -it spyria-host spyria-host login claude-code')
       machine.heartbeat(['claude-code'])
-      await expect(dialog).toContainText(
-        'Claude Code is ready: in a new Runtime chat, set Runs on to Local · Claude Code',
-      )
-      await expect(commandBox).toHaveCount(0)
-      await dialog.getByRole('button', { name: 'Close' }).click()
+      await expect(dialog).toHaveCount(0)
 
       await expect(machineSectionOf(page)).toContainText('Online')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
+      await expect(machineSectionOf(page)).toContainText('In a new Runtime chat, set Runs on to Local · Claude Code')
     })
 
-    test('As a member whose machine is offline, I get Start with the command that starts it again, or set it up again with a new command that pairs it', {
+    test('As a member whose machine is offline, I get Start with the command that starts it again, or set it up again with a new command that pairs it and closes the dialog once online', {
       tag: ['@spec-20'],
     }, async ({ page, pair }) => {
       const startButtonOf = () => machineSectionOf(page).getByRole('button', { name: 'Start', exact: true })
@@ -158,8 +156,7 @@ test.describe('My machine', () => {
       const command = await commandBoxes.nth(1).inputValue()
       expect(command).toMatch(/ spyria-host --personal http:\/\/host\.docker\.internal:\d+\/h\/[A-HJ-NP-Z2-9]{8}$/)
       pair(urlOf(command), { personal: true, signedIn: ['claude-code'] })
-      await expect(dialog).toContainText('Your machine: Online')
-      await dialog.getByRole('button', { name: 'Close' }).click()
+      await expect(dialog).toHaveCount(0)
       await expect(startButtonOf()).toHaveCount(0)
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
     })

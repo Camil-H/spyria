@@ -51,7 +51,7 @@ const FailureRule = ({
           value={Number.isNaN(step.fixes) ? '' : step.fixes}
           onChange={(event) => change({ fixes: numberOf(event.target.value) })}
         />
-        times, then hand over
+        {step.fixes === 1 ? 'time' : 'times'}, then hand over
       </label>
     )}
   </div>

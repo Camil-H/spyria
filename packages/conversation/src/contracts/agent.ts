@@ -147,6 +147,7 @@ export type AgentEventSockets = {
   streamDelegated(chat: AgentChat, frame: DelegatedFrame): void
   showQuestion(chat: AgentChat, frame: QuestionFrame): void
   hideQuestion(chat: AgentChat, questionId: string): void
+  showSessionStartsOnNextMessage(chat: AgentChat): void
 }
 
 type ClassifierCall = Readonly<{

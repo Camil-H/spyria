@@ -103,6 +103,7 @@ const liveAfter = (
 ): LiveState => {
   const live = current.chatKey === chatKey ? current : emptyLiveOf(chatKey)
   const { reply, questions, delegated } = live
+  if ('sessionStarted' in frame || 'sessionStartsOnNextMessage' in frame) return live
   if ('commandOutput' in frame) {
     const { stepId, output } = frame.commandOutput
     return { ...live, commandOutputs: { ...live.commandOutputs, [stepId]: output } }
