@@ -665,6 +665,8 @@ export const runtimeHosts = table(
     status: text().$type<'waiting' | 'online' | 'offline' | 'expired'>().notNull(),
     capacity: jsonb().$type<RuntimeHostCapacity>(),
     runningRuntimes: integer().notNull(),
+    hostVersion: text(),
+    protocolVersion: integer().notNull().default(0),
     lastSeenAt: instant(),
     createdBy: text().notNull(),
     ownerId: text(),

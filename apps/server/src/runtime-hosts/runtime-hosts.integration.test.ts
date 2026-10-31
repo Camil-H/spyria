@@ -125,13 +125,15 @@ const claim = async (code: string) => {
 const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) =>
   'closed' in outcome ? outcome.closed.reason : 'not refused'
 
+const hostVersions = { hostVersion: 'test', protocolVersion: 1 }
+
 const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean; relayVersion?: number }) => {
   const { id, code } = await addedHost(name)
   const { host: claimingHost, token } = await claim(code)
   if (!token) throw new Error('Claiming failed')
   claimingHost.socket.close()
   const host = await connectFakeHost(options)
-  host.send({ type: 'hello', token, system: hostSystem, relayVersion: options?.relayVersion })
+  host.send({ type: 'hello', token, system: hostSystem, relayVersion: options?.relayVersion, ...hostVersions })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   return { id, code, token, host }
 }
@@ -176,7 +178,7 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
   }
   const helloRefusal = async (hello: object) => {
     const host = await connectFakeHost()
-    host.send({ type: 'hello', system: hostSystem, ...hello })
+    host.send({ type: 'hello', system: hostSystem, ...hostVersions, ...hello })
     return (await host.closed).reason
   }
   const refusals = {
@@ -231,11 +233,13 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(claimed.token_hash).toBe(sha256(token ?? ''))
   expect(JSON.stringify(claimed)).not.toContain(token)
   const host = await connectFakeHost()
-  host.send({ type: 'hello', token, system: hostSystem })
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   const online = await hostRow(id)
   expect(online.capacity).toEqual({ ...hostSystem, cap: 6 })
   expect(online.running_runtimes).toBe(0)
+  expect(online.host_version).toBe('test')
+  expect(online.protocol_version).toBe(1)
   expect(online.last_seen_at).toBeInstanceOf(Date)
 
   const expiring = await addedHost()

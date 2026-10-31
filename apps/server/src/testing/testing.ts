@@ -859,6 +859,9 @@ export const promptedBy = async (chatId: string, prompterId: string) =>
 const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
+export const fakeHostVersion = 'test'
+export const fakeHostProtocolVersion = 1
+
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
   const hostStatus = async (hostId: string) =>
@@ -1067,6 +1070,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
+          hostVersion: fakeHostVersion,
+          protocolVersion: fakeHostProtocolVersion,
           ...(relayVersion && { relayVersion }),
           ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {

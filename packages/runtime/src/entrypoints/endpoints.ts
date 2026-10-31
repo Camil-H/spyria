@@ -62,6 +62,8 @@ const hostSessionFrame = z.discriminatedUnion('type', [
     }),
     personal: z.optional(z.boolean()),
     relayVersion: z.optional(z.int().check(z.positive())),
+    hostVersion: z.optional(boundedText(64)),
+    protocolVersion: z.optional(z.int().check(z.nonnegative())),
     signedIn,
     credentialsChangedAt,
   }),
@@ -86,7 +88,12 @@ export const createHostSessionHandlers = (transact: Transact) => ({
     return outcome
   },
   hello: (
-    hello: Partial<HostDeclaration> & { token: string; system: HostSystem },
+    hello: Partial<HostDeclaration> & {
+      token: string
+      system: HostSystem
+      hostVersion?: string
+      protocolVersion?: number
+    },
     beforeOnline: (host: ConnectedHost) => void,
   ) => transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
   heartbeat: (

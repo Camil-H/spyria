@@ -20,6 +20,7 @@ export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([
 
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 export const gibibyte = 1024 ** 3
+export const fakeHostVersions = { hostVersion: 'e2e', protocolVersion: 1 }
 
 type HostSystem = { cpus: number; memoryBytes: number; rootless: boolean; limitsEnforced: boolean }
 type HostProcess = { output: () => string; exited: Promise<number | null>; stop: () => Promise<void> }
@@ -31,7 +32,7 @@ type Hosts = {
 }
 
 type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void; disconnect: () => void }
-type PairingOptions = { personal?: boolean; signedIn?: string[] }
+type PairingOptions = { personal?: boolean; signedIn?: string[]; outdated?: boolean }
 
 export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options: PairingOptions) => FakeMachine }>({
   hosts: async ({ browserName: _ }, use) => {
@@ -81,6 +82,7 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
             send({
               type: 'hello',
               token: frame.token,
+              ...fakeHostVersions,
               system: {
                 cpus: 4,
                 memoryBytes: 8 * gibibyte,
@@ -101,7 +103,7 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
   },
   pair: async ({ browserName: _ }, use) => {
     const sockets: WebSocket[] = []
-    await use((url, { personal, signedIn }) => {
+    await use((url, { personal, signedIn, outdated = false }) => {
       const { origin, pathname } = new URL(url)
       const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
       sockets.push(socket)
@@ -117,6 +119,7 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
             token: frame.token,
             personal,
             signedIn,
+            ...(outdated ? {} : fakeHostVersions),
             system: {
               cpus: 8,
               memoryBytes: 16 * 1024 ** 3,

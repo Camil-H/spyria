@@ -35,6 +35,8 @@ test('a runtime host counts once it has been claimed, and a member host never do
     claimExpiresAt: null,
     capacity: null,
     runningRuntimes: 0,
+    hostVersion: null,
+    protocolVersion: 0,
   } as const
   const withHosts = (status: 'waiting' | 'offline', ownerId: typeof bob | null) =>
     statesOf({ ...snapshot, runtimeHosts: [{ ...host, id: 'host-1' as never, status, ownerId }] })['connect-runtime']

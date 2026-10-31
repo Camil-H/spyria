@@ -37,6 +37,7 @@ const hostOf = (row: RuntimeHostRow): RuntimeHost => ({
   ...row,
   workspaceId: workspaceId(row.workspaceId),
   id: runtimeHostId(row.id),
+  protocolVersion: row.protocolVersion ?? 0,
   createdBy: memberId(row.createdBy),
   ownerId: row.ownerId ? memberId(row.ownerId) : null,
 })
