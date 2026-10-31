@@ -9,6 +9,7 @@ import type {
   DelegatedFrame,
   QuestionFrame,
   SessionStartedFrame,
+  SessionStartsOnNextMessageFrame,
   StoredFrame,
   StreamFrame,
   WorkspaceFrame,
@@ -79,7 +80,8 @@ export type AgentStream = {
         | WorkspaceFrame
         | DelegatedFrame
         | CommandOutputFrame
-        | SessionStartedFrame,
+        | SessionStartedFrame
+        | SessionStartsOnNextMessageFrame,
     ) => void,
   ): () => void
 }

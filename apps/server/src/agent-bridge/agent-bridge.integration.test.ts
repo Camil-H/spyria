@@ -310,6 +310,35 @@ test('a started agent session reaches viewers live as sessionStarted and is stil
   expect(storedUpdates).toContain('session_started')
 })
 
+test('Restart session tells viewers the session started again on an idle chat whose event socket closed, and that it starts on the next message when there is none', async () => {
+  const { relay } = await agentHost()
+  const framesOf = (viewer: { frames: string[] }) => viewer.frames.map((frame) => JSON.parse(frame))
+  const restart = (chat: string) =>
+    mutate(aliceInAcme, 'conversation.restartSession', { workspaceId: acme, chatId: chat })
+
+  const idle = await newRuntimeChat()
+  await answered(await prompt(idle, 'Hello'))
+  await turnEnded(idle)
+  relay.dropSockets()
+  await Bun.sleep(200)
+  const socketsBefore = relay.socketPaths.length
+  const idleViewer = await openStream(idle)
+  await idleViewer.subscribed
+  expect(await restart(idle)).toEqual(succeeded)
+  await waitFor(() => framesOf(idleViewer).some((frame) => frame.sessionStarted === true))
+  expect(relay.socketPaths.length).toBeGreaterThan(socketsBefore)
+  expect(framesOf(idleViewer).filter((frame) => frame.sessionStartsOnNextMessage)).toEqual([])
+
+  const fresh = await newRuntimeChat()
+  const freshViewer = await openStream(fresh)
+  await freshViewer.subscribed
+  expect(await restart(fresh)).toEqual(succeeded)
+  await waitFor(() => framesOf(freshViewer).some((frame) => frame.sessionStartsOnNextMessage === true))
+  expect(framesOf(freshViewer).filter((frame) => frame.sessionStartsOnNextMessage)).toEqual([
+    { chatId: fresh, sessionStartsOnNextMessage: true },
+  ])
+})
+
 test('the agent’s workspace reaches viewers live when it changes, is resent to a new viewer but not to a closed one, and is never stored', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
