@@ -4,7 +4,9 @@ import {
   checksFixPromptOf,
   ciVerdictOf,
   commandGroupAt,
+  type DevLoopStep,
   failedAt,
+  isGateRunning,
   limitOutcomeOf,
   newDevLoop,
   type ReportedFinding,
@@ -19,10 +21,13 @@ import {
   reviewVerdictOf,
   stopped,
   unresolvedIdsOf,
+  withFinishedChecks,
   withOutcomes,
 } from './dev-loop.ts'
 
 const startedAt = Date.parse('2026-10-30T10:00:00Z')
+const runningGatesOf = (step: DevLoopStep) =>
+  step.pipeline.flatMap((_, index) => (isGateRunning(step, index) ? [index] : []))
 const lint: DevLoopStepConfig = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 }
 const types: DevLoopStepConfig = {
   kind: 'command',
@@ -102,6 +107,27 @@ test('the loop stops at its time limit, and at its cost limit only when the cost
     'Stopped at $5.00, the cost limit of a run through the gates: over to you',
   )
   expect(limitOutcomeOf(capped, startedAt, null)).toBeUndefined()
+})
+
+test('while a group of commands runs, each finished command gets its outcome and the next one is running; a poll with no new result changes nothing', () => {
+  const tests: DevLoopStepConfig = { ...lint, name: 'Tests' }
+  const rules: DevLoopRules = { ...pipeline, steps: [lint, types, tests, { kind: 'review', fixes: 2 }] }
+  const started = newDevLoop(messageId('prompt-1'), startedAt, 'acme/app', rules, loop.summary)
+  const running = { ...started, state: 'running' as const }
+  const lintPassed = { name: 'Lint', command: 'bun run lint', exitCode: 0, output: '' }
+  const typesFailed = { name: 'Types', command: 'bun run typecheck', exitCode: 2, output: 'a.ts: error' }
+  expect(runningGatesOf(running)).toEqual([0])
+  expect(withFinishedChecks(running, [])).toBeUndefined()
+
+  const afterLint = withFinishedChecks(running, [lintPassed]) ?? running
+  expect(afterLint.outcomes).toEqual(['passed', null, null, null])
+  expect(runningGatesOf(afterLint)).toEqual([1])
+  expect(withFinishedChecks(afterLint, [lintPassed])).toBeUndefined()
+
+  const afterTypes = withFinishedChecks(afterLint, [lintPassed, typesFailed]) ?? afterLint
+  expect(afterTypes).toMatchObject({ position: 0, outcomes: ['passed', 'failed', null, null] })
+  expect(runningGatesOf(afterTypes)).toEqual([2])
+  expect(isGateRunning({ ...afterTypes, state: 'working' }, 2)).toBe(false)
 })
 
 test('the fix prompt lists only the failed checks with their attempt and their output fenced, as data rather than instructions', () => {

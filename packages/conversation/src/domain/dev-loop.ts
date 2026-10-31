@@ -71,7 +71,8 @@ export const findingsToVerifyOf = (step: DevLoopStep) =>
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
 const gateRunningStates: DevLoopState[] = ['running', 'reviewing', 'waiting_for_ci']
 export const isGateRunning = (step: DevLoopStep, index: number) =>
-  index === step.position && gateRunningStates.includes(step.state)
+  gateRunningStates.includes(step.state) &&
+  index === step.outcomes.findIndex((outcome, at) => at >= step.position && outcome === null)
 
 export const newDevLoop = (
   startPromptId: MessageId,
@@ -126,6 +127,15 @@ export const withOutcomes = (step: DevLoopStep, outcomes: [index: number, outcom
   ...step,
   outcomes: step.outcomes.map((known, index) => outcomes.find(([at]) => at === index)?.[1] ?? known),
 })
+
+export const withFinishedChecks = (step: DevLoopStep, results: CheckResult[]): DevLoopStep | undefined => {
+  const finishedCommands = commandGroupAt(step.pipeline, step.position).slice(0, results.length)
+  const checked = withOutcomes(
+    step,
+    finishedCommands.map((index, offset) => [index, results[offset]?.exitCode === 0 ? 'passed' : 'failed']),
+  )
+  return checked.outcomes.every((outcome, index) => outcome === step.outcomes[index]) ? undefined : checked
+}
 
 export const restarted = (step: DevLoopStep): DevLoopStep => ({
   ...step,
