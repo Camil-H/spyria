@@ -326,7 +326,8 @@ export const startZeroCache = async ({
 const gatewayImage = 'maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7'
 export const testGatewayAdmin = { user: 'spyria-test', password: 'spyria-test-gateway-password' }
 const gatewayProviders = ['openai', 'anthropic', 'mistral', 'typesafe', 'openrouter', 'gemini', 'xai']
-const zaiPaths = {
+const openAiCompatibleProviders = ['zai', 'meta']
+const openAiCompatiblePaths = {
   chat_completion: '/chat/completions',
   chat_completion_stream: '/chat/completions',
   list_models: '/models',
@@ -453,7 +454,8 @@ export const startTestGateway = async ({
     gatewayConfig,
     clientConfig,
     gatewayProviders,
-    zaiPaths,
+    openAiCompatibleProviders,
+    openAiCompatiblePaths,
     testModelPrices,
   }
   const setupHash = createHash('sha256').update(JSON.stringify(setup)).digest('hex').slice(0, 16)
@@ -543,15 +545,16 @@ export const startTestGateway = async ({
       method: 'POST',
       body: { provider: 'deepseek', keys: [], network_config: { ...networkConfig, base_url: `${fakeLlmUrl}/v1` } },
     })
-    await gateway.call('/api/providers', {
-      method: 'POST',
-      body: {
-        provider: 'zai',
-        keys: [],
-        network_config: { ...networkConfig, base_url: `${fakeLlmUrl}/v1` },
-        custom_provider_config: { base_provider_type: 'openai', request_path_overrides: zaiPaths },
-      },
-    })
+    for (const provider of openAiCompatibleProviders)
+      await gateway.call('/api/providers', {
+        method: 'POST',
+        body: {
+          provider,
+          keys: [],
+          network_config: { ...networkConfig, base_url: `${fakeLlmUrl}/v1` },
+          custom_provider_config: { base_provider_type: 'openai', request_path_overrides: openAiCompatiblePaths },
+        },
+      })
     for (const [model, dollarsPerToken] of Object.entries(testModelPrices))
       await gateway.call('/api/governance/pricing-overrides', {
         method: 'POST',

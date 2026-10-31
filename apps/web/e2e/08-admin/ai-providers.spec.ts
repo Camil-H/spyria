@@ -19,7 +19,7 @@ test.describe('AI providers', () => {
     await expect(providerSwitchOf(page, 'Mistral')).toHaveAttribute('aria-checked', 'true')
     await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
     await expect(mainOf(page).getByRole('link', { name: 'AI providers', exact: true })).toContainText(
-      '8 allowed providers',
+      '9 allowed providers',
     )
 
     await openProfile(page)

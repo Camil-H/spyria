@@ -54,6 +54,14 @@ test.each([
   ['deepseek', ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2']],
   ['zai', ['zai/glm-5.3', 'zai/glm-4.7', 'zai/glm-5.3-flash']],
   [
+    'meta',
+    [
+      'meta/Llama-4-Maverick-17B-128E-Instruct-FP8',
+      'meta/Llama-4-Scout-17B-16E-Instruct-FP8',
+      'meta/Llama-3.3-8B-Instruct',
+    ],
+  ],
+  [
     'openrouter',
     [
       'openrouter/anthropic/claude-opus-5.5',
@@ -148,6 +156,7 @@ test('a provider is found by its id, its name or an alias, and nothing else', ()
   expect(aiProviderOf(' Google ')?.id).toBe('gemini')
   expect(aiProviderOf('google gemini')?.id).toBe('gemini')
   expect(aiProviderOf('Z.ai')?.id).toBe('zai')
+  expect(aiProviderOf('Llama')?.id).toBe('meta')
   expect(aiProviderOf('openai')?.name).toBe('OpenAI')
   expect(aiProviderOf('fake')).toBeUndefined()
 })

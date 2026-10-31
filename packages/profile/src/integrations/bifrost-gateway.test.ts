@@ -56,8 +56,24 @@ test.each([
       },
     },
   ],
+  [
+    'meta',
+    {
+      provider: 'meta',
+      keys: [],
+      network_config: { base_url: 'https://api.llama.com/compat/v1' },
+      custom_provider_config: {
+        base_provider_type: 'openai',
+        request_path_overrides: {
+          chat_completion: '/chat/completions',
+          chat_completion_stream: '/chat/completions',
+          list_models: '/models',
+        },
+      },
+    },
+  ],
 ])(
-  'the first %s key creates its provider on the gateway, Z.ai as an OpenAI-compatible custom provider',
+  'the first %s key creates its provider on the gateway, Z.ai and Meta as OpenAI-compatible custom providers',
   async (provider, created) => {
     const createdProviders: object[] = []
     const providerServer = Bun.serve({
