@@ -21,6 +21,7 @@ export type WorkspaceFrame = Readonly<{
 }>
 export type CommandOutputFrame = Readonly<{ commandOutput: { stepId: string; output: string }; isSnapshot?: boolean }>
 export type SessionStartedFrame = Readonly<{ sessionStarted: true }>
+export type SessionStartsOnNextMessageFrame = Readonly<{ sessionStartsOnNextMessage: true }>
 export type StreamedReply = Readonly<{
   promptId: string
   text: string

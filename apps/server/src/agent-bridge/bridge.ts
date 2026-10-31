@@ -199,6 +199,7 @@ export const createAgentBridge = ({
           if (shown?.size === 0) shownQuestions.delete(keyOf(chat))
         },
         ensureOpen: (...target) => ensureOpen(...target),
+        showSessionStartsOnNextMessage: (chat) => broadcast(chat, { sessionStartsOnNextMessage: true }),
         streamDelegated: (chat, frame) => {
           const texts = delegatedTexts.get(keyOf(chat)) ?? new Map<string, DelegatedFrame>()
           const previous = texts.get(frame.delegationId)

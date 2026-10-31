@@ -18,14 +18,16 @@ export const restartAgentSession = async (
   dependencies: AgentDependencies,
   { workspaceId, chatId, memberId }: Input,
 ) => {
-  const { transactor, runtimes, agentClient } = dependencies
+  const { transactor, runtimes, agentClient, eventSockets } = dependencies
   const chat = { workspaceId, chatId }
   const promptId = await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))
   if (promptId !== null) await interruptAgent(dependencies, { workspaceId, chatId, promptId, memberId })
   const endpoint = await runtimes.endpointOf(chat)
-  if (!endpoint?.conversationId) return
+  if (!endpoint?.conversationId) return eventSockets.showSessionStartsOnNextMessage(chat)
   const conversation = { ...endpoint, conversationId: endpoint.conversationId }
+  await eventSockets.ensureOpen(chat, conversation, null)
   if ((await agentClient.restartConversation(conversation).catch(() => 'error')) !== 'error') return
   await agentClient.deleteConversation(conversation).catch(() => undefined)
   await runtimes.forgetConversation(chat)
+  eventSockets.showSessionStartsOnNextMessage(chat)
 }

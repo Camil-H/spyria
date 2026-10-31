@@ -15,7 +15,13 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useAgentStream, useConversationCommands } from './providers.tsx'
 
 type RuntimeAction = 'restartSession' | 'stopRuntime'
-type Restart = 'restarting' | 'restarted' | null
+type RestartNotice = 'restarted' | 'startsOnNextMessage'
+type Restart = 'restarting' | RestartNotice | null
+
+const restartNotices: Record<RestartNotice, string> = {
+  restarted: 'Session restarted',
+  startsOnNextMessage: 'New session on your next message',
+}
 
 const actionLabels: Record<RuntimeAction, string> = {
   restartSession: 'Restart session',
@@ -27,7 +33,7 @@ const confirmations: Record<RuntimeAction, string> = {
   stopRuntime: 'The agent is working. Stopping the runtime stops this turn; your next message starts it again.',
 }
 
-const restartedNoticeMilliseconds = 3_000
+const restartNoticeMilliseconds = 3_000
 const restartGiveUpMilliseconds = 20_000
 
 const useRestartFeedback = (workspaceId: WorkspaceId, chatId: ChatId) => {
@@ -38,6 +44,7 @@ const useRestartFeedback = (workspaceId: WorkspaceId, chatId: ChatId) => {
     const giveUp = setTimeout(() => setRestart(null), restartGiveUpMilliseconds)
     const unsubscribe = agentStream.subscribe(workspaceId, chatId, (frame) => {
       if ('sessionStarted' in frame) setRestart('restarted')
+      if ('sessionStartsOnNextMessage' in frame) setRestart('startsOnNextMessage')
     })
     return () => {
       clearTimeout(giveUp)
@@ -45,8 +52,8 @@ const useRestartFeedback = (workspaceId: WorkspaceId, chatId: ChatId) => {
     }
   }, [agentStream, workspaceId, chatId, restart])
   useEffect(() => {
-    if (restart !== 'restarted') return
-    const hide = setTimeout(() => setRestart(null), restartedNoticeMilliseconds)
+    if (restart === null || restart === 'restarting') return
+    const hide = setTimeout(() => setRestart(null), restartNoticeMilliseconds)
     return () => clearTimeout(hide)
   }, [restart])
   return { restart, setRestart }
@@ -86,8 +93,8 @@ export const RuntimeMenu = ({
               <Spinner />
               Restarting…
             </>
-          ) : restart === 'restarted' ? (
-            'Session restarted'
+          ) : restart ? (
+            restartNotices[restart]
           ) : (
             children
           )}
