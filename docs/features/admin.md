@@ -137,7 +137,7 @@ After registration, Spyria lists the server's tools, each marked read-only or wr
 - **Allowed tools** decides which of them the workspace may use (all by default).
 - **Member access** narrows them per member: all allowed tools, some, or none.
 
-Each member's gateway key is given exactly the workspace's connections with the allowed tools minus their restrictions, and the gateway enforces it on every call. Connections of one workspace are invisible to other workspaces. Adding, changing or removing a connection reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Members see what they may use in **Profile** > **Connections** > **Shared with me**.
+Each member's gateway key is given exactly the workspace's connections with the allowed tools minus their restrictions, and the gateway enforces it on every call. Connections of one workspace are invisible to other workspaces. Adding, changing or removing a connection reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Members see what they may use in **Profile** > **Tool connections** > **Shared with me**.
 
 When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only what both the owner and the guest may use on shared connections, never the owner's personal connections, and write calls wait for the owner's approval (see [Agents](./agents.md)).
 

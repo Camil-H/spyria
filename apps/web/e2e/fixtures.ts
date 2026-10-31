@@ -233,7 +233,7 @@ export const switchWorkspace = async (page: Page, workspaceName: string) => {
   await expect(switcherOf(page)).toContainText(workspaceName)
 }
 
-export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
+export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Tool connections' })
 export const openMyConnections = async (page: Page, workspace = 'workspace-acme') => {
   await page.goto(`/w/${workspace}/profile`)
   await connectionsOf(page).getByRole('tab', { name: 'My connections' }).click()
