@@ -2,7 +2,6 @@ import { type MessageId, messageId, rulesOf, systemActor, type WorkspaceId } fro
 import type { AgentChat, AgentEndpoint } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
-  blockingFindingsOf,
   type CheckResult,
   checksFixPromptOf,
   checksPollMilliseconds,
@@ -18,7 +17,6 @@ import {
   finished,
   handOffOutcomeOf,
   limitOutcomeOf,
-  newFindingsOf,
   noCiOutcomeOf,
   notRunOutcome,
   pausedOutcome,
@@ -27,6 +25,7 @@ import {
   restarted,
   reviewFixPromptOf,
   reviewRequestOf,
+  reviewVerdictOf,
   stepNameOf,
   stopOutcomeOf,
   stopped,
@@ -167,18 +166,18 @@ export const continueLoopAfterTurn = (dependencies: Dependencies, job: LoopJob) 
     if (step.state === 'handing_off') return endLoop(unitOfWork, loop, stopped(step, step.outcome ?? pausedOutcome))
     if (step.state === 'working' && step.next === 'run') return moveOn(unitOfWork, loop, restarted(step), 0)
     if (step.state === 'reviewing' && step.next === 'review_verdict') {
-      const fresh = newFindingsOf(step, step.reportedFindings ?? [])
-      const blocking = blockingFindingsOf(fresh)
+      const { findings, reopened, introduced } = reviewVerdictOf(step)
       const reviewed = {
         ...step,
-        findings: [...step.findings, ...fresh],
+        findings,
         reviewedHead: step.checkedHead,
         reportedFindings: null,
+        reportedUnresolved: null,
       }
-      if (blocking.length === 0)
+      if (reopened.length + introduced.length === 0)
         return moveOn(unitOfWork, loop, withOutcomes(reviewed, [[step.position, 'passed']]), step.position + 1)
       return sendBack(unitOfWork, { ...loop, step: reviewed }, [step.position], (rounds) =>
-        reviewFixPromptOf(blocking, rounds[step.position] ?? 1, failedAt(step, [step.position]).limit),
+        reviewFixPromptOf({ reopened, introduced }, rounds[step.position] ?? 1, failedAt(step, [step.position]).limit),
       )
     }
     const hasRun = await unitOfWork.agentTurns.hasReply(step.lastPromptId)
@@ -265,7 +264,13 @@ export const runLoop = async (dependencies: Dependencies, job: LoopJob) => {
       return unitOfWork.devLoop.enqueue(devLoopJobTypes.ci, current.card.id, ciPollOf(dependencies))
     }
     const { baseBranch } = await unitOfWork.chats.get(current.card.chatId)
-    const reviewing = { ...current.step, state: 'reviewing' as const, next: null, reportedFindings: null }
+    const reviewing = {
+      ...current.step,
+      state: 'reviewing' as const,
+      next: null,
+      reportedFindings: null,
+      reportedUnresolved: null,
+    }
     return postLoopPrompt(
       unitOfWork,
       { ...current, step: reviewing },

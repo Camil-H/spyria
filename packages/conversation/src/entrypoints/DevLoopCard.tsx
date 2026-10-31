@@ -1,6 +1,13 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, isGateRunning, restartLabelOf, stepNameOf } from '../domain/dev-loop.ts'
+import {
+  type DevLoopState,
+  type DevLoopStep,
+  isBlocking,
+  isGateRunning,
+  restartLabelOf,
+  stepNameOf,
+} from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -37,7 +44,7 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
     : undefined
 
 const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
-  const important = step.findings.filter((finding) => finding.severity === 'important').length
+  const blocking = step.findings.filter(isBlocking)
   const restart = restartLabelOf(step)
   return (
     <section
@@ -69,7 +76,8 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
               <span>{stepNameOf(config)}</span>
               {config.kind === 'review' && step.findings.length > 0 && (
                 <span className="text-muted">
-                  {step.findings.length} {step.findings.length === 1 ? 'finding' : 'findings'}, {important} important
+                  {step.findings.length} {step.findings.length === 1 ? 'finding' : 'findings'}, {blocking.length}{' '}
+                  important
                 </span>
               )}
               {config.kind === 'pull_request' && step.pullRequestNumber !== null && (
@@ -80,6 +88,30 @@ const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
           )
         })}
       </ol>
+      {blocking.length > 0 && (
+        <ul aria-label="Important findings" className="flex flex-col gap-1 text-xs">
+          {blocking.map((finding) => {
+            const Icon = finding.isResolved ? CircleCheck : CircleX
+            return (
+              <li key={finding.id} className="flex items-start gap-1.5">
+                <Icon
+                  role="img"
+                  aria-label={finding.isResolved ? 'fixed' : 'not fixed'}
+                  size={14}
+                  className="mt-0.5 shrink-0 text-muted"
+                />
+                <span className="min-w-0 break-words">
+                  <span className="text-muted">
+                    {finding.path}
+                    {finding.line === null ? '' : `:${finding.line}`}
+                  </span>{' '}
+                  {finding.title}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {step.outcome && <p>{step.outcome}</p>}
     </section>
   )

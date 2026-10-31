@@ -18,4 +18,4 @@ A pull request that changes the UI includes screenshots in light and dark; the r
 
 Pull requests target `develop`; CI runs the checks and the tests your change affects, and `main` only receives commits of `develop` that passed the full suite.
 
-While iterating, `bun run check:related` runs lint, typecheck, boundaries and the affected tests. Before opening a pull request, `bun run check:all` runs everything. See [docs/guides/testing.md](docs/guides/testing.md) for details.
+While iterating, `bun run check:related` runs lint, typecheck, boundaries and the affected tests. `bun run check:all` runs everything; run it for changes to shared code (`packages/kernel`, `packages/db`, test helpers). See [docs/guides/testing.md](docs/guides/testing.md) for details.
