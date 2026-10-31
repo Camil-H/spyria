@@ -64,7 +64,14 @@ const shownFindingDetailCharacters = 1_000
 
 export const isBlocking = (finding: ReportedFinding) => finding.severity === 'important'
 export const findingsToVerifyOf = (step: DevLoopStep) =>
-  step.findings.filter((finding) => isBlocking(finding) && finding.isResolved === false)
+  step.findings.filter((finding) => isBlocking(finding) && !finding.isResolved)
+
+export const devLoopStepOf = (step: DevLoopStep): DevLoopStep => ({
+  ...step,
+  findings: step.findings.map((finding, index) =>
+    finding.id ? finding : { ...finding, id: `F${index + 1}`, isResolved: true },
+  ),
+})
 
 export const isActiveLoop = (step: DevLoopStep) => !finishedStates.includes(step.state)
 

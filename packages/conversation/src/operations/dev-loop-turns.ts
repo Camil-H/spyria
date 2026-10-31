@@ -1,6 +1,13 @@
 import { type MemberId, type MessageId, systemActor } from '@spyria/kernel'
 import type { UnitOfWork } from '../contracts/transactor.ts'
-import { type DevLoopStep, devLoopJobTypes, isActiveLoop, memberWroteOutcomeOf, stopped } from '../domain/dev-loop.ts'
+import {
+  type DevLoopStep,
+  devLoopJobTypes,
+  devLoopStepOf,
+  isActiveLoop,
+  memberWroteOutcomeOf,
+  stopped,
+} from '../domain/dev-loop.ts'
 import type { Message } from '../domain/message.ts'
 
 export type Loop = { card: Message; step: DevLoopStep; ownerId: MemberId }
@@ -8,7 +15,9 @@ export type Loop = { card: Message; step: DevLoopStep; ownerId: MemberId }
 export const devLoopActor = 'dev_loop'
 
 export const loopOf = (card: Message | undefined): Loop | undefined =>
-  card?.step?.type === 'dev_loop' && card.authorId ? { card, step: card.step, ownerId: card.authorId } : undefined
+  card?.step?.type === 'dev_loop' && card.authorId
+    ? { card, step: devLoopStepOf(card.step), ownerId: card.authorId }
+    : undefined
 
 export const loopOfPrompt = async ({ messages }: UnitOfWork, prompt: Message) => {
   if (prompt.step?.type === 'dev_loop_prompt') return loopOf(await messages.find(prompt.step.loopId))
