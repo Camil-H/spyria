@@ -1,6 +1,6 @@
 import type { DevLoopStepConfig } from '@spyria/kernel'
 import { CircleCheck, CircleDashed, CircleX, IterationCw, LoaderCircle } from 'lucide-react'
-import { type DevLoopState, type DevLoopStep, devLoopStepOf, isBlocking, stepNameOf } from '../domain/dev-loop.ts'
+import { type DevLoopState, type DevLoopStep, isBlocking, stepNameOf } from '../domain/dev-loop.ts'
 
 const stateLabels: Record<DevLoopState, string> = {
   working: 'Agent working',
@@ -37,8 +37,7 @@ const fixesOf = (config: DevLoopStepConfig, round: number) =>
     ? `sent back ${Math.min(round, config.fixes)} of ${config.fixes} times`
     : undefined
 
-const DevLoopCard = ({ step: stored }: { step: DevLoopStep }) => {
-  const step = devLoopStepOf(stored)
+const DevLoopCard = ({ step }: { step: DevLoopStep }) => {
   const blocking = step.findings.filter(isBlocking)
   return (
     <section
