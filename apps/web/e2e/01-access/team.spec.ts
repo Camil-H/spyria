@@ -5,9 +5,9 @@ import {
   expect,
   type FileChooser,
   giveWorkspaceRole,
-  hostsSectionOf,
   insertWorkspaceRole,
   invite,
+  localRuntimesSectionOf,
   machineTest,
   mainOf,
   membersSectionOf,
@@ -134,7 +134,7 @@ test.describe('Team', () => {
       })
       await openChat(bobPage, bobsChatName)
       await page.goto('/w/workspace-acme/settings/runtime')
-      await expect(hostsSectionOf(page)).toContainText('1 member uses their machine')
+      await expect(localRuntimesSectionOf(page)).toContainText('1 member uses their machine')
       await openChat(page, bobsChatName)
       await sendMessage(page, 'Watch this')
       await expect(messageContaining(bobPage, 'Understood,')).toHaveCount(1)
@@ -156,7 +156,7 @@ test.describe('Team', () => {
         )
         .toBeTruthy()
       await page.goto('/w/workspace-acme/settings/runtime')
-      await expect(hostsSectionOf(page)).not.toContainText('uses their machine')
+      await expect(localRuntimesSectionOf(page)).not.toContainText('uses their machine')
 
       await openChat(page, bobsChatName)
       await expect(mainOf(page)).toContainText(frozenNotice)

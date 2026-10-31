@@ -60,12 +60,26 @@ const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>;
   )
 }
 
+export const MemberLocalRuntimesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const commands = useRuntimeCommands()
+  const localSessions = useQuery(localSessionsOf, workspaceId)
+  const machineCounts = useQuery(machineCountsOf, workspaceId)
+  return (
+    <LabelledSection title="Member local runtimes">
+      <Switch
+        label="Members can run sessions on their own machine"
+        isOn={localSessions}
+        onToggle={() => commands.setLocalSessions({ workspaceId, isOn: !localSessions })}
+      />
+      {machineCounts.machines > 0 && <p className="text-sm text-muted">{machineUsageOf(machineCounts)}</p>}
+    </LabelledSection>
+  )
+}
+
 export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useRuntimeCommands()
   const hosts = useQuery(listRuntimeHosts, workspaceId)
-  const localSessions = useQuery(localSessionsOf, workspaceId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
-  const machineCounts = useQuery(machineCountsOf, workspaceId)
   const closeDialog = () => setOpenDialog(null)
   const showCommand = (label: string, hostId: RuntimeHostId, code: string) =>
     setOpenDialog({ kind: 'command', label, hostId, code })
@@ -129,12 +143,6 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
           })}
         </ul>
       )}
-      {machineCounts.machines > 0 && <p className="text-sm text-muted">{machineUsageOf(machineCounts)}</p>}
-      <Switch
-        label="Members can run sessions on their own machine"
-        isOn={localSessions}
-        onToggle={() => commands.setLocalSessions({ workspaceId, isOn: !localSessions })}
-      />
       {openDialog?.kind === 'add' && (
         <AddHostDialog
           add={async (name) => {

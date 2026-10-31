@@ -161,6 +161,8 @@ export const openSettings = async (page: Page, cardTitle: string) => {
   await expect(mainOf(page).getByRole('heading', { level: 1, name: cardTitle })).toBeVisible()
 }
 export const hostsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Runtime hosts' })
+export const localRuntimesSectionOf = (page: Page) =>
+  mainOf(page).getByRole('region', { name: 'Member local runtimes' })
 export const sendMessage = async (page: Page, text: string) => {
   await composerOf(page).fill(text)
   await composerOf(page).press('ControlOrMeta+Enter')
