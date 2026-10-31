@@ -51,16 +51,16 @@ Never weaken an assertion to make a test pass; if a check must change, say so in
 Run the checks while you work, not only at the end; they are the same scripts the quality gates and CI run:
 
 ```sh
-bun run lint            # `bunx biome check --write .` fixes formatting and import order
+bun run lint            # biome; `bunx biome check --write .` fixes formatting and import order
 bun run typecheck
 bun run check:boundaries
-bun run check:locks     # after any dependency change; commit the lockfiles it names
+bun run check:locks     # after any dependency change; reinstall where it names a stale lockfile and commit the result
 bun run test
 ```
 
 Integration, e2e and docker tests need Postgres, Zero and Docker. Where they are available, run `bun run check:related`, plus `bun run check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers) and `bun run check:docker` for the host, the agent or the images. In a Spyria runtime they are not available: write the tests anyway and say in the description which ones you could not run.
 
-Never get a check to pass by making it check less: no skipped or loosened tests, no `biome-ignore`, no new boundary exceptions, no hand-edited lockfiles. If a check fails on code your change did not touch, say so rather than fixing it.
+Never get a check to pass by making it check less: no skipped or loosened tests, no `biome-ignore` to silence a real finding, no new boundary exceptions, no hand-edited lockfiles. If a check fails on code your change did not touch, say so rather than fixing it.
 
 Check whether your change makes a page in [docs/](docs/README.md) stale (a decision, a guide step, a feature as users see it); if so, update it in the same pull request, or say in the pull request which page needs a follow-up.
 
@@ -68,7 +68,7 @@ In a dev chat with quality gates, end the work with `finish_work`; otherwise ope
 
 ## Reviewing a change
 
-A finding is **important** when the change breaks a rule of this file (non-negotiable rules, layering, tests at the right layer, a weakened check) or changes behaviour without a test. It is a **nit** when it is about naming, style or a smaller equivalent. It is **pre-existing** when it is in lines the diff did not change; it does not block the change. Cite the architecture rule number ([.agents/skills/architecture](.agents/skills/architecture/SKILL.md)) when a finding is about structure.
+A finding is **important** when the change breaks a rule of this file (non-negotiable rules, layering, tests at the right layer, a weakened check) or changes behaviour without a test. It is a **nit** when it is about naming, style, or a simpler way to write the same thing. It is **pre-existing** when it is in lines the diff did not change; it does not block the change. Cite the architecture rule number ([.agents/skills/architecture](.agents/skills/architecture/SKILL.md)) when a finding is about structure.
 
 ## Conventions
 

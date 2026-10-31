@@ -42,7 +42,7 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 ### Before a pull request
 
-Run `typecheck`, `lint`, `check:boundaries` and `check:related`. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent or the images.
+Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent or the images.
 
 ### How `check:related` chooses
 
