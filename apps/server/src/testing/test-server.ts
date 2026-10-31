@@ -171,6 +171,7 @@ const agentBridge = createAgentBridge({
   sessionClassifierOf: sessionClassifierOf(llmGateway, { gatewayUrlOf, headersOf: testHeadersOf }),
   resumeAfterMilliseconds: 5_000,
   reopenDelayMilliseconds: 50,
+  devLoopPollMilliseconds: 500,
   repositoryCheckoutsOf: (database) => createGitHubCheckouts(database, github),
   ...placement,
 })
