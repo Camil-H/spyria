@@ -374,17 +374,21 @@ export const createRuntimeHostGateway = ({
   const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
     createHmac('sha256', runtimeKeySecret).update(`runtime-api-key.${workspaceId}.${runtimeId}`).digest('base64url')
 
-  const sandboxProvider: SandboxProvider = {
-    create: async ({ image, packageCache, ...sandbox }) => {
+  const createWith =
+    (op: 'create' | 'recreate'): SandboxProvider['create'] =>
+    async ({ image, packageCache, ...sandbox }) => {
       const hasPackageCache = (connectionOf(sandbox).identified?.relayVersion ?? 1) >= packageCacheRelayVersion
-      await command(sandbox, 'create', {
+      await command(sandbox, op, {
         runtimeId: sandbox.runtimeId,
         image,
         apiKey: apiKeyOf(sandbox),
         ...(packageCache &&
           hasPackageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
       })
-    },
+    }
+  const sandboxProvider: SandboxProvider = {
+    create: createWith('create'),
+    recreate: createWith('recreate'),
     apiKeyOf,
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),

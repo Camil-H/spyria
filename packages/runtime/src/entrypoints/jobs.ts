@@ -15,12 +15,12 @@ const discardPayload = z.object({
   hostId: z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeHostId)),
 })
 
-export const createRuntimeJobs = (provider: SandboxProvider) => {
+export const createRuntimeJobs = (provider: SandboxProvider, { currentImage }: { currentImage?: string } = {}) => {
   const forRuntime =
     (job: typeof bringUpRuntime) =>
     ({ workspaceId, payload, isLastAttempt, transact }: Job) =>
       job(
-        { transactor: createTransactingZeroTransactor(transact), provider },
+        { transactor: createTransactingZeroTransactor(transact), provider, currentImage },
         { workspaceId, ...runtimePayload.parse(payload), now: Date.now(), isLastAttempt },
       )
   return {

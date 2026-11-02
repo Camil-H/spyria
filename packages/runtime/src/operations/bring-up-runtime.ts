@@ -6,7 +6,7 @@ import { RuntimeNotReady } from '../domain/errors.ts'
 import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
-type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider }
+type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider; currentImage?: string }
 type Input = { workspaceId: WorkspaceId; runtimeId: RuntimeId; now: number; isLastAttempt: boolean }
 
 const readyBudgetMilliseconds = 15_000
@@ -31,7 +31,7 @@ class HarnessInstallFailed extends Error {}
 class AgentOutOfDate extends Error {}
 
 export const bringUpRuntime = async (
-  { transactor, provider }: Dependencies,
+  { transactor, provider, currentImage }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
   const { runtime, harness, packageCache } = await transactor.run(async ({ runtimes }) => {
@@ -43,16 +43,24 @@ export const bringUpRuntime = async (
   let started = runtime
   try {
     const status = await provider.status(sandbox)
-    if (status === 'missing') await provider.create({ ...sandbox, image: runtime.image, packageCache })
+    const isOnOldImage = currentImage !== undefined && runtime.image !== currentImage
+    const image = isOnOldImage ? currentImage : runtime.image
+    if (status === 'missing') await provider.create({ ...sandbox, image, packageCache })
+    else if (isOnOldImage) await provider.recreate({ ...sandbox, image, packageCache })
+    if (isOnOldImage) {
+      const moved = { ...runtime, image }
+      await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(moved))
+      started = moved
+    }
     if (harness && !(await provider.hasHarness({ ...sandbox, harness }))) {
-      const installing = runtime.state === 'installing' ? runtime : transitioned(runtime, 'installing', now)
-      await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(installing))
+      const installing = started.state === 'installing' ? started : transitioned(started, 'installing', now)
+      await recordIfUnchanged(transactor, started, ({ runtimes }) => runtimes.save(installing))
       started = installing
       await provider.installHarness({ ...sandbox, harness }).catch((error: Error) => {
         throw new HarnessInstallFailed(error.message)
       })
     }
-    if (status !== 'running') await provider.start(sandbox)
+    if (status !== 'running' || isOnOldImage) await provider.start(sandbox)
     const readiness = await waitUntilReady(provider.connect(sandbox), runtimeId)
     if (isAgentOutOfDate(readiness))
       throw new AgentOutOfDate(`spyria-agent speaks protocol ${readiness.protocolVersion}`)

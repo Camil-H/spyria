@@ -393,3 +393,44 @@ test('a pull the registry refuses fails with its reason', async () => {
     createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'prepare', image: publishedImage }),
   ).rejects.toThrow('manifest unknown')
 })
+
+test('a recreate removes the managed container alone and creates it again on the same volumes; without a container it just creates', async () => {
+  const calls: string[] = []
+  const bodies: ReturnType<typeof containerBodyOf>[] = []
+  let exists = true
+  const docker = (async (method: string, path: string, body?: unknown) => {
+    calls.push(`${method} ${path.split('?')[0]}`)
+    if (method === 'POST' && path.startsWith('/containers/create'))
+      bodies.push(body as ReturnType<typeof containerBodyOf>)
+    if (method === 'GET' && path.startsWith('/containers/')) {
+      if (!exists) throw new DockerError(404, 'No such container')
+      return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    }
+    if (method === 'DELETE') exists = false
+    return {}
+  }) as Docker
+  const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  await runner.run({ op: 'recreate', ...create })
+  expect(calls).toEqual([
+    'GET /containers/spyria-rt-runtime-1/json',
+    'DELETE /containers/spyria-rt-runtime-1',
+    'POST /networks/create',
+    `GET /images/${image}/json`,
+    'POST /containers/create',
+  ])
+  expect(bodies[0]?.HostConfig.Mounts.map(({ Source }) => Source)).toEqual([
+    'spyria-rt-runtime-1-ws',
+    'spyria-rt-runtime-1-home',
+    'spyria-rt-runtime-1-tmp',
+  ])
+  calls.length = 0
+  await runner.run({ op: 'recreate', ...create })
+  expect(calls).toEqual([
+    'GET /containers/spyria-rt-runtime-1/json',
+    'POST /networks/create',
+    `GET /images/${image}/json`,
+    'POST /containers/create',
+  ])
+  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
+  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
+})

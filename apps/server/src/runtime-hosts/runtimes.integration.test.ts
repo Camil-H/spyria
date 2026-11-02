@@ -45,6 +45,7 @@ const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,
   retryDelayMilliseconds: 300,
   sandboxProvider: gateway.sandboxProvider,
+  spyriaAgentImage: testSpyriaAgentImage,
 })
 const zeroDatabase = zeroDrizzle(schema, database)
 const runtimeJobs = createRuntimeJobs(gateway.sandboxProvider)
@@ -588,4 +589,22 @@ test('a runtime whose spyria-agent answers ready with a protocol below the minim
   const running = await runningRuntime(freshChat)
   expect(await runtimeOf(freshChat)).toMatchObject({ id: running.id, agent_version: 'test', agent_protocol_version: 1 })
   expect(current.containers.get(running.id)?.running).toBe(true)
+})
+
+test('a stopped runtime left on an older image is recreated on the current image, with the same id, when it starts again', async () => {
+  const host = await fakeHost('Upgraded host')
+  const chat = await newRuntimeChat()
+  const runtime = await stoppedRuntime(chat)
+  const olderImage = `sha256:${'1'.repeat(64)}`
+  await database.$client`update runtimes set image = ${olderImage} where id = ${runtime.id}`
+  host.commands.length = 0
+
+  expect(await ensure(chat)).toMatchObject({ id: runtime.id, state: 'starting' })
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['recreate', 'start'])
+  expect(host.commands.find((command) => command.op === 'recreate')).toMatchObject({
+    runtimeId: runtime.id,
+    image: testSpyriaAgentImage,
+  })
+  expect((await runtimeOf(chat)).image).toBe(testSpyriaAgentImage)
 })

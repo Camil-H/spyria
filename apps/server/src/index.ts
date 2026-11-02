@@ -112,6 +112,7 @@ setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()
 const jobWorker = startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,
+  spyriaAgentImage,
   agentBridge,
   llmGateway,
   usageLogs: createBifrostUsageLogs(gatewaySettings),
