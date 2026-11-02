@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import {
@@ -39,6 +40,7 @@ type AuthRouteSettings = {
   deployment: string
   version: string
   hostImage?: string
+  setupToken?: string
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
@@ -56,6 +58,8 @@ type PopupResult =
 const sessionCookiePrefix = 'spyria_s_'
 const loginCookie = 'spyria_login'
 const popupSelfCloseMilliseconds = 10_000
+const sha256 = (text: string) => createHash('sha256').update(text).digest()
+export const setupLinkNeededNotice = 'This Spyria is being set up: open the setup link to create its first workspace'
 export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
 
@@ -92,12 +96,15 @@ export const createAuthRoutes = ({
   deployment,
   version,
   hostImage,
+  setupToken,
   database,
   authenticate,
   testDatabaseByName,
   closeSessionStreams,
   rateLimited,
 }: AuthRouteSettings) => {
+  const isSetupToken = (given: unknown) =>
+    setupToken !== undefined && typeof given === 'string' && timingSafeEqual(sha256(given), sha256(setupToken))
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
     const testSettings: TestSettings = testDatabaseByName ? JSON.parse(getCookie(context, testCookie) ?? '{}') : {}
     const databaseName = tokenDatabaseName ?? testSettings.db
@@ -161,21 +168,22 @@ export const createAuthRoutes = ({
         return context.json({ error: 'forbidden' }, 403)
       await next()
     })
-    .get('/mode', async (context) =>
-      context.json({
+    .get('/mode', async (context) => {
+      const isBeingSetUp = authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client))
+      return context.json({
         authMode,
-        canCreateWorkspace: authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client)),
+        isBeingSetUp,
+        canCreateWorkspace: isBeingSetUp && isSetupToken(context.req.query('setup')),
         instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
-      }),
-    )
+      })
+    })
     .post('/first-workspace', rateLimited('firstWorkspace'), async (context) => {
       if (authMode !== 'sso' || context.req.header('origin') !== appOrigin)
         return context.json({ error: 'forbidden' }, 403)
-      const firstWorkspace = await prepareFirstWorkspace(
-        scopeOf(context).database,
-        sso,
-        await context.req.parseBody(),
-      ).catch(domainErrorOnly)
+      const form = await context.req.parseBody()
+      if (!isSetupToken(form.setupToken))
+        return popup(context, { status: 'refused', message: setupLinkNeededNotice }, 403)
+      const firstWorkspace = await prepareFirstWorkspace(scopeOf(context).database, sso, form).catch(domainErrorOnly)
       if (firstWorkspace instanceof Error)
         return popup(context, { status: 'refused', message: firstWorkspace.message }, 400)
       return redirectToProvider(context, await oidcOf(firstWorkspace.provider), { firstWorkspace })

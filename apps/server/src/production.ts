@@ -19,6 +19,7 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     settingOf('SPYRIA_AUTH_MODE') !== 'sso' && 'SPYRIA_AUTH_MODE must be sso.',
     secretProblemOf('SPYRIA_TOKEN_SECRET', settingOf('SPYRIA_TOKEN_SECRET')),
     secretProblemOf('SPYRIA_SECRETS_KEY', settingOf('SPYRIA_SECRETS_KEY')),
+    secretProblemOf('SPYRIA_SETUP_TOKEN', settingOf('SPYRIA_SETUP_TOKEN')),
     !appOrigin.startsWith('https://') && 'SPYRIA_APP_ORIGIN must start with https://.',
     (!originOf(appOrigin) || originOf(settingOf('SPYRIA_OIDC_REDIRECT_URI')) !== originOf(appOrigin)) &&
       'SPYRIA_OIDC_REDIRECT_URI must be on SPYRIA_APP_ORIGIN.',

@@ -121,6 +121,7 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `retry-jobs <id>\|--all` | `jobs:retry` | Requeues failed jobs with their attempts reset. |
 | `tools-setup github\|notion` | `tools:setup` | Sets up a tool server in the gateway (above). |
 | `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Self-hosting](./self-hosting.md)). |
+| `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
 
 ## Running agents locally: a runtime host
 

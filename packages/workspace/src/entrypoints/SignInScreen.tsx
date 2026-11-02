@@ -19,14 +19,18 @@ const creationRefusalOf = (outcome: SignInOutcome) =>
 
 export const SignInScreen = ({
   isEmailFirst,
+  isBeingSetUp = false,
   canCreateWorkspace,
+  setupToken,
   instanceApps = [],
   notice,
   signIn,
   createWorkspace,
 }: {
   isEmailFirst: boolean
+  isBeingSetUp?: boolean
   canCreateWorkspace: boolean
+  setupToken?: string
   instanceApps?: readonly SsoPreset[]
   notice?: string
   signIn: (email?: string) => Promise<SignInOutcome>
@@ -52,9 +56,17 @@ export const SignInScreen = ({
     setIsSigningIn(true)
     settle(await createWorkspace(event.currentTarget), creationRefusalOf)
   }
+  if (isBeingSetUp && !canCreateWorkspace)
+    return (
+      <AuthScreen
+        title="This Spyria is being set up"
+        description="No workspace exists yet. The person installing it has a setup link that creates the first one."
+      />
+    )
   return canCreateWorkspace ? (
     <AuthScreen title="Create a workspace" description="No workspace exists on this Spyria yet.">
       <form aria-label="Create a workspace" onSubmit={create} className="flex flex-col gap-3">
+        <input type="hidden" name="setupToken" value={setupToken ?? ''} />
         <label className={labelClass}>
           Organization name
           <input name="name" required className={fieldClass} />

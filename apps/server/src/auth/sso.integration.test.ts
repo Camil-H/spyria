@@ -13,6 +13,7 @@ import {
   globex,
   rejectionOf,
   testAuthSettings,
+  testSetupToken,
   workspaceEventsOf,
 } from '../testing/testing.ts'
 import { createSmtpMailer } from './mail.ts'
@@ -194,17 +195,25 @@ const identitiesOf = async (subject: string) => [
 test('the server tells its auth mode and whether a workspace can be created', async () => {
   expect(await (await app.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
   })
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    isBeingSetUp: true,
+    canCreateWorkspace: false,
+    instanceApps: [],
+  })
+  expect(await (await emptyInstanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
+    authMode: 'sso',
+    isBeingSetUp: true,
     canCreateWorkspace: true,
     instanceApps: [],
   })
   expect(
     await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
-  ).toEqual({ authMode: 'dex', canCreateWorkspace: false, instanceApps: [] })
+  ).toEqual({ authMode: 'dex', isBeingSetUp: false, canCreateWorkspace: false, instanceApps: [] })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -648,7 +657,7 @@ const startCreation = (form: Record<string, string>, origin = testAuthSettings.a
   emptyInstanceApp.request('/auth/first-workspace', {
     method: 'POST',
     headers: { origin },
-    body: new URLSearchParams(form),
+    body: new URLSearchParams({ setupToken: testSetupToken, ...form }),
   })
 const completeCreation = async (started: Response, code: string, claims: JWTPayload) => {
   const location = new URL(started.headers.get('location') ?? '')
@@ -768,6 +777,7 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
 
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
   })
@@ -810,8 +820,9 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
   })
   entraIdp.clientSecret = 'instance-secret'
   try {
-    expect(await (await instanceApp.request('/auth/mode')).json()).toEqual({
+    expect(await (await instanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
       authMode: 'sso',
+      isBeingSetUp: true,
       canCreateWorkspace: true,
       instanceApps: ['microsoft'],
     })
@@ -819,7 +830,13 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
       instanceApp.request('/auth/first-workspace', {
         method: 'POST',
         headers: { origin: testAuthSettings.appOrigin },
-        body: new URLSearchParams({ name: 'Initech', domain: 'initech.com', usesInstanceApp: 'true', ...form }),
+        body: new URLSearchParams({
+          setupToken: testSetupToken,
+          name: 'Initech',
+          domain: 'initech.com',
+          usesInstanceApp: 'true',
+          ...form,
+        }),
       })
     const googleRefusal = await create({ preset: 'google' })
     expect(await googleRefusal.text()).toContain(
@@ -895,4 +912,26 @@ test('the server refuses to start when workspaces sign in through an app of this
 test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'stark'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
+})
+
+test('the first workspace needs the setup token: refused without it, with a wrong one, and once a workspace exists; the sign-in mode only offers creation with it', async () => {
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  const modeOf = async (query = '') => (await emptyInstanceApp.request(`/auth/mode${query}`)).json()
+  expect(await modeOf()).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf('?setup=not-the-token')).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: true })
+  const form = { ...umbrellaForm(), setupToken: '' }
+  for (const refusedToken of ['', 'not-the-token', `${testSetupToken} `]) {
+    const refused = await startCreation({ ...form, setupToken: refusedToken })
+    expect(refused.status).toBe(403)
+    expect(await refused.text()).toContain('This Spyria is being set up: open the setup link')
+    expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(0)
+  }
+  const started = await startCreation(umbrellaForm())
+  expect(started.status).toBe(302)
+  await completeCreation(started, 'setup-token-code', { sub: 'u-setup', email: 'owner@umbrella.com' })
+  expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(1)
+  expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: false, canCreateWorkspace: false })
+  const spent = await startCreation(umbrellaForm())
+  expect(spent.status).toBe(403)
 })

@@ -3,7 +3,7 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
-import { verifyDomainByOperator } from './auth/sso.ts'
+import { hasNoWorkspace, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
@@ -55,6 +55,12 @@ const commands: Record<string, () => Promise<void>> = {
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
+  },
+  'setup-link': async () => {
+    if (!(await hasNoWorkspace(database.$client)))
+      throw new Error('A workspace already exists: the setup link is spent')
+    const origin = requiredEnvironment('SPYRIA_APP_ORIGIN')
+    console.log(`${origin}/?${new URLSearchParams({ setup: requiredEnvironment('SPYRIA_SETUP_TOKEN') })}`)
   },
   'sso:verify-domain': async () => {
     const [workspaceId, domain] = ['--workspace', '--domain'].map(optionOf)

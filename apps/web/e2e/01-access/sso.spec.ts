@@ -1,4 +1,5 @@
 import { openPageAs, type WorkerStack } from '../stack'
+import { e2eSetupToken } from '../stack-ports'
 import {
   expect,
   invite,
@@ -175,6 +176,11 @@ test.describe('SSO', () => {
   }, async ({ page, browser, workerStack }) => {
     await workerStack.database.$client`truncate workspaces cascade`
     await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
+    await expect(page.getByRole('form', { name: 'Create a workspace' })).toHaveCount(0)
+    await page.goto('/?setup=not-the-token')
+    await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
+    await page.goto(`/?setup=${e2eSetupToken}`)
     await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
     await fillCreationForm(page, 'http://localhost:9/nothing')
     await creationFormOf(page).getByRole('button', { name: 'Create and sign in' }).click()
