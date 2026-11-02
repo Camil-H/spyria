@@ -116,7 +116,7 @@ export const createApp = async (
   memberId: MemberId,
   defaultWorkspaceId: WorkspaceId,
   sessions: readonly WorkspaceSession[],
-  deployment: string,
+  instance: { deployment: string; version: string; hostImage?: string },
 ): Promise<Application | undefined> => {
   const store = createZeroStore({
     memberId,
@@ -214,7 +214,7 @@ export const createApp = async (
     session: {
       memberId,
       defaultWorkspaceId,
-      deployment,
+      ...instance,
       signedInWorkspaceIds: store.signedInWorkspaceIds,
       subscribe: store.subscribe,
       signOut: async (workspaceId) => {

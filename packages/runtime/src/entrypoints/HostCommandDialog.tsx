@@ -26,14 +26,16 @@ export const CommandBox = ({ command }: { command: string }) => (
 )
 
 export const HostCommand = ({ code, personal, signIn }: { code: string; personal?: boolean; signIn?: HarnessId }) => {
-  const { deployment } = useSession()
+  const { deployment, hostImage } = useSession()
   return (
     <>
       <p className="text-sm text-muted">
         Run this command in a terminal within 15 minutes
-        {location.hostname === 'localhost' && ', from the Spyria repo folder'}. The code works once.
+        {location.hostname === 'localhost' && !hostImage && ', from the Spyria repo folder'}. The code works once.
       </p>
-      <CommandBox command={hostCommandOf({ deployment, origin: location.origin, code, personal, signIn })} />
+      <CommandBox
+        command={hostCommandOf({ deployment, origin: location.origin, code, personal, signIn, image: hostImage })}
+      />
     </>
   )
 }
