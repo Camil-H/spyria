@@ -75,9 +75,11 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
         sockets.push(socket)
         const send = (frame: object) => socket.send(JSON.stringify(frame))
         socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
+        let refusedReason: string | undefined
         socket.onmessage = (message) => {
           const frame = JSON.parse(String(message.data))
           if (frame.type === 'ping') send({ type: 'pong' })
+          if (frame.type === 'refused') refusedReason = String(frame.reason)
           if (frame.type === 'token')
             send({
               type: 'hello',
@@ -94,7 +96,11 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
               },
             })
         }
-        return { closed: new Promise((resolve) => socket.addEventListener('close', (event) => resolve(event.reason))) }
+        return {
+          closed: new Promise((resolve) =>
+            socket.addEventListener('close', (event) => resolve(refusedReason ?? event.reason)),
+          ),
+        }
       },
     })
     for (const socket of sockets) socket.close()
@@ -109,9 +115,11 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
       sockets.push(socket)
       const send = (frame: object) => socket.send(JSON.stringify(frame))
       socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
+      let refusedReason: string | undefined
       socket.onmessage = (message) => {
         const frame = JSON.parse(String(message.data))
         if (frame.type === 'ping') send({ type: 'pong' })
+        if (frame.type === 'refused') refusedReason = String(frame.reason)
         if (frame.type === 'cmd') send({ type: 'res', id: frame.id, data: frame.op === 'status' ? 'missing' : null })
         if (frame.type === 'token')
           send({
@@ -133,7 +141,9 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
       return {
         heartbeat: (heartbeatSignedIn) =>
           send({ type: 'heartbeat', memoryFreeBytes: 8 * 1024 ** 3, running: 0, signedIn: heartbeatSignedIn }),
-        closed: new Promise((resolve) => socket.addEventListener('close', (event) => resolve(event.reason))),
+        closed: new Promise((resolve) =>
+          socket.addEventListener('close', (event) => resolve(refusedReason ?? event.reason)),
+        ),
         disconnect: () => socket.close(),
       }
     })

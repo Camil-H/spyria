@@ -45,3 +45,7 @@ export const hostCommandOf = ({
     ...(signIn ? [`&& ${signInCommandOf(signIn, deployment)}`] : []),
   ].join(' ')
 }
+
+export const hostUpdateCommandOf =
+  (settings: { deployment: string; origin: string; image?: string }) => (host: { ownerId: string | null }) =>
+    hostCommandOf({ ...settings, personal: host.ownerId !== null, update: true })

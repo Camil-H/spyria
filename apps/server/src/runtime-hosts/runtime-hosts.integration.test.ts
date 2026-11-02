@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { defaultHarness, runtimeHostId } from '@spyria/kernel'
-import { runtimeMutators } from '@spyria/runtime/server'
+import { defaultDeployment, defaultHarness, runtimeHostId } from '@spyria/kernel'
+import { hostUpdateCommandOf, runtimeMutators } from '@spyria/runtime/server'
 import { createApp } from '../app.ts'
 import {
   acme,
@@ -32,6 +32,11 @@ const gateway = createRuntimeHostGateway({
   runtimeKeySecret: testSecretsKey,
   databases: () => [database],
   pingIntervalMilliseconds: 100,
+  hostUpdateCommandOf: hostUpdateCommandOf({
+    deployment: defaultDeployment,
+    origin: testAuthSettings.appOrigin,
+    image: 'ghcr.io/camil-h/spyria-host:1.2.0',
+  }),
 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
@@ -179,7 +184,12 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
   const helloRefusal = async (hello: object) => {
     const host = await connectFakeHost()
     host.send({ type: 'hello', system: hostSystem, ...hostVersions, ...hello })
-    return (await host.closed).reason
+    const outcome = await host.frameOrClose('refused')
+    const { reason: closeReason } = await host.closed
+    if (!('frame' in outcome)) throw new Error(`No refused frame before the close: ${closeReason}`)
+    const reason = String(outcome.frame.reason)
+    expect(closeReason).toBe(reason.slice(0, 123))
+    return reason
   }
   const refusals = {
     'unknown code': async () => refusalOf((await claim('ZZZZZZZZ')).outcome),
@@ -237,8 +247,12 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
     'machine hello without personal': 'This host was paired as your machine: restart spyria-host with --personal',
     'workspace host hello with personal':
       'This host was paired as a workspace host: restart spyria-host without --personal',
-    'hello without versions': expect.stringMatching(/^This host is out of date: update it with docker /),
-    'hello below the minimum protocol': expect.stringMatching(/^This host is out of date: update it with docker /),
+    'hello without versions': expect.stringMatching(
+      /^This host is out of date: update it with docker rm -f spyria-host .* -v spyria-host:\/state ghcr\.io\/camil-h\/spyria-host:1\.2\.0 http:\/\/host\.docker\.internal:5190$/,
+    ),
+    'hello below the minimum protocol': expect.stringMatching(
+      /^This host is out of date: update it with docker rm -f spyria-host .* -v spyria-host:\/state ghcr\.io\/camil-h\/spyria-host:1\.2\.0 http:\/\/host\.docker\.internal:5190$/,
+    ),
   })
 })
 

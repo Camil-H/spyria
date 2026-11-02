@@ -1,6 +1,6 @@
 export type * from './contracts/sandbox-provider.ts'
 export { HostRefused } from './domain/errors.ts'
-export { hostCommandOf } from './domain/host-command.ts'
+export { hostUpdateCommandOf } from './domain/host-command.ts'
 export type { RuntimeHost } from './domain/runtime-host.ts'
 export type { RuntimeCommands } from './entrypoints/commands.ts'
 export {

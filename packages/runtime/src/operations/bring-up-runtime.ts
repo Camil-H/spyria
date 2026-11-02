@@ -48,9 +48,8 @@ export const bringUpRuntime = async (
     if (status === 'missing') await provider.create({ ...sandbox, image, packageCache })
     else if (isOnOldImage) await provider.recreate({ ...sandbox, image, packageCache })
     if (isOnOldImage) {
-      const moved = { ...runtime, image }
-      await recordIfUnchanged(transactor, runtime, ({ runtimes }) => runtimes.save(moved))
-      started = moved
+      started = { ...runtime, image }
+      await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) => runtimes.save({ ...current, image }))
     }
     if (harness && !(await provider.hasHarness({ ...sandbox, harness }))) {
       const installing = started.state === 'installing' ? started : transitioned(started, 'installing', now)
