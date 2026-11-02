@@ -174,13 +174,7 @@ The host pairs once and keeps its token in the `<deployment>-host` volume; the c
 
 ### Other machines
 
-A host on another machine (a second workspace host, or a member's own machine) runs the published host image of the deployment's version, under the name the app's command expects (the deployment name plus `-host`):
-
-```sh
-docker pull ghcr.io/camil-h/spyria-host:1.0.0 && docker tag ghcr.io/camil-h/spyria-host:1.0.0 spyria-prod-host
-```
-
-Then run the command the app shows. It adapts to rootless or rooted Docker by itself, and the host pulls the runtime image by digest when the first runtime starts. A deployment built from a clone instead needs its own two images on every host: `docker build -t spyria-prod-host apps/host` from the same version, and the runtime image with the exact content ID in the server's `apps/agent/image-id` (building it again elsewhere may give another ID; `docker save <image id> | ssh <machine> docker load` keeps it, same CPU architecture only).
+A host on another machine (a second workspace host, or a member's own machine) runs the command the app shows: it names the published host image of the deployment's version (`ghcr.io/camil-h/spyria-host:1.0.0`), which Docker pulls, adapts to rootless or rooted Docker by itself, and the host pulls the runtime image by digest when the first runtime starts. A deployment built from a clone instead needs its own two images on every host: `docker build -t spyria-prod-host apps/host` from the same version, and the runtime image with the exact content ID in the server's `apps/agent/image-id` (building it again elsewhere may give another ID; `docker save <image id> | ssh <machine> docker load` keeps it, same CPU architecture only).
 
 ### Many runtimes on one host
 
@@ -241,7 +235,7 @@ docker compose --env-file .env.prod -f compose.prod.yml pull
 docker compose --env-file .env.prod -f compose.prod.yml up -d
 ```
 
-The `migrate` service applies new migrations, and the server starts only after it succeeded. Hosts pull the new runtime image when their next runtime starts; running runtimes keep theirs. Pull the new host image on other host machines. More in [operations](./operations.md#upgrades-and-migrations).
+The `migrate` service applies new migrations, and the server starts only after it succeeded. Hosts pull the new runtime image when their next runtime starts, stopped runtimes are recreated on it, and running runtimes keep theirs until they stop. Hosts on other machines keep working and show **Update available** (or **Update needed**, refused, when the release raised the minimum protocol) with the command that updates them in place. More in [operations](./operations.md#upgrades-and-migrations).
 
 ## Checking the Compose file
 
