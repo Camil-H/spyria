@@ -570,3 +570,22 @@ test('a Claude Code or Codex session is never placed on a workspace host: with o
   }
   expect(harnessCommands(workspaceHost)).toEqual([])
 })
+
+test('a runtime whose spyria-agent answers ready with a protocol below the minimum fails as outdated and is placed anew on the next prompt; an accepted one records its agent version', async () => {
+  const host = await fakeHost('Old agent host', { agentProtocolVersion: 0 })
+  const chat = await newRuntimeChat()
+  const outdated = await ensure(chat)
+  await runtimeIn(chat, 'failed')
+  expect(await runtimeOf(chat)).toMatchObject({ id: outdated.id, failure: 'outdated', agent_protocol_version: null })
+  expect(host.containers.get(outdated.id)?.running).toBe(false)
+
+  const placed = await ensure(chat)
+  expect(placed.id).not.toBe(outdated.id)
+  await host.disconnect()
+
+  const current = await fakeHost('Current agent host')
+  const freshChat = await newRuntimeChat()
+  const running = await runningRuntime(freshChat)
+  expect(await runtimeOf(freshChat)).toMatchObject({ id: running.id, agent_version: 'test', agent_protocol_version: 1 })
+  expect(current.containers.get(running.id)?.running).toBe(true)
+})

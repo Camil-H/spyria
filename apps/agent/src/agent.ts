@@ -13,6 +13,7 @@ import {
 import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
 import { connectPi } from './pi.ts'
+import { agentProtocolVersion, agentVersion } from './protocol.ts'
 import { redacted } from './redaction.ts'
 import { createScreenshotTaker } from './screenshots.ts'
 import { contextOf, log, withSpan } from './telemetry.ts'
@@ -882,7 +883,8 @@ export const startAgent = ({
     port,
     fetch: async (request, server) => {
       const { pathname, searchParams } = new URL(request.url)
-      if (request.method === 'GET' && pathname === '/ready') return Response.json({ status: 'ready' })
+      if (request.method === 'GET' && pathname === '/ready')
+        return Response.json({ status: 'ready', agentVersion, protocolVersion: agentProtocolVersion })
       const [, socketConversationId] = socketRoute.exec(pathname) ?? []
       if (socketConversationId) {
         if (!conversations.has(socketConversationId)) return Response.json({ error: 'Not found' }, { status: 404 })

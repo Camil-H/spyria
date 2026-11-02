@@ -1,6 +1,7 @@
 import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
+import { type AgentReadiness, isAgentOutOfDate, readinessOf } from '../domain/agent-version.ts'
 import { RuntimeNotReady } from '../domain/errors.ts'
 import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
@@ -12,22 +13,22 @@ const readyBudgetMilliseconds = 15_000
 const readyPollMilliseconds = 250
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
-const isReady = (transport: SandboxTransport) =>
+const readinessProbe = (transport: SandboxTransport) =>
   transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-    (response) => response.status === 200,
-    () => false,
+    (response) => (response.status === 200 ? readinessOf(response.body) : undefined),
+    () => undefined,
   )
 
-const waitUntilReady = async (transport: SandboxTransport, runtimeId: RuntimeId) => {
-  for (
-    const deadline = Date.now() + readyBudgetMilliseconds;
-    !(await isReady(transport));
-    await sleep(readyPollMilliseconds)
-  )
+const waitUntilReady = async (transport: SandboxTransport, runtimeId: RuntimeId): Promise<AgentReadiness> => {
+  for (const deadline = Date.now() + readyBudgetMilliseconds; ; await sleep(readyPollMilliseconds)) {
+    const readiness = await readinessProbe(transport)
+    if (readiness) return readiness
     if (Date.now() > deadline) throw new RuntimeNotReady(runtimeId)
+  }
 }
 
 class HarnessInstallFailed extends Error {}
+class AgentOutOfDate extends Error {}
 
 export const bringUpRuntime = async (
   { transactor, provider }: Dependencies,
@@ -52,18 +53,28 @@ export const bringUpRuntime = async (
       })
     }
     if (status !== 'running') await provider.start(sandbox)
-    await waitUntilReady(provider.connect(sandbox), runtimeId)
+    const readiness = await waitUntilReady(provider.connect(sandbox), runtimeId)
+    if (isAgentOutOfDate(readiness))
+      throw new AgentOutOfDate(`spyria-agent speaks protocol ${readiness.protocolVersion}`)
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
-      runtimes.save({ ...transitioned(current, 'running', now), lastActiveAt: now }),
+      runtimes.save({
+        ...transitioned(current, 'running', now),
+        agentVersion: readiness.agentVersion,
+        agentProtocolVersion: readiness.protocolVersion,
+        lastActiveAt: now,
+      }),
     )
   } catch (error) {
     const isInstallFailure = error instanceof HarnessInstallFailed
-    if (!isLastAttempt && !isInstallFailure) throw error
+    const isOutdated = error instanceof AgentOutOfDate
+    if (!isLastAttempt && !isInstallFailure && !isOutdated) throw error
     const failure = isInstallFailure
       ? installFailureOf(error.message)
-      : runtime.state === 'creating'
-        ? 'create_failed'
-        : 'start_failed'
+      : isOutdated
+        ? 'outdated'
+        : runtime.state === 'creating'
+          ? 'create_failed'
+          : 'start_failed'
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
     )
