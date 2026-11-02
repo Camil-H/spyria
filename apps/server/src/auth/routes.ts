@@ -37,6 +37,8 @@ type AuthRouteSettings = {
   tokenSecret: string
   appOrigin: string
   deployment: string
+  version: string
+  hostImage?: string
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
@@ -88,6 +90,8 @@ export const createAuthRoutes = ({
   tokenSecret,
   appOrigin,
   deployment,
+  version,
+  hostImage,
   database,
   authenticate,
   testDatabaseByName,
@@ -244,7 +248,7 @@ export const createAuthRoutes = ({
       const liveSessions = await findLiveSessions(scope.database, sessionIdByWorkspace)
       const userId = liveSessions.toSorted((first, second) => +second.createdAt - +first.createdAt)[0]?.userId
       const sessions = await Promise.all(liveSessions.filter((session) => session.userId === userId).map(scope.issue))
-      return context.json({ userId, sessions, deployment })
+      return context.json({ userId, sessions, deployment, version, hostImage })
     })
     .post('/renew', async (context) => {
       const workspaceId = await workspaceIdOfBody(context)

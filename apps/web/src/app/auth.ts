@@ -23,6 +23,8 @@ export const loadSessions = async (): Promise<{
   userId?: MemberId
   sessions: WorkspaceSession[]
   deployment: string
+  version: string
+  hostImage?: string
 }> => (await fetch('/auth/sessions')).json()
 
 export const loadAuthMode = async (): Promise<{

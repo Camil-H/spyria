@@ -105,6 +105,8 @@ const app = createApp({
   spyriaAgentImage,
   trustedProxy: process.env.SPYRIA_TRUSTED_PROXY === 'cloudflare' ? 'cloudflare' : undefined,
   zeroUrl: process.env.SPYRIA_ZERO_URL || undefined,
+  version,
+  hostImage,
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()
