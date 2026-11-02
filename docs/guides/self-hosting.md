@@ -246,7 +246,7 @@ bun run agent:build
 bun run smoke:prod
 ```
 
-`smoke:prod` starts the production Compose file with the build override (`compose.build.yml`, so the images come from this clone) under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, that `/auth/mode` offers creating the first workspace, and that `/zero` reaches zero-cache through the server (HTTP and WebSocket). It then removes the containers, volumes, network and every image it built, even on failure. It does not start the optional profiles, and it takes a few minutes.
+`smoke:prod` starts the production Compose file with the build override (`compose.build.yml`, so the images come from this clone) under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, that `/auth/mode` says the deployment is being set up and offers creating the first workspace only with the setup token, and that `/zero` reaches zero-cache through the server (HTTP and WebSocket). It then removes the containers, volumes, network and every image it built, even on failure. It does not start the optional profiles, and it takes a few minutes.
 
 ## Example: Cloudflare
 

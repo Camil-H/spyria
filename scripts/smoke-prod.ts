@@ -27,6 +27,7 @@ const smokeEnvironment = {
   SPYRIA_APP_ORIGIN: 'https://localhost',
   SPYRIA_TOKEN_SECRET: secretOf(),
   SPYRIA_SECRETS_KEY: secretOf(),
+  SPYRIA_SETUP_TOKEN: secretOf(),
   SPYRIA_SMTP_URL: `smtp://smoke:${secretOf()}@127.0.0.1:2525`,
   SPYRIA_MAIL_FROM: 'Spyria smoke <smoke@example.com>',
   SPYRIA_GATEWAY_ADMIN_USER: `admin-${secretOf().slice(0, 8)}`,
@@ -139,9 +140,13 @@ const smoke = async () => {
   )
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
-    authMode.authMode === 'sso' && authMode.canCreateWorkspace === true,
-    '/auth/mode offers creating the first workspace',
+    authMode.authMode === 'sso' && authMode.isBeingSetUp === true && authMode.canCreateWorkspace === false,
+    '/auth/mode says the deployment is being set up and refuses creating a workspace without the setup link',
   )
+  const setupMode = await (
+    await fetch(`${serverUrl}/auth/mode?${new URLSearchParams({ setup: smokeEnvironment.SPYRIA_SETUP_TOKEN })}`)
+  ).json()
+  check(setupMode.canCreateWorkspace === true, '/auth/mode offers creating the first workspace with the setup token')
   const zeroKeepalive = await fetch(`${serverUrl}/zero/keepalive`)
   await zeroKeepalive.arrayBuffer()
   check(zeroKeepalive.status === 200, 'the server forwards /zero/keepalive to zero-cache')

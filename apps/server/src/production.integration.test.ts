@@ -35,6 +35,7 @@ const productionEnvironment = {
   SPYRIA_ENV: 'production',
   SPYRIA_AUTH_MODE: 'sso',
   SPYRIA_TOKEN_SECRET: 'production-test-token-secret-0123456789abcdef',
+  SPYRIA_SETUP_TOKEN: 'd'.repeat(48),
   SPYRIA_SECRETS_KEY: 'production-test-secrets-key-0123456789abcdef',
   SPYRIA_APP_ORIGIN: 'https://spyria.example',
   SPYRIA_OIDC_REDIRECT_URI: 'https://spyria.example/auth/callback',
