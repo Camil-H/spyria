@@ -6,6 +6,7 @@ const production = {
   SPYRIA_AUTH_MODE: 'sso',
   SPYRIA_TOKEN_SECRET: 'a'.repeat(64),
   SPYRIA_SECRETS_KEY: 'b'.repeat(64),
+  SPYRIA_SETUP_TOKEN: 'd'.repeat(48),
   SPYRIA_APP_ORIGIN: 'https://spyria.example',
   SPYRIA_OIDC_REDIRECT_URI: 'https://spyria.example/auth/callback',
   SPYRIA_SMTP_URL: 'smtp://user:pass@smtp.example:587',
@@ -34,13 +35,16 @@ test('the auth mode is sso', () => {
   expect(problemsWith({ SPYRIA_AUTH_MODE: undefined })).toEqual(['SPYRIA_AUTH_MODE must be sso.'])
 })
 
-test.each(['SPYRIA_TOKEN_SECRET', 'SPYRIA_SECRETS_KEY'])('%s is present, long enough and not a dev default', (name) => {
-  expect(problemsWith({ [name]: undefined })).toEqual([`${name} is required.`])
-  expect(problemsWith({ [name]: 'x'.repeat(31) })).toEqual([`${name} must be at least 32 characters.`])
-  expect(problemsWith({ [name]: 'spyria-dev-gateway-encryption-key' })).toEqual([
-    `${name} must not be a development default.`,
-  ])
-})
+test.each(['SPYRIA_TOKEN_SECRET', 'SPYRIA_SECRETS_KEY', 'SPYRIA_SETUP_TOKEN'])(
+  '%s is present, long enough and not a dev default',
+  (name) => {
+    expect(problemsWith({ [name]: undefined })).toEqual([`${name} is required.`])
+    expect(problemsWith({ [name]: 'x'.repeat(31) })).toEqual([`${name} must be at least 32 characters.`])
+    expect(problemsWith({ [name]: 'spyria-dev-gateway-encryption-key' })).toEqual([
+      `${name} must not be a development default.`,
+    ])
+  },
+)
 
 test('the app origin is https and the OIDC redirect is on it', () => {
   expect(
@@ -77,7 +81,7 @@ test('the gateway admin login is present and not the dev default', () => {
 })
 
 test('every problem is listed at once', () => {
-  expect(productionProblemsOf({ SPYRIA_ENV: 'production' })).toHaveLength(8)
+  expect(productionProblemsOf({ SPYRIA_ENV: 'production' })).toHaveLength(9)
 })
 
 test('a trusted proxy is unset or cloudflare', () => {

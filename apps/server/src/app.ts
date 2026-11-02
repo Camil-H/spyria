@@ -242,6 +242,7 @@ export const createApp = ({
   llmGateway,
   hostImage,
   version = 'dev',
+  setupToken,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
@@ -279,6 +280,7 @@ export const createApp = ({
   zeroUrl?: string
   hostImage?: string
   version?: string
+  setupToken?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
@@ -445,6 +447,7 @@ export const createApp = ({
         deployment,
         version,
         hostImage,
+        setupToken,
         database,
         authenticate,
         testDatabaseByName,

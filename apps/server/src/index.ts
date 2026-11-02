@@ -106,6 +106,7 @@ const app = createApp({
   zeroUrl: process.env.SPYRIA_ZERO_URL || undefined,
   version,
   hostImage,
+  setupToken: process.env.SPYRIA_SETUP_TOKEN || undefined,
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()

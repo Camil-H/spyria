@@ -50,12 +50,14 @@ import {
 } from './spyria-agent-relay.ts'
 
 export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
+export const testSetupToken = 'e2e-and-integration-test-setup-token'
 const unlimitedRateBudgets = Object.fromEntries(
   Object.entries(rateBudgets).map(([name, budget]) => [name, { ...budget, count: 1_000_000_000 }]),
 ) as RateBudgets
 export const testAuthSettings = {
   rateLimits: unlimitedRateBudgets,
   tokenSecret: 'integration-test-secret',
+  setupToken: testSetupToken,
   appOrigin: 'http://localhost:5190',
   oidc: { issuer: 'http://localhost:5557/dex', clientId: 'spyria', redirectUri: 'http://localhost:3100/auth/callback' },
 }
