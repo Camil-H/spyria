@@ -48,7 +48,7 @@ spyria up -d
 
 When a pull changes the gateway image, the gateway migrates its `bifrost` database on start, and some of its migrations cannot be reverted. Take a [backup](#backups) before `up`; going back to the previous gateway image means restoring that backup with it.
 
-Each version's server names its runtime image by digest; a host pulls it when the first runtime starts on it after the upgrade, and running runtimes keep theirs. Hosts on other machines keep their host image until you pull the new version there too (see [self-hosting](./self-hosting.md#other-machines)); from a clone, rebuild their host image and load the new runtime image there as well.
+Each version's server names its runtime image by digest; a host pulls it when the first runtime starts on it after the upgrade, a stopped runtime is recreated on it when it starts again (its volumes are kept), and running runtimes keep theirs until they stop. Hosts on other machines keep their host image and show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the release raised the minimum protocol, in which case they are refused until updated; either badge opens the command that replaces the host container in place (see [machines](../features/machines.md#versions-and-updates)). From a clone, rebuild their host image and load the new runtime image there as well.
 
 ## Jobs
 

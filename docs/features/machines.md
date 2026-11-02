@@ -20,10 +20,20 @@ A host runs only the runtime image the server names: on a published deployment t
 ## Adding a workspace runtime host
 
 1. As an admin, open **Workspace settings**, **Connect runtime**, then **Add runtime host**, give it a name and copy the command.
-2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. When Spyria's origin is `localhost` (local development), the command builds the host image itself and points the container at `host.docker.internal`.
+2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. On a published deployment the command runs the host image of Spyria's own version (`ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker); when Spyria's origin is `localhost` (local development), it builds the host image itself and points the container at `host.docker.internal`.
 3. The row turns **Online** within seconds. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
 
-Each host row shows its CPUs, memory, how many runtimes run against its cap, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
+Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
+
+## Versions and updates
+
+A host says hello with its release and protocol versions, and spyria-agent answers the server's readiness check with its own. The server holds a minimum protocol for each, raised by a breaking change or a security fix in the host or the agent:
+
+- A host below the minimum (one that sends no version counts as protocol 0) is refused with "This host is out of date: update it with `<command>`", logs it and stops; its row shows **Update needed**. The badge opens the update command: it replaces the host container with the current image but keeps the state volume, so the host reconnects with its token and sign-ins, and needs no new code.
+- A host that is accepted but older than Spyria shows **Update available** with the same command.
+- A runtime whose spyria-agent is below the minimum fails as outdated, and the next prompt places a new runtime on the current image. A stopped runtime whose image is no longer the server's is recreated on the current image when it starts again, keeping its workspace and home volumes; a running runtime keeps its image until it stops.
+
+The same applies to a member's machine on their profile page.
 
 ## Removing a host
 
