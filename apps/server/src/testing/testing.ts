@@ -876,6 +876,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signedIn = [],
       relayLimitMilliseconds,
       relayVersion,
+      agentProtocolVersion = fakeHostProtocolVersion,
     }: {
       memoryGibibytes?: number
       containerAgent?: ContainerAgent
@@ -884,6 +885,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signedIn?: string[]
       relayLimitMilliseconds?: number
       relayVersion?: number
+      agentProtocolVersion?: number
     } = {},
   ) => {
     const id = crypto.randomUUID()
@@ -1039,7 +1041,13 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
                 sid: frame.sid,
                 status: isReady ? 200 : 503,
                 headers: {},
-                body: '',
+                body: isReady
+                  ? JSON.stringify({
+                      status: 'ready',
+                      agentVersion: fakeHostVersion,
+                      protocolVersion: agentProtocolVersion,
+                    })
+                  : '',
                 ...(response as object),
               }),
             )

@@ -38,6 +38,8 @@ const placeRuntime = async (
     failure,
     hostOnline: placement.hostId !== undefined,
     image: spyriaAgentImage ?? '',
+    agentVersion: null,
+    agentProtocolVersion: null,
     lastActiveAt: now,
     createdAt: now,
     stateChangedAt: now,

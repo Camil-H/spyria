@@ -707,6 +707,8 @@ export const runtimes = table(
     failure: text().$type<RuntimeFailure>(),
     hostOnline: boolean().notNull().default(false),
     image: text().notNull(),
+    agentVersion: text(),
+    agentProtocolVersion: integer(),
     llmTokenHash: text(),
     agentConversationId: text(),
     workspaceSnapshot: text(),

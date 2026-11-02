@@ -82,6 +82,8 @@ export default drizzleZeroConfig(tables, {
       failure: true,
       hostOnline: true,
       image: true,
+      agentVersion: true,
+      agentProtocolVersion: true,
       lastActiveAt: true,
       createdAt: true,
       stateChangedAt: true,
