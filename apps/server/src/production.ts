@@ -1,11 +1,5 @@
 const minimumSecretLength = 32
-const requiredSettings = [
-  'SPYRIA_SMTP_URL',
-  'SPYRIA_MAIL_FROM',
-  'SPYRIA_GATEWAY_URL',
-  'SPYRIA_GATEWAY_ADMIN_USER',
-  'SPYRIA_GATEWAY_ADMIN_PASSWORD',
-]
+const requiredSettings = ['SPYRIA_GATEWAY_URL', 'SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD']
 const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 const originOf = (url: string) => URL.parse(url)?.origin
 
@@ -29,6 +23,9 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     (!originOf(appOrigin) || originOf(settingOf('SPYRIA_OIDC_REDIRECT_URI')) !== originOf(appOrigin)) &&
       'SPYRIA_OIDC_REDIRECT_URI must be on SPYRIA_APP_ORIGIN.',
     ...requiredSettings.map((name) => !settingOf(name) && `${name} is required.`),
+    settingOf('SPYRIA_SMTP_URL') !== '' &&
+      !settingOf('SPYRIA_MAIL_FROM') &&
+      'SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.',
     ![undefined, '', 'cloudflare'].includes(environment.SPYRIA_TRUSTED_PROXY) &&
       'SPYRIA_TRUSTED_PROXY must be unset or cloudflare.',
     ...['SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD'].map(

@@ -54,7 +54,12 @@ test('the app origin is https and the OIDC redirect is on it', () => {
   ])
 })
 
-test.each(['SPYRIA_SMTP_URL', 'SPYRIA_MAIL_FROM', 'SPYRIA_GATEWAY_URL'])('%s is required', (name) => {
+test('mail is optional, but a sender is required once SMTP is set', () => {
+  expect(problemsWith({ SPYRIA_SMTP_URL: undefined, SPYRIA_MAIL_FROM: undefined })).toEqual([])
+  expect(problemsWith({ SPYRIA_MAIL_FROM: undefined })).toEqual(['SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.'])
+})
+
+test.each(['SPYRIA_GATEWAY_URL'])('%s is required', (name) => {
   expect(problemsWith({ [name]: '' })).toEqual([`${name} is required.`])
 })
 
@@ -72,7 +77,7 @@ test('the gateway admin login is present and not the dev default', () => {
 })
 
 test('every problem is listed at once', () => {
-  expect(productionProblemsOf({ SPYRIA_ENV: 'production' })).toHaveLength(10)
+  expect(productionProblemsOf({ SPYRIA_ENV: 'production' })).toHaveLength(8)
 })
 
 test('a trusted proxy is unset or cloudflare', () => {

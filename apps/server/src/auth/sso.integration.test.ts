@@ -404,8 +404,7 @@ test('a domain verifies through a single-use emailed link; until then it does no
 test('without SMTP the verification link is refused with a clear message', async () => {
   expect((await sendVerification(acme, 'example.com', 'it@example.com', appWithoutMail)).body).toEqual({
     error: 'mail_not_configured',
-    message:
-      'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+    message: "Mail isn't set up on this deployment; an operator can verify the domain with spyria verify-domain",
   })
 })
 
