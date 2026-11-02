@@ -10,7 +10,7 @@ Spyria runs as one Docker Compose file on one machine: Postgres, the migrations,
 | An HTTPS origin, for example `https://spyria.example.com` | The server refuses to start in production without `https://` (secure cookies, OIDC redirects, GitHub callbacks). |
 | A reverse proxy or tunnel that terminates TLS | For example Caddy, nginx, Traefik or a tunnel service, routing the hostname to the server (see below). |
 | An OIDC provider for the first workspace | Google Workspace, Microsoft Entra, or any OIDC issuer. Production sign-in is per-workspace SSO only. |
-| Any SMTP service that sends from your domain | Domain verification links (invites send no email). |
+| Optionally, an SMTP service that sends from your domain | Domain verification links (invites send no email). Without mail, an operator verifies the domain from the command line (see below). |
 | A GitHub App (later, from the app) | Only for dev chats on repositories. |
 
 ### Path routing
@@ -52,7 +52,7 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
 | `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM, and derives the key the server uses to reach each runtime. At least 32 characters. Never change it: every stored secret would have to be entered again, and existing runtimes would stop answering the server. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
-| `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`. |
+| `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Optional mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`; the sender is required once SMTP is set. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
 | `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Admin login of the gateway. |
 | `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Encrypts members' API keys inside the gateway. Never change it without wiping the gateway's database. |
@@ -80,7 +80,8 @@ The server image sets `SPYRIA_ENV=production`. The server then checks its settin
 - `SPYRIA_AUTH_MODE` is `sso`.
 - `SPYRIA_TOKEN_SECRET` and `SPYRIA_SECRETS_KEY` are set, at least 32 characters, and not a development default (`spyria` or `spyria-dev-…`).
 - `SPYRIA_APP_ORIGIN` starts with `https://`, and `SPYRIA_OIDC_REDIRECT_URI` is on that origin.
-- `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
+- `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
+- `SPYRIA_MAIL_FROM` is set when `SPYRIA_SMTP_URL` is.
 - `SPYRIA_TRUSTED_PROXY` is unset or `cloudflare`.
 
 Read the list with `docker compose --env-file .env.prod -f compose.prod.yml logs server`.
@@ -129,7 +130,7 @@ Production signs in through each workspace's own OIDC provider. Identities are m
 3. Submitting opens the provider's sign-in. The first person who completes it with an address at that domain becomes the Admin of the new workspace. From then on the screen no longer offers creating a workspace and the server refuses it; **New workspace** in the app reuses the member's verified domain and provider.
 4. Verify the domain right away: in **Workspace settings > Setup SSO**, send the single-use link (valid 24 hours) to any address at the domain and open it. Until the domain is verified, the workspace cannot invite, and only its existing members can sign in.
 
-Without working SMTP, an operator can verify a domain directly from the server container:
+Without mail (`SPYRIA_SMTP_URL` unset), **Send verification link** answers that mail isn't set up; an operator verifies the domain directly from the server container instead:
 
 ```sh
 docker compose --env-file .env.prod -f compose.prod.yml exec server \

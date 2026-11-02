@@ -68,8 +68,7 @@ export const SsoDiscoveryFailed = errorKind(
 )
 export const MailNotConfigured = errorKind(
   'mail_not_configured',
-  () =>
-    'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+  () => "Mail isn't set up on this deployment; an operator can verify the domain with spyria verify-domain",
   WorkspaceError,
 )
 export const MailNotSent = errorKind(
