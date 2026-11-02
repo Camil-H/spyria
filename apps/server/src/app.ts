@@ -61,6 +61,7 @@ import {
 } from '@spyria/profile/server'
 import {
   addRuntimeHostFromRequest,
+  hostCommandOf,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
@@ -239,10 +240,13 @@ export const createApp = ({
   webDist,
   testDatabaseByName,
   llmGateway,
+  hostImage,
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
+    hostUpdateCommandOf: (host) =>
+      hostCommandOf({ deployment, origin: appOrigin, image: hostImage, personal: host.ownerId !== null, update: true }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
   spyriaAgentImage,
@@ -273,6 +277,7 @@ export const createApp = ({
   rateLimiter?: RateLimiter
   trustedProxy?: TrustedProxy
   zeroUrl?: string
+  hostImage?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
