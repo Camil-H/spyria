@@ -16,6 +16,7 @@ import { type SubmitEvent, useState } from 'react'
 import { isClaimExpired } from '../domain/claim.ts'
 import { listRuntimeHosts, localSessionsOf, machineCountsOf } from '../queries/list-runtime-hosts.ts'
 import { HostCommandDialog } from './HostCommandDialog.tsx'
+import { HostVersion } from './HostVersion.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 
 type OpenDialog =
@@ -83,6 +84,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
               <li key={host.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="font-medium">{host.name}</span>
                 <span className="text-muted">{statusLabels[status]}</span>
+                <HostVersion host={host} />
                 {host.capacity && (
                   <>
                     <span>{host.capacity.cpus} CPUs</span>
