@@ -208,6 +208,22 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
       helloRefusal({ token: await tokenOf((await addMachine(bobInAcme)).body?.code) }),
     'workspace host hello with personal': async () =>
       helloRefusal({ token: await tokenOf((await addedHost('Workspace box')).code), personal: true }),
+    'hello without versions': async () => {
+      const { id, code } = await addedHost('Old box')
+      const reason = await helloRefusal({
+        token: await tokenOf(code),
+        hostVersion: undefined,
+        protocolVersion: undefined,
+      })
+      expect(await hostRow(id)).toMatchObject({ host_version: null, protocol_version: 0 })
+      return reason
+    },
+    'hello below the minimum protocol': async () => {
+      const { id, code } = await addedHost('Older box')
+      const reason = await helloRefusal({ token: await tokenOf(code), hostVersion: '0.9.0', protocolVersion: 0 })
+      expect(await hostRow(id)).toMatchObject({ host_version: '0.9.0', protocol_version: 0 })
+      return reason
+    },
   }
   const reasons: Record<string, string> = {}
   for (const [name, refused] of Object.entries(refusals)) reasons[name] = await refused()
@@ -221,6 +237,8 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
     'machine hello without personal': 'This host was paired as your machine: restart spyria-host with --personal',
     'workspace host hello with personal':
       'This host was paired as a workspace host: restart spyria-host without --personal',
+    'hello without versions': expect.stringMatching(/^This host is out of date: update it with docker /),
+    'hello below the minimum protocol': expect.stringMatching(/^This host is out of date: update it with docker /),
   })
 })
 

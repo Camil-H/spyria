@@ -2,6 +2,7 @@ import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
+import { hostCommandOf } from '@spyria/runtime/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
@@ -51,9 +52,15 @@ const llmGateway = createLlmGateway(gatewaySettings)
 const tokenSecret = requiredEnvironment('SPYRIA_TOKEN_SECRET')
 const secretsKey = requiredEnvironment('SPYRIA_SECRETS_KEY')
 const spyriaAgentImage = await readSpyriaAgentImage()
+const appOrigin = requiredEnvironment('SPYRIA_APP_ORIGIN')
+const version = process.env.SPYRIA_VERSION || undefined
+const images = process.env.SPYRIA_IMAGES || undefined
+const hostImage = version && images ? `${images}/spyria-host:${version}` : undefined
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
   runtimeKeySecret: secretsKey,
+  hostUpdateCommandOf: (host) =>
+    hostCommandOf({ deployment, origin: appOrigin, image: hostImage, personal: host.ownerId !== null, update: true }),
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -89,7 +96,7 @@ const app = createApp({
   mail: process.env.SPYRIA_SMTP_URL
     ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }
     : undefined,
-  appOrigin: requiredEnvironment('SPYRIA_APP_ORIGIN'),
+  appOrigin,
   deployment,
   webDist: process.env.SPYRIA_WEB_DIST || undefined,
   llmGateway,

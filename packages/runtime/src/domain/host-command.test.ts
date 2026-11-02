@@ -65,3 +65,41 @@ test("another deployment's command names its own host container, state volume an
     hostCommandOf({ deployment: defaultDeployment, origin: 'https://spyria.test', code: 'ABCDEFGH' }),
   ).not.toContain('SPYRIA_DEPLOYMENT')
 })
+
+test('with a published host image the command runs that image instead of a local build, even on localhost', () => {
+  const command = hostCommandOf({
+    deployment: 'spyria-prod',
+    origin: 'https://spyria.test',
+    code: 'ABCDEFGH',
+    image: 'ghcr.io/camil-h/spyria-host:1.2.0',
+  })
+  expect(command).toContain(
+    ' -v spyria-prod-host:/state ghcr.io/camil-h/spyria-host:1.2.0 https://spyria.test/h/ABCDEFGH',
+  )
+  expect(
+    hostCommandOf({
+      deployment: defaultDeployment,
+      origin: 'http://localhost:5173',
+      code: 'ABCDEFGH',
+      image: 'ghcr.io/camil-h/spyria-host:1.2.0',
+    }),
+  ).toStartWith('docker rm -f spyria-host ')
+})
+
+test('the update command replaces the container on the new image but keeps the state volume, and names the origin without a code', () => {
+  const command = hostCommandOf({
+    deployment: 'spyria-prod',
+    origin: 'https://spyria.test',
+    image: 'ghcr.io/camil-h/spyria-host:1.2.0',
+    personal: true,
+    update: true,
+  })
+  expect(command).toStartWith('docker rm -f spyria-prod-host >/dev/null 2>&1; docker run -d --name spyria-prod-host ')
+  expect(command).not.toContain('docker volume rm')
+  expect(command).toEndWith(
+    ' -v spyria-prod-host:/state ghcr.io/camil-h/spyria-host:1.2.0 --personal https://spyria.test',
+  )
+  expect(hostCommandOf({ deployment: defaultDeployment, origin: 'http://localhost:5173', update: true })).toStartWith(
+    'docker build -q -t spyria-host apps/host >/dev/null && docker rm -f spyria-host >/dev/null 2>&1; docker run -d',
+  )
+})

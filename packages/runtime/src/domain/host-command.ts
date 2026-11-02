@@ -7,26 +7,31 @@ const dockerFlags = `$(docker info -f '{{.SecurityOptions}}' | grep -q rootless 
 const hostGateway = 'host.docker.internal'
 const proxyFlags = '-e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY'
 
+type HostCommandInput = {
+  deployment: string
+  origin: string
+  personal?: boolean
+  signIn?: HarnessId
+  image?: string
+} & ({ code: string; update?: false } | { code?: undefined; update: true })
+
 export const hostCommandOf = ({
   origin,
   code,
   personal = false,
   signIn,
   deployment,
-}: {
-  deployment: string
-  origin: string
-  code: string
-  personal?: boolean
-  signIn?: HarnessId
-}) => {
+  image,
+  update,
+}: HostCommandInput) => {
   const url = new URL(origin)
   const isLocalhost = url.hostname === 'localhost'
   if (isLocalhost) url.hostname = hostGateway
   const host = hostContainerOf(deployment)
   return [
-    ...(isLocalhost ? [`docker build -q -t ${host} apps/host >/dev/null &&`] : []),
-    `docker rm -f ${host} >/dev/null 2>&1; docker volume rm ${host} >/dev/null 2>&1;`,
+    ...(isLocalhost && !image ? [`docker build -q -t ${host} apps/host >/dev/null &&`] : []),
+    `docker rm -f ${host} >/dev/null 2>&1;`,
+    ...(update ? [] : [`docker volume rm ${host} >/dev/null 2>&1;`]),
     `docker run -d --name ${host} --restart unless-stopped`,
     ...(deployment === defaultDeployment ? [] : [`-e SPYRIA_DEPLOYMENT=${deployment}`]),
     proxyFlags,
@@ -34,9 +39,9 @@ export const hostCommandOf = ({
     ...(isLocalhost ? [`--add-host ${hostGateway}:host-gateway`] : []),
     '--cap-drop ALL --security-opt no-new-privileges --read-only',
     `-v ${host}:/state`,
-    host,
+    image ?? host,
     ...(personal ? ['--personal'] : []),
-    `${url.origin}/h/${code}`,
+    update ? url.origin : `${url.origin}/h/${code}`,
     ...(signIn ? [`&& ${signInCommandOf(signIn, deployment)}`] : []),
   ].join(' ')
 }

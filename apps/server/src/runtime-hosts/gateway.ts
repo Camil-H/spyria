@@ -10,6 +10,7 @@ import {
   type HostSessionFrame,
   type PackageCacheScope,
   parseHostSessionFrame,
+  type RuntimeHost,
   type SandboxLocation,
   type SandboxProvider,
   type SandboxResponse,
@@ -88,6 +89,7 @@ export const createRuntimeHostGateway = ({
   relayModelCall,
   spyriaAgentImage,
   runtimeKeySecret,
+  hostUpdateCommandOf,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
@@ -95,6 +97,7 @@ export const createRuntimeHostGateway = ({
   relayModelCall?: ModelCallRelay
   spyriaAgentImage?: string
   runtimeKeySecret: string
+  hostUpdateCommandOf?: (host: RuntimeHost) => string
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -112,7 +115,9 @@ export const createRuntimeHostGateway = ({
   const firstAccepted = async <Result>(attempt: (handlers: HostSessionHandlers) => Promise<Result>) => {
     let lastRefusal: unknown
     for (const database of databases()) {
-      const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work))
+      const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work), {
+        hostUpdateCommandOf,
+      })
       try {
         return { database, handlers, result: await attempt(handlers) }
       } catch (error) {
