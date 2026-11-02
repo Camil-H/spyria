@@ -914,7 +914,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       if (op === 'install' && installFailure) throw new Error(installFailure)
       if (op === 'install') installedHarnesses.add(harness)
       const container = containers.get(runtimeId)
-      if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
+      if (op === 'create' || op === 'recreate') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container) {
         Object.assign(container, { running: true, isBooted: false })
         void boot().then(() => {
@@ -982,7 +982,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         }
       }) satisfies ModelCall,
       lifecycleCommands: () =>
-        commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
+        commands.filter(({ op }) => ['create', 'recreate', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
       closed: () => closed,
       signIn: (tools: string[]) => {
         currentSignIns = tools

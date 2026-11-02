@@ -34,11 +34,22 @@ const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
-const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status', 'installed', 'install'] as const
+const operations = [
+  'create',
+  'recreate',
+  'prepare',
+  'start',
+  'stop',
+  'remove',
+  'status',
+  'installed',
+  'install',
+] as const
 
 type Operation = (typeof operations)[number]
 type HarnessOperation = 'installed' | 'install'
-type RuntimeOperation = Exclude<Operation, 'create' | 'prepare' | HarnessOperation>
+type CreateOperation = 'create' | 'recreate'
+type RuntimeOperation = Exclude<Operation, CreateOperation | 'prepare' | HarnessOperation>
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string>; Image?: string }
   State?: { Running?: boolean }
@@ -46,7 +57,7 @@ type ContainerInfo = {
 }
 type CreateRequest = { runtimeId: string; image: string; apiKey: string; packageCacheKey?: string }
 export type Command =
-  | ({ op: 'create' } & CreateRequest)
+  | ({ op: CreateOperation } & CreateRequest)
   | { op: 'prepare'; image: string }
   | { op: RuntimeOperation; runtimeId: string }
   | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
@@ -62,6 +73,7 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
   const allowedFields = {
     create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
+    recreate: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
     prepare: ['image'],
     installed: ['runtimeId', 'harness'],
     install: ['runtimeId', 'harness'],
@@ -79,7 +91,7 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     if (!harnessIds.includes(fields.harness as HarnessId)) throw new Refused('unknown harness')
     return { op, runtimeId, harness: fields.harness as HarnessId }
   }
-  if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
+  if (op !== 'create' && op !== 'recreate') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
     runtimeId,
@@ -244,6 +256,11 @@ export const createCommandRunner = ({
     if (command.op === 'prepare') return void (await prepare(command.image))
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
+    if (command.op === 'recreate') {
+      const replaced = await managedContainer(command.runtimeId).catch(ignoringMissing)
+      if (replaced) await docker('DELETE', `/containers/${name}?force=true`)
+      return create(command)
+    }
     if (command.op === 'installed' || command.op === 'install') {
       if (!personal) throw new Refused('harnesses install only on a personal host')
       if (command.op === 'installed') return isHarnessInstalled(docker, name, command.harness)
