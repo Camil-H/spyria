@@ -46,6 +46,7 @@ type IncomingBody = { head: Frame; parts: Buffer[]; size: number }
 
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
+const maximumCloseReasonBytes = 123
 const requestTimeoutMilliseconds = 180_000
 const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
@@ -316,7 +317,10 @@ export const createRuntimeHostGateway = ({
       },
       onMessage: (event, socket) =>
         receive(connection, String(event.data)).catch((error) => {
-          if (error instanceof HostRefused) return socket.close(refusedCloseCode, error.message)
+          if (error instanceof HostRefused) {
+            sendTo(connection, { type: 'refused', reason: error.message })
+            return socket.close(refusedCloseCode, error.message.slice(0, maximumCloseReasonBytes))
+          }
           log.error({ event: 'runtime_host.connection_failed', body: 'A runtime host connection failed', error })
           socket.close(1011, 'Internal error')
         }),

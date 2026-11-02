@@ -61,7 +61,7 @@ import {
 } from '@spyria/profile/server'
 import {
   addRuntimeHostFromRequest,
-  hostCommandOf,
+  hostUpdateCommandOf,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
@@ -246,8 +246,7 @@ export const createApp = ({
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
-    hostUpdateCommandOf: (host) =>
-      hostCommandOf({ deployment, origin: appOrigin, image: hostImage, personal: host.ownerId !== null, update: true }),
+    hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
   spyriaAgentImage,

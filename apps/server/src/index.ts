@@ -2,7 +2,7 @@ import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
-import { hostCommandOf } from '@spyria/runtime/server'
+import { hostUpdateCommandOf } from '@spyria/runtime/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
@@ -59,8 +59,7 @@ const hostImage = version && images ? `${images}/spyria-host:${version}` : undef
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
   runtimeKeySecret: secretsKey,
-  hostUpdateCommandOf: (host) =>
-    hostCommandOf({ deployment, origin: appOrigin, image: hostImage, personal: host.ownerId !== null, update: true }),
+  hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),

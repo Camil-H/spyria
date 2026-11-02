@@ -67,7 +67,7 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
 }
 if (!claimUrlArgument) {
   console.error(
-    `Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE>, or spyria-host login|logout ${credentialsTools.join('|')}`,
+    `Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE> (the origin alone once paired), or spyria-host login|logout ${credentialsTools.join('|')}`,
   )
   process.exit(2)
 }
@@ -225,9 +225,14 @@ const connect = () => {
     log.error({ event: 'host.unpaired', body: 'No stored token and no code in the URL' })
     exitForGood()
   }
+  let refusedReason: string | undefined
   socket.onmessage = (message) => {
     const frame = JSON.parse(String(message.data))
     if (frame.type === 'ping') return send({ type: 'pong' })
+    if (frame.type === 'refused') {
+      refusedReason = String(frame.reason)
+      return
+    }
     if (frame.type === 'token') {
       writeFileSync(tokenPath, frame.token, { mode: 0o600 })
       return void hello(frame.token).catch(logHelloFailure)
@@ -247,11 +252,12 @@ const connect = () => {
     sendToSpyria = () => false
     sendSignInsNow = declaration
     modelRelay.closeAll()
+    const reason = refusedReason ?? event.reason
     if (isRefusal(event.code) && storedToken() && claimCode && !isTokenRefused) {
       log.warn({
         event: 'host.token_refused',
         body: 'The host token was refused, pairing again with the code in the URL',
-        attributes: { 'host.close_reason': event.reason },
+        attributes: { 'host.close_reason': reason },
       })
       isTokenRefused = true
       return connect()
@@ -260,7 +266,7 @@ const connect = () => {
       log.error({
         event: 'host.refused',
         body: 'Spyria refused this host',
-        attributes: { 'host.close_reason': event.reason },
+        attributes: { 'host.close_reason': reason },
       })
       return exitForGood()
     }

@@ -27,9 +27,9 @@ test.describe('Host versions', () => {
       const dialog = page.getByRole('dialog', { name: 'Update needed' })
       await expect(dialog).toContainText('refused until it is updated')
       const updateCommand = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-      expect(updateCommand).toContain('docker rm -f spyria-test-e2e-host')
+      expect(updateCommand).toContain('docker rm -f spyria-host')
       expect(updateCommand).not.toContain('docker volume rm')
-      expect(updateCommand).toMatch(/ spyria-test-e2e-host --personal https?:\/\/[^/]+$/)
+      expect(updateCommand).toMatch(/ spyria-host --personal https?:\/\/[^/]+$/)
       await dialog.getByRole('button', { name: 'Close' }).click()
     })
     await test.step('an updated host reconnects and the badge goes away', async () => {
