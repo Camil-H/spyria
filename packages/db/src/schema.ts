@@ -17,10 +17,12 @@ import {
   type WorkspacePermission,
 } from '@spyria/kernel'
 
+export type JoinBy = 'domain' | 'invited_address'
 type WorkspaceRow = {
   id: WorkspaceId
   name: string
   localSessions: boolean
+  joinBy: JoinBy
   aiProviderAllowList: AiProviderAllowList | null
   devLoop: DevLoopSettings | null
   setupCommands: readonly SetupCommand[]

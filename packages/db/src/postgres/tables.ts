@@ -69,6 +69,7 @@ export const workspaces = table('workspaces', {
     .notNull()
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
+  joinBy: text().$type<'domain' | 'invited_address'>().notNull().default('domain'),
   aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
   devLoop: jsonb().$type<DevLoopSettings>(),
   setupCommands: jsonb().$type<readonly SetupCommand[]>(),
