@@ -150,6 +150,9 @@ resource "google_sql_database_instance" "postgres" {
       point_in_time_recovery_enabled = true
     }
   }
+  lifecycle {
+    ignore_changes = [settings[0].disk_size]
+  }
 }
 
 resource "google_sql_database" "spyria" {
