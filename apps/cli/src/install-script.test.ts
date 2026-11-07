@@ -22,7 +22,10 @@ const fake = (name: string, script: string) => {
   writeFileSync(join(fakeTools, name), `#!/bin/sh\n${script}\n`)
   chmodSync(join(fakeTools, name), 0o755)
 }
-fake('curl', 'url=""; out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; -*) ;; *) url="$1" ;; esac; shift; done; cp "${url#file://}" "$out"')
+fake(
+  'curl',
+  'url=""; out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; -*) ;; *) url="$1" ;; esac; shift; done; cp "$(echo "$url" | sed "s|^file://||")" "$out"',
+)
 fake('docker', 'exit 0')
 
 const install = (release: string) => {

@@ -1,5 +1,6 @@
 import { backup, doctor, installFolderOf, printSetupLink, restore, upgrade, verifyDomain } from './commands.ts'
-import { parseFlags } from './flags.ts'
+import { runCompose } from './compose.ts'
+import { composeArgumentsOf, parseFlags } from './flags.ts'
 import { cliVersion } from './release.ts'
 import { setup } from './setup.ts'
 
@@ -13,6 +14,7 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
   spyria setup-link                print the link that creates the first workspace
   spyria verify-domain --workspace <id> --domain <domain>
                                    verify a workspace's email domain without mail
+  spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
 Every command takes --folder <path> (default ~/spyria, or the current folder when it holds an install).`
 
@@ -30,6 +32,9 @@ const commands: Record<string, () => unknown> = {
   'setup-link': () => printSetupLink(folder),
   'verify-domain': () => verifyDomain(folder, flags),
   version: () => console.log(cliVersion),
+  compose: () => {
+    process.exitCode = runCompose(folder, composeArgumentsOf(process.argv.slice(3))) ?? 1
+  },
 }
 const run = command ? commands[command] : undefined
 if (!run || flags.switches.has('help')) {
