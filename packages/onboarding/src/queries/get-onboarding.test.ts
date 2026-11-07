@@ -60,3 +60,22 @@ test('workspace records are shared and member records are the member’s own', (
   expect(states['add-profile-picture']).toBeUndefined()
   expect(getOnboarding(acme, alice, true)(recorded).tasksToRecord).toEqual(['add-ai-key', 'invite-members'])
 })
+
+test('a workspace joined by invited address owns no domain: no verify-domain task, and invites are not held back by it', () => {
+  const withoutTeammates: Snapshot = {
+    ...snapshot,
+    memberships: snapshot.memberships.filter((membership) => membership.memberId === alice),
+    invitations: [],
+  }
+  const joinedBy = (joinBy: 'domain' | 'invited_address') =>
+    statesOf({
+      ...withoutTeammates,
+      workspaces: withoutTeammates.workspaces.map((workspace) =>
+        workspace.id === acme ? { ...workspace, joinBy } : workspace,
+      ),
+    })
+  expect(joinedBy('domain')).toMatchObject({ 'verify-domain': 'open', 'invite-members': 'blocked' })
+  const invitedOnly = joinedBy('invited_address')
+  expect(invitedOnly['verify-domain']).toBeUndefined()
+  expect(invitedOnly['invite-members']).toBe('open')
+})
