@@ -86,7 +86,11 @@ test('every problem is listed at once', () => {
 
 test('a trusted proxy is unset or cloudflare', () => {
   expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'cloudflare' })).toEqual([])
-  expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'nginx' })).toEqual(['SPYRIA_TRUSTED_PROXY must be unset or cloudflare.'])
+  expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'x-forwarded-for:2' })).toEqual([])
+  for (const refused of ['nginx', 'x-forwarded-for:0', 'x-forwarded-for'])
+    expect(problemsWith({ SPYRIA_TRUSTED_PROXY: refused })).toEqual([
+      'SPYRIA_TRUSTED_PROXY must be unset, cloudflare, or x-forwarded-for:1 to 3.',
+    ])
 })
 
 test('an install code, when set, is 16 characters of the claim code alphabet', () => {

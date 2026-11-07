@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { type LogEvent, setLogOutput } from '@spyria/kernel'
-import { clientAddressOf, createRateLimiter, limitOfMutation, RateLimited, rateBudgets } from './rate-limits.ts'
+import {
+  clientAddressOf,
+  createRateLimiter,
+  limitOfMutation,
+  RateLimited,
+  rateBudgets,
+  trustedProxyOf,
+} from './rate-limits.ts'
 
 beforeEach(() => setLogOutput(() => {}))
 afterEach(() => setLogOutput(undefined))
@@ -70,6 +77,19 @@ test('CF-Connecting-IP is the client address only behind Cloudflare, else the so
   expect(clientAddressOf(request, '10.0.0.5', 'cloudflare')).toBe('203.0.113.7')
   expect(clientAddressOf(request, '10.0.0.5', undefined)).toBe('10.0.0.5')
   expect(clientAddressOf(new Request('http://spyria.test/'), '10.0.0.5', 'cloudflare')).toBe('10.0.0.5')
+})
+
+test('behind a cloud load balancer, the client is the address that many hops from the end of X-Forwarded-For, which a client cannot forge', () => {
+  const forwarded = (value: string) => new Request('http://spyria.test/', { headers: { 'x-forwarded-for': value } })
+  expect(clientAddressOf(forwarded('6.6.6.6, 203.0.113.7'), '10.0.0.5', { forwardedHops: 1 })).toBe('203.0.113.7')
+  expect(clientAddressOf(forwarded('6.6.6.6, 203.0.113.7, 35.191.0.1'), '10.0.0.5', { forwardedHops: 2 })).toBe(
+    '203.0.113.7',
+  )
+  expect(clientAddressOf(forwarded(''), '10.0.0.5', { forwardedHops: 1 })).toBe('10.0.0.5')
+  expect(clientAddressOf(forwarded('203.0.113.7'), '10.0.0.5', { forwardedHops: 2 })).toBe('10.0.0.5')
+  expect(trustedProxyOf('x-forwarded-for:2')).toEqual({ forwardedHops: 2 })
+  expect(trustedProxyOf('cloudflare')).toBe('cloudflare')
+  expect(trustedProxyOf('nginx')).toBeUndefined()
 })
 
 test('invites, agent retries and runtime or fork creation are limited by name; a message is limited by its chat inside the mutation', () => {
