@@ -19,7 +19,8 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
                                    verify a workspace's email domain without mail
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
-Setup flags, each a question it then skips: --name, --hostname, --cloudflare-token (Account Cloudflare Tunnel Edit,
+Setup flags, each a question it then skips (with --cloud: --region, --project, --subscription, --dns-zone,
+--dns-zone-resource-group, --route53-zone-id, --certificate-arn, --size, --bind-hostname yes): --name, --hostname, --cloudflare-token (Account Cloudflare Tunnel Edit,
 Zone DNS Edit, Zone Read), --join-by domain|invited-address, --google-client-id and --google-client-secret,
 --microsoft-client-id and --microsoft-client-secret (create to register it with az), --provider
 cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url and --okta-token,
