@@ -38,3 +38,16 @@ test('the public docs build into a site with no broken link, the install script 
   expect(readFileSync(join(output, 'install'), 'utf8')).toStartWith('#!/bin/sh')
   expect(readFileSync(join(output, 'CNAME'), 'utf8')).toBe('spyria.dev\n')
 })
+
+test('a link with a broken encoding or leaving the repository is a problem, and a heading-like line in code is no anchor', () => {
+  const root = join(work, 'edges')
+  mkdirSync(join(root, 'docs'), { recursive: true })
+  writeFileSync(join(root, 'docs/a b.md'), '# A\n\n```sh\n# not a heading\n```\n')
+  const from = (href: string) => linkTargetOf(href, 'docs/c.md', { pages: [], root })
+  expect(from('./a%20b.md')).toEqual({ href: 'https://github.com/Camil-H/spyria/blob/main/docs/a%20b.md' })
+  expect(from('./%E0%A4%A.md').problem).toBe('docs/c.md links to ./%E0%A4%A.md, which is not a valid address')
+  expect(from('../../outside.md').problem).toBe('docs/c.md links to ../../outside.md, which leaves the repository')
+  expect(from('./a%20b.md#not-a-heading').problem).toBe(
+    'docs/c.md links to ./a%20b.md#not-a-heading, which has no such heading',
+  )
+})

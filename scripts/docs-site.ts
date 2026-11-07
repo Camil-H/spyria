@@ -35,19 +35,22 @@ export const slugOf = (heading: string) =>
     .replace(/[^\p{Letter}\p{Number}\s_-]/gu, '')
     .replace(/\s/g, '-')
 
-const headingSlugsOf = (markdown: string) =>
-  new Set(
-    markdown
-      .split('\n')
-      .filter((line) => /^#{1,6} /.test(line))
-      .map((line) => slugOf(plainTextOf(Bun.markdown.html(line.replace(/^#+ /, ''))))),
-  )
-
 export const withHeadingIds = (html: string) =>
   html.replace(
     /<h([1-6])>(.*?)<\/h\1>/g,
     (_, level, inner) => `<h${level} id="${slugOf(plainTextOf(inner))}">${inner}</h${level}>`,
   )
+
+const headingSlugsOf = (markdown: string) =>
+  new Set([...withHeadingIds(Bun.markdown.html(markdown)).matchAll(/<h[1-6] id="([^"]*)">/g)].map(([, id]) => id))
+
+const safelyDecoded = (path: string) => {
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return undefined
+  }
+}
 
 export const linkTargetOf = (
   href: string,
@@ -56,7 +59,11 @@ export const linkTargetOf = (
 ): { href: string; problem?: string } => {
   if (/^[a-z]+:/i.test(href) || href.startsWith('//')) return { href }
   const [path = '', anchor] = href.split('#')
-  const target = path === '' ? sourceFile : normalize(join(dirname(sourceFile), decodeURIComponent(path)))
+  const decoded = safelyDecoded(path)
+  if (decoded === undefined) return { href, problem: `${sourceFile} links to ${href}, which is not a valid address` }
+  const target = path === '' ? sourceFile : normalize(join(dirname(sourceFile), decoded))
+  if (target.startsWith('..') || target.startsWith('/'))
+    return { href, problem: `${sourceFile} links to ${href}, which leaves the repository` }
   const absolute = join(root, target)
   if (!existsSync(absolute)) return { href, problem: `${sourceFile} links to ${href}, which does not exist` }
   if (anchor && target.endsWith('.md') && !headingSlugsOf(readFileSync(absolute, 'utf8')).has(anchor))
@@ -64,7 +71,7 @@ export const linkTargetOf = (
   const page = pages.find((candidate) => candidate.file === target)
   const fragment = anchor ? `#${anchor}` : ''
   if (page) return { href: `${page.slug === 'index' ? './' : `${page.slug}.html`}${fragment}` }
-  return { href: `${repositoryUrl}/blob/main/${relative('.', target)}${fragment}` }
+  return { href: `${repositoryUrl}/blob/main/${encodeURI(relative('.', target))}${fragment}` }
 }
 
 const layoutOf = (page: SitePage, body: string, pages: readonly SitePage[]) => `<!doctype html>
