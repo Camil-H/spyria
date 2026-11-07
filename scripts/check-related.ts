@@ -109,6 +109,7 @@ const integration: Suite = { name: 'integration', files: new Set(), full: [] }
 const e2e: Suite = { name: 'e2e', files: new Set(), full: [] }
 const e2eSegments = new Map<string, string[]>()
 const dockerReasons: string[] = []
+const tofuReasons: string[] = []
 const reasons = new Map<string, string[]>()
 const select = (suite: Suite, testFile: string, changed: string) => {
   suite.files.add(testFile)
@@ -142,6 +143,8 @@ const dependentsOf = (file: string) => {
 
 for (const changed of changedFiles) {
   if (isDockerArea(changed)) dockerReasons.push(changed)
+  if (changed.startsWith('deploy/tofu/') || changed === 'deploy/bifrost.json' || changed === 'scripts/check-tofu.ts')
+    tofuReasons.push(changed)
   const isModule = /\.(ts|tsx)$/.test(changed) && /^(apps|packages)\//.test(changed)
   if (isOutsideTests(changed)) continue
   if (isWebAsset(changed)) {
@@ -200,12 +203,13 @@ else {
 }
 console.log(dockerReasons.length > 0 ? `\ndocker: yes, because of ${dockerReasons.join(', ')}` : '\ndocker: no')
 console.log(bundleReasons.length > 0 ? `bundle: yes, because of ${bundleReasons.join(', ')}` : 'bundle: no')
+console.log(tofuReasons.length > 0 ? `tofu: yes, because of ${tofuReasons.join(', ')}` : 'tofu: no')
 
 const selectionOf = (suite: Suite) => (suite.full.length > 0 ? ('all' as const) : [...suite.files])
 if (planFile) {
   const isFull = process.argv.includes('--full')
   const selection = isFull
-    ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true }
+    ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true, tofu: true }
     : {
         unit: selectionOf(unit),
         integration: selectionOf(integration),
@@ -213,6 +217,7 @@ if (planFile) {
         e2eRepeat: changedSpecs.map(playwrightPathOf),
         docker: dockerReasons.length > 0,
         bundle: bundleReasons.length > 0,
+        tofu: tofuReasons.length > 0,
       }
   writeFileSync(planFile, `${JSON.stringify({ base, changedFiles, ...selection }, null, 2)}\n`)
   console.log(`\n${isFull ? 'Full plan' : 'Plan'} written to ${planFile}`)
@@ -233,6 +238,7 @@ else if (e2eSelection.length > 0)
   testResults.push(runInherited('e2e', ['bun', 'run', 'test:e2e', '--', ...e2eSelection]))
 if (dockerReasons.length > 0)
   console.log('\nThe change reaches the host, the agent or the images: run check:docker too')
+if (tofuReasons.length > 0) console.log('\nThe change reaches the OpenTofu modules: run check:tofu too')
 
 const results = [...fastResults, ...testResults]
 console.log(`\ncheck:related in ${((performance.now() - startedAt) / 1000).toFixed(1)} s`)
