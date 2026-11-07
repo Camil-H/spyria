@@ -3,9 +3,12 @@ import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import {
   domainOfEmail,
+  EmailNotConfirmed,
   entraObjectIdPattern,
   instanceAppFor,
   instanceAppPresets,
+  type JoinBy,
+  normalizedEmail,
   ssoCanBindByEmail,
   ssoEmailOf,
   ssoSubjectOf,
@@ -14,7 +17,7 @@ import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import type { RateLimitName } from '../rate-limits.ts'
-import { createOidc, type Oidc } from './oidc.ts'
+import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import { deleteSession, findLiveSessions, openSessions, signInUser } from './sessions.ts'
 import {
@@ -41,6 +44,7 @@ type AuthRouteSettings = {
   version: string
   hostImage?: string
   setupToken?: string
+  joinBy: JoinBy
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
@@ -97,6 +101,7 @@ export const createAuthRoutes = ({
   version,
   hostImage,
   setupToken,
+  joinBy,
   database,
   authenticate,
   testDatabaseByName,
@@ -115,7 +120,7 @@ export const createAuthRoutes = ({
         issueSessionToken(tokenSecret, session, { databaseName, lifetimeSeconds: testSettings.tokenSeconds }),
     }
   }
-  const oidcOf = async (provider: FirstWorkspace['provider']) => {
+  const oidcOf = async (provider: FirstWorkspace['provider'], workspaceJoinBy: JoinBy) => {
     const instanceApp = provider.usesInstanceApp ? instanceAppFor(sso.instanceApps ?? {}, provider.preset) : undefined
     if (!instanceApp && !sso.secretBox) throw new Error('SPYRIA_SECRETS_KEY is required in sso mode')
     return createOidc({
@@ -123,15 +128,15 @@ export const createAuthRoutes = ({
       clientId: instanceApp?.clientId ?? provider.clientId,
       clientSecret: instanceApp?.clientSecret ?? (await sso.secretBox?.open(provider.encryptedClientSecret)),
       redirectUri,
-      emailOf: (claims) => ssoEmailOf(provider.preset, claims),
+      emailOf: (claims) => ssoEmailOf(provider.preset, claims, workspaceJoinBy),
       subjectOf: (claims) => ssoSubjectOf(provider.preset, claims),
       canBindByEmailOf: (claims) => ssoCanBindByEmail(provider.preset, claims),
     })
   }
   const ssoClients = new Map<string, Oidc>()
   const ssoClientOf = async (provider: SsoProvider) => {
-    const clientKey = `${provider.issuer} ${provider.clientId} ${provider.encryptedClientSecret}`
-    const client = ssoClients.get(clientKey) ?? (await oidcOf(provider))
+    const clientKey = `${provider.issuer} ${provider.clientId} ${provider.encryptedClientSecret} ${provider.joinBy}`
+    const client = ssoClients.get(clientKey) ?? (await oidcOf(provider, provider.joinBy))
     ssoClients.set(clientKey, client)
     return client
   }
@@ -172,6 +177,7 @@ export const createAuthRoutes = ({
       const isBeingSetUp = authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client))
       return context.json({
         authMode,
+        joinBy,
         isBeingSetUp,
         canCreateWorkspace: isBeingSetUp && isSetupToken(context.req.query('setup')),
         instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
@@ -183,10 +189,14 @@ export const createAuthRoutes = ({
       const form = await context.req.parseBody()
       if (!isSetupToken(form.setupToken))
         return popup(context, { status: 'refused', message: setupLinkNeededNotice }, 403)
-      const firstWorkspace = await prepareFirstWorkspace(scopeOf(context).database, sso, form).catch(domainErrorOnly)
+      const firstWorkspace = await prepareFirstWorkspace(scopeOf(context).database, sso, form, joinBy).catch(
+        domainErrorOnly,
+      )
       if (firstWorkspace instanceof Error)
         return popup(context, { status: 'refused', message: firstWorkspace.message }, 400)
-      return redirectToProvider(context, await oidcOf(firstWorkspace.provider), { firstWorkspace })
+      return redirectToProvider(context, await oidcOf(firstWorkspace.provider, firstWorkspace.joinBy), {
+        firstWorkspace,
+      })
     })
     .get(domainVerificationLinkPath.slice('/auth'.length), rateLimited('verificationLink'), async (context) => {
       const { database } = scopeOf(context)
@@ -202,11 +212,20 @@ export const createAuthRoutes = ({
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')
       if (scope.testUserId) return completeSignIn(context, scope, { userId: scope.testUserId, email: '', workspaceId })
-      const domain = domainOfEmail(context.req.query('email') ?? '')
+      const email = normalizedEmail(context.req.query('email') ?? '')
+      const domain = domainOfEmail(email)
       const provider =
-        authMode === 'sso' ? await ssoProviderOf(scope.database, workspaceId ? { workspaceId } : { domain }) : undefined
+        authMode === 'sso' ? await ssoProviderOf(scope.database, workspaceId ? { workspaceId } : { email }) : undefined
       if (authMode === 'sso' && !provider)
-        return popup(context, workspaceId ? { status: 'failed' } : { status: 'unknown_domain', domain }, 404)
+        return popup(
+          context,
+          workspaceId
+            ? { status: 'failed' }
+            : joinBy === 'invited_address'
+              ? { status: 'not_invited', email }
+              : { status: 'unknown_domain', domain },
+          404,
+        )
       return redirectToProvider(context, provider ? await ssoClientOf(provider) : oidc, {
         workspaceId,
         providerWorkspaceId: provider?.workspaceId,
@@ -225,13 +244,17 @@ export const createAuthRoutes = ({
         authMode === 'dex'
           ? oidc
           : firstWorkspace
-            ? await oidcOf(firstWorkspace.provider)
+            ? await oidcOf(firstWorkspace.provider, firstWorkspace.joinBy)
             : provider && (await ssoClientOf(provider))
       const identity =
         signedLogin && client
-          ? await client.verifiedIdentityOf(new URL(context.req.url), login).catch(() => undefined)
+          ? await client
+              .verifiedIdentityOf(new URL(context.req.url), login)
+              .catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))))
           : undefined
-      if (identity === undefined) return popup(context, { status: 'failed' }, 400)
+      if (identity instanceof EmailRefused && identity.refusal === 'unconfirmed')
+        return popup(context, { status: 'refused', message: new EmailNotConfirmed().message }, 403)
+      if (identity === undefined || identity instanceof Error) return popup(context, { status: 'failed' }, 400)
       if (firstWorkspace) {
         const created = await createFirstWorkspace(scope.database, firstWorkspace, identity).catch(domainErrorOnly)
         if (created instanceof Error) return popup(context, { status: 'refused', message: created.message }, 403)

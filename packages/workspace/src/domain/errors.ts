@@ -50,6 +50,17 @@ export const ChatOwnerActive = errorKind(
   WorkspaceError,
 )
 export const InvalidSsoSettings = errorKind('invalid_sso_settings', (reason: string) => reason, WorkspaceError)
+export const PublicEmailDomain = errorKind(
+  'public_email_domain',
+  (domain: string) =>
+    `${domain} is a public email domain: a workspace cannot own it. Set up Spyria to join people by invited address instead`,
+  WorkspaceError,
+)
+export const EmailNotConfirmed = errorKind(
+  'email_not_confirmed',
+  () => 'Your provider did not confirm this address',
+  WorkspaceError,
+)
 export const DomainClaimed = errorKind(
   'domain_claimed',
   (domain: string) => `${domain} already signs in through another provider`,
