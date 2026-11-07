@@ -22,6 +22,7 @@
     "check:docker": "bun scripts/check-all.ts --docker",
     "check:related": "bun scripts/check-related.ts",
     "smoke:prod": "bun scripts/smoke-prod.ts",
+    "check:tofu": "bun scripts/check-tofu.ts",
     "load:websockets": "bun apps/server/src/testing/load-websockets.ts",
     "agent:build": "bun scripts/agent-image.ts build",
     "agent:versions": "bun scripts/agent-image.ts versions",
