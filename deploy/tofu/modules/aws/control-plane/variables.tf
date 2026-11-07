@@ -3,8 +3,8 @@ variable "name" {
   type        = string
   default     = "spyria"
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.name))
-    error_message = "The name takes lowercase letters, digits and dashes, from 2 to 31 characters, starting with a letter."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,16}$", var.name))
+    error_message = "The name takes lowercase letters, digits and dashes, from 2 to 17 characters, starting with a letter: some cloud resource names have short limits."
   }
 }
 
@@ -45,6 +45,10 @@ variable "mail_from" {
   description = "Sender of the mail, required with smtp_url"
   type        = string
   default     = ""
+  validation {
+    condition     = nonsensitive(var.smtp_url == "") || var.mail_from != ""
+    error_message = "Set mail_from with smtp_url: the server refuses to start with one and not the other."
+  }
 }
 
 variable "google_client_id" {

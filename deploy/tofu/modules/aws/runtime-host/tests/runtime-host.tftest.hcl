@@ -16,7 +16,7 @@ variables {
 run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpoint" {
   command = apply
   assert {
-    condition     = length(aws_security_group.host.ingress) == 0
+    condition     = length(aws_security_group.host.ingress) == 0 && aws_security_group.host.name == "spyria-runtime-host"
     error_message = "Nothing reaches a runtime host"
   }
   assert {
@@ -34,5 +34,20 @@ run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpo
   assert {
     condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "--cap-drop ALL --security-opt no-new-privileges --read-only")
     error_message = "The host container runs hardened, like the command of Workspace settings"
+  }
+  assert {
+    condition     = !aws_instance.host.user_data_replace_on_change
+    error_message = "A new version or AMI never replaces the host: it keeps its pairing and runtimes, and updates in place"
+  }
+}
+
+run "a_second_host_takes_its_own_name" {
+  command = apply
+  variables {
+    host_name = "build-box"
+  }
+  assert {
+    condition     = aws_security_group.host.name == "spyria-build-box" && aws_instance.host.tags.Name == "spyria-build-box"
+    error_message = "Each runtime host has its own resources"
   }
 }

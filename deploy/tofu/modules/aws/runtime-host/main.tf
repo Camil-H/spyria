@@ -11,6 +11,12 @@ variable "name" {
   default     = "spyria"
 }
 
+variable "host_name" {
+  description = "Name of this host among the deployment's, for its cloud resources: give each runtime host its own"
+  type        = string
+  default     = "runtime-host"
+}
+
 variable "claim_url" {
   description = "Claim URL of the host: install_host_claim_url of the control plane for the first host, or the URL at the end of an Add runtime host command"
   type        = string
@@ -60,7 +66,7 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_security_group" "host" {
-  name        = "${var.name}-runtime-host"
+  name        = "${var.name}-${var.host_name}"
   description = "The runtime host dials out to Spyria; nothing reaches it"
   vpc_id      = data.aws_subnet.selected.vpc_id
   egress {
@@ -78,7 +84,7 @@ resource "aws_instance" "host" {
   vpc_security_group_ids      = [aws_security_group.host.id]
   associate_public_ip_address = true
   user_data_base64            = base64encode(local.user_data)
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
@@ -88,7 +94,10 @@ resource "aws_instance" "host" {
     volume_type = "gp3"
     encrypted   = true
   }
-  tags = { Name = "${var.name}-runtime-host" }
+  tags = { Name = "${var.name}-${var.host_name}" }
+  lifecycle {
+    ignore_changes = [ami, user_data_base64]
+  }
 }
 
 output "instance_id" {
