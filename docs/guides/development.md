@@ -130,7 +130,7 @@ Agents run in runtimes (containers of Spyria's runtime image with spyria-agent) 
 
 ### Build the runtime image
 
-In development nothing is pulled: hosts run the image built here, by its content ID (a published deployment pulls `spyria-agent` by digest instead, see [self-hosting](./self-hosting.md#install)). Build Spyria's runtime image before the first runtime:
+In development nothing is pulled: hosts run the image built here, by its content ID (a published deployment pulls `spyria-agent` by digest instead, see [install on one machine](./install.md)). Build Spyria's runtime image before the first runtime:
 
 ```sh
 bun run agent:build          # compile spyria-agent and build the image; cached by Docker
