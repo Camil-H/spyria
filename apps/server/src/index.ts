@@ -4,6 +4,7 @@ import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { hostUpdateCommandOf } from '@spyria/runtime/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
+import { joinByOf } from '@spyria/workspace/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
@@ -107,6 +108,7 @@ const app = createApp({
   version,
   hostImage,
   setupToken: process.env.SPYRIA_SETUP_TOKEN || undefined,
+  joinBy: joinByOf(process.env.SPYRIA_JOIN_BY),
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()

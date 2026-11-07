@@ -101,6 +101,7 @@ import {
   githubSettingsPath,
   githubWebhooksPath,
   type InstanceApps,
+  type JoinBy,
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
@@ -243,6 +244,7 @@ export const createApp = ({
   hostImage,
   version = 'dev',
   setupToken,
+  joinBy = 'domain',
   runtimeHosts = createRuntimeHostGateway({
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
@@ -281,6 +283,7 @@ export const createApp = ({
   hostImage?: string
   version?: string
   setupToken?: string
+  joinBy?: JoinBy
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
@@ -448,6 +451,7 @@ export const createApp = ({
         version,
         hostImage,
         setupToken,
+        joinBy,
         database,
         authenticate,
         testDatabaseByName,

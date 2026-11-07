@@ -3,9 +3,18 @@ import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
+export type EmailRefusal = 'unconfirmed' | 'untrusted'
+export type EmailClaim = { email: string; refusal?: undefined } | { email?: undefined; refusal: EmailRefusal }
+export class EmailRefused extends Error {
+  readonly refusal: EmailRefusal
+  constructor(refusal: EmailRefusal) {
+    super(`The ID token carries no trusted email for this login: ${refusal}`)
+    this.refusal = refusal
+  }
+}
 type ClientSettings = OidcSettings & {
   clientSecret?: string
-  emailOf?: (claims: JWTPayload) => string | undefined
+  emailOf?: (claims: JWTPayload) => EmailClaim
   subjectOf?: (claims: JWTPayload) => string | undefined
   canBindByEmailOf?: (claims: JWTPayload) => boolean
 }
@@ -27,8 +36,10 @@ export const discoverIssuer = async (issuer: string) => {
   return oauth.processDiscoveryResponse(issuerUrl, response)
 }
 
-const verifiedEmailOf = (claims: JWTPayload) =>
-  claims.email_verified === true && typeof claims.email === 'string' ? claims.email : undefined
+const verifiedEmailOf = (claims: JWTPayload): EmailClaim => {
+  if (typeof claims.email !== 'string') return { refusal: 'untrusted' }
+  return claims.email_verified === true ? { email: claims.email } : { refusal: 'unconfirmed' }
+}
 
 export const createOidc = ({
   issuer,
@@ -93,10 +104,12 @@ export const createOidc = ({
         audience: clientId,
         clockTolerance: idTokenClockToleranceSeconds,
       })
-      const email = emailOf(payload)
+      const claimed = emailOf(payload)
       const subject = subjectOf(payload)
-      if (payload.nonce !== login.nonce || email === undefined || typeof subject !== 'string' || subject === '')
-        throw new Error('The ID token carries no trusted email for this login')
+      if (payload.nonce !== login.nonce || typeof subject !== 'string' || subject === '')
+        throw new Error('The ID token carries no trusted subject for this login')
+      if (claimed.refusal) throw new EmailRefused(claimed.refusal)
+      const { email } = claimed
       const legacySubject = typeof payload.sub === 'string' && payload.sub !== subject ? payload.sub : undefined
       return {
         email,

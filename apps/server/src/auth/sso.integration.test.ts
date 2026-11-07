@@ -29,7 +29,7 @@ await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKey = 'sso-integration-secrets-key-0123456789'
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
-const startFakeIdp = async (issuerPath = '') => {
+const startFakeIdp = async (issuerPath = '', { confirmsEmail = true } = {}) => {
   const keys = await generateKeyPair('RS256')
   const publicKey = { ...(await exportJWK(keys.publicKey)), kid: 'fake-idp', alg: 'RS256', use: 'sig' }
   const idp = {
@@ -66,6 +66,7 @@ const startFakeIdp = async (issuerPath = '') => {
         aud: form.get('client_id') ?? '',
         iat: nowInSeconds(),
         exp: nowInSeconds() + 60,
+        ...(confirmsEmail && { email_verified: true }),
         ...(idp.claimsByCode.get(form.get('code') ?? '') ?? idp.claims),
       })
         .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
@@ -79,7 +80,7 @@ type FakeIdp = Awaited<ReturnType<typeof startFakeIdp>>
 
 const acmeIdp = await startFakeIdp()
 const otherIdp = await startFakeIdp()
-const entraIdp = await startFakeIdp('/tenant-1/v2.0')
+const entraIdp = await startFakeIdp('/tenant-1/v2.0', { confirmsEmail: false })
 const firstWorkspaceIdp = Object.assign(await startFakeIdp(), { clientSecret: 'umbrella-secret' })
 const smtp = startFakeSmtp()
 const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
@@ -934,4 +935,26 @@ test('the first workspace needs the setup token: refused without it, with a wron
   expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: false, canCreateWorkspace: false })
   const spent = await startCreation(umbrellaForm())
   expect(spent.status).toBe(403)
+})
+
+test('a workspace joined by email domain cannot claim a public email domain, and says why', async () => {
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  const refused = await startCreation({ ...umbrellaForm(), domain: 'gmail.com' })
+  expect(refused.status).toBe(400)
+  expect(await refused.text()).toContain('gmail.com is a public email domain: a workspace cannot own it')
+  expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(0)
+})
+
+test('through a generic OIDC provider, an address the provider does not confirm is refused with the reason', async () => {
+  await addWorkspace('confirming')
+  await configureIdp(otherIdp, 'confirming', 'confirming.com')
+  await database.$client`update sso_domains set verified_at = now() where workspace_id = 'confirming'`
+  const refused = await signInThrough(otherIdp, 'email=pat@confirming.com', {
+    sub: 'pat-unconfirmed',
+    email: 'pat@confirming.com',
+    email_verified: false,
+  })
+  expect(refused.status).toBe(403)
+  expect(refused.page).toContain('Your provider did not confirm this address')
+  expect(refused.sessions).toEqual([])
 })
