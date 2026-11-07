@@ -205,7 +205,9 @@ const SsoSettingsForm = ({
   }
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const saved = await run(async () => setForm(await commands.saveSsoSettings({ workspaceId, ...form, clientSecret })))
+    const saved = await run(async () =>
+      setForm(await commands.saveSsoSettings({ workspaceId, ...form, domain: form.domain ?? undefined, clientSecret })),
+    )
     if (saved) setClientSecret('')
     setIsSaved(saved)
   }
@@ -236,12 +238,21 @@ const SsoSettingsForm = ({
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
       </form>
-      <p className="text-sm text-muted">
-        The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
-        address at that domain. Changing the provider, the Microsoft tenant or the issuer unverifies it, and members
-        cannot sign in until it is verified again.
-      </p>
-      <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
+      {form.domainState ? (
+        <>
+          <p className="text-sm text-muted">
+            The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
+            address at that domain. Changing the provider, the Microsoft tenant or the issuer unverifies it, and members
+            cannot sign in until it is verified again.
+          </p>
+          <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          Who can join: people you invite. Each person signs in with this provider at exactly the address you invited;
+          the provider must confirm that address.
+        </p>
+      )}
     </LabelledSection>
   )
 }
