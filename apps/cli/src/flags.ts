@@ -43,3 +43,10 @@ export const askerOf = (flags: Flags, isUnattended = flags.switches.has('unatten
   }
   return { ask, choose, require }
 }
+
+export const composeArgumentsOf = (afterCommand: readonly string[]) => {
+  const folderAt = afterCommand.findIndex((argument) => argument === '--folder' || argument.startsWith('--folder='))
+  if (folderAt === -1) return [...afterCommand]
+  const width = afterCommand[folderAt]?.includes('=') ? 1 : 2
+  return afterCommand.toSpliced(folderAt, width)
+}

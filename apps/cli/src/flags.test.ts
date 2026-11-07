@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { askerOf, parseFlags } from './flags.ts'
+import { askerOf, composeArgumentsOf, parseFlags } from './flags.ts'
 
 test('flags take a value after them or inline, switches stand alone, and the rest are positionals', () => {
   expect(
@@ -31,4 +31,10 @@ test('an unattended run takes flags and defaults, and refuses a missing required
   expect(() => wrong.choose('join-by', 'Who can join', ['domain', 'invited-address'], 'domain')).toThrow(
     '--join-by must be domain or invited-address',
   )
+})
+
+test('spyria compose passes every argument to Compose except the install folder', () => {
+  expect(composeArgumentsOf(['logs', '--tail', '50', '-f', 'server'])).toEqual(['logs', '--tail', '50', '-f', 'server'])
+  expect(composeArgumentsOf(['--folder', '/srv/spyria', 'ps'])).toEqual(['ps'])
+  expect(composeArgumentsOf(['ps', '--folder=/srv/spyria'])).toEqual(['ps'])
 })
