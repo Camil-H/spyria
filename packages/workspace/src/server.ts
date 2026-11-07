@@ -12,6 +12,7 @@ export {
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
+  ProviderFixed,
   PublicEmailDomain,
   RepositoryNotGranted,
   SsoDiscoveryFailed,
