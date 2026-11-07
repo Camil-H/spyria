@@ -11,7 +11,20 @@ locals {
   size          = local.sizes[var.size]
   service_names = { server = "${var.name}-server", zero = "${var.name}-zero-cache", gateway = "${var.name}-gateway" }
   service_url   = { for service, name in local.service_names : service => "https://${name}-${data.google_project.current.number}.${var.region}.run.app" }
-  apis          = ["run.googleapis.com", "sqladmin.googleapis.com", "secretmanager.googleapis.com", "compute.googleapis.com", "servicenetworking.googleapis.com"]
+  apis = [
+    "run.googleapis.com",
+    "sqladmin.googleapis.com",
+    "secretmanager.googleapis.com",
+    "compute.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "iam.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
+    "dns.googleapis.com",
+  ]
+  ghcr_mirror  = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.ghcr.repository_id}"
+  images_path  = trimprefix(var.images, "ghcr.io/")
+  server_image = startswith(var.images, "ghcr.io/") ? "${local.ghcr_mirror}/${local.images_path}/spyria-server:${var.spyria_version}" : module.settings.server_image
 }
 
 resource "google_project_service" "api" {
@@ -52,6 +65,7 @@ module "settings" {
   zero_url          = local.service_url.zero
   gateway_url       = local.service_url.gateway
   zero_replica_file = "/data/spyria-replica.db"
+  trusted_proxy     = "x-forwarded-for:2"
 }
 
 resource "google_compute_network" "main" {
@@ -62,11 +76,20 @@ resource "google_compute_network" "main" {
 }
 
 resource "google_compute_subnetwork" "main" {
+  project                  = var.project
+  name                     = var.name
+  region                   = var.region
+  network                  = google_compute_network.main.id
+  ip_cidr_range            = "10.42.0.0/20"
+  private_ip_google_access = true
+}
+
+resource "google_compute_subnetwork" "hosts" {
   project       = var.project
-  name          = var.name
+  name          = "${var.name}-runtime-hosts"
   region        = var.region
   network       = google_compute_network.main.id
-  ip_cidr_range = "10.42.0.0/20"
+  ip_cidr_range = "10.42.16.0/20"
 }
 
 resource "google_compute_router" "main" {
@@ -140,4 +163,21 @@ resource "google_sql_user" "spyria" {
   name     = "spyria"
   instance = google_sql_database_instance.postgres.name
   password = module.secrets.values.database_password
+}
+
+resource "google_artifact_registry_repository" "ghcr" {
+  project       = var.project
+  location      = var.region
+  repository_id = "${var.name}-ghcr"
+  format        = "DOCKER"
+  mode          = "REMOTE_REPOSITORY"
+  description   = "Mirrors ghcr.io, which Cloud Run cannot pull from"
+  remote_repository_config {
+    docker_repository {
+      custom_repository {
+        uri = "https://ghcr.io"
+      }
+    }
+  }
+  depends_on = [google_project_service.api]
 }

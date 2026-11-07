@@ -49,6 +49,18 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "The gateway starts once its configuration and database exist"
   }
   assert {
+    condition     = google_cloud_run_v2_service.server.template[0].containers[0].image == "europe-west1-docker.pkg.dev/project/spyria-ghcr/camil-h/spyria-server:1.2.0" && google_artifact_registry_repository.ghcr.mode == "REMOTE_REPOSITORY"
+    error_message = "Cloud Run pulls the published images through an Artifact Registry mirror of ghcr.io"
+  }
+  assert {
+    condition     = google_compute_subnetwork.main.private_ip_google_access && !google_compute_subnetwork.hosts.private_ip_google_access && output.runtime_host_subnet_id == google_compute_subnetwork.hosts.id
+    error_message = "The services reach each other privately; runtime hosts sit apart, without that private access"
+  }
+  assert {
+    condition     = google_cloud_run_v2_service.gateway.template[0].timeout == "3600s" && google_cloud_run_v2_service.server.template[0].containers[0].startup_probe[0].http_get[0].path == "/health/live" && module.settings.server_environment.SPYRIA_TRUSTED_PROXY == "x-forwarded-for:2"
+    error_message = "Streamed model calls last up to an hour, the platform judges the server by its own liveness, and rate limits key on the client behind Google's load balancer"
+  }
+  assert {
     condition     = module.settings.server_environment.SPYRIA_ZERO_URL == "https://spyria-zero-cache-123456789012.europe-west1.run.app"
     error_message = "The server reaches zero-cache at its Cloud Run address"
   }

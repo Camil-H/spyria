@@ -40,6 +40,7 @@ resource "google_service_account" "services" {
   project      = var.project
   account_id   = "${var.name}-services"
   display_name = "Spyria services"
+  depends_on   = [google_project_service.api]
 }
 
 resource "google_secret_manager_secret_iam_member" "services_read" {

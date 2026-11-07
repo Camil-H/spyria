@@ -3,11 +3,12 @@ locals {
 }
 
 resource "google_cloud_run_v2_service" "server" {
-  project             = var.project
-  name                = local.service_names.server
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-  deletion_protection = false
+  project              = var.project
+  name                 = local.service_names.server
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection  = false
+  invoker_iam_disabled = true
   template {
     service_account                  = google_service_account.services.email
     timeout                          = "3600s"
@@ -25,7 +26,7 @@ resource "google_cloud_run_v2_service" "server" {
       }
     }
     containers {
-      image   = module.settings.server_image
+      image   = local.server_image
       command = module.settings.server_command
       ports {
         container_port = 3000
@@ -58,7 +59,7 @@ resource "google_cloud_run_v2_service" "server" {
         period_seconds        = 5
         failure_threshold     = 60
         http_get {
-          path = "/health"
+          path = "/health/live"
         }
       }
     }
@@ -67,11 +68,12 @@ resource "google_cloud_run_v2_service" "server" {
 }
 
 resource "google_cloud_run_v2_service" "zero" {
-  project             = var.project
-  name                = local.service_names.zero
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection = false
+  project              = var.project
+  name                 = local.service_names.zero
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection  = false
+  invoker_iam_disabled = true
   template {
     service_account = google_service_account.services.email
     timeout         = "3600s"
@@ -127,17 +129,24 @@ resource "google_cloud_run_v2_service" "zero" {
       }
     }
   }
-  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+  depends_on = [
+    google_secret_manager_secret_iam_member.services_read,
+    google_secret_manager_secret_version.setting,
+    google_cloud_run_v2_service.server,
+    google_cloud_run_v2_service.gateway,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "gateway" {
-  project             = var.project
-  name                = local.service_names.gateway
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection = false
+  project              = var.project
+  name                 = local.service_names.gateway
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection  = false
+  invoker_iam_disabled = true
   template {
     service_account = google_service_account.services.email
+    timeout         = "3600s"
     scaling {
       min_instance_count = 1
       max_instance_count = 1
@@ -158,7 +167,7 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
     containers {
       name    = "configure"
-      image   = module.settings.server_image
+      image   = local.server_image
       command = ["bun", "-e", module.settings.gateway_config_script]
       resources {
         limits = { cpu = "1", memory = "512Mi" }
@@ -224,17 +233,4 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
   }
   depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
-}
-
-resource "google_cloud_run_v2_service_iam_member" "invoker" {
-  for_each = {
-    server  = google_cloud_run_v2_service.server.name
-    zero    = google_cloud_run_v2_service.zero.name
-    gateway = google_cloud_run_v2_service.gateway.name
-  }
-  project  = var.project
-  location = var.region
-  name     = each.value
-  role     = "roles/run.invoker"
-  member   = "allUsers"
 }
