@@ -37,6 +37,12 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
 fi
 docker compose version >/dev/null 2>&1 || fail "Docker Compose is missing: install the Docker Compose plugin, then run this again."
+if ! docker info >/dev/null 2>&1; then
+  if [ "$os" = linux ] && [ -S /var/run/docker.sock ] && ! [ -w /var/run/docker.sock ]; then
+    fail "Docker does not let you in yet: run sudo usermod -aG docker $(id -un), log out and back in, then run this again."
+  fi
+  fail "Docker does not answer: start it, then run this again."
+fi
 
 if [ "$version" = latest ]; then
   release_path=latest/download
@@ -66,4 +72,8 @@ case ":$PATH:" in
 esac
 
 [ "${SPYRIA_SKIP_SETUP:-}" = 1 ] && exit 0
+if ! (: </dev/tty) 2>/dev/null; then
+  echo "No terminal to ask the setup questions: run spyria setup, or spyria setup --unattended with its flags (spyria --help)."
+  exit 0
+fi
 exec "$install_dir/spyria" setup </dev/tty
