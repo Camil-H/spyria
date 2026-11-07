@@ -16,7 +16,8 @@ Start with the architecture overview, then the page for what you are doing. The 
 
 - [Development](guides/development.md): prerequisites, the dev stack, `.env.dev`, daily commands, a local runtime host, the project layout.
 - [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the looks, the docker suite, manual checks.
-- [Self-hosting](guides/self-hosting.md): requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example, pitfalls.
+- [Self-hosting](guides/self-hosting.md): install on one machine with `spyria setup`, then the manual install: requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example, pitfalls.
+- [Install on AWS, Azure or Google Cloud](guides/cloud.md): the OpenTofu modules of the managed control plane and the runtime host VMs, and `spyria setup --cloud`.
 - [Operations](guides/operations.md): logs, traces, health, upgrades, jobs, connections, disk, backups.
 
 ## Features
