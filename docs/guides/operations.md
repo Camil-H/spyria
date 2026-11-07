@@ -50,6 +50,16 @@ When a pull changes the gateway image, the gateway migrates its `bifrost` databa
 
 Each version's server names its runtime image by digest; a host pulls it when the first runtime starts on it after the upgrade, a stopped runtime is recreated on it when it starts again (its volumes are kept), and running runtimes keep theirs until they stop. Hosts on other machines keep their host image and show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the release raised the minimum protocol, in which case they are refused until updated; either badge opens the command that replaces the host container in place (see [machines](../features/machines.md#versions-and-updates)). From a clone, rebuild their host image and load the new runtime image there as well.
 
+## First workspace
+
+Until the first workspace exists, only the setup link creates one. To print it again:
+
+```sh
+spyria exec server bun apps/server/src/operator-cli.ts setup-link
+```
+
+It is refused once a workspace exists.
+
 ## Jobs
 
 Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
