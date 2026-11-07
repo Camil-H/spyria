@@ -141,3 +141,28 @@ jobs:
     with:
       image: ${{ needs.version.outputs.images }}/spyria-server
       version: ${{ needs.version.outputs.version }}
+
+  cli:
+    needs: [version, server-manifest, host-manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: |
+          mkdir -p dist
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --minify --target="bun-$target" --define "process.env.SPYRIA_CLI_VERSION=\"$VERSION\"" \
+              apps/cli/src/main.ts --outfile "dist/spyria-$target"
+          done
+          (cd dist && sha256sum spyria-* > spyria-checksums.txt)
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --verify-tag --generate-notes --title "Spyria $VERSION"
+          gh release upload "v$VERSION" dist/* deploy/install.sh --clobber
