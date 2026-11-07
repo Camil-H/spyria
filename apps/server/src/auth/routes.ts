@@ -219,7 +219,7 @@ export const createAuthRoutes = ({
       const provider =
         routed ??
         (authMode === 'sso' && joinBy === 'invited_address' && !workspaceId
-          ? await ssoProviderOf(scope.database, {})
+          ? await ssoProviderOf(scope.database, { joinBy: 'invited_address' })
           : undefined)
       if (authMode === 'sso' && !provider)
         return popup(
