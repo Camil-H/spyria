@@ -34,7 +34,8 @@ const fileInZip = (zip: Buffer, wanted: string) => {
 const installTofu = async () => {
   if (existsSync(tofuPath)) return
   const architecture = process.arch === 'arm64' ? 'arm64' : 'amd64'
-  if (process.platform !== 'linux') throw new Error('check:tofu downloads OpenTofu for Linux only: run it in CI or a Linux runtime')
+  if (process.platform !== 'linux')
+    throw new Error('check:tofu downloads OpenTofu for Linux only: run it in CI or a Linux runtime')
   const url = `https://github.com/opentofu/opentofu/releases/download/v${version}/tofu_${version}_linux_${architecture}.zip`
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Downloading ${url} failed with ${response.status}`)

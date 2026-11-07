@@ -2,6 +2,8 @@
 
 Start with the architecture overview, then the page for what you are doing. The project rules for contributors are in [AGENTS.md](../AGENTS.md).
 
+The guides for installing and running Spyria are also published at [spyria.dev](https://spyria.dev), built from this folder by `scripts/docs-site.ts` (the pages it lists), which also serves `install.sh` at `https://spyria.dev/install`. Publishing goes to the `gh-pages` branch on every change of `main`; GitHub Pages serves that branch with the custom domain `spyria.dev`, set once in the repository settings.
+
 ## Architecture
 
 - [Overview](architecture/overview.md): the system in one diagram, the life of an agent turn, why tokens stream outside Zero, where state lives.
