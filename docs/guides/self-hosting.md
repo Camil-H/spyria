@@ -2,6 +2,30 @@
 
 Spyria runs as one Docker Compose file on one machine: Postgres, the migrations, the server with the built web app, zero-cache, the model gateway and its database, and optionally a runtime host on the same machine. Any server works, at home or at any provider, as long as it runs Docker and can be reached over HTTPS. This guide lists what you need, the steps from an empty machine to a first workspace, and the mistakes that cost the most time. Day-to-day running (logs, traces, health, backups, disk) is in [operations](./operations.md); how the parts fit together is in the [architecture overview](../architecture/overview.md).
 
+## Install on one machine
+
+On a Linux machine, a Mac or a PC under WSL, with a domain on Cloudflare:
+
+```sh
+curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh
+```
+
+The script checks Docker (on Linux it offers to install Docker Engine with Docker's own script; on a Mac it points to Docker Desktop or OrbStack), downloads the `spyria` tool for the machine, checks it against the release's checksums, installs it in `~/.local/bin`, then runs `spyria setup`, which asks:
+
+1. **The deployment name and the install folder** (`spyria` and `~/spyria`). The folder holds `compose.yml`, `bifrost.json`, `.env` (readable by you only, with every secret generated) and `backups/`.
+2. **The hostname** of Spyria, for example `spyria.example.com`, on a domain of your Cloudflare account, and a **Cloudflare API token** with *Account > Cloudflare Tunnel > Edit* and *Zone > DNS > Edit* (Cloudflare dashboard > My Profile > API Tokens > Create Token > Custom token). The tool creates a tunnel routing the hostname to the server, with its DNS record; no port opens on the machine. The token is used for this and never stored.
+3. **Who can join**: people at your email domain (each workspace owns a verified domain), or only the addresses you invite (any Google or OIDC account, Gmail included; see [admin](../features/admin.md#who-can-join)).
+4. **Sign-in apps of this Spyria** (optional): a Google OAuth client, and on a by-domain instance a Microsoft Entra app, so workspaces sign in without registering their own; it shows where to create them and the redirect URI to paste. Any other OIDC provider is entered when you create the workspace.
+5. **Mail** (optional): an SMTP URL and sender for domain verification links, with a test message. Without it, `spyria verify-domain` verifies a domain.
+
+It then pulls the images of its version, starts Spyria with a runtime host on this machine, waits until it answers, and prints the **setup link** that creates the first workspace. Open it, create the workspace through your provider, and the machine's runtime host is already in **Workspace settings**; then **Connect GitHub** there to work on repositories.
+
+Every question is also a flag, for an unattended install: `spyria setup --unattended --hostname spyria.example.com --cloudflare-token <token> --join-by invited-address` (`spyria --help` lists them). Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change.
+
+On a laptop or a personal computer: while it sleeps Spyria is unreachable, and running agent turns are interrupted; Docker and Compose's restart policies bring everything back when it wakes or restarts. `spyria doctor` checks Docker, each service, the server's start check, the disk and the versions; upgrades and backups are in [operations](./operations.md).
+
+The rest of this guide is the manual install, and what the tool does underneath.
+
 ## What you need
 
 | Requirement | Why |

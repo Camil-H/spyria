@@ -15,13 +15,10 @@ bun run db:seed
 bun run dev           # the app on http://localhost:5173; sign in as alice@example.com, password "password"
 ```
 
-Self-hosting (Docker with Compose, an HTTPS origin, an OIDC provider and SMTP), from the published images of a release:
+Self-hosting on one machine with a domain on Cloudflare (Docker, an OIDC provider or any Google account; mail optional):
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/deploy/compose.prod.yml
-curl -fsSLO https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/deploy/bifrost.json
-curl -fsSL https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/.env.example -o .env.prod   # fill every [prod] key
-docker compose --env-file .env.prod -f compose.prod.yml up -d
+curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh
 ```
 
 Then open the origin and create the first workspace. The full steps are in the [self-hosting guide](docs/guides/self-hosting.md).
