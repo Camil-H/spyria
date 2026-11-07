@@ -141,6 +141,7 @@ export const setup = async (
   const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
   const context = { asker, hostname, origin, cloudflare }
   const providerLines = await firstWorkspaceProviderOf(context, { joinBy, az })
+  if (providerLines.length > 0) console.log(['', ...providerLines, ''].join('\n'))
   const smtp = await mailOf(context, { existing, resendApiUrl })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
@@ -166,7 +167,6 @@ export const setup = async (
   )
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
-  if (providerLines.length > 0) console.log(['', ...providerLines, ''].join('\n'))
   if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
   const testAddress = smtp && asker.ask('mail-test', 'Address to send a test message to (empty to skip)', '')
