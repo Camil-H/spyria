@@ -16,6 +16,12 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
                                    verify a workspace's email domain without mail
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
+Setup flags, each a question it then skips: --name, --hostname, --cloudflare-token (Account Cloudflare Tunnel Edit,
+Zone DNS Edit, Zone Read), --join-by domain|invited-address, --google-client-id and --google-client-secret,
+--microsoft-client-id and --microsoft-client-secret, --smtp-url, --mail-from, --mail-test <address>, --version,
+--images, --port, --no-host (no runtime host on this machine), --no-start, --unattended (no question at all).
+A - answer removes a sign-in app or mail.
+
 Every command takes --folder <path> (default ~/spyria, or the current folder when it holds an install).`
 
 const flags = parseFlags(process.argv.slice(2))
@@ -33,7 +39,8 @@ const commands: Record<string, () => unknown> = {
   'verify-domain': () => verifyDomain(folder, flags),
   version: () => console.log(cliVersion),
   compose: () => {
-    process.exitCode = runCompose(folder, composeArgumentsOf(process.argv.slice(3))) ?? 1
+    process.exitCode =
+      runCompose(folder, composeArgumentsOf(process.argv.slice(process.argv.indexOf('compose') + 1))) ?? 1
   },
 }
 const run = command ? commands[command] : undefined
