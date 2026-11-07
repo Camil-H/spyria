@@ -1,0 +1,240 @@
+locals {
+  vpc_access = { network = google_compute_network.main.id, subnetwork = google_compute_subnetwork.main.id }
+}
+
+resource "google_cloud_run_v2_service" "server" {
+  project             = var.project
+  name                = local.service_names.server
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
+  template {
+    service_account                  = google_service_account.services.email
+    timeout                          = "3600s"
+    session_affinity                 = true
+    max_instance_request_concurrency = 1000
+    scaling {
+      min_instance_count = 1
+      max_instance_count = 1
+    }
+    vpc_access {
+      egress = "ALL_TRAFFIC"
+      network_interfaces {
+        network    = local.vpc_access.network
+        subnetwork = local.vpc_access.subnetwork
+      }
+    }
+    containers {
+      image   = module.settings.server_image
+      command = module.settings.server_command
+      ports {
+        container_port = 3000
+      }
+      resources {
+        cpu_idle = false
+        limits   = { cpu = local.size.cpu, memory = local.size.memory }
+      }
+      dynamic "env" {
+        for_each = module.settings.server_environment
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = local.service_secret_names.server
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.setting[env.value].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      startup_probe {
+        initial_delay_seconds = 5
+        period_seconds        = 5
+        failure_threshold     = 60
+        http_get {
+          path = "/health"
+        }
+      }
+    }
+  }
+  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+}
+
+resource "google_cloud_run_v2_service" "zero" {
+  project             = var.project
+  name                = local.service_names.zero
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = false
+  template {
+    service_account = google_service_account.services.email
+    timeout         = "3600s"
+    scaling {
+      min_instance_count = 1
+      max_instance_count = 1
+    }
+    vpc_access {
+      egress = "ALL_TRAFFIC"
+      network_interfaces {
+        network    = local.vpc_access.network
+        subnetwork = local.vpc_access.subnetwork
+      }
+    }
+    volumes {
+      name = "replica"
+      empty_dir {
+        medium     = "MEMORY"
+        size_limit = "2Gi"
+      }
+    }
+    containers {
+      image = module.settings.zero_image
+      ports {
+        container_port = 4848
+      }
+      resources {
+        cpu_idle = false
+        limits   = { cpu = "1", memory = "4Gi" }
+      }
+      volume_mounts {
+        name       = "replica"
+        mount_path = "/data"
+      }
+      dynamic "env" {
+        for_each = module.settings.zero_environment
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = local.service_secret_names.zero
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.setting[env.value].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+}
+
+resource "google_cloud_run_v2_service" "gateway" {
+  project             = var.project
+  name                = local.service_names.gateway
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = false
+  template {
+    service_account = google_service_account.services.email
+    scaling {
+      min_instance_count = 1
+      max_instance_count = 1
+    }
+    vpc_access {
+      egress = "PRIVATE_RANGES_ONLY"
+      network_interfaces {
+        network    = local.vpc_access.network
+        subnetwork = local.vpc_access.subnetwork
+      }
+    }
+    volumes {
+      name = "gateway-data"
+      empty_dir {
+        medium     = "MEMORY"
+        size_limit = "256Mi"
+      }
+    }
+    containers {
+      name    = "configure"
+      image   = module.settings.server_image
+      command = ["bun", "-e", module.settings.gateway_config_script]
+      resources {
+        limits = { cpu = "1", memory = "512Mi" }
+      }
+      volume_mounts {
+        name       = "gateway-data"
+        mount_path = "/app/data"
+      }
+      env {
+        name  = "BIFROST_CONFIG"
+        value = module.settings.gateway_environment.BIFROST_CONFIG
+      }
+      dynamic "env" {
+        for_each = local.service_secret_names.configure
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.setting[env.value].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      startup_probe {
+        period_seconds    = 2
+        failure_threshold = 60
+        tcp_socket {
+          port = 9000
+        }
+      }
+    }
+    containers {
+      name       = "gateway"
+      image      = module.settings.gateway_image
+      depends_on = ["configure"]
+      ports {
+        container_port = 8080
+      }
+      resources {
+        limits = { cpu = "1", memory = "1Gi" }
+      }
+      volume_mounts {
+        name       = "gateway-data"
+        mount_path = "/app/data"
+      }
+      env {
+        name  = "SPYRIA_GATEWAY_OAUTH_BASE"
+        value = module.settings.gateway_environment.SPYRIA_GATEWAY_OAUTH_BASE
+      }
+      dynamic "env" {
+        for_each = local.service_secret_names.gateway
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.setting[env.value].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
+  for_each = {
+    server  = google_cloud_run_v2_service.server.name
+    zero    = google_cloud_run_v2_service.zero.name
+    gateway = google_cloud_run_v2_service.gateway.name
+  }
+  project  = var.project
+  location = var.region
+  name     = each.value
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
