@@ -32,10 +32,11 @@ jobs:
       - run: bun scripts/docs-site.ts dist/site
       - env:
           GITHUB_TOKEN: ${{ github.token }}
+          PUBLISHED_REF: ${{ inputs.ref || github.event.release.tag_name || github.sha }}
         working-directory: dist/site
         run: |
           git init -q -b gh-pages
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Publish the docs of ${{ inputs.ref || github.event.release.tag_name || github.sha }}"
+            commit -q -m "Publish the docs of $PUBLISHED_REF"
           git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
