@@ -29,6 +29,8 @@ Every question is also a flag, for an unattended install: `spyria setup --unatte
 
 On a laptop or a personal computer: while it sleeps Spyria is unreachable, and running agent turns are interrupted; Docker and Compose's restart policies bring everything back when it wakes or restarts. `spyria doctor` checks Docker, each service, the server's start check, the disk and the versions; upgrades and backups are in [operations](./operations.md).
 
+To run on managed services of AWS, Azure or Google Cloud instead, see [Install on AWS, Azure or Google Cloud](./cloud.md).
+
 The rest of this guide is the manual install, and what the tool does underneath.
 
 ## What you need
