@@ -3,6 +3,8 @@ import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { testAuthSettings, testSetupToken } from '../testing/testing.ts'
+import { issueSessionToken } from './session-tokens.ts'
+import { openSessions } from './sessions.ts'
 
 const instance = await createTestDatabase()
 const { database } = instance
@@ -150,13 +152,13 @@ test('an invitee signs in at exactly the invited address and joins with the invi
   expect(again.sessions.map((session) => session.workspaceId)).toEqual([workspaceId])
 })
 
-test('a verified address nobody invited is refused, and nothing routes by its domain', async () => {
+test('a verified address nobody invited is refused once the provider has signed it in, and nothing routes by its domain', async () => {
   const refused = await signIn('carol@gmail.com', {
     sub: 'carol-subject',
     email: 'carol@gmail.com',
     email_verified: true,
   })
-  expect(refused.status).toBe(404)
+  expect(refused.status).toBe(403)
   expect(refused.page).toContain('"status":"not_invited"')
   expect(refused.page).toContain('carol@gmail.com')
   expect(refused.sessions).toEqual([])
@@ -196,4 +198,81 @@ test('the database refuses an email domain on a workspace joined by invited addr
       (error: Error) => error,
     )
   expect(String(changeError)).toContain('is chosen at its creation')
+})
+
+test('an address with a membership, an open invite or neither gets the same answer from email-first sign-in: the provider of the instance', async () => {
+  await inviteTo(workspaceId, 'frank@gmail.com')
+  const providerOf = async (email: string) => {
+    const login = await app.request(`/auth/login?email=${encodeURIComponent(email)}`)
+    const location = new URL(login.headers.get('location') ?? 'http://none')
+    return { status: login.status, provider: location.origin + location.pathname }
+  }
+  const answers = await Promise.all(['owner@gmail.com', 'frank@gmail.com', 'nobody@gmail.com'].map(providerOf))
+  expect(answers).toEqual(Array(3).fill({ status: 302, provider: `${issuer}/auth` }))
+})
+
+const adminBearer = async () => {
+  const [owner] = await database.$client`select id from users where email = 'owner@gmail.com'`
+  const [session] = await openSessions(database, String(owner?.id), workspaceId)
+  if (!session) throw new Error('The owner has no session')
+  return `Bearer ${(await issueSessionToken(testAuthSettings.tokenSecret, session)).token}`
+}
+const ssoSettingsRequest = async (body?: object) => {
+  const response = await app.request('/api/sso-settings', {
+    method: body ? 'POST' : 'GET',
+    headers: { authorization: await adminBearer(), 'content-type': 'application/json' },
+    body: body && JSON.stringify(body),
+  })
+  return { status: response.status, body: await response.json() }
+}
+
+test('Setup SSO of a workspace joined by invited address shows no domain, takes a new client of the same provider, and refuses a domain or another provider', async () => {
+  expect((await ssoSettingsRequest()).body.settings).toMatchObject({
+    joinBy: 'invited_address',
+    domain: null,
+    domainState: null,
+    issuer,
+  })
+  const sameProvider = { preset: 'oidc', issuer, clientId: 'spyria-rotated', clientSecret }
+  expect((await ssoSettingsRequest(sameProvider)).body.settings).toMatchObject({
+    clientId: 'spyria-rotated',
+    domainState: null,
+  })
+  const withDomain = await ssoSettingsRequest({ ...sameProvider, domain: 'gmail.com' })
+  expect(withDomain.body).toMatchObject({ message: 'A workspace joined by invited address owns no email domain' })
+  const otherIdp = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      Response.json({
+        issuer: new URL(request.url).origin,
+        authorization_endpoint: `${new URL(request.url).origin}/auth`,
+        token_endpoint: `${new URL(request.url).origin}/token`,
+        jwks_uri: `${new URL(request.url).origin}/keys`,
+        response_types_supported: ['code'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+      }),
+  })
+  try {
+    const moved = await ssoSettingsRequest({ ...sameProvider, issuer: otherIdp.url.origin })
+    expect(moved.body).toMatchObject({ error: 'provider_fixed' })
+  } finally {
+    await otherIdp.stop(true)
+  }
+  expect((await ssoSettingsRequest()).body.settings).toMatchObject({ issuer })
+})
+
+test("another account at the provider claiming a member's address gets neither that member's account nor a session", async () => {
+  const [owner] = await database.$client`select id from users where email = 'owner@gmail.com'`
+  const ownerIdentities = async () => [
+    ...(await database.$client`select issuer, subject from identities where user_id = ${String(owner?.id)}`),
+  ]
+  const before = await ownerIdentities()
+  const hijack = await signIn('owner@gmail.com', {
+    sub: 'attacker-subject',
+    email: 'owner@gmail.com',
+    email_verified: true,
+  })
+  expect(hijack.sessions).toEqual([])
+  expect(await ownerIdentities()).toEqual(before)
 })
