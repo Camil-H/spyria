@@ -9,7 +9,7 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { assertInstanceAppsConfigured } from './auth/sso.ts'
+import { assertInstanceAppsConfigured, hasNoWorkspace, isInstallHostToken } from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -57,8 +57,11 @@ const appOrigin = requiredEnvironment('SPYRIA_APP_ORIGIN')
 const version = process.env.SPYRIA_VERSION || undefined
 const images = process.env.SPYRIA_IMAGES || undefined
 const hostImage = version && images ? `${images}/spyria-host:${version}` : undefined
+const installHostToken = process.env.SPYRIA_INSTALL_HOST_TOKEN || undefined
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
+  awaitsFirstWorkspace: async (claimCode) =>
+    isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
   runtimeKeySecret: secretsKey,
   hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   databases: () => [database],
@@ -109,6 +112,7 @@ const app = createApp({
   hostImage,
   setupToken: process.env.SPYRIA_SETUP_TOKEN || undefined,
   joinBy: joinByOf(process.env.SPYRIA_JOIN_BY),
+  installHostToken,
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()

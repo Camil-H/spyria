@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import {
   type Actor,
@@ -57,12 +57,14 @@ export type SsoDependencies = {
   instanceApps?: InstanceApps
   mailer?: Mailer
   appOrigin?: string
+  installHostToken?: string
 }
 export type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
 type Member = { workspaceId: string; userId: string }
 
 export const domainVerificationLinkPath = '/auth/verify-domain'
 const verificationLifetime = '24 hours'
+const installHostClaimLifetime = '24 hours'
 const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
 export const ssoProviderOf = async (
@@ -294,6 +296,7 @@ export const createFirstWorkspace = async (
   database: Database,
   { workspaceName, joinBy, domain, provider }: FirstWorkspace,
   identity: { email: string; name?: unknown; subject: string },
+  { installHostToken }: Pick<SsoDependencies, 'installHostToken'> = {},
 ) => {
   const email = normalizedEmail(identity.email)
   if (domain !== null && domainOfEmail(email) !== domain)
@@ -338,6 +341,12 @@ export const createFirstWorkspace = async (
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)
       values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
+    if (installHostToken)
+      await sql`
+        insert into runtime_hosts (workspace_id, id, name, claim_code_hash, claim_expires_at, status, running_runtimes,
+          created_by, created_at)
+        values (${workspaceId}, ${crypto.randomUUID()}, 'This machine', ${hashOf(installHostToken)},
+          now() + ${installHostClaimLifetime}::interval, 'waiting', 0, ${userId}, now())`
     return { workspaceId, userId }
   })
 }
@@ -433,3 +442,8 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
         .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.`,
     )
 }
+
+export const isInstallHostToken = (installHostToken: string | undefined, code: string) =>
+  installHostToken !== undefined &&
+  installHostToken.length === code.length &&
+  timingSafeEqual(Buffer.from(installHostToken), Buffer.from(code))

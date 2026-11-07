@@ -47,6 +47,7 @@ type IncomingBody = { head: Frame; parts: Buffer[]; size: number }
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
 const maximumCloseReasonBytes = 123
+const tryAgainLaterCloseCode = 1013
 const requestTimeoutMilliseconds = 180_000
 const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
@@ -91,6 +92,7 @@ export const createRuntimeHostGateway = ({
   spyriaAgentImage,
   runtimeKeySecret,
   hostUpdateCommandOf,
+  awaitsFirstWorkspace = async () => false,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
@@ -99,6 +101,7 @@ export const createRuntimeHostGateway = ({
   spyriaAgentImage?: string
   runtimeKeySecret: string
   hostUpdateCommandOf?: (host: RuntimeHost) => string
+  awaitsFirstWorkspace?: (claimCode: string) => Promise<boolean>
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -155,8 +158,14 @@ export const createRuntimeHostGateway = ({
 
   const identify = async (connection: Connection, frame: HostSessionFrame) => {
     if (frame.type === 'claim') {
-      const { result } = await firstAccepted((handlers) => handlers.claim(frame.code))
-      return sendTo(connection, { type: 'token', token: result.token })
+      const claimed = await firstAccepted((handlers) => handlers.claim(frame.code)).catch(async (error: unknown) => {
+        const isWaiting =
+          error instanceof HostRefused && error.code === 'code_not_valid' && (await awaitsFirstWorkspace(frame.code))
+        if (!isWaiting) throw error
+      })
+      if (!claimed)
+        return connection.socket.close(tryAgainLaterCloseCode, 'Waiting for the first workspace of this Spyria')
+      return sendTo(connection, { type: 'token', token: claimed.result.token })
     }
     if (frame.type !== 'hello') return connection.socket.close(refusedCloseCode, 'This host is not registered')
     const {
