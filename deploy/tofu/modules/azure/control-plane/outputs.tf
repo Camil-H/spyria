@@ -41,3 +41,8 @@ output "certificate_command" {
   description = "Run once the hostname is bound: it creates the managed certificate and serves the hostname over HTTPS (the provider cannot bind a managed certificate itself)"
   value       = var.binds_hostname ? "az containerapp hostname bind --resource-group ${azurerm_resource_group.main.name} --name ${azurerm_container_app.server.name} --environment ${azurerm_container_app_environment.main.name} --hostname ${var.hostname} --validation-method CNAME" : ""
 }
+
+output "resource_group_name" {
+  description = "Resource group of the deployment, for the runtime-host module"
+  value       = azurerm_resource_group.main.name
+}
