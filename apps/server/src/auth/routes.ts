@@ -214,8 +214,13 @@ export const createAuthRoutes = ({
       if (scope.testUserId) return completeSignIn(context, scope, { userId: scope.testUserId, email: '', workspaceId })
       const email = normalizedEmail(context.req.query('email') ?? '')
       const domain = domainOfEmail(email)
-      const provider =
+      const routed =
         authMode === 'sso' ? await ssoProviderOf(scope.database, workspaceId ? { workspaceId } : { email }) : undefined
+      const provider =
+        routed ??
+        (authMode === 'sso' && joinBy === 'invited_address' && !workspaceId
+          ? await ssoProviderOf(scope.database, {})
+          : undefined)
       if (authMode === 'sso' && !provider)
         return popup(
           context,
