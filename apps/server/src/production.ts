@@ -1,4 +1,5 @@
 const minimumSecretLength = 32
+const installHostTokenPattern = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{16}$/
 const requiredSettings = ['SPYRIA_GATEWAY_URL', 'SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD']
 const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 const originOf = (url: string) => URL.parse(url)?.origin
@@ -20,6 +21,9 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     secretProblemOf('SPYRIA_TOKEN_SECRET', settingOf('SPYRIA_TOKEN_SECRET')),
     secretProblemOf('SPYRIA_SECRETS_KEY', settingOf('SPYRIA_SECRETS_KEY')),
     secretProblemOf('SPYRIA_SETUP_TOKEN', settingOf('SPYRIA_SETUP_TOKEN')),
+    settingOf('SPYRIA_INSTALL_HOST_TOKEN') !== '' &&
+      !installHostTokenPattern.test(settingOf('SPYRIA_INSTALL_HOST_TOKEN')) &&
+      'SPYRIA_INSTALL_HOST_TOKEN must be 16 characters from ABCDEFGHJKMNPQRSTUVWXYZ23456789.',
     !appOrigin.startsWith('https://') && 'SPYRIA_APP_ORIGIN must start with https://.',
     (!originOf(appOrigin) || originOf(settingOf('SPYRIA_OIDC_REDIRECT_URI')) !== originOf(appOrigin)) &&
       'SPYRIA_OIDC_REDIRECT_URI must be on SPYRIA_APP_ORIGIN.',
