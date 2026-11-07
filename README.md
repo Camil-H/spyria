@@ -21,7 +21,7 @@ Self-hosting on one machine with a domain on Cloudflare (Docker, an OIDC provide
 curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh
 ```
 
-Then open the origin and create the first workspace. The full steps are in the [self-hosting guide](docs/guides/self-hosting.md).
+Then open the setup link it prints and create the first workspace. The full steps, and the manual install, are in the [self-hosting guide](docs/guides/self-hosting.md).
 
 ## Documentation
 
