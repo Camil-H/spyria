@@ -18,7 +18,7 @@ bun run dev           # the app on http://localhost:5173; sign in as alice@examp
 Self-hosting on one machine with a domain on Cloudflare (Docker, an OIDC provider or any Google account; mail optional):
 
 ```sh
-curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh
+curl -fsSL https://spyria.dev/install | sh
 ```
 
 Then open the setup link it prints and create the first workspace. The steps are in [install on one machine](docs/guides/install.md); managed clouds in [install on AWS, Azure or Google Cloud](docs/guides/cloud.md), and the [manual install](docs/guides/self-hosting.md).
