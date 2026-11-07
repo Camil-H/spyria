@@ -63,16 +63,22 @@ export const setUpResend = async ({
   for (let attempt = 1; ; attempt++) {
     const { status } = await resend<ResendDomain>('GET', `/domains/${id}`)
     if (status === 'verified') break
-    if (attempt === verificationAttempts || status === 'failed')
+    if (attempt === verificationAttempts || (status === 'failed' && attempt > 1))
       throw new ResendRefused(
         `Resend did not verify ${zone.name} (${status}): check its DNS records, then run spyria setup again`,
       )
     await Bun.sleep(pollMilliseconds)
   }
+  const keyName = `Spyria on ${hostname}`
+  const { data: keys } = await resend<{ data: { id: string; name: string }[] }>('GET', '/api-keys')
+  for (const replaced of keys.filter((key) => key.name === keyName)) await resend('DELETE', `/api-keys/${replaced.id}`)
   const { token } = await resend<{ token: string }>('POST', '/api-keys', {
-    name: `Spyria on ${hostname}`,
+    name: keyName,
     permission: 'sending_access',
     domain_id: id,
   })
-  return { smtpUrl: `smtps://resend:${token}@smtp.resend.com:465`, mailFrom: `Spyria <spyria@${zone.name}>` }
+  return {
+    smtpUrl: `smtps://resend:${encodeURIComponent(token)}@smtp.resend.com:465`,
+    mailFrom: `Spyria <spyria@${zone.name}>`,
+  }
 }

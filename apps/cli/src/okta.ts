@@ -9,7 +9,7 @@ export const registerOktaApp = async ({
   apiToken: string
   origin: string
 }) => {
-  const org = new URL(orgUrl).origin
+  const org = new URL(orgUrl).origin.replace(/-admin(\.(?:okta|oktapreview)\.com)$/, '$1')
   const call = async <Result>(method: string, path: string, body?: object): Promise<Result> => {
     const response = await fetch(`${org}${path}`, {
       method,
@@ -39,8 +39,14 @@ export const registerOktaApp = async ({
       },
     },
   )
-  const [everyone] = await call<{ id: string }[]>('GET', `/api/v1/groups?${new URLSearchParams({ q: 'Everyone' })}`)
-  if (everyone) await call('PUT', `/api/v1/apps/${app.id}/groups/${everyone.id}`, {})
+  const builtInGroups = await call<{ id: string; profile: { name: string } }[]>(
+    'GET',
+    `/api/v1/groups?${new URLSearchParams({ search: 'type eq "BUILT_IN"' })}`,
+  )
+  const everyone = builtInGroups.find((group) => group.profile.name === 'Everyone')
+  if (!everyone)
+    throw new OktaRefused('Okta has no Everyone group to assign the app to: assign it to your people by hand')
+  await call('PUT', `/api/v1/apps/${app.id}/groups/${everyone.id}`, {})
   return {
     issuer: org,
     clientId: app.credentials.oauthClient.client_id,
