@@ -67,12 +67,10 @@ const verificationLifetime = '24 hours'
 const installHostClaimLifetime = '24 hours'
 const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
-export const ssoProviderOf = async (
-  database: Database,
-  { workspaceId, email, joinBy }: { workspaceId?: string; email?: string; joinBy?: JoinBy },
-) =>
-  (
-    await database.$client<SsoProvider[]>`
+type ProviderFilter = { workspaceId?: string; email?: string; joinBy?: JoinBy }
+
+export const ssoProvidersOf = (database: Database, { workspaceId, email, joinBy }: ProviderFilter) =>
+  database.$client<SsoProvider[]>`
       select workspace_id as "workspaceId", workspaces.join_by as "joinBy", preset, issuer, client_id as "clientId",
         encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp",
         updated_at as "updatedAt"
@@ -84,9 +82,17 @@ export const ssoProviderOf = async (
           or (workspaces.join_by = 'domain' and exists(
             select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
               and sso_domains.domain = ${domainOfEmail(email ?? '')}
-              and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1))))
-      order by workspaces.created_at limit 1`
-  )[0]
+              and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)))
+          or (workspaces.join_by = 'invited_address' and (
+            exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
+              and invitations.email = ${email ?? ''} and revoked_at is null and accepted_at is null and expires_at > now())
+            or exists(select 1 from memberships join users on users.id = memberships.user_id
+              where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
+                and users.email = ${email ?? ''}))))
+      order by workspaces.created_at`
+
+export const ssoProviderOf = async (database: Database, filter: ProviderFilter) =>
+  (await ssoProvidersOf(database, filter))[0]
 
 export const requireMemberPermission = async (
   sql: Sql,
