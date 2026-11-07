@@ -1,6 +1,6 @@
 # Machines
 
-This page explains where agent chats run: on the workspace's runtime hosts, or on a member's own machine for Claude Code and Codex subscriptions. It covers adding a host, adding your machine, signing in to a harness, the admin switch for members' machines, and how runtimes are isolated. It is for admins who run hosts and members who use their own machine. Installing and operating the server is in [Self-hosting](../guides/self-hosting.md); a host for local development is in [Development](../guides/development.md).
+This page explains where agent chats run: on the workspace's runtime hosts, or on a member's own machine for Claude Code and Codex subscriptions. It covers adding a host, adding your machine, signing in to a harness, the admin switch for members' machines, and how runtimes are isolated. It is for admins who run hosts and members who use their own machine. Installing the server is in [install on one machine](../guides/install.md) and the [manual install](../guides/self-hosting.md); a host for local development is in [Development](../guides/development.md).
 
 ## Runtime hosts and runtimes
 
@@ -117,4 +117,4 @@ Admins control this for the workspace with the switch **Members can run sessions
 
 ## Several deployments on one machine
 
-Every Docker object Spyria names carries the deployment name `SPYRIA_DEPLOYMENT`: the host container and its state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one Docker daemon, such as a development stack and a production one, therefore never see each other's runtimes. See [Self-hosting](../guides/self-hosting.md).
+Every Docker object Spyria names carries the deployment name `SPYRIA_DEPLOYMENT`: the host container and its state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one Docker daemon, such as a development stack and a production one, therefore never see each other's runtimes. See [Manual install](../guides/self-hosting.md).

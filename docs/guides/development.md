@@ -1,6 +1,6 @@
 # Development
 
-This guide takes you from a fresh clone to a running Spyria on your machine: the web app, the server, the sync layer, the model gateway and, when you need agents, a runtime host. It also lists the commands you use every day and where to start reading the code. For the test suites, see [Testing](./testing.md); for a production deployment, see [Self-hosting](./self-hosting.md).
+This guide takes you from a fresh clone to a running Spyria on your machine: the web app, the server, the sync layer, the model gateway and, when you need agents, a runtime host. It also lists the commands you use every day and where to start reading the code. For the test suites, see [Testing](./testing.md); for a production deployment, see [Manual install](./self-hosting.md).
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ The seed adds no model API key. To prompt an agent, add a real provider key (Ope
 
 The server refuses to start without `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`. `bun run dev` sets a dev value for each one (a random token secret per start, and a fixed secrets key so runtimes keep working across restarts), so nothing is needed to get going.
 
-Every setting is listed with its dev default and a comment in `.env.example`. To change one, copy it to `.env.dev`: `bun run dev` and `bun run operator` read that file. Production reads `.env.prod` instead (see [Self-hosting](./self-hosting.md)). Both files are git-ignored.
+Every setting is listed with its dev default and a comment in `.env.example`. To change one, copy it to `.env.dev`: `bun run dev` and `bun run operator` read that file. Production reads `.env.prod` instead (see [Manual install](./self-hosting.md)). Both files are git-ignored.
 
 ## The model gateway in development
 
@@ -120,7 +120,7 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `failed-jobs` | `jobs:failed` | Lists jobs that exhausted their attempts, with the last error. |
 | `retry-jobs <id>\|--all` | `jobs:retry` | Requeues failed jobs with their attempts reset. |
 | `tools-setup github\|notion` | `tools:setup` | Sets up a tool server in the gateway (above). |
-| `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Self-hosting](./self-hosting.md)). |
+| `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Manual install](./self-hosting.md)). |
 | `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
 | `mail:test --to <address>` | none | Sends a test message through `SPYRIA_SMTP_URL`. |
 
@@ -183,7 +183,7 @@ A removed host stops for good: it turns off its container's restart policy on th
 
 ### Deployment names
 
-Every Docker object Spyria names comes from `SPYRIA_DEPLOYMENT` (default `spyria`). Another deployment on the same Docker daemon, such as `spyria-prod`, uses the image, container and state volume `spyria-prod-host`, runtimes `spyria-prod-rt-*`, sign-ins `spyria-prod-cred-*` and harnesses `spyria-prod-harnesses`, and its Add host and sign-in commands carry these names. Neither host ever sees the other's runtimes. See [Self-hosting](./self-hosting.md).
+Every Docker object Spyria names comes from `SPYRIA_DEPLOYMENT` (default `spyria`). Another deployment on the same Docker daemon, such as `spyria-prod`, uses the image, container and state volume `spyria-prod-host`, runtimes `spyria-prod-rt-*`, sign-ins `spyria-prod-cred-*` and harnesses `spyria-prod-harnesses`, and its Add host and sign-in commands carry these names. Neither host ever sees the other's runtimes. See [Manual install](./self-hosting.md).
 
 ### Claude Code and Codex on your own machine
 

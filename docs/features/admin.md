@@ -1,6 +1,6 @@
 # Administration
 
-This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Self-hosting](../guides/self-hosting.md).
+This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Manual install](../guides/self-hosting.md).
 
 Everything here is in **Workspace settings** (the workspace menu), as cards in three sections; Escape goes back from a card's page to the cards. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
 
@@ -110,7 +110,7 @@ The sign-in screen asks for a work email and routes its domain to the provider o
 1. The admin enters any address at the domain; Spyria emails it a single-use link valid for 24 hours.
 2. Opening the link, without signing in, verifies the domain for that workspace.
 
-Until then the card shows the domain as not verified or pending. Two workspaces may share a domain only if they use the same provider; a different provider for a domain already claimed is refused. While a deployment has a single workspace, its own unverified domain still routes sign-in, so its first admin can sign back in before verifying; invites stay closed until verification. The first workspace of a deployment is created from the sign-in page; see [Self-hosting](../guides/self-hosting.md).
+Until then the card shows the domain as not verified or pending. Two workspaces may share a domain only if they use the same provider; a different provider for a domain already claimed is refused. While a deployment has a single workspace, its own unverified domain still routes sign-in, so its first admin can sign back in before verifying; invites stay closed until verification. The first workspace of a deployment is created from the setup link; see [who can join and sign-in](../guides/who-can-join.md).
 
 Accounts are matched on the provider's issuer and subject, not the email, so a changed address at the provider keeps the same Spyria account.
 
@@ -125,7 +125,7 @@ Either way, a Google or generic OIDC provider must confirm the address it return
 
 ## GitHub
 
-**Connect GitHub** creates the workspace's GitHub App on GitHub in one click (on your account or an organization), or takes the details of an App created by hand. It then lists the repositories the App's installations grant. How dev chats use it is described in [Dev mode](./dev-mode.md); the setup steps are in [Self-hosting](../guides/self-hosting.md).
+**Connect GitHub** creates the workspace's GitHub App on GitHub in one click (on your account or an organization), or takes the details of an App created by hand. It then lists the repositories the App's installations grant. How dev chats use it is described in [Dev mode](./dev-mode.md); the setup steps are in [Manual install](../guides/self-hosting.md).
 
 ## Runtime hosts and members' machines
 
@@ -192,7 +192,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 - At once, every member loses access: their sessions end, their open agent streams close, running runtimes stop, and the workspace's background work, GitHub webhooks, agents' and sub-agents' model calls are refused. A few minutes later, runtimes that were still starting are removed, so a restored workspace starts those afresh. The workspace disappears from everyone's workspace switcher.
 - Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, shared connections, the link to the GitHub App, the sign-in settings and the email domain, the audit log, and the accounts of people who belonged to no other workspace.
 - The GitHub App stays installed on the organization: uninstall it on GitHub.
-- Until the seven days are over, only the operator can restore the workspace ([Self-hosting](../guides/self-hosting.md#deleting-a-workspace)).
+- Until the seven days are over, only the operator can restore the workspace ([Manual install](../guides/self-hosting.md#deleting-a-workspace)).
 - When the only workspace of a deployment is erased, its domain is free again and the sign-in page offers **Create a workspace**.
 
 ## Audit log

@@ -2,10 +2,9 @@
 
 Start with `spyria doctor`: it checks Docker, each service and its healthcheck, the server's start check (the list of settings it refuses), the disk and the image versions. `spyria compose logs <service>` shows a service's logs, for example `server`, `zero-cache`, `gateway` or `host`.
 
-
 | Symptom | Cause and fix |
 |---|---|
-| The server keeps restarting | The production check failed; read `logs server` for the list. |
+| The server keeps restarting | The production check failed: `spyria compose logs server` lists every problem, and `spyria doctor` shows them too. |
 | `502` from the proxy | The proxy forwards to `https://`. The server speaks plain HTTP on the Compose network: use `http://server:3000`. |
 | The app loads but never syncs | The proxy drops WebSocket upgrades on `/zero/`, or zero-cache is down: `/health` answers `503` naming `zero`, and the server logs `zero.unreachable`. |
 | A prompt says the runtime image is missing | The host could not pull it: `docker logs <deployment>-host` has the registry's reason. A host built from a clone (no `SPYRIA_IMAGES`) accepts only a local content ID: run `bun run agent:build` there, or load the same image. |
