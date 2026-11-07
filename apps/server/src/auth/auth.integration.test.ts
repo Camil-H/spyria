@@ -189,12 +189,18 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
         .setExpirationTime(nowInSeconds() + 60)
         .sign((await generateKeyPair('RS256')).privateKey),
   ],
-  ['an unverified email', (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: false })],
 ])('the callback refuses %s', async (_, idTokenOf) => {
   const previousLogin = await startLogin()
   const signIn = await signInWith((nonce) => idTokenOf(nonce, previousLogin.nonce))
   expect(signIn.status).toBe(400)
   expect(signIn.page).toContain('"status":"failed"')
+  expect(signIn.cookie).not.toContain('spyria_s_')
+})
+
+test('the callback refuses an address the provider did not confirm, saying so', async () => {
+  const signIn = await signInWith((nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: false }))
+  expect(signIn.status).toBe(403)
+  expect(signIn.page).toContain('Your provider did not confirm this address')
   expect(signIn.cookie).not.toContain('spyria_s_')
 })
 

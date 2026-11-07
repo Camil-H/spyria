@@ -196,25 +196,28 @@ const identitiesOf = async (subject: string) => [
 test('the server tells its auth mode and whether a workspace can be created', async () => {
   expect(await (await app.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
     isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
   })
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
     isBeingSetUp: true,
     canCreateWorkspace: false,
     instanceApps: [],
   })
   expect(await (await emptyInstanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
     isBeingSetUp: true,
     canCreateWorkspace: true,
     instanceApps: [],
   })
   expect(
     await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
-  ).toEqual({ authMode: 'dex', isBeingSetUp: false, canCreateWorkspace: false, instanceApps: [] })
+  ).toEqual({ authMode: 'dex', joinBy: 'domain', isBeingSetUp: false, canCreateWorkspace: false, instanceApps: [] })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -778,6 +781,7 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
 
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
     isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
@@ -823,6 +827,7 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
   try {
     expect(await (await instanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
       authMode: 'sso',
+      joinBy: 'domain',
       isBeingSetUp: true,
       canCreateWorkspace: true,
       instanceApps: ['microsoft'],
@@ -934,7 +939,8 @@ test('the first workspace needs the setup token: refused without it, with a wron
   expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(1)
   expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: false, canCreateWorkspace: false })
   const spent = await startCreation(umbrellaForm())
-  expect(spent.status).toBe(403)
+  expect(spent.status).toBe(400)
+  expect(await spent.text()).toContain('Workspace creation is closed on this instance')
 })
 
 test('a workspace joined by email domain cannot claim a public email domain, and says why', async () => {
