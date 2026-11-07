@@ -443,7 +443,7 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
     )
 }
 
+const sha256Of = (value: string) => createHash('sha256').update(value).digest()
+
 export const isInstallHostToken = (installHostToken: string | undefined, code: string) =>
-  installHostToken !== undefined &&
-  installHostToken.length === code.length &&
-  timingSafeEqual(Buffer.from(installHostToken), Buffer.from(code))
+  installHostToken !== undefined && timingSafeEqual(sha256Of(installHostToken), sha256Of(code))
