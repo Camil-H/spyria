@@ -1,9 +1,14 @@
 name: Docs site
 
 on:
-  push:
-    branches: [main]
-    paths: [docs/**, deploy/install.sh, scripts/docs-site.ts]
+  workflow_call:
+    inputs:
+      ref:
+        description: The release tag to publish the docs of
+        required: true
+        type: string
+  release:
+    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -22,6 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || github.event.release.tag_name || github.ref }}
       - uses: ./.github/actions/setup
       - run: bun scripts/docs-site.ts dist/site
       - env:
@@ -31,5 +37,5 @@ jobs:
           git init -q -b gh-pages
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Publish the docs of $GITHUB_SHA"
+            commit -q -m "Publish the docs of ${{ inputs.ref || github.event.release.tag_name || github.sha }}"
           git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

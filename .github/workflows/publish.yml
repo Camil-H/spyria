@@ -166,3 +166,11 @@ jobs:
         run: |
           gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --verify-tag --generate-notes --title "Spyria $VERSION"
           gh release upload "v$VERSION" dist/* deploy/install.sh --clobber
+
+  docs-site:
+    needs: [version, cli]
+    uses: ./.github/workflows/docs-site.yml
+    permissions:
+      contents: write
+    with:
+      ref: v${{ needs.version.outputs.version }}
