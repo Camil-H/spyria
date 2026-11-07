@@ -1,3 +1,5 @@
+mock_provider "time" {}
+
 mock_provider "azurerm" {
   mock_data "azurerm_client_config" {
     defaults = { tenant_id = "00000000-0000-0000-0000-000000000001", object_id = "00000000-0000-0000-0000-000000000002" }
@@ -34,6 +36,9 @@ mock_provider "azurerm" {
   }
   mock_resource "azurerm_log_analytics_workspace" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/spyria/providers/Microsoft.OperationalInsights/workspaces/spyria" }
+  }
+  mock_resource "azurerm_role_assignment" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000009" }
   }
   mock_resource "azurerm_container_app_environment" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/spyria/providers/Microsoft.App/managedEnvironments/spyria" }
@@ -79,6 +84,14 @@ run "the_control_plane_runs_one_server_with_public_ingress_and_keeps_the_rest_in
   assert {
     condition     = azurerm_container_app.zero.template[0].volume[0].storage_type == "EmptyDir"
     error_message = "zero-cache keeps its replica on local storage"
+  }
+  assert {
+    condition     = module.settings.zero_environment.ZERO_QUERY_URL == "https://${azurerm_container_app.server.ingress[0].fqdn}/api/query" && azurerm_container_app.zero.ingress[0].allow_insecure_connections
+    error_message = "zero-cache calls the server over HTTPS, and the server calls the internal apps over plain HTTP inside the environment"
+  }
+  assert {
+    condition     = azurerm_container_app.server.template[0].container[0].readiness_probe[0].path == "/health/live"
+    error_message = "The platform judges the server by its own liveness, not zero-cache's or the gateway's"
   }
   assert {
     condition     = contains([for secret in azurerm_container_app.server.secret : secret.name], "spyria-smtp-url") && !contains(keys(azurerm_key_vault_secret.setting), "SPYRIA_GOOGLE_CLIENT_SECRET")

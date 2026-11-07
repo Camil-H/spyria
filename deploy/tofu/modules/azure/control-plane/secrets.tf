@@ -47,5 +47,15 @@ resource "azurerm_key_vault_secret" "setting" {
   name         = local.vault_secret_of[each.key]
   value        = local.secret_values[each.key]
   key_vault_id = azurerm_key_vault.settings.id
-  depends_on   = [azurerm_role_assignment.deployer_writes_secrets]
+  depends_on   = [time_sleep.deployer_role_propagates]
+}
+
+resource "time_sleep" "deployer_role_propagates" {
+  create_duration = "120s"
+  depends_on      = [azurerm_role_assignment.deployer_writes_secrets]
+}
+
+resource "time_sleep" "apps_role_propagates" {
+  create_duration = "120s"
+  depends_on      = [azurerm_role_assignment.apps_read_secrets]
 }

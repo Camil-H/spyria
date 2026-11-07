@@ -32,3 +32,14 @@ run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpo
     error_message = "Runtimes are kept off the metadata endpoint, and nobody signs in with a password"
   }
 }
+
+run "a_second_host_takes_its_own_name" {
+  command = apply
+  variables {
+    host_name = "build-box"
+  }
+  assert {
+    condition     = azurerm_linux_virtual_machine.host.name == "spyria-build-box" && azurerm_public_ip.host.name == "spyria-build-box"
+    error_message = "Each runtime host has its own resources"
+  }
+}
