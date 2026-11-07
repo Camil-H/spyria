@@ -15,6 +15,7 @@ import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { productionProblemsOf } from './production.ts'
+import { trustedProxyOf } from './rate-limits.ts'
 import { createRuntimeHostGateway, serverWebSocket } from './runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from './spyria-agent-image.ts'
 import { startTelemetry } from './telemetry.ts'
@@ -106,7 +107,7 @@ const app = createApp({
   runtimeHosts,
   agentBridge,
   spyriaAgentImage,
-  trustedProxy: process.env.SPYRIA_TRUSTED_PROXY === 'cloudflare' ? 'cloudflare' : undefined,
+  trustedProxy: trustedProxyOf(process.env.SPYRIA_TRUSTED_PROXY),
   zeroUrl: process.env.SPYRIA_ZERO_URL || undefined,
   version,
   hostImage,

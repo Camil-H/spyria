@@ -1,3 +1,5 @@
+import { isTrustedProxySetting } from './rate-limits.ts'
+
 const minimumSecretLength = 32
 const installHostTokenPattern = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{16}$/
 const requiredSettings = ['SPYRIA_GATEWAY_URL', 'SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD']
@@ -31,8 +33,8 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     settingOf('SPYRIA_SMTP_URL') !== '' &&
       !settingOf('SPYRIA_MAIL_FROM') &&
       'SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.',
-    ![undefined, '', 'cloudflare'].includes(environment.SPYRIA_TRUSTED_PROXY) &&
-      'SPYRIA_TRUSTED_PROXY must be unset or cloudflare.',
+    !isTrustedProxySetting(environment.SPYRIA_TRUSTED_PROXY) &&
+      'SPYRIA_TRUSTED_PROXY must be unset, cloudflare, or x-forwarded-for:1 to 3.',
     ...['SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD'].map(
       (name) => isDevelopmentDefault(settingOf(name)) && `${name} must not be a development default.`,
     ),
