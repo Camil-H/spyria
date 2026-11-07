@@ -67,6 +67,18 @@ test('setting up again without a Cloudflare token keeps the tunnel and every sec
   expect(tunnelNames).toHaveLength(1)
 })
 
+test('setting up again keeps a deployment without a runtime host that way until --host turns it back on', async () => {
+  await runSetup(['--no-host'])
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toBeUndefined()
+  await runSetup([])
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toBeUndefined()
+  await runSetup(['--host'])
+  expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toStartWith('http://server:3000/h/')
+})
+
 test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {
