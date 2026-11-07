@@ -36,7 +36,7 @@ const probes = [
   },
   {
     file: 'apps/host/src/__boundary-probes__/spyria-import.ts',
-    rule: 'host-and-agent-import-nothing-from-spyria',
+    rule: 'standalone-apps-import-nothing-from-spyria',
     source: `import { DomainError } from '@spyria/kernel'\nexport const probe = DomainError\n`,
   },
 ]

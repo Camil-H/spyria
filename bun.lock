@@ -27,6 +27,9 @@
         "@opentelemetry/sdk-trace-base": "2.11.0",
       },
     },
+    "apps/cli": {
+      "name": "@spyria/cli",
+    },
     "apps/host": {
       "name": "@spyria/host",
       "dependencies": {
@@ -776,6 +779,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
     "@spyria/agent": ["@spyria/agent@workspace:apps/agent"],
+
+    "@spyria/cli": ["@spyria/cli@workspace:apps/cli"],
 
     "@spyria/conversation": ["@spyria/conversation@workspace:packages/conversation"],
 

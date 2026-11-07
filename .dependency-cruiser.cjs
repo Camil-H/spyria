@@ -131,16 +131,16 @@ module.exports = {
       to: { path: '^(apps|packages)/', pathNot: ['^apps/server/', serverEntry, '^packages/(kernel|db)/'] },
     },
     {
-      name: 'host-and-agent-import-nothing-from-spyria',
+      name: 'standalone-apps-import-nothing-from-spyria',
       severity: 'error',
-      from: { path: '^apps/(host|agent)/' },
+      from: { path: '^apps/(host|agent|cli)/' },
       to: { path: ['^(apps|packages)/', '^@spyria/'], pathNot: '^apps/$1/' },
     },
     {
-      name: 'host-and-agent-imported-by-nothing',
+      name: 'standalone-apps-imported-by-nothing',
       severity: 'error',
       from: { path: '^(apps|packages)/([^/]+)/' },
-      to: { path: '^apps/(host|agent)/', pathNot: '^$1/$2/' },
+      to: { path: '^apps/(host|agent|cli)/', pathNot: '^$1/$2/' },
     },
     {
       name: 'packages-never-import-node-builtins',
