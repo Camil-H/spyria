@@ -30,6 +30,6 @@ output "dns_records" {
 }
 
 output "runtime_host_subnet_id" {
-  description = "The control plane's subnetwork, which reaches the internet through Cloud NAT, for the runtime-host module"
-  value       = google_compute_subnetwork.main.id
+  description = "A subnetwork for runtime hosts, which reaches the internet through Cloud NAT and, unlike the services' subnetwork, not Google's private access to Cloud Run"
+  value       = google_compute_subnetwork.hosts.id
 }

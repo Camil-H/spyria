@@ -10,6 +10,7 @@ resource "google_compute_managed_ssl_certificate" "hostname" {
   managed {
     domains = [var.hostname]
   }
+  depends_on = [google_project_service.api]
 }
 
 resource "google_compute_region_network_endpoint_group" "server" {

@@ -11,6 +11,12 @@ variable "name" {
   default     = "spyria"
 }
 
+variable "host_name" {
+  description = "Name of this host among the deployment's, for its cloud resources: give each runtime host its own"
+  type        = string
+  default     = "runtime-host"
+}
+
 variable "claim_url" {
   description = "Claim URL of the host: install_host_claim_url of the control plane for the first host, or the URL at the end of an Add runtime host command"
   type        = string
@@ -57,7 +63,7 @@ locals {
 
 resource "google_compute_instance" "host" {
   project      = var.project
-  name         = "${var.name}-runtime-host"
+  name         = "${var.name}-${var.host_name}"
   zone         = var.zone
   machine_type = local.machine_types[var.size]
   boot_disk {
@@ -76,6 +82,9 @@ resource "google_compute_instance" "host" {
   }
   shielded_instance_config {
     enable_secure_boot = true
+  }
+  lifecycle {
+    ignore_changes = [metadata["user-data"], boot_disk[0].initialize_params[0].image]
   }
 }
 

@@ -22,3 +22,14 @@ run "the_host_dials_out_through_nat_with_its_claim_and_keeps_runtimes_off_the_me
     error_message = "Runtimes keep DNS, which the metadata server answers on GCP, but never reach the metadata server otherwise"
   }
 }
+
+run "a_second_host_takes_its_own_name" {
+  command = apply
+  variables {
+    host_name = "build-box"
+  }
+  assert {
+    condition     = google_compute_instance.host.name == "spyria-build-box"
+    error_message = "Each runtime host has its own resources"
+  }
+}
