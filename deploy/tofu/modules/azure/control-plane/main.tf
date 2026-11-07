@@ -122,7 +122,7 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   public_network_access_enabled = false
   depends_on                    = [azurerm_private_dns_zone_virtual_network_link.database]
   lifecycle {
-    ignore_changes = [zone]
+    ignore_changes = [zone, storage_mb]
   }
 }
 
