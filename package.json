@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run --filter '*' --sequential typecheck",
     "lint": "biome check .",
     "test": "bun test ./packages ./apps/server ./apps/host ./apps/agent ./apps/cli ./scripts --path-ignore-patterns='**/*.integration.test.ts' --path-ignore-patterns='**/*.docker.test.ts'",
     "test:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration.xml .integration.test.ts",
