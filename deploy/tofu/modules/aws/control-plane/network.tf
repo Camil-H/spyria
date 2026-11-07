@@ -106,16 +106,3 @@ resource "aws_vpc_security_group_ingress_rule" "database" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
 }
-
-resource "aws_security_group" "replica_storage" {
-  name   = "${var.name}-replica-storage"
-  vpc_id = aws_vpc.main.id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "replica_storage" {
-  security_group_id            = aws_security_group.replica_storage.id
-  referenced_security_group_id = aws_security_group.service["zero-cache"].id
-  from_port                    = 2049
-  to_port                      = 2049
-  ip_protocol                  = "tcp"
-}
