@@ -261,7 +261,7 @@ export const createAuthRoutes = ({
         return popup(context, { status: 'refused', message: new EmailNotConfirmed().message }, 403)
       if (identity === undefined || identity instanceof Error) return popup(context, { status: 'failed' }, 400)
       if (firstWorkspace) {
-        const created = await createFirstWorkspace(scope.database, firstWorkspace, identity).catch(domainErrorOnly)
+        const created = await createFirstWorkspace(scope.database, firstWorkspace, identity, sso).catch(domainErrorOnly)
         if (created instanceof Error) return popup(context, { status: 'refused', message: created.message }, 403)
         return completeSignIn(context, scope, { ...created, ...identity, issuer: firstWorkspace.provider.issuer })
       }

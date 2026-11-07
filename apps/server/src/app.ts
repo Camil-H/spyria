@@ -116,7 +116,13 @@ import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import { readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
+import {
+  hasNoWorkspace,
+  isInstallHostToken,
+  readSsoSettings,
+  saveSsoSettings,
+  sendDomainVerification,
+} from './auth/sso.ts'
 import {
   disconnectGitHub,
   finishGitHubAppCreation,
@@ -245,7 +251,10 @@ export const createApp = ({
   version = 'dev',
   setupToken,
   joinBy = 'domain',
+  installHostToken,
   runtimeHosts = createRuntimeHostGateway({
+    awaitsFirstWorkspace: async (claimCode) =>
+      isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -284,6 +293,7 @@ export const createApp = ({
   version?: string
   setupToken?: string
   joinBy?: JoinBy
+  installHostToken?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
@@ -301,6 +311,7 @@ export const createApp = ({
     instanceApps: instanceSignInApps,
     mailer: mail && createSmtpMailer(mail),
     appOrigin,
+    installHostToken,
   }
   const githubDependencies = github ?? { api: createGitHubApi(githubDotCom), secretBox: sso.secretBox }
   const githubCallbackUrl = `${appOrigin}${githubCallbackPath}`
