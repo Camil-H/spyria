@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
@@ -19,9 +19,10 @@ import {
   serviceProblemsOf,
   serviceStatesOf,
 } from './health.ts'
-import { latestVersion, releaseFileUrlOf, releaseNotesUrlOf } from './release.ts'
+import { cliVersion, latestVersion, releaseFileUrlOf, releaseNotesUrlOf } from './release.ts'
 
 const backupDatabases = ['spyria', 'bifrost'] as const
+const databaseOwners: Record<(typeof backupDatabases)[number], string> = { spyria: 'spyria', bifrost: 'bifrost' }
 const defaultBackupsKept = 7
 const healthWaitMilliseconds = 180_000
 
@@ -38,8 +39,10 @@ export const readEnvironment = (folder: string): Environment => {
   return parseEnvironment(readFileSync(environmentFileOf(folder), 'utf8'))
 }
 
-export const writeEnvironment = (folder: string, environment: Environment) =>
+export const writeEnvironment = (folder: string, environment: Environment) => {
   writeFileSync(environmentFileOf(folder), serializeEnvironment(environment), { mode: 0o600 })
+  chmodSync(environmentFileOf(folder), 0o600)
+}
 
 const step = (message: string) => console.log(`• ${message}`)
 const mustSucceed = (exitCode: number | null, what: string) => {
@@ -67,31 +70,53 @@ export const startStack = async (folder: string, environment: Environment) => {
   step('Spyria answers')
 }
 
+export const keptBackupsOf = (flags: Flags) => {
+  const keep = Number(flags.values.keep ?? defaultBackupsKept)
+  if (!Number.isInteger(keep) || keep < 1) throw new Error('--keep takes a whole number of backups, at least 1')
+  return keep
+}
+
 export const backup = async (folder: string, flags: Flags) => {
+  const keep = keptBackupsOf(flags)
   const backupsFolder = join(folder, 'backups')
-  mkdirSync(backupsFolder, { recursive: true })
+  mkdirSync(backupsFolder, { recursive: true, mode: 0o700 })
+  chmodSync(backupsFolder, 0o700)
   const now = new Date()
   const written: string[] = []
   for (const database of backupDatabases) {
     const path = join(backupsFolder, backupNameOf(database, now))
+    writeFileSync(path, '', { mode: 0o600 })
     const exitCode = await spawnCompose(
       folder,
       ['exec', '-T', 'postgres', 'pg_dump', '-U', 'spyria', '-d', database, '-Fc'],
-      {
-        stdout: Bun.file(path),
-      },
+      { stdout: Bun.file(path) },
     )
+    chmodSync(path, 0o600)
     if (exitCode !== 0) {
       rmSync(path, { force: true })
       throw new Error(`Backing up the ${database} database failed`)
     }
     written.push(path)
   }
-  const keep = Number(flags.values.keep ?? defaultBackupsKept)
   for (const file of backupsToRemoveOf(readdirSync(backupsFolder), keep)) rmSync(join(backupsFolder, file))
   for (const path of written) step(`Backed up to ${path}`)
   return written
 }
+
+const psqlCommandOf = (sql: string) => [
+  'exec',
+  '-T',
+  'postgres',
+  'psql',
+  '-U',
+  'spyria',
+  '-d',
+  'postgres',
+  '-v',
+  'ON_ERROR_STOP=1',
+  '-c',
+  sql,
+]
 
 export const restore = async (folder: string, flags: Flags) => {
   const [, file] = flags.positionals
@@ -100,49 +125,90 @@ export const restore = async (folder: string, flags: Flags) => {
   const database = backupDatabases.find((candidate) => path.split('/').at(-1)?.startsWith(`${candidate}-`))
   if (!database || !existsSync(path)) throw new Error(`${file} is not a backup of spyria or bifrost`)
   const environment = readEnvironment(folder)
-  step('Stopping the server, zero-cache and the gateway')
-  mustSucceed(runCompose(folder, ['stop', 'server', 'zero-cache', 'gateway', 'host']), 'Stopping')
-  step(`Restoring the ${database} database`)
+  const profiles = (environment.COMPOSE_PROFILES ?? '').split(',')
+  step('Stopping the server, zero-cache, the gateway and the host')
+  mustSucceed(
+    runCompose(folder, ['stop', 'server', 'zero-cache', 'gateway', ...(profiles.includes('host') ? ['host'] : [])]),
+    'Stopping',
+  )
+  step(`Replacing the ${database} database with ${file}`)
+  mustSucceed(
+    runCompose(
+      folder,
+      psqlCommandOf(
+        `select pg_drop_replication_slot(slot_name) from pg_replication_slots where database = '${database}'`,
+      ),
+    ),
+    'Dropping its replication slots',
+  )
+  mustSucceed(
+    runCompose(folder, ['exec', '-T', 'postgres', 'dropdb', '-U', 'spyria', '--force', '--if-exists', database]),
+    `Dropping ${database}`,
+  )
+  mustSucceed(
+    runCompose(folder, [
+      ...['exec', '-T', 'postgres', 'createdb', '-U', 'spyria', '-O', databaseOwners[database]],
+      ...['-T', 'template0', '-E', 'UTF8', database],
+    ]),
+    `Creating ${database}`,
+  )
   const exitCode = await spawnCompose(
     folder,
-    ['exec', '-T', 'postgres', 'pg_restore', '-U', 'spyria', '-d', database, '--clean', '--if-exists', '--no-owner'],
+    ['exec', '-T', 'postgres', 'pg_restore', '-U', 'spyria', '-d', database, '--exit-on-error'],
     { stdin: Bun.file(path) },
   )
   mustSucceed(exitCode, `Restoring ${file}`)
   if (database === 'spyria') {
     step("Dropping zero-cache's replica, which it rebuilds from the restored database")
     mustSucceed(runCompose(folder, ['rm', '-f', 'zero-cache']), 'Removing zero-cache')
-    Bun.spawnSync(['docker', 'volume', 'rm', `${environment.SPYRIA_DEPLOYMENT}-zero-data`])
+    const volume = `${environment.SPYRIA_DEPLOYMENT}-zero-data`
+    const removed = Bun.spawnSync(['docker', 'volume', 'rm', volume], { stdout: 'ignore', stderr: 'pipe' })
+    if (removed.exitCode !== 0 && !removed.stderr.toString().includes('no such volume'))
+      throw new Error(`Removing ${volume} failed: ${removed.stderr.toString().trim()}`)
   }
   mustSucceed(runCompose(folder, ['up', '-d']), 'Starting Spyria')
   await waitForHealth(environment)
   step(`Restored ${file}`)
 }
 
-export const upgrade = async (folder: string, flags: Flags) => {
-  const environment = readEnvironment(folder)
-  const version = flags.positionals[1] ?? (await latestVersion())
-  step(`Upgrading from ${environment.SPYRIA_VERSION} to ${version}`)
-  await backup(folder, flags)
-  const [compose, bifrost] = await Promise.all(
+export const releaseFilesOf = async (version: string) => {
+  const [compose = '', bifrost = ''] = await Promise.all(
     ['deploy/compose.prod.yml', 'deploy/bifrost.json'].map(async (path) => {
       const response = await fetch(releaseFileUrlOf(version, path))
       if (!response.ok) throw new Error(`Version ${version} has no ${path} (${response.status})`)
       return response.text()
     }),
   )
-  writeFileSync(composeFileOf(folder), compose ?? '')
-  writeFileSync(join(folder, 'bifrost.json'), bifrost ?? '')
+  return { compose, bifrost }
+}
+
+export const writeReleaseFiles = (folder: string, { compose, bifrost }: { compose: string; bifrost: string }) => {
+  writeFileSync(composeFileOf(folder), compose)
+  writeFileSync(join(folder, 'bifrost.json'), bifrost)
+}
+
+export const upgrade = async (folder: string, flags: Flags) => {
+  const environment = readEnvironment(folder)
+  const version = flags.positionals[1] ?? (await latestVersion())
+  step(`Upgrading from ${environment.SPYRIA_VERSION} to ${version}`)
+  const files = await releaseFilesOf(version)
+  await backup(folder, flags)
+  writeReleaseFiles(folder, files)
   const upgraded = { ...environment, SPYRIA_VERSION: version }
   writeEnvironment(folder, upgraded)
   await startStack(folder, upgraded)
   console.log(`Spyria ${version} runs. What changed: ${releaseNotesUrlOf(version)}`)
+  if (version !== cliVersion && cliVersion !== 'dev')
+    console.log(`This spyria tool is ${cliVersion}: install the one of ${version} with install.sh to match it.`)
 }
 
 export const doctor = (folder: string) => {
   const environment = readEnvironment(folder)
   const problems: string[] = []
-  if (Bun.spawnSync(['docker', 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0)
+  if (
+    Bun.which('docker') === null ||
+    Bun.spawnSync(['docker', 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0
+  )
     problems.push('Docker does not answer: start Docker')
   else {
     const profiles = (environment.COMPOSE_PROFILES ?? '').split(',').filter(Boolean)
@@ -174,3 +240,6 @@ export const verifyDomain = (folder: string, flags: Flags) => {
 }
 
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])
+
+export const sendsTestMessage = (folder: string, address: string) =>
+  runCompose(folder, operatorCommandOf(['mail:test', '--to', address])) === 0
