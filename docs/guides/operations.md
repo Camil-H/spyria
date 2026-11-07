@@ -31,7 +31,7 @@ curl 127.0.0.1:3300/health
 spyria compose ps
 ```
 
-`GET /health` answers `200 {"status":"ok"}`, or `503 {"status":"degraded","failing":[…]}` naming `database` and/or `gateway`, each check given 2 seconds. Every long-running service has a Compose healthcheck: Postgres (`pg_isready`), the server (`/health`), zero-cache (`/keepalive`), the gateway (`/health`), the host (`spyria-host health`, which checks its model relay answers) and the optional tunnel. Services restart `unless-stopped`.
+`GET /health` answers `200 {"status":"ok"}`, or `503 {"status":"degraded","failing":[…]}` naming `database`, `gateway` and/or `zero`, each check given 2 seconds. `GET /health/live` checks the process and the database alone: it is what a platform restarting or routing to the server should watch (the cloud modules do), since zero-cache rebuilding its replica or the gateway restarting is no reason to restart the server or take it out of service. Every long-running service has a Compose healthcheck: Postgres (`pg_isready`), the server (`/health`), zero-cache (`/keepalive`), the gateway (`/health`), the host (`spyria-host health`, which checks its model relay answers) and the optional tunnel. Services restart `unless-stopped`.
 
 ## Shutdown
 
