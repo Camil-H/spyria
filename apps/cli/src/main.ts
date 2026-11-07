@@ -1,0 +1,44 @@
+import { backup, doctor, installFolderOf, printSetupLink, restore, upgrade, verifyDomain } from './commands.ts'
+import { parseFlags } from './flags.ts'
+import { cliVersion } from './release.ts'
+import { setup } from './setup.ts'
+
+const usage = `spyria ${cliVersion}: install and run Spyria on this machine
+
+  spyria setup                     ask the questions, write ~/spyria and start Spyria (--unattended takes flags only)
+  spyria upgrade [version]         back up, then run the given or latest release
+  spyria backup [--keep 7]         dump both databases into backups/, keeping the newest
+  spyria restore <file>            restore a dump from backups/
+  spyria doctor                    check Docker, the services, the server's start check and the disk
+  spyria setup-link                print the link that creates the first workspace
+  spyria verify-domain --workspace <id> --domain <domain>
+                                   verify a workspace's email domain without mail
+
+Every command takes --folder <path> (default ~/spyria, or the current folder when it holds an install).`
+
+const flags = parseFlags(process.argv.slice(2))
+const [command] = flags.positionals
+const folder = installFolderOf(flags)
+const commands: Record<string, () => unknown> = {
+  setup: () => setup(flags),
+  upgrade: () => upgrade(folder, flags),
+  backup: () => backup(folder, flags),
+  restore: () => restore(folder, flags),
+  doctor: () => {
+    if (!doctor(folder)) process.exitCode = 1
+  },
+  'setup-link': () => printSetupLink(folder),
+  'verify-domain': () => verifyDomain(folder, flags),
+  version: () => console.log(cliVersion),
+}
+const run = command ? commands[command] : undefined
+if (!run || flags.switches.has('help')) {
+  console.log(usage)
+  if (command && command !== 'help' && !flags.switches.has('help')) process.exitCode = 2
+} else
+  try {
+    await run()
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  }
