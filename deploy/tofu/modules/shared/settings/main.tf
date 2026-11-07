@@ -188,3 +188,26 @@ output "install_host_claim_url" {
   sensitive   = true
   value       = "${local.origin}/h/${var.secrets.install_host_token}"
 }
+
+output "gateway_config_script" {
+  description = "Bun script for the clouds without init containers: writes the gateway configuration, creates its role and database, then answers on port 9000 so the gateway starts after it"
+  value       = <<-SCRIPT
+    await Bun.write('/app/data/config.json', process.env.BIFROST_CONFIG)
+    const sql = new Bun.SQL(process.env.DATABASE_URL)
+    const password = process.env.BIFROST_DB_PASSWORD
+    if (!/^[A-Za-z0-9]+$/.test(password)) throw new Error('The gateway database password takes letters and digits only')
+    if ((await sql`select 1 from pg_roles where rolname = 'bifrost'`).length === 0)
+      await sql.unsafe(`create role bifrost login password '$${password}'`)
+    await sql.unsafe('grant bifrost to current_user')
+    ${var.database.replication_grant == "" ? "" : "await sql.unsafe('alter role current_user with replication')"}
+    if ((await sql`select 1 from pg_database where datname = '${var.database.gateway_name}'`).length === 0)
+      await sql.unsafe(`create database ${var.database.gateway_name} owner bifrost template template0 encoding 'UTF8'`)
+    await sql.end()
+    Bun.serve({ port: 9000, fetch: () => new Response('configured') })
+  SCRIPT
+}
+
+output "server_command" {
+  description = "Runs the migrations, then the server, for the clouds without init containers"
+  value       = ["sh", "-c", "bun run --cwd packages/db migrate && exec bun apps/server/src/index.ts"]
+}
