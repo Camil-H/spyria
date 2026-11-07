@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import {
@@ -29,6 +29,7 @@ import {
   type SsoDependencies,
   type SsoProvider,
   ssoProviderOf,
+  ssoProvidersOf,
   verifyDomainByToken,
 } from './sso.ts'
 
@@ -108,6 +109,10 @@ export const createAuthRoutes = ({
   closeSessionStreams,
   rateLimited,
 }: AuthRouteSettings) => {
+  const providerForAnyAddress = async (database: Database, email: string) => {
+    const providers = await ssoProvidersOf(database, { joinBy: 'invited_address' })
+    return providers[createHmac('sha256', tokenSecret).update(email).digest().readUInt32BE(0) % providers.length]
+  }
   const isSetupToken = (given: unknown) =>
     setupToken !== undefined && typeof given === 'string' && timingSafeEqual(sha256(given), sha256(setupToken))
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
@@ -219,7 +224,7 @@ export const createAuthRoutes = ({
       const provider =
         routed ??
         (authMode === 'sso' && joinBy === 'invited_address' && !workspaceId
-          ? await ssoProviderOf(scope.database, { joinBy: 'invited_address' })
+          ? await providerForAnyAddress(scope.database, email)
           : undefined)
       if (authMode === 'sso' && !provider)
         return popup(
