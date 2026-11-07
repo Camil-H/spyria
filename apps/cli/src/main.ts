@@ -1,3 +1,4 @@
+import { type Cloud, clouds, setupCloud } from './cloud.ts'
 import { backup, doctor, installFolderOf, printSetupLink, restore, upgrade, verifyDomain } from './commands.ts'
 import { runCompose } from './compose.ts'
 import { composeArgumentsOf, parseFlags } from './flags.ts'
@@ -7,6 +8,8 @@ import { setup } from './setup.ts'
 const usage = `spyria ${cliVersion}: install and run Spyria on this machine
 
   spyria setup                     ask the questions, write ~/spyria and start Spyria (--unattended takes flags only)
+  spyria setup --cloud aws|azure|gcp
+                                   write an OpenTofu configuration of the managed services and apply it
   spyria upgrade [version]         back up, then run the given or latest release
   spyria backup [--keep 7]         dump both databases into backups/, keeping the newest
   spyria restore <file>            restore a dump from backups/
@@ -32,7 +35,12 @@ const flags = parseFlags(process.argv.slice(2))
 const [command] = flags.positionals
 const folder = installFolderOf(flags)
 const commands: Record<string, () => unknown> = {
-  setup: () => setup(flags),
+  setup: () => {
+    const cloud = flags.values.cloud
+    if (cloud === undefined) return setup(flags)
+    if (!clouds.includes(cloud as Cloud)) throw new Error('--cloud is aws, azure or gcp')
+    return setupCloud(flags, cloud as Cloud)
+  },
   upgrade: () => upgrade(folder, flags),
   backup: () => backup(folder, flags),
   restore: () => restore(folder, flags),
