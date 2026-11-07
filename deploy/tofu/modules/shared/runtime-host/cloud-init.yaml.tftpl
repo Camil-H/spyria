@@ -12,7 +12,7 @@ write_files:
       iptables -N SPYRIA-RUNTIMES 2>/dev/null || iptables -F SPYRIA-RUNTIMES
       iptables -A SPYRIA-RUNTIMES -o "$egress" -p udp --dport 53 -j RETURN
       iptables -A SPYRIA-RUNTIMES -o "$egress" -p tcp --dport 53 -j RETURN
-      for range in 169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10; do
+      for range in 169.254.0.0/16 168.63.129.16/32 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10; do
         iptables -A SPYRIA-RUNTIMES -o "$egress" -d "$range" -j DROP
       done
       iptables -C DOCKER-USER -j SPYRIA-RUNTIMES 2>/dev/null || iptables -I DOCKER-USER -j SPYRIA-RUNTIMES

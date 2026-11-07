@@ -51,6 +51,10 @@ variable "gateway_url" {
   type        = string
 }
 variable "zero_replica_file" { type = string }
+variable "trusted_proxy" {
+  description = "How the server finds the client address behind the cloud's load balancer, for example x-forwarded-for:1"
+  type        = string
+}
 
 locals {
   origin       = "https://${var.hostname}"
@@ -87,6 +91,7 @@ output "server_environment" {
     SPYRIA_APP_ORIGIN             = local.origin
     SPYRIA_OIDC_REDIRECT_URI      = "${local.origin}/auth/callback"
     SPYRIA_JOIN_BY                = var.join_by
+    SPYRIA_TRUSTED_PROXY          = var.trusted_proxy
     SPYRIA_GATEWAY_URL            = var.gateway_url
     SPYRIA_ZERO_URL               = var.zero_url
     SPYRIA_MAIL_FROM              = var.mail_from
