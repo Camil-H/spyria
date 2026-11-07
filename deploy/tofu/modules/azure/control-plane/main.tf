@@ -45,10 +45,11 @@ module "settings" {
     spyria_name       = "spyria"
     gateway_name      = "bifrost"
   }
-  server_url        = "http://${local.app_names.server}"
+  server_url        = "https://${azurerm_container_app.server.ingress[0].fqdn}"
   zero_url          = "http://${local.app_names.zero}"
   gateway_url       = "http://${local.app_names.gateway}"
   zero_replica_file = "/data/spyria-replica.db"
+  trusted_proxy     = "x-forwarded-for:1"
 }
 
 resource "azurerm_virtual_network" "main" {

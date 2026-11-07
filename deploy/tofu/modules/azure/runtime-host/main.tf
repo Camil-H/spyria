@@ -12,6 +12,12 @@ variable "name" {
   default     = "spyria"
 }
 
+variable "host_name" {
+  description = "Name of this host among the deployment's, for its cloud resources: give each runtime host its own"
+  type        = string
+  default     = "runtime-host"
+}
+
 variable "claim_url" {
   description = "Claim URL of the host: install_host_claim_url of the control plane for the first host, or the URL at the end of an Add runtime host command"
   type        = string
@@ -62,7 +68,7 @@ resource "tls_private_key" "unused_login" {
 }
 
 resource "azurerm_public_ip" "host" {
-  name                = "${var.name}-runtime-host"
+  name                = "${var.name}-${var.host_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Static"
@@ -70,13 +76,13 @@ resource "azurerm_public_ip" "host" {
 }
 
 resource "azurerm_network_security_group" "host" {
-  name                = "${var.name}-runtime-host"
+  name                = "${var.name}-${var.host_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
 }
 
 resource "azurerm_network_interface" "host" {
-  name                = "${var.name}-runtime-host"
+  name                = "${var.name}-${var.host_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
   ip_configuration {
@@ -93,7 +99,7 @@ resource "azurerm_network_interface_security_group_association" "host" {
 }
 
 resource "azurerm_linux_virtual_machine" "host" {
-  name                            = "${var.name}-runtime-host"
+  name                            = "${var.name}-${var.host_name}"
   location                        = var.location
   resource_group_name             = var.resource_group_name
   size                            = local.vm_sizes[var.size]
@@ -115,6 +121,9 @@ resource "azurerm_linux_virtual_machine" "host" {
     offer     = "ubuntu-24_04-lts"
     sku       = "server"
     version   = "latest"
+  }
+  lifecycle {
+    ignore_changes = [custom_data]
   }
 }
 

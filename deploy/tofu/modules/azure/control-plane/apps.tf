@@ -96,11 +96,11 @@ resource "azurerm_container_app" "server" {
       readiness_probe {
         transport = "HTTP"
         port      = 3000
-        path      = "/health"
+        path      = "/health/live"
       }
     }
   }
-  depends_on = [azurerm_role_assignment.apps_read_secrets]
+  depends_on = [time_sleep.apps_role_propagates]
 }
 
 resource "azurerm_container_app" "zero" {
@@ -122,9 +122,10 @@ resource "azurerm_container_app" "zero" {
     }
   }
   ingress {
-    external_enabled = false
-    target_port      = 4848
-    transport        = "auto"
+    external_enabled           = false
+    target_port                = 4848
+    allow_insecure_connections = true
+    transport                  = "auto"
     traffic_weight {
       latest_revision = true
       percentage      = 100
@@ -162,7 +163,7 @@ resource "azurerm_container_app" "zero" {
       }
     }
   }
-  depends_on = [azurerm_role_assignment.apps_read_secrets]
+  depends_on = [time_sleep.apps_role_propagates]
 }
 
 resource "azurerm_container_app" "gateway" {
@@ -184,9 +185,10 @@ resource "azurerm_container_app" "gateway" {
     }
   }
   ingress {
-    external_enabled = false
-    target_port      = 8080
-    transport        = "auto"
+    external_enabled           = false
+    target_port                = 8080
+    allow_insecure_connections = true
+    transport                  = "auto"
     traffic_weight {
       latest_revision = true
       percentage      = 100
@@ -249,7 +251,7 @@ resource "azurerm_container_app" "gateway" {
       }
     }
   }
-  depends_on = [azurerm_role_assignment.apps_read_secrets]
+  depends_on = [time_sleep.apps_role_propagates]
 }
 
 resource "azurerm_dns_cname_record" "hostname" {
