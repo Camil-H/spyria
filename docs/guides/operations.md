@@ -1,6 +1,6 @@
 # Operations
 
-What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [self-hosting](./self-hosting.md). The commands below use the `spyria` tool that `spyria setup` installed: `spyria compose <arguments>` runs Docker Compose on its install folder (`~/spyria` by default, or `--folder`). On an install made by hand, define an alias that does the same:
+What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [manual install](./self-hosting.md). The commands below use the `spyria` tool that `spyria setup` installed: `spyria compose <arguments>` runs Docker Compose on its install folder (`~/spyria` by default, or `--folder`). On an install made by hand, define an alias that does the same:
 
 ```sh
 alias spyria-compose='docker compose --env-file .env.prod -f compose.prod.yml'
@@ -72,7 +72,7 @@ spyria compose exec server bun apps/server/src/operator-cli.ts retry-jobs --all
 spyria compose exec server bun apps/server/src/operator-cli.ts rebuild-messages [--chat <chat id>]
 ```
 
-`failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued, or that a later failure of the same sweep supersedes, is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Self-hosting](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
+`failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued, or that a later failure of the same sweep supersedes, is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Manual install](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
 
 ## Database connections
 

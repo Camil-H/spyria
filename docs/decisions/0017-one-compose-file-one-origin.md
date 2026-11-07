@@ -18,4 +18,4 @@ Self-hosters range from one person on a spare machine to a team with its own pla
 - Cookies are first-party and the session model stays simple.
 - Scaling past one server process is not supported yet: live streams, host connections and rate limits live in that process.
 
-See [self-hosting](../guides/self-hosting.md).
+See [manual install](../guides/self-hosting.md).

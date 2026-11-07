@@ -18,4 +18,4 @@ Installing Spyria meant a clone, Bun, building the runtime image on the machine 
 - Development keeps Vite's own proxy and local images with content IDs; nothing is pulled there.
 - The proxy guidance is now one line, and the sync WebSocket crosses the server process: a server restart reconnects every client, as it already did for agent streams.
 
-See [self-hosting](../guides/self-hosting.md) and [decision 0017](0017-one-compose-file-one-origin.md).
+See [manual install](../guides/self-hosting.md) and [decision 0017](0017-one-compose-file-one-origin.md).

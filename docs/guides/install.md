@@ -1,13 +1,12 @@
 # Install on one machine
 
-
 On a Linux machine, a Mac or a PC under WSL, with a domain on Cloudflare:
 
 ```sh
 curl -fsSL https://spyria.dev/install | sh
 ```
 
-The script is the `install.sh` of the latest release (`https://github.com/Camil-H/spyria/releases/latest/download/install.sh`), which you can read first.
+or, the same script straight from the latest release: `curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh`.
 
 The script checks Docker (on Linux it offers to install Docker Engine with Docker's own script; on a Mac it points to Docker Desktop or OrbStack), downloads the `spyria` tool for the machine, checks it against the release's checksums, installs it in `~/.local/bin`, then runs `spyria setup`, which asks:
 

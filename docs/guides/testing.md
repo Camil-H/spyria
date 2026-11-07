@@ -40,7 +40,7 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 `check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, when React, react-dom, react-router or Zero is installed more than once across the web app and the packages, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
 
-`smoke:prod` is described in [Self-hosting](./self-hosting.md).
+`smoke:prod` is described in [Manual install](./self-hosting.md).
 
 ### Before a pull request
 
