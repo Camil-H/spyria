@@ -30,6 +30,10 @@ const dockerGroupOf = () => {
   return stat.exitCode === 0 ? stat.stdout.toString().trim() : '0'
 }
 
+const runsHostOf = (flags: Flags, existingProfiles: string | undefined) =>
+  flags.switches.has('host') ||
+  (!flags.switches.has('no-host') && (existingProfiles === undefined || existingProfiles.split(',').includes('host')))
+
 const instanceAppOf = (
   asker: Asker,
   provider: 'google' | 'microsoft',
@@ -152,7 +156,7 @@ export const setup = async (
     origin,
     joinBy,
     tunnelToken,
-    runsHost: !flags.switches.has('no-host'),
+    runsHost: runsHostOf(flags, existing.COMPOSE_PROFILES),
     dockerGroup: dockerGroupOf(),
     smtp,
     instanceApps: { google, microsoft },

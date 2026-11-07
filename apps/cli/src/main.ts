@@ -25,7 +25,7 @@ Zone DNS Edit, Zone Read), --join-by domain|invited-address, --google-client-id 
 --microsoft-client-id and --microsoft-client-secret (create to register it with az), --provider
 cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url and --okta-token,
 --mail skip|smtp|resend|keep with --smtp-url or --resend-key, --mail-from, --mail-test <address>, --version,
---images, --port, --no-host (no runtime host on this machine), --no-start, --unattended (no question at all).
+--images, --port, --no-host (no runtime host on this machine; kept when you set up again), --host (turn it back on), --no-start, --unattended (no question at all).
 A - answer removes a sign-in app; --mail skip removes mail. --provider cloudflare-access and --mail resend need the
 Cloudflare token to also hold Access: Apps and Policies Edit, Access: Organizations, Identity Providers, and Groups
 Edit, Email Routing Addresses Edit, Zone Email Routing Rules Edit and Zone DNS Edit.
