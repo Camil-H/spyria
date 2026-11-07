@@ -211,6 +211,42 @@ test('an address with a membership, an open invite or neither gets the same answ
   expect(answers).toEqual(Array(3).fill({ status: 302, provider: `${issuer}/auth` }))
 })
 
+test('email-first sign-in starts the same way for an address invited to a second workspace as for anyone, and the invitee still joins it', async () => {
+  const [owner] = await database.$client`select id from users where email = 'owner@gmail.com'`
+  const secondWorkspaceId = crypto.randomUUID()
+  await database.$client`
+    insert into workspaces (workspace_id, name, created_by, join_by, created_at)
+    values (${secondWorkspaceId}, 'Workshop', ${String(owner?.id)}, 'invited_address', now() + interval '1 second')`
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+    select ${secondWorkspaceId}, preset, issuer, 'workshop-client', encrypted_client_secret, uses_instance_app, now()
+    from workspace_sso where workspace_id = ${workspaceId}`
+  await database.$client`
+    insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
+    values (${secondWorkspaceId}, ${crypto.randomUUID()}, 'gina@gmail.com', 'member', ${String(owner?.id)}, now(),
+      now() + interval '7 days')`
+  const loginStartOf = async (email: string) => {
+    const login = await app.request(`/auth/login?email=${encodeURIComponent(email)}`)
+    const loginCookie = login.headers.getSetCookie().find((cookie) => cookie.includes('spyria_login=')) ?? ''
+    const signedValue = decodeURIComponent(loginCookie.split(';')[0]?.split('=').slice(1).join('=') ?? '')
+    const { providerWorkspaceId } = JSON.parse(signedValue.slice(0, signedValue.lastIndexOf('.')))
+    const location = new URL(login.headers.get('location') ?? 'http://none')
+    return { login, start: { providerWorkspaceId, clientId: location.searchParams.get('client_id') } }
+  }
+  const invited = await loginStartOf('gina@gmail.com')
+  const nobody = await loginStartOf('nobody@gmail.com')
+  expect(invited.start).toEqual(nobody.start)
+  expect(invited.start.providerWorkspaceId).toBe(workspaceId)
+
+  const joined = await callbackAfter(invited.login, {
+    sub: 'gina-subject',
+    email: 'gina@gmail.com',
+    email_verified: true,
+  })
+  expect(joined.sessions.map((session) => session.workspaceId)).toContain(secondWorkspaceId)
+  expect(await pendingInvitesOf('gina@gmail.com')).toBe(0)
+})
+
 const adminBearer = async () => {
   const [owner] = await database.$client`select id from users where email = 'owner@gmail.com'`
   const [session] = await openSessions(database, String(owner?.id), workspaceId)
