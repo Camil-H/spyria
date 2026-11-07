@@ -94,18 +94,6 @@ resource "aws_service_discovery_service" "service" {
   }
 }
 
-resource "aws_efs_file_system" "replica" {
-  encrypted = true
-  tags      = { Name = "${var.name}-zero-replica" }
-}
-
-resource "aws_efs_mount_target" "replica" {
-  count           = 2
-  file_system_id  = aws_efs_file_system.replica.id
-  subnet_id       = aws_subnet.public[count.index].id
-  security_groups = [aws_security_group.replica_storage.id]
-}
-
 resource "aws_ecs_task_definition" "server" {
   family                   = "${var.name}-server"
   requires_compatibilities = ["FARGATE"]
@@ -149,12 +137,11 @@ resource "aws_ecs_task_definition" "zero" {
   cpu                      = 1024
   memory                   = 2048
   execution_role_arn       = aws_iam_role.execution.arn
+  ephemeral_storage {
+    size_in_gib = 40
+  }
   volume {
     name = "replica"
-    efs_volume_configuration {
-      file_system_id     = aws_efs_file_system.replica.id
-      transit_encryption = "ENABLED"
-    }
   }
   container_definitions = jsonencode([
     {
@@ -240,5 +227,5 @@ resource "aws_ecs_service" "service" {
       container_port   = 3000
     }
   }
-  depends_on = [aws_lb_listener.https, aws_efs_mount_target.replica, aws_secretsmanager_secret_version.settings]
+  depends_on = [aws_lb_listener.https, aws_secretsmanager_secret_version.settings]
 }

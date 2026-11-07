@@ -89,6 +89,10 @@ run "the_control_plane_runs_one_server_behind_the_load_balancer_and_keeps_the_re
     error_message = "The server starts only once its migrations succeeded"
   }
   assert {
+    condition     = aws_ecs_task_definition.zero.ephemeral_storage[0].size_in_gib == 40 && strcontains(aws_ecs_task_definition.zero.container_definitions, "\"containerPath\":\"/data\"")
+    error_message = "zero-cache keeps its SQLite replica on the task's local storage, which network file systems cannot hold"
+  }
+  assert {
     condition     = strcontains(aws_ecs_task_definition.server.container_definitions, "ghcr.io/camil-h/spyria-server:1.2.0")
     error_message = "The server runs the published image of the version"
   }
