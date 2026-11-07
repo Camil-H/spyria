@@ -32,14 +32,14 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
     if (await run(() => commands.disconnectTool({ workspaceId, tool }))) setDisconnectedTool(tool)
   }
   return (
-    <LabelledSection id="connections" title="Connections">
-      <Root defaultValue="shared" className="flex flex-col gap-3">
-        <List aria-label="Connections" className="flex gap-1 border-b border-line">
-          <Trigger value="shared" className={tabClass}>
-            Shared with me
-          </Trigger>
+    <LabelledSection id="connections" title="Tool connections">
+      <Root defaultValue="personal" className="flex flex-col gap-3">
+        <List aria-label="Tool connections" className="flex gap-1 border-b border-line">
           <Trigger value="personal" className={tabClass}>
             My connections
+          </Trigger>
+          <Trigger value="shared" className={tabClass}>
+            Shared with me
           </Trigger>
         </List>
         <Content value="shared" className="flex flex-col gap-3">

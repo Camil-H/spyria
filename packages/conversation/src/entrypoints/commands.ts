@@ -8,6 +8,8 @@ import type {
   CommandOutputFrame,
   DelegatedFrame,
   QuestionFrame,
+  SessionStartedFrame,
+  SessionStartsOnNextMessageFrame,
   StoredFrame,
   StreamFrame,
   WorkspaceFrame,
@@ -71,7 +73,15 @@ export type AgentStream = {
     workspaceId: WorkspaceId,
     chatId: ChatId,
     listener: (
-      frame: StreamFrame | StoredFrame | QuestionFrame | WorkspaceFrame | DelegatedFrame | CommandOutputFrame,
+      frame:
+        | StreamFrame
+        | StoredFrame
+        | QuestionFrame
+        | WorkspaceFrame
+        | DelegatedFrame
+        | CommandOutputFrame
+        | SessionStartedFrame
+        | SessionStartsOnNextMessageFrame,
     ) => void,
   ): () => void
 }

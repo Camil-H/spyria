@@ -264,6 +264,7 @@ test.each([
   'xai/grok-4.3',
   'deepseek/deepseek-v4-flash',
   'zai/glm-4.7',
+  'meta/muse-spark-1.3',
 ])('Pi reaches %s on the chat route with its full gateway id', (id) => {
   expect(piModelOf(id)).toBe(`spyria/${id}`)
   const command = piCommandOf(

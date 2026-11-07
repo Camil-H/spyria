@@ -34,6 +34,7 @@ test.each([
   ['xAI', 'xai'],
   ['DeepSeek', 'deepseek'],
   ['Z.ai', 'zai'],
+  ['Meta', 'meta'],
   [' ', expect.any(BlankProvider)],
   ['Foo', expect.any(UnsupportedProvider)],
 ])('newLlmCredential maps the provider %p to the gateway, or refuses it', (provider, expected) => {

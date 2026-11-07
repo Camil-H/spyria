@@ -1,5 +1,13 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { buttonClass, ErrorMessage, fieldClass, LabelledSection, labelClass, useGuardedAction } from '@spyria/ui'
+import {
+  buttonClass,
+  ErrorMessage,
+  fieldClass,
+  ghostButtonClass,
+  LabelledSection,
+  labelClass,
+  useGuardedAction,
+} from '@spyria/ui'
 import { Check } from 'lucide-react'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
@@ -31,6 +39,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const [ids, setIds] = useState({ appId: '', clientId: '' })
   const [secrets, setSecrets] = useState(noSecrets)
   const [isSaved, setIsSaved] = useState(false)
+  const [isManual, setIsManual] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
   const show = (shown: GitHubSettingsView | null) => {
     setSettings(shown)
@@ -82,55 +91,66 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
         </>
       )}
       {!settings && <GitHubAppCreationForm workspaceId={workspaceId} />}
-      <h3 className="text-sm font-medium">Create it manually</h3>
-      <GitHubAppGuide />
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <label className={labelClass}>
-          App id
-          <input
-            className={fieldClass}
-            value={ids.appId}
-            onChange={(event) => setIds({ ...ids, appId: event.target.value })}
-          />
-        </label>
-        <label className={labelClass}>
-          Client id
-          <input
-            className={fieldClass}
-            value={ids.clientId}
-            onChange={(event) => setIds({ ...ids, clientId: event.target.value })}
-          />
-        </label>
-        <label className={labelClass}>
-          Private key
-          <textarea
-            className={`${fieldClass} h-20 font-mono text-xs`}
-            placeholder={placeholder}
-            value={secrets.privateKey}
-            onChange={(event) => setSecrets({ ...secrets, privateKey: event.target.value })}
-          />
-        </label>
-        {(['clientSecret', 'webhookSecret'] as const).map((name) => (
-          <label key={name} className={labelClass}>
-            {secretLabels[name]}
-            <input
-              type="password"
-              autoComplete="off"
-              className={fieldClass}
-              placeholder={placeholder}
-              value={secrets[name]}
-              onChange={(event) => setSecrets({ ...secrets, [name]: event.target.value })}
-            />
-          </label>
-        ))}
-        <ErrorMessage message={errorMessage} />
-        <div className="flex items-center gap-3">
-          <button type="submit" className={buttonClass} disabled={isPending}>
-            Save
-          </button>
-          {isSaved && <span className="text-sm text-muted">Saved</span>}
-        </div>
-      </form>
+      <button
+        type="button"
+        aria-expanded={isManual}
+        className={`self-start ${ghostButtonClass}`}
+        onClick={() => setIsManual(!isManual)}
+      >
+        {settings ? 'Change the App credentials' : 'Create it manually'}
+      </button>
+      {isManual && (
+        <>
+          <GitHubAppGuide />
+          <form onSubmit={submit} className="flex flex-col gap-3">
+            <label className={labelClass}>
+              App id
+              <input
+                className={fieldClass}
+                value={ids.appId}
+                onChange={(event) => setIds({ ...ids, appId: event.target.value })}
+              />
+            </label>
+            <label className={labelClass}>
+              Client id
+              <input
+                className={fieldClass}
+                value={ids.clientId}
+                onChange={(event) => setIds({ ...ids, clientId: event.target.value })}
+              />
+            </label>
+            <label className={labelClass}>
+              Private key
+              <textarea
+                className={`${fieldClass} h-20 font-mono text-xs`}
+                placeholder={placeholder}
+                value={secrets.privateKey}
+                onChange={(event) => setSecrets({ ...secrets, privateKey: event.target.value })}
+              />
+            </label>
+            {(['clientSecret', 'webhookSecret'] as const).map((name) => (
+              <label key={name} className={labelClass}>
+                {secretLabels[name]}
+                <input
+                  type="password"
+                  autoComplete="off"
+                  className={fieldClass}
+                  placeholder={placeholder}
+                  value={secrets[name]}
+                  onChange={(event) => setSecrets({ ...secrets, [name]: event.target.value })}
+                />
+              </label>
+            ))}
+            <ErrorMessage message={errorMessage} />
+            <div className="flex items-center gap-3">
+              <button type="submit" className={buttonClass} disabled={isPending}>
+                Save
+              </button>
+              {isSaved && <span className="text-sm text-muted">Saved</span>}
+            </div>
+          </form>
+        </>
+      )}
     </LabelledSection>
   )
 }
