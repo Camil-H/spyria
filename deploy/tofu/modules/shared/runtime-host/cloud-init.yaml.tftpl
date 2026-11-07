@@ -1,0 +1,42 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+write_files:
+  - path: /usr/local/sbin/spyria-runtime-firewall
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      egress=$(ip route show default | awk '{ print $5; exit }')
+      iptables -N SPYRIA-RUNTIMES 2>/dev/null || iptables -F SPYRIA-RUNTIMES
+      iptables -A SPYRIA-RUNTIMES -o "$egress" -p udp --dport 53 -j RETURN
+      iptables -A SPYRIA-RUNTIMES -o "$egress" -p tcp --dport 53 -j RETURN
+      for range in 169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10; do
+        iptables -A SPYRIA-RUNTIMES -o "$egress" -d "$range" -j DROP
+      done
+      iptables -C DOCKER-USER -j SPYRIA-RUNTIMES 2>/dev/null || iptables -I DOCKER-USER -j SPYRIA-RUNTIMES
+  - path: /etc/systemd/system/spyria-runtime-firewall.service
+    content: |
+      [Unit]
+      Description=Keep Spyria runtimes away from the metadata endpoint and private ranges
+      After=docker.service
+      Requires=docker.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/spyria-runtime-firewall
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - systemctl enable --now docker
+  - systemctl daemon-reload
+  - systemctl enable --now spyria-runtime-firewall
+  - >-
+    docker run -d --name ${name}-host --restart unless-stopped
+    -e SPYRIA_DEPLOYMENT=${name}
+    --group-add "$(stat -c %g /var/run/docker.sock)"
+    -v /var/run/docker.sock:/var/run/docker.sock
+    --cap-drop ALL --security-opt no-new-privileges --read-only
+    -v ${name}-host:/state
+    ${host_image} ${claim_url}
