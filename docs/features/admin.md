@@ -83,7 +83,7 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 
 - Inviting is an allow-list: no account is created and no email is sent, so tell the person yourself. The invited person signs in with their work email through the workspace's provider; their first sign-in accepts every open invite for that address.
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.
-- In SSO mode, invites open only once the workspace's email domain is verified (see below), so nobody new gets in before the admin has proven they control the domain.
+- In SSO mode, on a workspace joined by email domain, invites open only once its domain is verified (see below), so nobody new gets in before the admin has proven they control the domain.
 - Someone who signs in without a membership or an open invite sees that no workspace has invited them.
 - A signed-in member whose workspace takes more than 10 seconds to load, for example right after a deploy or while the connection is down, sees that it is taking longer than usual, with a **Try again** button; the app keeps trying and opens as soon as the workspace arrives, rather than sending them back to sign in. If their session ends meanwhile, the sign-in screen says so.
 
@@ -113,6 +113,15 @@ The sign-in screen asks for a work email and routes its domain to the provider o
 Until then the card shows the domain as not verified or pending. Two workspaces may share a domain only if they use the same provider; a different provider for a domain already claimed is refused. While a deployment has a single workspace, its own unverified domain still routes sign-in, so its first admin can sign back in before verifying; invites stay closed until verification. The first workspace of a deployment is created from the sign-in page; see [Self-hosting](../guides/self-hosting.md).
 
 Accounts are matched on the provider's issuer and subject, not the email, so a changed address at the provider keeps the same Spyria account.
+
+### Who can join
+
+An instance chooses how people join its workspaces when it is set up ([decision 0027](../decisions/0027-join-by-invited-address.md)):
+
+- **By email domain** (above): the workspace owns a verified domain.
+- **By invited address**: the workspace owns no domain. **Setup SSO** shows "Who can join: people you invite" and the provider, without the domain section. Invites open at once; an invitee signs in through the provider at exactly the invited address, and from then on is recognized by the provider identity, not the address. Through Google any confirmed Google account signs in, Gmail included; Microsoft consumer accounts never do. **New workspace** reuses the member's provider and the same setting.
+
+Either way, a Google or generic OIDC provider must confirm the address it returns; otherwise sign-in is refused with "Your provider did not confirm this address". A public email domain such as `gmail.com` cannot be a workspace's domain.
 
 ## GitHub
 
