@@ -26,6 +26,7 @@ import {
   Name,
   normalizedDomain,
   normalizedEmail,
+  ProviderFixed,
   SsoDiscoveryFailed,
   type SsoDomainState,
   type SsoPreset,
@@ -224,6 +225,7 @@ export const saveSsoSettings = async (
   if (current?.domain && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
   const joinBy = current?.joinBy ?? (await database.$client.begin((sql) => joinByOfWorkspace(sql, member.workspaceId)))
   const settings = await checkedSettings(input, joinBy, dependencies)
+  if (joinBy === 'invited_address' && current?.issuer !== settings.issuer) throw new ProviderFixed()
   const usesInstanceApp = input.usesInstanceApp === true
   const clientSecret = usesInstanceApp ? '' : String(input.clientSecret ?? '').trim()
   if (clientSecret !== '' && !dependencies.secretBox)
