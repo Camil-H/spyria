@@ -18,6 +18,10 @@ test('the root module uses the modules of the chosen release from GitHub', () =>
 })
 
 test('variables are written as HCL, quoted safely, empty ones left out', () => {
+  const interpolations = ['smtps://u:p$', '{x}%{y}@smtp.example.com'].join('')
+  expect(tfVariablesOf({ smtp_url: interpolations })).toBe(
+    ['smtp_url = "smtps://u:p$$', '{x}%%{y}@smtp.example.com"\n'].join(''),
+  )
   expect(
     tfVariablesOf({
       hostname: 'spyria.example.com',

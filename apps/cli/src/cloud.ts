@@ -28,10 +28,15 @@ export const rootModuleOf = (cloud: Cloud, version: string) =>
       `source${spacing}= "github.com/${repository}//deploy/tofu/modules/${module}?ref=v${version}"`,
   )
 
+const hclStringOf = (value: string) =>
+  JSON.stringify(value)
+    .replaceAll('${', () => '$${')
+    .replaceAll('%{', () => '%%{')
+
 export const tfVariablesOf = (variables: TfVariables) =>
   Object.entries(variables)
     .filter(([, value]) => value !== '')
-    .map(([name, value]) => `${name} = ${typeof value === 'boolean' ? value : JSON.stringify(value)}\n`)
+    .map(([name, value]) => `${name} = ${typeof value === 'boolean' ? value : hclStringOf(value)}\n`)
     .join('')
 
 const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>): TfVariables => {
@@ -56,7 +61,7 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>): TfVa
       dns_zone_resource_group: dnsZone
         ? asker.require('dns-zone-resource-group', 'Resource group of that DNS zone')
         : '',
-      binds_hostname: dnsZone !== '',
+      binds_hostname: dnsZone !== '' || asker.given('bind-hostname'),
     }
   }
   return {
@@ -128,7 +133,7 @@ export const setupCloud = async (flags: Flags, cloud: Cloud) => {
         : []),
       ...(cloud === 'azure' && !variables.binds_hostname
         ? [
-            'Once the records exist, set binds_hostname = true in terraform.tfvars and run spyria setup --cloud azure again.',
+            'Once the records exist, run spyria setup --cloud azure again with the same answers and --bind-hostname yes.',
           ]
         : []),
       `Create the first workspace from this setup link, which works once: ${outputs.setup_link?.value}`,
