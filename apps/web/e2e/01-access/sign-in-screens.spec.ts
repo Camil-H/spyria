@@ -36,3 +36,30 @@ test.describe('Sign-in screens', () => {
     await expect(page.getByText(/becomes the Admin/)).toHaveCount(0)
   })
 })
+
+test.describe('Sign-in screens of an instance that joins people by invited address', () => {
+  test('As the first person with the setup link, I create a workspace without an email domain, and the sign-in card asks for an email rather than a work email', {
+    tag: ['@spec-53'],
+  }, async ({ browser }) => {
+    const pageWith = async (canCreateWorkspace: boolean) => {
+      const page = await browser.newPage({ reducedMotion: 'reduce' })
+      await page.route('**/auth/sessions', (route) =>
+        route.fulfill({ json: { sessions: [], deployment: 'test', version: 'test' } }),
+      )
+      await page.route('**/auth/mode**', (route) =>
+        route.fulfill({
+          json: { authMode: 'sso', joinBy: 'invited_address', isBeingSetUp: canCreateWorkspace, canCreateWorkspace },
+        }),
+      )
+      await page.goto('/')
+      return page
+    }
+    const creating = await pageWith(true)
+    const form = creating.getByRole('form', { name: 'Create a workspace' })
+    await expect(form).toContainText('Who can join: people you invite, at exactly the address you invite.')
+    await expect(form.getByLabel('Email domain')).toHaveCount(0)
+    const signingIn = await pageWith(false)
+    await expect(signingIn.getByRole('form', { name: 'Sign in' }).getByLabel('Email', { exact: true })).toBeVisible()
+    await expect(signingIn.getByLabel('Work email')).toHaveCount(0)
+  })
+})
