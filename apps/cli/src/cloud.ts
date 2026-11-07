@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import awsExample from '../../../deploy/tofu/examples/aws/main.tf' with { type: 'text' }
 import azureExample from '../../../deploy/tofu/examples/azure/main.tf' with { type: 'text' }
@@ -39,35 +39,62 @@ export const tfVariablesOf = (variables: TfVariables) =>
     .map(([name, value]) => `${name} = ${typeof value === 'boolean' ? value : hclStringOf(value)}\n`)
     .join('')
 
-const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>): TfVariables => {
+export const tfVariablesFrom = (text: string): TfVariables =>
+  Object.fromEntries(
+    text.split('\n').flatMap((line): [string, string | boolean][] => {
+      const [, name, value] = /^(\w+) = (.+)$/.exec(line) ?? []
+      if (!name || !value) return []
+      if (value === 'true' || value === 'false') return [[name, value === 'true']]
+      return [[name, (JSON.parse(value) as string).replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')]]
+    }),
+  )
+
+const stringOf = (value: string | boolean | undefined) => (typeof value === 'string' ? value : '')
+const joinBys = ['domain', 'invited-address'] as const
+const sizes = ['small', 'medium', 'large'] as const
+const choiceOf = <Choice extends string>(choices: readonly [Choice, ...Choice[]], previous: string) =>
+  choices.find((choice) => choice === previous) ?? choices[0]
+
+const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, existing: TfVariables): TfVariables => {
+  const was = (name: string) => stringOf(existing[name])
   if (cloud === 'aws')
     return {
-      region: asker.ask('region', 'AWS region', 'eu-west-1'),
-      route53_zone_id: asker.ask('route53-zone-id', 'Route 53 zone id of the hostname (empty to give a certificate)'),
+      region: asker.ask('region', 'AWS region', was('region') || 'eu-west-1'),
+      route53_zone_id: asker.ask(
+        'route53-zone-id',
+        'Route 53 zone id of the hostname (empty to give a certificate)',
+        was('route53_zone_id'),
+      ),
       certificate_arn: asker.ask(
         'certificate-arn',
         'ARN of an issued ACM certificate for the hostname (when no Route 53 zone)',
+        was('certificate_arn'),
       ),
     }
   if (cloud === 'azure') {
     const dnsZone = asker.ask(
       'dns-zone',
       'Azure DNS zone of the hostname, for example example.com (empty when DNS is elsewhere)',
+      was('dns_zone_name'),
     )
     return {
-      subscription_id: asker.require('subscription', 'Azure subscription id'),
-      location: asker.ask('region', 'Azure region', 'westeurope'),
+      subscription_id: asker.require('subscription', 'Azure subscription id', was('subscription_id')),
+      location: asker.ask('region', 'Azure region', was('location') || 'westeurope'),
       dns_zone_name: dnsZone,
       dns_zone_resource_group: dnsZone
-        ? asker.require('dns-zone-resource-group', 'Resource group of that DNS zone')
+        ? asker.require('dns-zone-resource-group', 'Resource group of that DNS zone', was('dns_zone_resource_group'))
         : '',
-      binds_hostname: dnsZone !== '' || asker.given('bind-hostname'),
+      binds_hostname: dnsZone !== '' || asker.given('bind-hostname') || existing.binds_hostname === true,
     }
   }
   return {
-    project: asker.require('project', 'Google Cloud project id'),
-    region: asker.ask('region', 'Google Cloud region', 'europe-west1'),
-    dns_zone_name: asker.ask('dns-zone', 'Cloud DNS managed zone name of the hostname (empty when DNS is elsewhere)'),
+    project: asker.require('project', 'Google Cloud project id', was('project')),
+    region: asker.ask('region', 'Google Cloud region', was('region') || 'europe-west1'),
+    dns_zone_name: asker.ask(
+      'dns-zone',
+      'Cloud DNS managed zone name of the hostname (empty when DNS is elsewhere)',
+      was('dns_zone_name'),
+    ),
   }
 }
 
@@ -85,20 +112,29 @@ export const setupCloud = async (flags: Flags, cloud: Cloud) => {
     },
   })
   mkdirSync(folder, { recursive: true })
-  const version = flags.values.version ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
-  const smtpUrl = asker.ask('smtp-url', 'SMTP URL for verification links (empty to skip)')
+  const variablesFile = join(folder, 'terraform.tfvars')
+  const existing = existsSync(variablesFile) ? tfVariablesFrom(readFileSync(variablesFile, 'utf8')) : {}
+  const was = (name: string) => stringOf(existing[name])
+  if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its answers are the defaults.`)
+  const version =
+    flags.values.version || was('spyria_version') || (cliVersion === 'dev' ? await latestVersion() : cliVersion)
+  const smtpUrl = asker.ask('smtp-url', 'SMTP URL for verification links (empty to skip)', was('smtp_url'))
   const variables: TfVariables = {
-    hostname: asker.require('hostname', 'Hostname of Spyria, for example spyria.example.com').toLowerCase(),
+    hostname: asker
+      .require('hostname', 'Hostname of Spyria, for example spyria.example.com', was('hostname'))
+      .toLowerCase(),
     spyria_version: version,
-    join_by: asker.choose('join-by', 'Who can join', ['domain', 'invited-address'], 'domain'),
-    size: asker.choose('size', 'Size', ['small', 'medium', 'large'], 'small'),
+    join_by: asker.choose('join-by', 'Who can join', joinBys, choiceOf(joinBys, was('join_by'))),
+    size: asker.choose('size', 'Size', sizes, choiceOf(sizes, was('size'))),
     smtp_url: smtpUrl,
-    mail_from: smtpUrl ? asker.require('mail-from', 'Sender, for example Spyria <spyria@example.com>') : '',
-    ...cloudVariablesOf(cloud, asker),
+    mail_from: smtpUrl
+      ? asker.require('mail-from', 'Sender, for example Spyria <spyria@example.com>', was('mail_from'))
+      : '',
+    ...cloudVariablesOf(cloud, asker, existing),
   }
   writeFileSync(join(folder, 'main.tf'), rootModuleOf(cloud, version))
-  writeFileSync(join(folder, 'terraform.tfvars'), tfVariablesOf(variables), { mode: 0o600 })
-  chmodSync(join(folder, 'terraform.tfvars'), 0o600)
+  writeFileSync(variablesFile, tfVariablesOf(variables), { mode: 0o600 })
+  chmodSync(variablesFile, 0o600)
   console.log(`Wrote ${folder}: main.tf (modules of Spyria ${version}) and terraform.tfvars (readable by you only).`)
   if (flags.switches.has('no-start')) return
   if (Bun.which('tofu') === null)
@@ -132,9 +168,7 @@ export const setupCloud = async (flags: Flags, cloud: Cloud) => {
         ? [`Then serve it over HTTPS with: ${outputs.certificate_command.value}`]
         : []),
       ...(cloud === 'azure' && !variables.binds_hostname
-        ? [
-            'Once the records exist, run spyria setup --cloud azure again with the same answers and --bind-hostname yes.',
-          ]
+        ? ['Once the records exist, run spyria setup --cloud azure again with --bind-hostname yes.']
         : []),
       `Create the first workspace from this setup link, which works once: ${outputs.setup_link?.value}`,
       'A runtime host VM pairs with it when you create it.',

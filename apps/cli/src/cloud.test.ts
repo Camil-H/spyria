@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rootModuleOf, setupCloud, tfVariablesOf } from './cloud.ts'
+import { rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
 import { parseFlags } from './flags.ts'
 
 const folder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
@@ -53,4 +53,34 @@ test('spyria setup --cloud writes the configuration and private variables of the
     ].join('\n'),
   )
   expect(statSync(join(folder, 'terraform.tfvars')).mode & 0o777).toBe(0o600)
+})
+
+test('the variables file reads back to the answers it was written from', () => {
+  const answers = {
+    smtp_url: ['smtps://u:p$', '{x}%{y}@smtp.example.com'].join(''),
+    mail_from: 'Spyria "Team" <s@example.com>',
+    binds_hostname: true,
+    dns_zone_name: 'example.com',
+  }
+  expect(tfVariablesFrom(tfVariablesOf(answers))).toEqual(answers)
+})
+
+test('spyria setup --cloud run again with only a new version upgrades and keeps every other answer', async () => {
+  const setupGcp = (extra: string[]) =>
+    setupCloud(
+      parseFlags(['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--folder', folder, ...extra]),
+      'gcp',
+    )
+  await setupGcp([
+    ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--project', 'acme-prod'],
+    ...['--join-by', 'invited-address', '--size', 'medium', '--region', 'europe-north1', '--dns-zone', 'example'],
+    ...['--smtp-url', 'smtps://u:p@smtp.example.com', '--mail-from', 'Spyria <spyria@example.com>'],
+  ])
+  const before = tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8'))
+  await setupGcp(['--version', '1.3.0'])
+  expect(tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8'))).toEqual({
+    ...before,
+    spyria_version: '1.3.0',
+  })
+  expect(readFileSync(join(folder, 'main.tf'), 'utf8')).toContain('deploy/tofu/modules/gcp/control-plane?ref=v1.3.0')
 })
