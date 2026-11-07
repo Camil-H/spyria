@@ -15,7 +15,15 @@ const okta = Bun.serve({
         id: 'app-1',
         credentials: { oauthClient: { client_id: 'client-1', client_secret: 'secret-1' } },
       })
-    if (url.pathname === '/api/v1/groups') return Response.json([{ id: 'everyone-1' }])
+    if (url.pathname === '/api/v1/groups')
+      return Response.json(
+        url.searchParams.get('search') === 'type eq "BUILT_IN"'
+          ? [
+              { id: 'admins-1', profile: { name: 'Okta Administrators' } },
+              { id: 'everyone-1', profile: { name: 'Everyone' } },
+            ]
+          : [],
+      )
     return Response.json({})
   },
 })

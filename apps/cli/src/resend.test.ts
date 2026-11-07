@@ -7,6 +7,7 @@ const dnsRecords: { type: string; name: string; content: string; priority?: numb
 ]
 let statusChecks = 0
 const apiKeys: unknown[] = []
+const deletedKeys: string[] = []
 const ok = (result: unknown) => Response.json({ success: true, errors: [], result })
 const cloudflare = Bun.serve({
   port: 0,
@@ -43,6 +44,17 @@ const resend = Bun.serve({
           { record: 'DKIM', name: 'resend._domainkey', type: 'TXT', value: 'p=KEY' },
         ],
       })
+    if (pathname === '/api-keys' && request.method === 'GET')
+      return Response.json({
+        data: [
+          { id: 'old-key', name: 'Spyria on spyria.example.com' },
+          { id: 'other', name: 'Other' },
+        ],
+      })
+    if (pathname === '/api-keys/old-key' && request.method === 'DELETE') {
+      deletedKeys.push('old-key')
+      return Response.json({})
+    }
     if (pathname === '/api-keys') {
       apiKeys.push(await request.json())
       return Response.json({ id: 'key-1', token: 're_sending' })
@@ -75,6 +87,7 @@ test('Resend gets the domain, its DNS records land in the Cloudflare zone once, 
   expect(apiKeys).toEqual([
     { name: 'Spyria on spyria.example.com', permission: 'sending_access', domain_id: 'domain-1' },
   ])
+  expect(deletedKeys).toEqual(['old-key'])
   expect(JSON.stringify(mail)).not.toContain('re_full')
 })
 
