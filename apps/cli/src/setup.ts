@@ -1,11 +1,19 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import bifrostConfig from '../../../deploy/bifrost.json'
 import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, createTunnel } from './cloudflare.ts'
-import { installFolderOf, readEnvironment, runOperator, startStack, writeEnvironment } from './commands.ts'
-import { composeFileOf, environmentFileOf } from './compose.ts'
-import { environmentOf, isDeploymentName, type SetupAnswers, setupLinkOf } from './environment.ts'
+import {
+  installFolderOf,
+  readEnvironment,
+  releaseFilesOf,
+  sendsTestMessage,
+  startStack,
+  writeEnvironment,
+  writeReleaseFiles,
+} from './commands.ts'
+import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
+import { environmentOf, isDeploymentName, type SetupAnswers } from './environment.ts'
 import { askerOf, type Flags } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
 
@@ -22,25 +30,36 @@ const dockerGroupOf = () => {
 
 type Asker = ReturnType<typeof askerOf> & { isUnattended: boolean }
 
-const instanceAppOf = (asker: Asker, provider: 'google' | 'microsoft', origin: string, existingClientId?: string) => {
+const removal = '-'
+
+const instanceAppOf = (
+  asker: Asker,
+  provider: 'google' | 'microsoft',
+  origin: string,
+  existing: { clientId?: string; clientSecret?: string },
+) => {
   const guide =
     provider === 'google'
       ? `Google sign-in through an app of this Spyria (optional). In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`
       : `Microsoft sign-in through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for accounts in any organizational directory with the web redirect URI ${origin}/auth/callback, then create a client secret.`
   const flagPrefix = `${provider}-client`
-  if (!asker.isUnattended && existingClientId === undefined) console.log(guide)
+  if (!asker.isUnattended && existing.clientId === undefined) console.log(guide)
   const clientId = asker.ask(
     `${flagPrefix}-id`,
-    `${provider === 'google' ? 'Google' : 'Microsoft'} client id (empty to skip)`,
-    existingClientId ?? '',
+    `${provider === 'google' ? 'Google' : 'Microsoft'} client id (empty to skip${existing.clientId ? ', - to remove' : ''})`,
+    existing.clientId ?? '',
   )
-  if (clientId === '') return undefined
+  if (clientId === '' || clientId === removal) return undefined
   const pattern = provider === 'google' ? googleClientIdPattern : guidPattern
   if (!pattern.test(clientId))
     throw new Error(
       `${clientId} is not a ${provider === 'google' ? 'Google OAuth' : 'Microsoft application'} client id`,
     )
-  const clientSecret = asker.require(`${flagPrefix}-secret`, 'Client secret')
+  const clientSecret = asker.require(
+    `${flagPrefix}-secret`,
+    'Client secret',
+    clientId === existing.clientId ? (existing.clientSecret ?? '') : '',
+  )
   return { clientId, clientSecret }
 }
 
@@ -70,7 +89,7 @@ export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: 
     existing.CLOUDFLARE_TUNNEL_TOKEN !== undefined && hostnameOf(existing.SPYRIA_APP_ORIGIN) === hostname
   const apiToken = asker.ask(
     'cloudflare-token',
-    `Cloudflare API token with Account > Cloudflare Tunnel > Edit and Zone > DNS > Edit, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
+    `Cloudflare API token with Account > Cloudflare Tunnel > Edit, Zone > DNS > Edit and Zone > Zone > Read, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
   )
   const tunnelToken = apiToken
     ? (await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })).token
@@ -85,24 +104,33 @@ export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: 
     ['domain', 'invited-address'],
     existing.SPYRIA_JOIN_BY === 'invited-address' ? 'invited-address' : 'domain',
   )
-  const google = instanceAppOf(asker, 'google', origin, existing.SPYRIA_GOOGLE_CLIENT_ID)
+  const google = instanceAppOf(asker, 'google', origin, {
+    clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
+    clientSecret: existing.SPYRIA_GOOGLE_CLIENT_SECRET,
+  })
   const microsoft =
-    joinBy === 'domain' ? instanceAppOf(asker, 'microsoft', origin, existing.SPYRIA_MICROSOFT_CLIENT_ID) : undefined
+    joinBy === 'domain'
+      ? instanceAppOf(asker, 'microsoft', origin, {
+          clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
+          clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
+        })
+      : undefined
   const smtpUrl = asker.ask(
     'smtp-url',
-    'SMTP URL for verification links, for example smtps://user:pass@smtp.example.com:465 (empty to skip)',
+    'SMTP URL for verification links, for example smtps://user:pass@smtp.example.com:465 (empty to skip, - to remove)',
     existing.SPYRIA_SMTP_URL ?? '',
   )
-  const smtp = smtpUrl
-    ? {
-        url: smtpUrl,
-        from: asker.require(
-          'mail-from',
-          'Sender, for example Spyria <spyria@example.com>',
-          existing.SPYRIA_MAIL_FROM ?? '',
-        ),
-      }
-    : undefined
+  const smtp =
+    smtpUrl && smtpUrl !== removal
+      ? {
+          url: smtpUrl,
+          from: asker.require(
+            'mail-from',
+            'Sender, for example Spyria <spyria@example.com>',
+            existing.SPYRIA_MAIL_FROM ?? '',
+          ),
+        }
+      : undefined
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   const answers: SetupAnswers = {
@@ -119,19 +147,27 @@ export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: 
     localPort: Number(flags.values.port ?? existing.SPYRIA_LOCAL_PORT ?? 3300),
   }
   const environment = environmentOf(answers, existing)
-  writeFileSync(composeFileOf(folder), composeFile)
-  writeFileSync(join(folder, 'bifrost.json'), `${JSON.stringify(bifrostConfig, null, 2)}\n`)
+  writeReleaseFiles(
+    folder,
+    version === cliVersion || cliVersion === 'dev'
+      ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n` }
+      : await releaseFilesOf(version),
+  )
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
   const testAddress = smtp && asker.ask('mail-test', 'Address to send a test message to (empty to skip)', '')
-  if (testAddress) runOperator(folder, ['mail:test', '--to', testAddress])
+  if (testAddress && !sendsTestMessage(folder, testAddress))
+    console.log('The test message was not sent: check the SMTP URL and the sender, then run spyria setup again.')
+  const setupLink = readCompose(folder, operatorCommandOf(['setup-link']))
   console.log(
     [
       '',
       `Spyria ${version} runs at ${origin}.`,
-      `Create the first workspace from this setup link, which works once: ${setupLinkOf(environment)}`,
+      setupLink.exitCode === 0
+        ? `Create the first workspace from this setup link, which works once: ${setupLink.output.trim()}`
+        : '',
       answers.runsHost ? 'This machine runs a runtime host: it joins the first workspace when you create it.' : '',
       'Then, in Workspace settings, Connect GitHub to work on repositories.',
     ]

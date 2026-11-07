@@ -70,7 +70,10 @@ test('the environment file round-trips, drops empty values and refuses a value s
     Object.fromEntries(Object.entries(environment).filter(([, value]) => value !== '')),
   )
   expect(parseEnvironment('# comment\nA=1\n\nB=x=y\n')).toEqual({ A: '1', B: 'x=y' })
-  expect(() => serializeEnvironment({ A: 'one\ntwo' })).toThrow('A cannot span lines')
+  expect(parseEnvironment('A=\'p$ss word\'\nB="x"\n')).toEqual({ A: 'p$ss word', B: 'x' })
+  expect(serializeEnvironment({ A: 'p$ss' })).toBe("A='p$ss'\n")
+  expect(() => serializeEnvironment({ A: 'one\ntwo' })).toThrow('A cannot hold a quote or span lines')
+  expect(() => serializeEnvironment({ A: "it's" })).toThrow('A cannot hold a quote or span lines')
 })
 
 test('answers are checked: a deployment name Docker accepts and an https address', () => {
