@@ -18,6 +18,16 @@ const cloudflareOf = ({ cloudflare }: SetupContext, what: string) => {
   return cloudflare
 }
 
+const adminMailLines = {
+  routed: (adminAddress: string, ownerEmail: string) => `${adminAddress} forwards to ${ownerEmail}.`,
+  awaits_confirmation: (adminAddress: string, ownerEmail: string) =>
+    `${adminAddress} forwards to ${ownerEmail} once you open the confirmation Cloudflare just sent there.`,
+  routed_elsewhere: (adminAddress: string) =>
+    `${adminAddress} already forwards elsewhere in Email Routing: its PIN arrives there.`,
+  has_mailboxes: (adminAddress: string) =>
+    `Your domain already receives mail, so ${adminAddress} must be a mailbox or alias you can read.`,
+}
+
 const formLines = (preset: string, fields: Record<string, string>) => [
   `In Create a workspace, choose ${preset} and enter:`,
   ...Object.entries(fields).map(([label, value]) => `  ${label}: ${value}`),
@@ -40,17 +50,19 @@ export const firstWorkspaceProviderOf = async (
     const cloudflare = cloudflareOf(context, 'Cloudflare Access')
     const ownerEmail = asker.require(
       'owner-email',
-      'Your own email address, which Cloudflare sends sign-in PINs and admin@ mail to',
+      'Your own email address, where admin@ your domain forwards (sign-in PINs and the verification link)',
     )
-    const access = await createAccessOidcApp(cloudflare, { hostname, origin, ownerEmail, name: `Spyria ${hostname}` })
+    const access = await createAccessOidcApp(cloudflare, { hostname, origin, name: `Spyria ${hostname}` })
     const mail = await routeAdminMail(cloudflare, { hostname, ownerEmail })
     return [
       ...formLines('Other OIDC', {
+        'Email domain': access.domain,
         Issuer: access.issuer,
         'Client id': access.clientId,
         'Client secret': access.clientSecret,
       }),
-      `${mail.adminAddress} now forwards to ${ownerEmail}${mail.awaitsConfirmation ? `: open the confirmation Cloudflare sent to ${ownerEmail} first` : ''}.`,
+      `Then sign in as ${mail.adminAddress}: Cloudflare emails its one-time PIN to that address.`,
+      adminMailLines[mail.outcome](mail.adminAddress, ownerEmail),
     ]
   }
   if (provider === 'microsoft') {
@@ -96,7 +108,7 @@ export const mailOf = async (
     'mail',
     'Mail for domain verification links: none, an SMTP URL, or Resend with its DNS records written in Cloudflare',
     mailChoices.filter((option) => option !== 'keep' || hasMail),
-    hasMail ? 'keep' : 'skip',
+    asker.given('resend-key') ? 'resend' : asker.given('smtp-url') ? 'smtp' : hasMail ? 'keep' : 'skip',
   )
   if (choice === 'skip') return undefined
   if (choice === 'keep') return { url: existing.SPYRIA_SMTP_URL ?? '', from: existing.SPYRIA_MAIL_FROM ?? '' }
