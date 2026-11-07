@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import bifrostConfig from '../../../deploy/bifrost.json'
 import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
-import { cloudflareApi, createTunnel } from './cloudflare.ts'
+import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
   installFolderOf,
   readEnvironment,
@@ -13,9 +13,11 @@ import {
   writeReleaseFiles,
 } from './commands.ts'
 import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
+import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
 import { environmentOf, isDeploymentName, type SetupAnswers } from './environment.ts'
 import { askerOf, type Flags } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
+import { type Asker, firstWorkspaceProviderOf, mailOf, removal } from './setup-steps.ts'
 
 const googleClientIdPattern = /^[\w-]+\.apps\.googleusercontent\.com$/
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -28,20 +30,17 @@ const dockerGroupOf = () => {
   return stat.exitCode === 0 ? stat.stdout.toString().trim() : '0'
 }
 
-type Asker = ReturnType<typeof askerOf> & { isUnattended: boolean }
-
-const removal = '-'
-
 const instanceAppOf = (
   asker: Asker,
   provider: 'google' | 'microsoft',
   origin: string,
   existing: { clientId?: string; clientSecret?: string },
+  az: AzRunner,
 ) => {
   const guide =
     provider === 'google'
       ? `Google sign-in through an app of this Spyria (optional). In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`
-      : `Microsoft sign-in through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for accounts in any organizational directory with the web redirect URI ${origin}/auth/callback, then create a client secret.`
+      : `Microsoft sign-in through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for accounts in any organizational directory with the web redirect URI ${origin}/auth/callback, then create a client secret. Or answer create to register it now with az, signed in as an admin of your directory.`
   const flagPrefix = `${provider}-client`
   if (!asker.isUnattended && existing.clientId === undefined) console.log(guide)
   const clientId = asker.ask(
@@ -50,6 +49,11 @@ const instanceAppOf = (
     existing.clientId ?? '',
   )
   if (clientId === '' || clientId === removal) return undefined
+  if (provider === 'microsoft' && clientId === 'create') {
+    if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
+    const { clientId: createdClientId, clientSecret } = registerEntraApp({ origin, audience: 'organizations' }, az)
+    return { clientId: createdClientId, clientSecret }
+  }
   const pattern = provider === 'google' ? googleClientIdPattern : guidPattern
   if (!pattern.test(clientId))
     throw new Error(
@@ -63,7 +67,14 @@ const instanceAppOf = (
   return { clientId, clientSecret }
 }
 
-export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: { cloudflareApiUrl?: string } = {}) => {
+export const setup = async (
+  flags: Flags,
+  {
+    cloudflareApiUrl = cloudflareApi,
+    resendApiUrl,
+    az = runAz,
+  }: { cloudflareApiUrl?: string; resendApiUrl?: string; az?: AzRunner } = {},
+) => {
   const isUnattended = flags.switches.has('unattended')
   const asker: Asker = { ...askerOf(flags, isUnattended), isUnattended }
   const folder = installFolderOf({
@@ -104,33 +115,33 @@ export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: 
     ['domain', 'invited-address'],
     existing.SPYRIA_JOIN_BY === 'invited-address' ? 'invited-address' : 'domain',
   )
-  const google = instanceAppOf(asker, 'google', origin, {
-    clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
-    clientSecret: existing.SPYRIA_GOOGLE_CLIENT_SECRET,
-  })
+  const google = instanceAppOf(
+    asker,
+    'google',
+    origin,
+    {
+      clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
+      clientSecret: existing.SPYRIA_GOOGLE_CLIENT_SECRET,
+    },
+    az,
+  )
   const microsoft =
     joinBy === 'domain'
-      ? instanceAppOf(asker, 'microsoft', origin, {
-          clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
-          clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
-        })
+      ? instanceAppOf(
+          asker,
+          'microsoft',
+          origin,
+          {
+            clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
+            clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
+          },
+          az,
+        )
       : undefined
-  const smtpUrl = asker.ask(
-    'smtp-url',
-    'SMTP URL for verification links, for example smtps://user:pass@smtp.example.com:465 (empty to skip, - to remove)',
-    existing.SPYRIA_SMTP_URL ?? '',
-  )
-  const smtp =
-    smtpUrl && smtpUrl !== removal
-      ? {
-          url: smtpUrl,
-          from: asker.require(
-            'mail-from',
-            'Sender, for example Spyria <spyria@example.com>',
-            existing.SPYRIA_MAIL_FROM ?? '',
-          ),
-        }
-      : undefined
+  const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
+  const context = { asker, hostname, origin, cloudflare }
+  const providerLines = await firstWorkspaceProviderOf(context, { joinBy, az })
+  const smtp = await mailOf(context, { existing, resendApiUrl })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   const answers: SetupAnswers = {
@@ -155,6 +166,7 @@ export const setup = async (flags: Flags, { cloudflareApiUrl = cloudflareApi }: 
   )
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
+  if (providerLines.length > 0) console.log(['', ...providerLines, ''].join('\n'))
   if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
   const testAddress = smtp && asker.ask('mail-test', 'Address to send a test message to (empty to skip)', '')

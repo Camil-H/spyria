@@ -18,7 +18,9 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
 
 Setup flags, each a question it then skips: --name, --hostname, --cloudflare-token (Account Cloudflare Tunnel Edit,
 Zone DNS Edit, Zone Read), --join-by domain|invited-address, --google-client-id and --google-client-secret,
---microsoft-client-id and --microsoft-client-secret, --smtp-url, --mail-from, --mail-test <address>, --version,
+--microsoft-client-id and --microsoft-client-secret (create to register it with az), --provider
+cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url and --okta-token,
+--mail skip|smtp|resend|keep with --smtp-url or --resend-key, --mail-from, --mail-test <address>, --version,
 --images, --port, --no-host (no runtime host on this machine), --no-start, --unattended (no question at all).
 A - answer removes a sign-in app or mail.
 

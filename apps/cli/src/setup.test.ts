@@ -88,6 +88,12 @@ test('an unattended setup refuses what it cannot decide: no hostname, a new host
         'not-google',
       ]),
     ).toBe('not-google is not a Google OAuth client id')
+    expect(
+      await attempt([
+        ...['--hostname', 'spyria.example.com', '--cloudflare-token', 't'],
+        ...['--join-by', 'invited-address', '--provider', 'cloudflare-access'],
+      ]),
+    ).toBe('--provider must be microsoft or okta or google or other or skip')
   } finally {
     rmSync(empty, { recursive: true, force: true })
   }
