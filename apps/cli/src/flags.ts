@@ -41,7 +41,8 @@ export const askerOf = (flags: Flags, isUnattended = flags.switches.has('unatten
     if (answer === '') throw new Error(`--${name} is required`)
     return answer
   }
-  return { ask, choose, require }
+  const given = (name: string) => flags.values[name] !== undefined
+  return { ask, choose, require, given }
 }
 
 export const composeArgumentsOf = (afterCommand: readonly string[]) => {
