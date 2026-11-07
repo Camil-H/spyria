@@ -31,6 +31,7 @@ bun run test:e2e:smoke     # only the tests tagged @smoke, after the platform ga
 bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs first)
 bun run check:docker       # agent:build, then the docker tests
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
+bun run check:tofu         # OpenTofu fmt, validate and the tests with mock providers, for every module and example
 bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
@@ -91,6 +92,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 | `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |
 | `e2e-repeat` | the changed specs, 3 times each, without retry | not run |
 | `docker` | `check:docker` when the host, the agent, `infra` or the images changed | always |
+| `tofu` | `check:tofu` when `deploy/tofu`, `deploy/bifrost.json` or the script changed | always |
 | `ci-ok` | fails when any job failed or was cancelled; skipped jobs pass | the same |
 | `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
 
