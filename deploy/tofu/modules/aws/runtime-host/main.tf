@@ -1,0 +1,96 @@
+terraform {
+  required_version = ">= 1.8"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.0" }
+  }
+}
+
+variable "name" {
+  description = "Deployment name, the same as the control plane's"
+  type        = string
+  default     = "spyria"
+}
+
+variable "claim_url" {
+  description = "Claim URL of the host: install_host_claim_url of the control plane for the first host, or the URL at the end of an Add runtime host command"
+  type        = string
+  sensitive   = true
+}
+
+variable "host_image" {
+  description = "Published spyria-host image of the control plane's version (its host_image output)"
+  type        = string
+}
+
+variable "size" {
+  description = "small, medium or large: about 6, 14 or 30 runtimes at once"
+  type        = string
+  default     = "small"
+  validation {
+    condition     = contains(["small", "medium", "large"], var.size)
+    error_message = "size is small, medium or large."
+  }
+}
+
+variable "subnet_id" {
+  description = "Subnet with a route to the internet, for example a public subnet of the control plane"
+  type        = string
+}
+
+locals {
+  instance_types = { small = "m7g.large", medium = "m7g.xlarge", large = "m7g.2xlarge" }
+  user_data = templatefile("${path.module}/../../shared/runtime-host/cloud-init.yaml.tftpl", {
+    name       = var.name
+    claim_url  = var.claim_url
+    host_image = var.host_image
+  })
+}
+
+data "aws_subnet" "selected" {
+  id = var.subnet_id
+}
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720108477"]
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"]
+  }
+}
+
+resource "aws_security_group" "host" {
+  name        = "${var.name}-runtime-host"
+  description = "The runtime host dials out to Spyria; nothing reaches it"
+  vpc_id      = data.aws_subnet.selected.vpc_id
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "host" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = local.instance_types[var.size]
+  subnet_id                   = var.subnet_id
+  vpc_security_group_ids      = [aws_security_group.host.id]
+  associate_public_ip_address = true
+  user_data_base64            = base64encode(local.user_data)
+  user_data_replace_on_change = true
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+  root_block_device {
+    volume_size = 100
+    volume_type = "gp3"
+    encrypted   = true
+  }
+  tags = { Name = "${var.name}-runtime-host" }
+}
+
+output "instance_id" {
+  value = aws_instance.host.id
+}
