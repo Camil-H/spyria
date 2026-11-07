@@ -3,6 +3,7 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
+import { createSmtpMailer } from './auth/mail.ts'
 import { hasNoWorkspace, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
@@ -55,6 +56,20 @@ const commands: Record<string, () => Promise<void>> = {
     const server = setup()
     const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
+  },
+  'mail:test': async () => {
+    const to = optionOf('--to')
+    if (!to) throw new Error('Usage: bun run operator mail:test --to <address>')
+    const mailer = createSmtpMailer({
+      smtpUrl: requiredEnvironment('SPYRIA_SMTP_URL'),
+      from: requiredEnvironment('SPYRIA_MAIL_FROM'),
+    })
+    await mailer.send({
+      to,
+      subject: 'Spyria can send mail',
+      text: 'This test message shows that Spyria can send mail.',
+    })
+    console.log(`Sent a test message to ${to}`)
   },
   'setup-link': async () => {
     if (!(await hasNoWorkspace(database.$client)))
