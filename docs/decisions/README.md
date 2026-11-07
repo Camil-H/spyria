@@ -30,3 +30,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0024](0024-typed-actors-on-events.md) | Events record a typed actor and the member it acts for |
 | [0025](0025-dev-loop.md) | Quality gates: server-run steps between the agent's turns |
 | [0026](0026-published-images-one-entry-point.md) | Published, signed images per version; the server is the one entry point and forwards `/zero` |
+| [0027](0027-join-by-invited-address.md) | Who can join: by email domain or by invited address, with confirmed addresses required |
