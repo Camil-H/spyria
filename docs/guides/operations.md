@@ -1,14 +1,16 @@
 # Operations
 
-What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [self-hosting](./self-hosting.md). The commands below run in the install folder with the production Compose file (`deploy/compose.prod.yml` in a clone); to shorten them, define an alias:
+What an operator watches and maintains once a deployment runs: logs, traces, health, shutdown, upgrades, failed jobs, database connections, disk and backups. Installing a deployment is in [self-hosting](./self-hosting.md). The commands below use the `spyria` tool that `spyria setup` installed: `spyria compose <arguments>` runs Docker Compose on its install folder (`~/spyria` by default, or `--folder`). On an install made by hand, define an alias that does the same:
 
 ```sh
-alias spyria='docker compose --env-file .env.prod -f compose.prod.yml'
+alias spyria-compose='docker compose --env-file .env.prod -f compose.prod.yml'
 ```
+
+and read `spyria compose` as `spyria-compose` below.
 
 ## Logs
 
-The server, `spyria-host` and `spyria-agent` write one JSON line per event on stdout, following OpenTelemetry's log model. Read them with `spyria logs -f server` (or `host`). Filter on `event.name`, a stable name per event (for example `http.request`, `job.run` or `gen_ai.call`), and follow a request across services with `trace_id`. Recurring background jobs (the sweeps and the usage sync) log only their retries and failures; their successful runs show only as trace spans. Errors carry `ERROR` severity with the error type and stack trace.
+The server, `spyria-host` and `spyria-agent` write one JSON line per event on stdout, following OpenTelemetry's log model. Read them with `spyria compose logs -f server` (or `host`). Filter on `event.name`, a stable name per event (for example `http.request`, `job.run` or `gen_ai.call`), and follow a request across services with `trace_id`. Recurring background jobs (the sweeps and the usage sync) log only their retries and failures; their successful runs show only as trace spans. Errors carry `ERROR` severity with the error type and stack trace.
 
 ### What is never logged
 
@@ -26,7 +28,7 @@ The Compose file samples 10% of new traces (`OTEL_TRACES_SAMPLER=parentbased_tra
 
 ```sh
 curl 127.0.0.1:3300/health
-spyria ps
+spyria compose ps
 ```
 
 `GET /health` answers `200 {"status":"ok"}`, or `503 {"status":"degraded","failing":[…]}` naming `database` and/or `gateway`, each check given 2 seconds. Every long-running service has a Compose healthcheck: Postgres (`pg_isready`), the server (`/health`), zero-cache (`/keepalive`), the gateway (`/health`), the host (`spyria-host health`, which checks its model relay answers) and the optional tunnel. Services restart `unless-stopped`.
@@ -37,14 +39,13 @@ On `SIGTERM` or `SIGINT` the server stops accepting requests, lets the job worke
 
 ## Upgrades and migrations
 
-Set `SPYRIA_VERSION` in `.env.prod` to the new release, then:
-
 ```sh
-spyria pull
-spyria up -d
+spyria upgrade            # the latest release, or: spyria upgrade 1.3.0
 ```
 
-(From a clone with `compose.build.yml`: `git pull`, `bun run agent:build`, then `spyria up -d --build`.) The `migrate` service runs Drizzle's migrations against the database and exits; the server starts only after it succeeded, and zero-cache waits for it too (it needs the publication the migrations create). A failed migration leaves the old server down and the reason in `spyria logs migrate`. Migrations are never edited once shipped, so applying them in order is always safe.
+It backs up both databases into `backups/`, fetches the release's Compose file and gateway configuration, sets `SPYRIA_VERSION`, pulls the images, starts them and waits for `/health`, then prints the link to what changed. By hand: set `SPYRIA_VERSION` in `.env.prod` to the new release, replace `compose.prod.yml` and `bifrost.json` with the release's, then `spyria-compose pull` and `spyria-compose up -d`.
+
+(From a clone with `compose.build.yml`: `git pull`, `bun run agent:build`, then `spyria compose up -d --build`.) The `migrate` service runs Drizzle's migrations against the database and exits; the server starts only after it succeeded, and zero-cache waits for it too (it needs the publication the migrations create). A failed migration leaves the old server down and the reason in `spyria compose logs migrate`. Migrations are never edited once shipped, so applying them in order is always safe.
 
 When a pull changes the gateway image, the gateway migrates its `bifrost` database on start, and some of its migrations cannot be reverted. Take a [backup](#backups) before `up`; going back to the previous gateway image means restoring that backup with it.
 
@@ -55,7 +56,7 @@ Each version's server names its runtime image by digest; a host pulls it when th
 Until the first workspace exists, only the setup link creates one. To print it again:
 
 ```sh
-spyria exec server bun apps/server/src/operator-cli.ts setup-link
+spyria setup-link
 ```
 
 It is refused once a workspace exists.
@@ -65,10 +66,10 @@ It is refused once a workspace exists.
 Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
 
 ```sh
-spyria exec server bun apps/server/src/operator-cli.ts failed-jobs
-spyria exec server bun apps/server/src/operator-cli.ts retry-jobs <job id>
-spyria exec server bun apps/server/src/operator-cli.ts retry-jobs --all
-spyria exec server bun apps/server/src/operator-cli.ts rebuild-messages [--chat <chat id>]
+spyria compose exec server bun apps/server/src/operator-cli.ts failed-jobs
+spyria compose exec server bun apps/server/src/operator-cli.ts retry-jobs <job id>
+spyria compose exec server bun apps/server/src/operator-cli.ts retry-jobs --all
+spyria compose exec server bun apps/server/src/operator-cli.ts rebuild-messages [--chat <chat id>]
 ```
 
 `failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued, or that a later failure of the same sweep supersedes, is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Self-hosting](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
@@ -103,7 +104,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 
 ## Backups
 
-Backups are the operator's responsibility; Spyria does not take any. What holds state:
+`spyria backup` dumps both databases (Spyria's and the gateway's) into `backups/` of the install folder, keeping the newest 7 of each (`--keep <n>`); `spyria upgrade` takes one first. Run it on a schedule, for example from cron, and copy `backups/` and `.env` off the machine. `spyria restore backups/spyria-<time>.dump` stops the server, zero-cache, the gateway and the host, restores that database, drops zero-cache's replica so it is rebuilt, and starts everything again. What holds state:
 
 | Volume | Holds | Back up |
 |---|---|---|
@@ -111,10 +112,10 @@ Backups are the operator's responsibility; Spyria does not take any. What holds 
 | `<deployment>-gateway-data` | The gateway's local data. | Yes. |
 | `<deployment>-host` | The workspace host's pairing token. | Optional: a lost token means adding the host again. |
 | `<deployment>-zero-data` | zero-cache's replica, rebuilt from Postgres. | No. |
-| `.env.prod` | Every secret, including `SPYRIA_SECRETS_KEY` and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
+| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
 
-For a consistent dump of both databases, for example:
+By hand, a consistent dump of both databases:
 
 ```sh
-spyria exec -T postgres pg_dumpall -U spyria > spyria-backup.sql
+spyria compose exec -T postgres pg_dumpall -U spyria > spyria-backup.sql
 ```
