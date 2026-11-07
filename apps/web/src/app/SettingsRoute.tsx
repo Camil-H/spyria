@@ -3,7 +3,7 @@ import { useQuery, useScoped } from '@spyria/db/react'
 import { isAnyRuleOn, type WorkspaceId, type WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
-import { RuntimeHostsSection } from '@spyria/runtime'
+import { MemberLocalRuntimesSection, RuntimeHostsSection } from '@spyria/runtime'
 import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
@@ -27,6 +27,7 @@ type SettingsCard = {
   title: string
   description: string
   permissions: readonly WorkspacePermission[]
+  isWide?: true
   Page: ComponentType<{
     workspaceId: WorkspaceId
     isDexSignIn: boolean
@@ -38,6 +39,7 @@ type SettingsCard = {
 const RuntimeSettings = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
   <>
     <RuntimeHostsSection workspaceId={workspaceId} />
+    <MemberLocalRuntimesSection workspaceId={workspaceId} />
     <SetupCommandsSection workspaceId={workspaceId} />
   </>
 )
@@ -106,6 +108,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         description: "The gates an agent's work goes through before it reaches you",
         permissions: ['github.manage'],
         Page: DevLoopSection,
+        isWide: true,
       },
     ],
   },
@@ -118,6 +121,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         description: 'Spend over time by member, project, chat and model, with what drove it',
         permissions: ['costs.view', 'budgets.manage'],
         Page: UsageSection,
+        isWide: true,
       },
       {
         path: 'audit',
@@ -125,6 +129,7 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         description: 'Who changed what in the workspace, with tool calls and publishing',
         permissions: ['audit.view'],
         Page: AuditLogSection,
+        isWide: true,
       },
     ],
   },
@@ -202,7 +207,7 @@ const SettingsRoute = () => {
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
     return (
-      <div className="flex flex-col gap-6 px-6 py-6 md:px-12 xl:px-16">
+      <div className={`flex flex-col gap-6 px-6 py-6 md:px-12 xl:px-16 ${openCard.isWide ? '' : 'max-w-4xl'}`}>
         <div className="flex items-center gap-2">
           <Link to={settingsPath} aria-label="Back to Workspace settings" className={iconButtonClass}>
             <ArrowLeft aria-hidden className="size-5" />

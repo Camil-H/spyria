@@ -15,7 +15,7 @@ import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
 import { SessionProvider, useSession } from '@spyria/session'
 import { KeyboardShortcuts } from '@spyria/ui'
 import { BudgetNotice, UsageProvider } from '@spyria/usage'
-import { TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
+import { NoChatSelected, TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
 import { lazy, Suspense, use } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
 import { sharedAuthMode } from './auth.ts'
@@ -105,7 +105,7 @@ export const App = ({ app }: { app: Application }) => (
                             />
                           }
                         >
-                          <Route index element={<p className="p-6 text-muted">Select a chat</p>} />
+                          <Route index element={<NoChatSelected />} />
                           <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
                           <Route
                             path="settings/:card?"

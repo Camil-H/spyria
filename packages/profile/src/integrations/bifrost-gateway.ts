@@ -29,8 +29,8 @@ type BifrostGateway = LlmGateway &
 
 const notFound = 404
 const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
-const zaiProviderSetup = {
-  network_config: { base_url: 'https://api.z.ai/api/paas/v4' },
+const openAiCompatibleProviderAt = (baseUrl: string) => ({
+  network_config: { base_url: baseUrl },
   custom_provider_config: {
     base_provider_type: 'openai',
     request_path_overrides: {
@@ -39,7 +39,7 @@ const zaiProviderSetup = {
       list_models: '/models',
     },
   },
-}
+})
 const providersCreatedOnDemand: Record<string, object> = {
   openai: {},
   anthropic: {},
@@ -49,7 +49,8 @@ const providersCreatedOnDemand: Record<string, object> = {
   gemini: {},
   xai: {},
   deepseek: {},
-  zai: zaiProviderSetup,
+  zai: openAiCompatibleProviderAt('https://api.z.ai/api/paas/v4'),
+  meta: openAiCompatibleProviderAt('https://api.meta.ai/v1'),
 }
 const modelListMilliseconds = 60 * 60 * 1000
 const modelListSize = 5000

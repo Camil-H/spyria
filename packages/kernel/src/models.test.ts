@@ -69,6 +69,13 @@ test.each([
   expect(providersOfGatewayRefs([`gateway:${provider}/key-id`])).toEqual([provider])
 })
 
+test('the Meta key reaches Muse Wonder as large and Muse Spark as medium, the nearest model for a small task', () => {
+  const reachable = reachableModelsOf(['meta'])
+  expect(idsOf(reachable)).toEqual(['meta/muse-wonder-1.0', 'meta/muse-spark-1.3'])
+  expect(reachable.map((model) => model.tier)).toEqual(['large', 'medium'])
+  expect(nearestModelOf(reachable, 'small')?.id).toBe('meta/muse-spark-1.3')
+})
+
 test('a manual pick is a curated model or a listed model of a reachable chat provider', () => {
   const openRouter = reachableModelsOf(['openrouter'])
   const listed = [
@@ -148,6 +155,7 @@ test('a provider is found by its id, its name or an alias, and nothing else', ()
   expect(aiProviderOf(' Google ')?.id).toBe('gemini')
   expect(aiProviderOf('google gemini')?.id).toBe('gemini')
   expect(aiProviderOf('Z.ai')?.id).toBe('zai')
+  expect(aiProviderOf('Muse')?.id).toBe('meta')
   expect(aiProviderOf('openai')?.name).toBe('OpenAI')
   expect(aiProviderOf('fake')).toBeUndefined()
 })

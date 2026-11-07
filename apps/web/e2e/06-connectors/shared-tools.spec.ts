@@ -88,6 +88,7 @@ test.describe('Shared tools', () => {
     untick(crmCardOf(page).getByRole('checkbox', { name: `${tool} for ${memberName}` }))
   const sharedWithMeOf = async (page: Page) => {
     await openProfile(page)
+    await connectionsOf(page).getByRole('tab', { name: 'Shared with me' }).click()
     return connectionsOf(page).getByRole('tabpanel')
   }
 

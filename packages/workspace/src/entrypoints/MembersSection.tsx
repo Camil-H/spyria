@@ -98,7 +98,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     if (await run(() => commands.removeMember({ workspaceId, memberId: member.id }))) setRemoving(null)
   }
   return (
-    <LabelledSection title="Members">
+    <LabelledSection title="Members" className="flex max-w-2xl flex-col gap-3">
       <ul aria-label="Members" className="flex flex-col gap-2 text-sm">
         {members.map((member) => (
           <li key={member.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">

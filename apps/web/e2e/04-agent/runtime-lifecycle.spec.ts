@@ -183,7 +183,7 @@ test.describe('Runtime lifecycle', () => {
       await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
     })
 
-    test('As the owner, I restart the session or stop the runtime from the status menu, confirming while the agent works; a prompter gets no menu', {
+    test('As the owner, I restart the session or stop the runtime from the status menu, confirming while the agent works, and the chip tells me once the session restarted; a prompter gets no menu', {
       tag: ['@spec-10'],
     }, async ({ page, browser, workerStack, agentScript, release }) => {
       await addParticipant(workerStack, research, 'member-bob', 'prompter')
@@ -204,6 +204,7 @@ test.describe('Runtime lifecycle', () => {
       const confirmation = page.getByRole('dialog', { name: 'Restart session' })
       await expect(confirmation).toContainText('stops this turn')
       await confirmation.getByRole('button', { name: 'Restart session' }).click()
+      await expect(runtimeStatusOf(page)).toHaveText('Session restarted')
       await expect(messageContaining(page, 'Stopped by Alice')).toHaveCount(1)
       await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(runtimeStatusOf(page)).toHaveText('Ready')
