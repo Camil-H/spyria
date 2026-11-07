@@ -31,6 +31,7 @@ export const loadAuthMode = async (
   setupToken?: string,
 ): Promise<{
   authMode: 'dex' | 'sso'
+  joinBy: 'domain' | 'invited_address'
   isBeingSetUp: boolean
   canCreateWorkspace: boolean
   instanceApps: ('google' | 'microsoft')[]

@@ -83,12 +83,13 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithP
 
 const showSignIn = async (notice?: string) => {
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
-  const { authMode, isBeingSetUp, canCreateWorkspace, instanceApps } = await loadAuthMode(setupToken)
+  const { authMode, joinBy, isBeingSetUp, canCreateWorkspace, instanceApps } = await loadAuthMode(setupToken)
   root.render(
     <>
       <SignInScreen
         isEmailFirst={authMode === 'sso'}
         isBeingSetUp={isBeingSetUp}
+        joinsByInvitedAddress={joinBy === 'invited_address'}
         canCreateWorkspace={canCreateWorkspace}
         setupToken={setupToken}
         instanceApps={instanceApps}
