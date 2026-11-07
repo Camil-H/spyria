@@ -64,7 +64,12 @@ resource "google_cloud_run_v2_service" "server" {
       }
     }
   }
-  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+  depends_on = [
+    google_secret_manager_secret_iam_member.services_read,
+    google_secret_manager_secret_version.setting,
+    google_sql_database.spyria,
+    google_sql_user.spyria,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "zero" {
@@ -232,5 +237,10 @@ resource "google_cloud_run_v2_service" "gateway" {
       }
     }
   }
-  depends_on = [google_secret_manager_secret_iam_member.services_read, google_secret_manager_secret_version.setting]
+  depends_on = [
+    google_secret_manager_secret_iam_member.services_read,
+    google_secret_manager_secret_version.setting,
+    google_sql_database.spyria,
+    google_sql_user.spyria,
+  ]
 }
