@@ -87,7 +87,7 @@ test('a broken production environment refuses to start and lists every problem',
     expect(printed).toContain(problem)
 })
 
-test('a correct production environment starts without fakes, reports its health and stops on SIGTERM', async () => {
+test('a correct production environment starts without fakes, reports its health, stays live for the platform while the gateway is down, and stops on SIGTERM', async () => {
   const server = startServer(productionEnvironment)
   for (let attempt = 1; !(await fetch(`${serverUrl}/health`).catch(() => undefined)); attempt++) {
     if (attempt === 300 || server.exitCode !== null) {
@@ -101,6 +101,8 @@ test('a correct production environment starts without fakes, reports its health 
   expect(await healthOf()).toEqual({ status: 200, body: { status: 'ok' } })
   await gatewayProxy.stop(true)
   expect(await healthOf()).toEqual({ status: 503, body: { status: 'degraded', failing: ['gateway'] } })
+  const live = await fetch(`${serverUrl}/health/live`)
+  expect({ status: live.status, body: await live.json() }).toEqual({ status: 200, body: { status: 'ok' } })
   const stoppingAt = performance.now()
   server.kill('SIGTERM')
   expect(await server.exited).toBe(0)

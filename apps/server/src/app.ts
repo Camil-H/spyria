@@ -378,6 +378,11 @@ export const createApp = ({
       async (context) =>
         (webDist && (await webAppResponse(webDist, context.req.raw))) || context.text('404 Not Found', 404),
     )
+    .get('/health/live', async (context) =>
+      (await passesWithinTimeout(() => database.$client`select 1`.then(() => true)))
+        ? context.json({ status: 'ok' })
+        : context.json({ status: 'degraded', failing: ['database'] }, 503),
+    )
     .get('/health', async (context) => {
       const checks = Object.entries({
         database: () => database.$client`select 1`.then(() => true),
