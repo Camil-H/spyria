@@ -84,3 +84,64 @@ test('spyria setup --cloud run again with only a new version upgrades and keeps 
   })
   expect(readFileSync(join(folder, 'main.tf'), 'utf8')).toContain('deploy/tofu/modules/gcp/control-plane?ref=v1.3.0')
 })
+
+test('the variables file is read after tofu fmt aligned it, with comments, and keeps variables setup does not ask', () => {
+  const formatted = [
+    '# Spyria on GCP',
+    'hostname       = "spyria.example.com" # the public name',
+    'spyria_version = "1.2.0"',
+    'binds_hostname = false',
+    'runtime_hosts  = 2',
+    '',
+  ].join('\n')
+  expect(tfVariablesFrom(formatted)).toEqual({
+    hostname: 'spyria.example.com',
+    spyria_version: '1.2.0',
+    binds_hostname: false,
+    runtime_hosts: 2,
+  })
+  const unreadable = () => tfVariablesFrom('hostname = "a"\nsmtp_url = <<EOT\nsmtps://u:secret@x\nEOT\n')
+  expect(unreadable).toThrow(
+    'Line 2 of terraform.tfvars is not a text, number, true or false on one line: fix it, then run this again',
+  )
+})
+
+test('run again by hand, a saved SMTP URL is never shown, empty keeps an answer and - removes it', async () => {
+  const azureFolder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
+  const questions: string[] = []
+  const answersByQuestion: [string, string][] = []
+  const originalPrompt = globalThis.prompt
+  globalThis.prompt = (question?: string) => {
+    questions.push(question ?? '')
+    return answersByQuestion.find(([start]) => question?.startsWith(start))?.[1] ?? ''
+  }
+  try {
+    const setupAzure = (extra: string[] = []) =>
+      setupCloud(parseFlags(['setup', '--cloud', 'azure', '--no-start', '--folder', azureFolder, ...extra]), 'azure')
+    await setupAzure([
+      ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--subscription', 'subscription-1'],
+      ...['--smtp-url', 'smtps://u:secret@smtp.example.com', '--mail-from', 'Spyria <spyria@example.com>'],
+      ...['--dns-zone', 'example.com', '--dns-zone-resource-group', 'dns'],
+    ])
+    const saved = () => tfVariablesFrom(readFileSync(join(azureFolder, 'terraform.tfvars'), 'utf8'))
+    expect(saved()).toMatchObject({ dns_zone_name: 'example.com', binds_hostname: true })
+
+    await setupAzure()
+    expect(questions.join('\n')).not.toContain('secret')
+    expect(questions).toContain('SMTP URL for verification links (empty keeps the saved one, - removes it)')
+    expect(saved()).toMatchObject({ smtp_url: 'smtps://u:secret@smtp.example.com', dns_zone_name: 'example.com' })
+
+    answersByQuestion.push(['SMTP URL', '-'], ['Azure DNS zone', '-'])
+    await setupAzure()
+    const removed = saved()
+    expect(removed.smtp_url).toBeUndefined()
+    expect(removed.mail_from).toBeUndefined()
+    expect(removed.dns_zone_name).toBeUndefined()
+    expect(removed.dns_zone_resource_group).toBeUndefined()
+    expect(removed.binds_hostname).toBe(false)
+    expect(removed.hostname).toBe('spyria.example.com')
+  } finally {
+    globalThis.prompt = originalPrompt
+    rmSync(azureFolder, { recursive: true, force: true })
+  }
+})

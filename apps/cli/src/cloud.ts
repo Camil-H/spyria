@@ -6,10 +6,11 @@ import gcpExample from '../../../deploy/tofu/examples/gcp/main.tf' with { type: 
 import { installFolderOf } from './commands.ts'
 import { askerOf, type Flags } from './flags.ts'
 import { cliVersion, latestVersion, repository } from './release.ts'
+import { removal } from './setup-steps.ts'
 
 export const clouds = ['aws', 'azure', 'gcp'] as const
 export type Cloud = (typeof clouds)[number]
-type TfVariables = Record<string, string | boolean>
+type TfVariables = Record<string, string | boolean | number>
 
 const examples: Record<Cloud, string> = { aws: awsExample, azure: azureExample, gcp: gcpExample }
 const signInChecks: Record<Cloud, { command: string[]; hint: string }> = {
@@ -36,20 +37,55 @@ const hclStringOf = (value: string) =>
 export const tfVariablesOf = (variables: TfVariables) =>
   Object.entries(variables)
     .filter(([, value]) => value !== '')
-    .map(([name, value]) => `${name} = ${typeof value === 'boolean' ? value : hclStringOf(value)}\n`)
+    .map(([name, value]) => `${name} = ${typeof value === 'string' ? hclStringOf(value) : value}\n`)
     .join('')
+
+const isBlankOrComment = (text: string) => /^\s*((#|\/\/).*)?$/.test(text)
+
+const hclStringFrom = (value: string) => {
+  let end = 1
+  while (end < value.length && value[end] !== '"') end += value[end] === '\\' ? 2 : 1
+  if (!isBlankOrComment(value.slice(end + 1))) return undefined
+  try {
+    return (JSON.parse(value.slice(0, end + 1)) as string).replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')
+  } catch {
+    return undefined
+  }
+}
+
+const tfValueFrom = (value: string) => {
+  const [, literal = '', rest = ''] = /^(true|false|-?\d+(?:\.\d+)?)(.*)$/.exec(value) ?? []
+  if (literal && isBlankOrComment(rest))
+    return literal === 'true' || literal === 'false' ? literal === 'true' : Number(literal)
+  return value.startsWith('"') ? hclStringFrom(value) : undefined
+}
 
 export const tfVariablesFrom = (text: string): TfVariables =>
   Object.fromEntries(
-    text.split('\n').flatMap((line): [string, string | boolean][] => {
-      const [, name, value] = /^(\w+) = (.+)$/.exec(line) ?? []
-      if (!name || !value) return []
-      if (value === 'true' || value === 'false') return [[name, value === 'true']]
-      return [[name, (JSON.parse(value) as string).replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')]]
+    text.split('\n').flatMap((line, index): [string, string | boolean | number][] => {
+      if (isBlankOrComment(line)) return []
+      const [, name = '', value = ''] = /^\s*(\w+)\s*=\s*(.*)$/.exec(line) ?? []
+      const parsed = name ? tfValueFrom(value) : undefined
+      if (parsed === undefined)
+        throw new Error(
+          `Line ${index + 1} of terraform.tfvars is not a text, number, true or false on one line: fix it, then run this again`,
+        )
+      return [[name, parsed]]
     }),
   )
 
-const stringOf = (value: string | boolean | undefined) => (typeof value === 'string' ? value : '')
+const stringOf = (value: string | boolean | number | undefined) => (typeof value === 'string' ? value : '')
+
+const optionalAnswerOf =
+  (asker: ReturnType<typeof askerOf>, existing: TfVariables) =>
+  (flag: string, variable: string, question: string, whenEmpty: string, { isSecret = false } = {}) => {
+    const saved = stringOf(existing[variable])
+    if (!saved) return asker.ask(flag, `${question} (${whenEmpty})`)
+    const answer = isSecret
+      ? asker.ask(flag, `${question} (empty keeps the saved one, ${removal} removes it)`) || saved
+      : asker.ask(flag, `${question} (${removal} removes it)`, saved)
+    return answer === removal ? '' : answer
+  }
 const joinBys = ['domain', 'invited-address'] as const
 const sizes = ['small', 'medium', 'large'] as const
 const choiceOf = <Choice extends string>(choices: readonly [Choice, ...Choice[]], previous: string) =>
@@ -57,25 +93,29 @@ const choiceOf = <Choice extends string>(choices: readonly [Choice, ...Choice[]]
 
 const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, existing: TfVariables): TfVariables => {
   const was = (name: string) => stringOf(existing[name])
+  const optional = optionalAnswerOf(asker, existing)
   if (cloud === 'aws')
     return {
       region: asker.ask('region', 'AWS region', was('region') || 'eu-west-1'),
-      route53_zone_id: asker.ask(
+      route53_zone_id: optional(
         'route53-zone-id',
-        'Route 53 zone id of the hostname (empty to give a certificate)',
-        was('route53_zone_id'),
+        'route53_zone_id',
+        'Route 53 zone id of the hostname',
+        'empty to give a certificate',
       ),
-      certificate_arn: asker.ask(
+      certificate_arn: optional(
         'certificate-arn',
-        'ARN of an issued ACM certificate for the hostname (when no Route 53 zone)',
-        was('certificate_arn'),
+        'certificate_arn',
+        'ARN of an issued ACM certificate for the hostname',
+        'when no Route 53 zone',
       ),
     }
   if (cloud === 'azure') {
-    const dnsZone = asker.ask(
+    const dnsZone = optional(
       'dns-zone',
-      'Azure DNS zone of the hostname, for example example.com (empty when DNS is elsewhere)',
-      was('dns_zone_name'),
+      'dns_zone_name',
+      'Azure DNS zone of the hostname, for example example.com',
+      'empty when DNS is elsewhere',
     )
     return {
       subscription_id: asker.require('subscription', 'Azure subscription id', was('subscription_id')),
@@ -84,16 +124,21 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
       dns_zone_resource_group: dnsZone
         ? asker.require('dns-zone-resource-group', 'Resource group of that DNS zone', was('dns_zone_resource_group'))
         : '',
-      binds_hostname: dnsZone !== '' || asker.given('bind-hostname') || existing.binds_hostname === true,
+      binds_hostname:
+        dnsZone !== '' ||
+        (asker.given('bind-hostname')
+          ? asker.ask('bind-hostname', 'Bind the hostname') !== 'no'
+          : existing.binds_hostname === true && was('dns_zone_name') === ''),
     }
   }
   return {
     project: asker.require('project', 'Google Cloud project id', was('project')),
     region: asker.ask('region', 'Google Cloud region', was('region') || 'europe-west1'),
-    dns_zone_name: asker.ask(
+    dns_zone_name: optional(
       'dns-zone',
-      'Cloud DNS managed zone name of the hostname (empty when DNS is elsewhere)',
-      was('dns_zone_name'),
+      'dns_zone_name',
+      'Cloud DNS managed zone name of the hostname',
+      'empty when DNS is elsewhere',
     ),
   }
 }
@@ -118,8 +163,15 @@ export const setupCloud = async (flags: Flags, cloud: Cloud) => {
   if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its answers are the defaults.`)
   const version =
     flags.values.version || was('spyria_version') || (cliVersion === 'dev' ? await latestVersion() : cliVersion)
-  const smtpUrl = asker.ask('smtp-url', 'SMTP URL for verification links (empty to skip)', was('smtp_url'))
+  const smtpUrl = optionalAnswerOf(asker, existing)(
+    'smtp-url',
+    'smtp_url',
+    'SMTP URL for verification links',
+    'empty to skip',
+    { isSecret: true },
+  )
   const variables: TfVariables = {
+    ...existing,
     hostname: asker
       .require('hostname', 'Hostname of Spyria, for example spyria.example.com', was('hostname'))
       .toLowerCase(),
