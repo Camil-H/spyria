@@ -88,3 +88,11 @@ test('a trusted proxy is unset or cloudflare', () => {
   expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'cloudflare' })).toEqual([])
   expect(problemsWith({ SPYRIA_TRUSTED_PROXY: 'nginx' })).toEqual(['SPYRIA_TRUSTED_PROXY must be unset or cloudflare.'])
 })
+
+test('an install code, when set, is 16 characters of the claim code alphabet', () => {
+  expect(problemsWith({ SPYRIA_INSTALL_HOST_TOKEN: 'ABCDEFGHJKMNPQRS' })).toEqual([])
+  for (const refused of ['ABC', 'abcdefghjkmnpqrs', 'ABCDEFGHJKMNPQR0'])
+    expect(problemsWith({ SPYRIA_INSTALL_HOST_TOKEN: refused })).toEqual([
+      'SPYRIA_INSTALL_HOST_TOKEN must be 16 characters from ABCDEFGHJKMNPQRSTUVWXYZ23456789.',
+    ])
+})
