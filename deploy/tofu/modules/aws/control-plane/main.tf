@@ -34,12 +34,13 @@ module "settings" {
   microsoft_client_secret = var.microsoft_client_secret
   secrets                 = module.secrets.values
   database = {
-    host         = aws_db_instance.postgres.address
-    port         = aws_db_instance.postgres.port
-    user         = "spyria"
-    requires_tls = true
-    spyria_name  = "spyria"
-    gateway_name = "bifrost"
+    host              = aws_db_instance.postgres.address
+    port              = aws_db_instance.postgres.port
+    user              = "spyria"
+    requires_tls      = true
+    replication_grant = ""
+    spyria_name       = "spyria"
+    gateway_name      = "bifrost"
   }
   server_url        = "http://server.${local.namespace}:3000"
   zero_url          = "http://zero-cache.${local.namespace}:4848"

@@ -27,14 +27,15 @@ variable "secrets" {
   sensitive = true
 }
 variable "database" {
-  description = "Where the managed Postgres answers, and whether it requires TLS"
+  description = "Where the managed Postgres answers, whether it requires TLS, and the statement that lets the admin role replicate where the cloud needs one"
   type = object({
-    host         = string
-    port         = number
-    user         = string
-    requires_tls = bool
-    spyria_name  = string
-    gateway_name = string
+    host              = string
+    port              = number
+    user              = string
+    requires_tls      = bool
+    replication_grant = string
+    spyria_name       = string
+    gateway_name      = string
   })
 }
 variable "server_url" {
@@ -171,6 +172,7 @@ output "gateway_config_command" {
       "export PGHOST=${var.database.host} PGPORT=${var.database.port} PGUSER=${var.database.user} PGDATABASE=${var.database.spyria_name} PGSSLMODE=${var.database.requires_tls ? "require" : "disable"}",
       "psql -tAc \"select 1 from pg_roles where rolname = 'bifrost'\" | grep -q 1 || psql -c \"create role bifrost login password '$BIFROST_DB_PASSWORD'\"",
       "psql -c \"grant bifrost to current_user\"",
+      var.database.replication_grant,
       "psql -tAc \"select 1 from pg_database where datname = '${var.database.gateway_name}'\" | grep -q 1 || psql -c \"create database ${var.database.gateway_name} owner bifrost template template0 encoding 'UTF8'\"",
     ]),
   ]
