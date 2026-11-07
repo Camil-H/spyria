@@ -100,7 +100,11 @@ resource "azurerm_container_app" "server" {
       }
     }
   }
-  depends_on = [time_sleep.apps_role_propagates]
+  depends_on = [
+    time_sleep.apps_role_propagates,
+    azurerm_postgresql_flexible_server_database.spyria,
+    azurerm_postgresql_flexible_server_configuration.setting,
+  ]
 }
 
 resource "azurerm_container_app" "zero" {
@@ -163,7 +167,11 @@ resource "azurerm_container_app" "zero" {
       }
     }
   }
-  depends_on = [time_sleep.apps_role_propagates]
+  depends_on = [
+    time_sleep.apps_role_propagates,
+    azurerm_postgresql_flexible_server_database.spyria,
+    azurerm_postgresql_flexible_server_configuration.setting,
+  ]
 }
 
 resource "azurerm_container_app" "gateway" {
@@ -251,7 +259,11 @@ resource "azurerm_container_app" "gateway" {
       }
     }
   }
-  depends_on = [time_sleep.apps_role_propagates]
+  depends_on = [
+    time_sleep.apps_role_propagates,
+    azurerm_postgresql_flexible_server_database.spyria,
+    azurerm_postgresql_flexible_server_configuration.setting,
+  ]
 }
 
 resource "azurerm_dns_cname_record" "hostname" {
