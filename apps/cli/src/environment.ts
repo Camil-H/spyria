@@ -31,21 +31,23 @@ export const newInstallHostToken = () => {
 
 export const isDeploymentName = (name: string) => deploymentPattern.test(name)
 
+const unquoted = (value: string) => value.replace(/^'(.*)'$/s, '$1').replace(/^"(.*)"$/s, '$1')
+
 export const parseEnvironment = (text: string): Environment =>
   Object.fromEntries(
     text
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line !== '' && !line.startsWith('#') && line.includes('='))
-      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+      .map((line) => [line.slice(0, line.indexOf('=')), unquoted(line.slice(line.indexOf('=') + 1))]),
   )
 
 export const serializeEnvironment = (environment: Environment) =>
   Object.entries(environment)
     .filter(([, value]) => value !== '')
     .map(([name, value]) => {
-      if (/[\n\r]/.test(value)) throw new Error(`${name} cannot span lines`)
-      return `${name}=${value}\n`
+      if (/[\n\r']/.test(value)) throw new Error(`${name} cannot hold a quote or span lines`)
+      return `${name}='${value}'\n`
     })
     .join('')
 
@@ -94,12 +96,10 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_DOCKER_GROUP: answers.runsHost ? answers.dockerGroup : '',
     SPYRIA_SMTP_URL: answers.smtp?.url ?? '',
     SPYRIA_MAIL_FROM: answers.smtp?.from ?? '',
-    SPYRIA_GOOGLE_CLIENT_ID: answers.instanceApps.google?.clientId ?? existing.SPYRIA_GOOGLE_CLIENT_ID ?? '',
-    SPYRIA_GOOGLE_CLIENT_SECRET:
-      answers.instanceApps.google?.clientSecret ?? existing.SPYRIA_GOOGLE_CLIENT_SECRET ?? '',
-    SPYRIA_MICROSOFT_CLIENT_ID: answers.instanceApps.microsoft?.clientId ?? existing.SPYRIA_MICROSOFT_CLIENT_ID ?? '',
-    SPYRIA_MICROSOFT_CLIENT_SECRET:
-      answers.instanceApps.microsoft?.clientSecret ?? existing.SPYRIA_MICROSOFT_CLIENT_SECRET ?? '',
+    SPYRIA_GOOGLE_CLIENT_ID: answers.instanceApps.google?.clientId ?? '',
+    SPYRIA_GOOGLE_CLIENT_SECRET: answers.instanceApps.google?.clientSecret ?? '',
+    SPYRIA_MICROSOFT_CLIENT_ID: answers.instanceApps.microsoft?.clientId ?? '',
+    SPYRIA_MICROSOFT_CLIENT_SECRET: answers.instanceApps.microsoft?.clientSecret ?? '',
   }
 }
 
