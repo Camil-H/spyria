@@ -46,4 +46,5 @@ module "settings" {
   zero_url          = "http://zero-cache.${local.namespace}:4848"
   gateway_url       = "http://gateway.${local.namespace}:8080"
   zero_replica_file = "/data/spyria-replica.db"
+  trusted_proxy     = "x-forwarded-for:1"
 }

@@ -4,7 +4,6 @@ locals {
     module.settings.zero_secrets,
     module.settings.gateway_secrets,
   )
-  secret_names = toset(nonsensitive(keys(local.secret_values)))
   log_options = {
     awslogs-group         = aws_cloudwatch_log_group.services.name
     awslogs-region        = data.aws_region.current.region
@@ -121,7 +120,7 @@ resource "aws_ecs_task_definition" "server" {
       stopTimeout      = 30
       logConfiguration = { logDriver = "awslogs", options = local.log_options }
       healthCheck = {
-        command     = ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
+        command     = ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/health/live').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
         interval    = 10
         retries     = 6
         startPeriod = 90

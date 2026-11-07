@@ -7,13 +7,14 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "server" {
-  name        = "${var.name}-server"
-  port        = 3000
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = aws_vpc.main.id
+  name                 = "${var.name}-server"
+  port                 = 3000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_vpc.main.id
+  deregistration_delay = 30
   health_check {
-    path    = "/health"
+    path    = "/health/live"
     matcher = "200"
   }
 }
