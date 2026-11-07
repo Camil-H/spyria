@@ -6,8 +6,10 @@ type Tunnel = { id: string; name: string }
 
 export class CloudflareRefused extends Error {}
 
-const clientOf =
-  (apiToken: string, api: string) =>
+export type CloudflareCall = <Result>(method: string, path: string, body?: object) => Promise<Result>
+
+export const cloudflareClientOf =
+  (apiToken: string, api = cloudflareApi): CloudflareCall =>
   async <Result>(method: string, path: string, body?: object) => {
     const response = await fetch(`${api}${path}`, {
       method,
@@ -27,6 +29,14 @@ const zoneCandidatesOf = (hostname: string) => {
   return labels.slice(0, -1).map((_, index) => labels.slice(index).join('.'))
 }
 
+export const zoneOf = async (call: CloudflareCall, hostname: string) => {
+  for (const candidate of zoneCandidatesOf(hostname)) {
+    const [zone] = await call<Zone[]>('GET', `/zones?${new URLSearchParams({ name: candidate })}`)
+    if (zone) return zone
+  }
+  throw new CloudflareRefused(`No Cloudflare zone this token can edit holds ${hostname}`)
+}
+
 export const createTunnel = async ({
   apiToken,
   hostname,
@@ -38,13 +48,8 @@ export const createTunnel = async ({
   tunnelName: string
   api?: string
 }) => {
-  const call = clientOf(apiToken, api)
-  let zone: Zone | undefined
-  for (const candidate of zoneCandidatesOf(hostname)) {
-    ;[zone] = await call<Zone[]>('GET', `/zones?${new URLSearchParams({ name: candidate })}`)
-    if (zone) break
-  }
-  if (!zone) throw new CloudflareRefused(`No Cloudflare zone this token can edit holds ${hostname}`)
+  const call = cloudflareClientOf(apiToken, api)
+  const zone = await zoneOf(call, hostname)
   const accountPath = `/accounts/${zone.account.id}/cfd_tunnel`
   const [existing] = await call<Tunnel[]>(
     'GET',
