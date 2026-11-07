@@ -61,7 +61,7 @@ const fastChecks = planFile
     ])
 
 const isUnitTest = (file: string) =>
-  /^(packages|apps\/server|apps\/host|apps\/agent|apps\/cli)\/.+\.test\.tsx?$/.test(file) &&
+  /^(packages|apps\/server|apps\/host|apps\/agent|apps\/cli|scripts)\/.+\.test\.tsx?$/.test(file) &&
   !/\.(integration|docker)\.test\.ts$/.test(file)
 const isIntegrationTest = (file: string) => file.endsWith('.integration.test.ts')
 const isE2eSpec = (file: string) => /^apps\/web\/e2e\/.+\.spec\.ts$/.test(file)
