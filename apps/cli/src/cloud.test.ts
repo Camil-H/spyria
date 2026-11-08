@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
@@ -210,5 +210,28 @@ test('run from inside a cloud configuration without --folder, setup --cloud keep
     expect(tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8')).spyria_version).toBe('1.4.0')
   } finally {
     process.chdir(originalDirectory)
+  }
+})
+
+test('the configuration folder, where OpenTofu keeps its state with every secret, is readable by its owner only', async () => {
+  const parent = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
+  try {
+    const existing = join(parent, 'existing')
+    const created = join(parent, 'created')
+    await Bun.write(join(existing, 'terraform.tfstate'), '{}')
+    chmodSync(existing, 0o755)
+    for (const target of [existing, created]) {
+      await setupCloud(
+        parseFlags([
+          ...['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--folder', target, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--project', 'acme-prod'],
+        ]),
+        'gcp',
+        { environment: {} },
+      )
+      expect(statSync(target).mode & 0o777).toBe(0o700)
+    }
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
   }
 })
