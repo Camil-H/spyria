@@ -129,7 +129,7 @@ variable "sign_in_app_client_secret" {
 }
 
 variable "secret_admin_object_ids" {
-  description = "Object ids of the other accounts that apply this configuration, such as another admin or a CI service principal, which read its Key Vault secrets when they plan; the account applying is added by itself"
+  description = "Object ids of every account that applies this configuration, yours included, such as another admin or a CI service principal, which read its Key Vault secrets when they plan; empty grants the account applying alone"
   type        = list(string)
   default     = []
 }

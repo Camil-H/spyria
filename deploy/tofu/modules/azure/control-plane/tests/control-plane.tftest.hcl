@@ -262,13 +262,36 @@ run "the_same_secret_values_give_the_same_digest" {
   }
 }
 
-run "every_account_listed_to_apply_can_read_and_write_the_secrets" {
+run "every_account_listed_to_apply_can_read_and_write_the_secrets_whichever_of_them_applies" {
   command = apply
   variables {
-    secret_admin_object_ids = ["00000000-0000-0000-0000-0000000000aa"]
+    secret_admin_object_ids = ["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-0000000000AA"]
   }
   assert {
     condition     = toset(keys(azurerm_role_assignment.deployer_writes_secrets)) == toset(["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-0000000000aa"])
-    error_message = "The account applying and every listed account are Key Vault Secrets Officers"
+    error_message = "Every listed account is a Key Vault Secrets Officer"
   }
+}
+
+run "the_other_listed_account_applying_keeps_the_same_grants" {
+  command = apply
+  override_data {
+    target = data.azurerm_client_config.current
+    values = { tenant_id = "00000000-0000-0000-0000-000000000001", object_id = "00000000-0000-0000-0000-0000000000aa" }
+  }
+  variables {
+    secret_admin_object_ids = ["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-0000000000aa"]
+  }
+  assert {
+    condition     = toset(keys(azurerm_role_assignment.deployer_writes_secrets)) == toset(["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-0000000000aa"])
+    error_message = "An apply by another listed account takes no access from the first"
+  }
+}
+
+run "an_account_that_applies_without_being_listed_is_refused" {
+  command = plan
+  variables {
+    secret_admin_object_ids = ["00000000-0000-0000-0000-0000000000aa"]
+  }
+  expect_failures = [azurerm_role_assignment.deployer_writes_secrets]
 }
