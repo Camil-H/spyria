@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "bun build --compile --minify src/main.ts --outfile dist/spyria"
+    "build": "bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --minify src/main.ts --outfile dist/spyria"
   }
 }
