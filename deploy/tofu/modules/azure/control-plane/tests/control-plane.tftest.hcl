@@ -138,3 +138,17 @@ run "a_dns_zone_needs_its_resource_group" {
   }
   expect_failures = [var.dns_zone_resource_group]
 }
+
+run "at_size_large_every_app_with_its_init_containers_fits_one_consumption_app" {
+  command = apply
+  variables {
+    size = "large"
+  }
+  assert {
+    condition = alltrue([for app in [azurerm_container_app.server, azurerm_container_app.zero, azurerm_container_app.gateway] :
+      sum(concat([for container in app.template[0].container : container.cpu], [for container in app.template[0].init_container : container.cpu])) <= 4 &&
+      sum(concat([for container in app.template[0].container : tonumber(trimsuffix(container.memory, "Gi"))], [for container in app.template[0].init_container : tonumber(trimsuffix(container.memory, "Gi"))])) <= 8
+    ])
+    error_message = "A Consumption app takes at most 4 vCPU and 8 GiB across its containers and init containers"
+  }
+}

@@ -4,7 +4,7 @@ locals {
   sizes = {
     small  = { cpu = 1.0, memory = "2Gi", database_sku = "GP_Standard_D2ds_v5" }
     medium = { cpu = 2.0, memory = "4Gi", database_sku = "GP_Standard_D4ds_v5" }
-    large  = { cpu = 4.0, memory = "8Gi", database_sku = "GP_Standard_D8ds_v5" }
+    large  = { cpu = 3.5, memory = "7Gi", database_sku = "GP_Standard_D8ds_v5" }
   }
   size          = local.sizes[var.size]
   manages_dns   = var.dns_zone_name != ""
