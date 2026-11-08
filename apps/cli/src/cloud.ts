@@ -169,7 +169,8 @@ export const setupCloud = async (
       ),
     },
   })
-  mkdirSync(folder, { recursive: true })
+  mkdirSync(folder, { recursive: true, mode: 0o700 })
+  chmodSync(folder, 0o700)
   const variablesFile = join(folder, 'terraform.tfvars')
   const existing = existsSync(variablesFile) ? tfVariablesFrom(readFileSync(variablesFile, 'utf8')) : {}
   const was = (name: string) => stringOf(existing[name])
@@ -200,7 +201,9 @@ export const setupCloud = async (
   writeFileSync(join(folder, 'main.tf'), rootModuleOf(cloud, version))
   writeFileSync(variablesFile, tfVariablesOf(variables), { mode: 0o600 })
   chmodSync(variablesFile, 0o600)
-  console.log(`Wrote ${folder}: main.tf (modules of Spyria ${version}) and terraform.tfvars (readable by you only).`)
+  console.log(
+    `Wrote ${folder}, readable by you only, since the OpenTofu state it will hold carries every secret: main.tf (modules of Spyria ${version}) and terraform.tfvars.`,
+  )
   if (flags.switches.has('no-start')) return
   if (Bun.which('tofu') === null)
     throw new Error('OpenTofu is missing: install it (https://opentofu.org/docs/intro/install/), then run this again')
