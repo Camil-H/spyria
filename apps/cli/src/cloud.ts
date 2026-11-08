@@ -62,9 +62,9 @@ const tfValueFrom = (value: string) => {
 
 export const tfVariablesFrom = (text: string): TfVariables =>
   Object.fromEntries(
-    text.split('\n').flatMap((line, index): [string, string | boolean | number][] => {
+    text.split(/\r?\n/).flatMap((line, index): [string, string | boolean | number][] => {
       if (isBlankOrComment(line)) return []
-      const [, name = '', value = ''] = /^\s*(\w+)\s*=\s*(.*)$/.exec(line) ?? []
+      const [, name = '', value = ''] = /^\s*([A-Za-z_][\w-]*)\s*=\s*(.*)$/.exec(line) ?? []
       const parsed = name ? tfValueFrom(value) : undefined
       if (parsed === undefined)
         throw new Error(
@@ -80,10 +80,11 @@ const optionalAnswerOf =
   (asker: ReturnType<typeof askerOf>, existing: TfVariables) =>
   (flag: string, variable: string, question: string, whenEmpty: string, { isSecret = false } = {}) => {
     const saved = stringOf(existing[variable])
-    if (!saved) return asker.ask(flag, `${question} (${whenEmpty})`)
-    const answer = isSecret
-      ? asker.ask(flag, `${question} (empty keeps the saved one, ${removal} removes it)`) || saved
-      : asker.ask(flag, `${question} (${removal} removes it)`, saved)
+    const answer = !saved
+      ? asker.ask(flag, `${question} (${whenEmpty})`)
+      : isSecret
+        ? asker.ask(flag, `${question} (empty keeps the saved one, ${removal} removes it)`) || saved
+        : asker.ask(flag, `${question} (${removal} removes it)`, saved)
     return answer === removal ? '' : answer
   }
 const joinBys = ['domain', 'invited-address'] as const
@@ -127,7 +128,7 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
       binds_hostname:
         dnsZone !== '' ||
         (asker.given('bind-hostname')
-          ? asker.ask('bind-hostname', 'Bind the hostname') !== 'no'
+          ? asker.choose('bind-hostname', 'Bind the hostname', ['yes', 'no'], 'yes') === 'yes'
           : existing.binds_hostname === true && was('dns_zone_name') === ''),
     }
   }
