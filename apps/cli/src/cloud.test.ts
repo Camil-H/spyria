@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
@@ -220,8 +220,7 @@ test('the configuration folder, where OpenTofu keeps its state with every secret
   try {
     const existing = join(parent, 'existing')
     const created = join(parent, 'created')
-    await Bun.write(join(existing, 'main.tf'), rootModuleOf('gcp', '1.2.0'))
-    await Bun.write(join(existing, 'terraform.tfstate'), '{}')
+    mkdirSync(existing)
     chmodSync(existing, 0o755)
     for (const target of [existing, created]) {
       await setupCloud(
@@ -239,41 +238,45 @@ test('the configuration folder, where OpenTofu keeps its state with every secret
   }
 })
 
-test('setup --cloud never writes into a folder that holds Spyria on another cloud or another OpenTofu configuration', async () => {
+test('setup --cloud marks the folders it makes, and writes only into a new or empty folder or one it marked for the same cloud', async () => {
   const parent = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
   try {
-    const setupGcpIn = (target: string) =>
+    const setupIn = (target: string, cloud: 'gcp' | 'aws' = 'gcp') =>
       setupCloud(
         parseFlags([
-          ...['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--folder', target, '--version', '1.2.0'],
-          ...['--hostname', 'spyria.example.com', '--project', 'acme-prod'],
+          ...['setup', '--cloud', cloud, '--unattended', '--no-start', '--folder', target, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--project', 'acme-prod', '--certificate-arn', 'arn:aws:acm:x'],
         ]),
-        'gcp',
+        cloud,
         { environment: {} },
       ).catch((error: Error) => error.message)
+
     const onAws = join(parent, 'aws')
-    await Bun.write(join(onAws, 'main.tf'), rootModuleOf('aws', '1.2.0'))
-    await Bun.write(join(onAws, 'terraform.tfvars'), 'region = "eu-west-1"\n')
-    expect(await setupGcpIn(onAws)).toBe(`${onAws} holds Spyria on aws: pass --folder with a folder for gcp`)
-    expect(readFileSync(join(onAws, 'main.tf'), 'utf8')).toBe(rootModuleOf('aws', '1.2.0'))
+    expect(await setupIn(onAws, 'aws')).toBeUndefined()
+    expect(readFileSync(join(onAws, '.spyria-cloud'), 'utf8')).toBe('aws\n')
+    const awsRootModule = readFileSync(join(onAws, 'main.tf'), 'utf8')
+    expect(await setupIn(onAws)).toBe(`${onAws} holds Spyria on aws: pass --folder with a folder for gcp`)
+    expect(readFileSync(join(onAws, 'main.tf'), 'utf8')).toBe(awsRootModule)
+
     for (const [name, files] of [
-      ['variables-only', { 'terraform.tfvars': 'name = "x"\n' }],
-      ['state-only', { 'terraform.tfstate': '{}' }],
-      ['other-project', { 'network.tf': 'resource "x" "y" {}\n', 'terraform.tfstate': '{}' }],
-      ['spyria-and-more', { 'main.tf': rootModuleOf('gcp', '1.2.0'), 'extra.tf': 'resource "x" "y" {}\n' }],
+      ['opentofu-project', { 'network.tofu': 'resource "x" "y" {}\n' }],
+      ['spyria-without-marker', { 'main.tf': rootModuleOf('gcp', '1.2.0') }],
+      ['anything', { 'notes.txt': 'mine\n' }],
     ] as const) {
-      const unrelated = join(parent, name)
-      for (const [file, content] of Object.entries(files)) await Bun.write(join(unrelated, file), content)
-      expect(await setupGcpIn(unrelated)).toBe(
-        `${unrelated} holds another OpenTofu configuration: pass --folder with a folder of its own`,
+      const unmarked = join(parent, name)
+      for (const [file, content] of Object.entries(files)) await Bun.write(join(unmarked, file), content)
+      expect(await setupIn(unmarked)).toBe(
+        `${unmarked} was not made by spyria setup --cloud: pass --folder with a new or empty folder`,
       )
+      expect(readdirSync(unmarked).sort()).toEqual(Object.keys(files).sort())
     }
-    const applied = join(parent, 'applied')
-    await Bun.write(join(applied, 'main.tf'), rootModuleOf('gcp', '1.2.0'))
-    await Bun.write(join(applied, 'terraform.tfstate'), '{}')
-    await Bun.write(join(applied, 'backend.tf'), 'terraform {\n  backend "gcs" {\n    bucket = "acme-state"\n  }\n}\n')
-    mkdirSync(join(applied, '.terraform'))
-    expect(await setupGcpIn(applied)).toBeUndefined()
+
+    const empty = join(parent, 'empty')
+    mkdirSync(empty)
+    expect(await setupIn(empty)).toBeUndefined()
+    await Bun.write(join(empty, 'backend.tf.json'), '{"terraform":{"backend":{"gcs":{"bucket":"acme-state"}}}}\n')
+    await Bun.write(join(empty, 'terraform.tfstate'), '{}')
+    expect(await setupIn(empty)).toBeUndefined()
   } finally {
     rmSync(parent, { recursive: true, force: true })
   }

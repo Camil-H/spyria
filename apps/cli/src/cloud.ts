@@ -148,32 +148,20 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
   }
 }
 
-const tofuEntryPattern = /(\.tf|\.tf\.json|\.tfvars|\.tfvars\.json|\.tfstate)$|^\.terraform$|^terraform\.tfstate\.d$/
-const configurationFilePattern = /\.tf(\.json)?$/
-const infrastructureBlockPattern = /^\s*(resource|module|data)\s+"/m
+const markerFile = '.spyria-cloud'
 
-const configurationIn = (folder: string): Cloud | 'other' | undefined => {
-  if (!existsSync(folder)) return undefined
-  const tofuEntries = readdirSync(folder).filter((entry) => tofuEntryPattern.test(entry))
-  if (tofuEntries.length === 0) return undefined
-  const configurationFiles = tofuEntries.filter((entry) => configurationFilePattern.test(entry))
-  const definesOtherInfrastructure = configurationFiles.some(
-    (entry) =>
-      entry !== 'main.tf' &&
-      (entry.endsWith('.json') || infrastructureBlockPattern.test(readFileSync(join(folder, entry), 'utf8'))),
-  )
-  if (!configurationFiles.includes('main.tf') || definesOtherInfrastructure) return 'other'
-  const rootModule = readFileSync(join(folder, 'main.tf'), 'utf8')
-  const [, cloud] = /deploy\/tofu\/modules\/(aws|azure|gcp)\/control-plane/.exec(rootModule) ?? []
-  return clouds.find((candidate) => candidate === cloud) ?? 'other'
+const markedCloudOf = (folder: string) => {
+  const marker = join(folder, markerFile)
+  return existsSync(marker) ? readFileSync(marker, 'utf8').trim() : undefined
 }
 
 const assertFolderFor = (folder: string, cloud: Cloud) => {
-  const configuration = configurationIn(folder)
-  if (configuration === 'other')
-    throw new Error(`${folder} holds another OpenTofu configuration: pass --folder with a folder of its own`)
-  if (configuration !== undefined && configuration !== cloud)
-    throw new Error(`${folder} holds Spyria on ${configuration}: pass --folder with a folder for ${cloud}`)
+  if (!existsSync(folder)) return
+  const markedCloud = markedCloudOf(folder)
+  if (markedCloud === undefined && readdirSync(folder).length > 0)
+    throw new Error(`${folder} was not made by spyria setup --cloud: pass --folder with a new or empty folder`)
+  if (markedCloud !== undefined && markedCloud !== cloud)
+    throw new Error(`${folder} holds Spyria on ${markedCloud}: pass --folder with a folder for ${cloud}`)
 }
 
 const run = (folder: string, command: string[]) =>
@@ -193,13 +181,14 @@ export const setupCloud = async (
       folder: asker.ask(
         'folder',
         'Folder of the OpenTofu configuration',
-        configurationIn(process.cwd()) === cloud ? process.cwd() : `~/spyria-${cloud}`,
+        markedCloudOf(process.cwd()) === cloud ? process.cwd() : `~/spyria-${cloud}`,
       ),
     },
   })
   assertFolderFor(folder, cloud)
   mkdirSync(folder, { recursive: true, mode: 0o700 })
   chmodSync(folder, 0o700)
+  writeFileSync(join(folder, markerFile), `${cloud}\n`)
   const variablesFile = join(folder, 'terraform.tfvars')
   const existing = existsSync(variablesFile) ? tfVariablesFrom(readFileSync(variablesFile, 'utf8')) : {}
   const was = (name: string) => stringOf(existing[name])
