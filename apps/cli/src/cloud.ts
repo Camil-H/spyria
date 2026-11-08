@@ -148,6 +148,21 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
   }
 }
 
+const configurationIn = (folder: string): Cloud | 'other' | undefined => {
+  const rootModule = join(folder, 'main.tf')
+  if (!existsSync(rootModule)) return existsSync(join(folder, 'terraform.tfvars')) ? 'other' : undefined
+  const [, cloud] = /deploy\/tofu\/modules\/(aws|azure|gcp)\/control-plane/.exec(readFileSync(rootModule, 'utf8')) ?? []
+  return clouds.find((candidate) => candidate === cloud) ?? 'other'
+}
+
+const assertFolderFor = (folder: string, cloud: Cloud) => {
+  const configuration = configurationIn(folder)
+  if (configuration === 'other')
+    throw new Error(`${folder} holds another OpenTofu configuration: pass --folder with a folder of its own`)
+  if (configuration !== undefined && configuration !== cloud)
+    throw new Error(`${folder} holds Spyria on ${configuration}: pass --folder with a folder for ${cloud}`)
+}
+
 const run = (folder: string, command: string[]) =>
   Bun.spawnSync(command, { cwd: folder, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }).exitCode
 
@@ -165,10 +180,11 @@ export const setupCloud = async (
       folder: asker.ask(
         'folder',
         'Folder of the OpenTofu configuration',
-        existsSync(join(process.cwd(), 'terraform.tfvars')) ? process.cwd() : `~/spyria-${cloud}`,
+        configurationIn(process.cwd()) === cloud ? process.cwd() : `~/spyria-${cloud}`,
       ),
     },
   })
+  assertFolderFor(folder, cloud)
   mkdirSync(folder, { recursive: true, mode: 0o700 })
   chmodSync(folder, 0o700)
   const variablesFile = join(folder, 'terraform.tfvars')

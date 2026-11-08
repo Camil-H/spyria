@@ -237,3 +237,30 @@ test('the configuration folder, where OpenTofu keeps its state with every secret
     rmSync(parent, { recursive: true, force: true })
   }
 })
+
+test('setup --cloud never writes into a folder that holds Spyria on another cloud or another OpenTofu configuration', async () => {
+  const parent = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
+  try {
+    const setupGcpIn = (target: string) =>
+      setupCloud(
+        parseFlags([
+          ...['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--folder', target, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--project', 'acme-prod'],
+        ]),
+        'gcp',
+        { environment: {} },
+      ).catch((error: Error) => error.message)
+    const onAws = join(parent, 'aws')
+    await Bun.write(join(onAws, 'main.tf'), rootModuleOf('aws', '1.2.0'))
+    await Bun.write(join(onAws, 'terraform.tfvars'), 'region = "eu-west-1"\n')
+    expect(await setupGcpIn(onAws)).toBe(`${onAws} holds Spyria on aws: pass --folder with a folder for gcp`)
+    expect(readFileSync(join(onAws, 'main.tf'), 'utf8')).toBe(rootModuleOf('aws', '1.2.0'))
+    const unrelated = join(parent, 'unrelated')
+    await Bun.write(join(unrelated, 'terraform.tfvars'), 'name = "x"\n')
+    expect(await setupGcpIn(unrelated)).toBe(
+      `${unrelated} holds another OpenTofu configuration: pass --folder with a folder of its own`,
+    )
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
+})
