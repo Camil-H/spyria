@@ -26,7 +26,7 @@ export const runCompose = (folder: string, composeArguments: string[], input?: s
   Bun.spawnSync(composeCommandOf(folder, composeArguments), {
     cwd: folder,
     env: shellEnvironmentOf(process.env),
-    ...(input !== undefined && { stdin: new TextEncoder().encode(input) }),
+    stdin: input === undefined ? 'inherit' : new TextEncoder().encode(input),
     stdout: 'inherit',
     stderr: 'inherit',
   }).exitCode
