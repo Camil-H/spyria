@@ -80,8 +80,9 @@ resource "google_cloud_run_v2_service" "zero" {
   deletion_protection  = false
   invoker_iam_disabled = true
   template {
-    service_account = google_service_account.services.email
-    timeout         = "3600s"
+    service_account                  = google_service_account.services.email
+    timeout                          = "3600s"
+    max_instance_request_concurrency = 1000
     scaling {
       min_instance_count = 1
       max_instance_count = 1
@@ -150,8 +151,9 @@ resource "google_cloud_run_v2_service" "gateway" {
   deletion_protection  = false
   invoker_iam_disabled = true
   template {
-    service_account = google_service_account.services.email
-    timeout         = "3600s"
+    service_account                  = google_service_account.services.email
+    timeout                          = "3600s"
+    max_instance_request_concurrency = 1000
     scaling {
       min_instance_count = 1
       max_instance_count = 1
