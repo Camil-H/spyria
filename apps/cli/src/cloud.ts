@@ -173,7 +173,7 @@ const assertFolderFor = (folder: string, cloud: Cloud) => {
 
 export const hostUpdateStepsOf = (cloud: Cloud, accessCommand: string) =>
   cloud === 'azure'
-    ? `When Spyria asks you to update that host, save the update command it shows as update.sh, then run, from that folder: ${accessCommand}`
+    ? `When Spyria asks you to update that host, save the update command it shows as update.sh in the current folder, then run there: ${accessCommand}`
     : `When Spyria asks you to update that host, open a shell on it with ${accessCommand}${cloud === 'aws' ? ' (it needs the Session Manager plugin of the AWS CLI)' : ''}, run sudo -i, then paste the update command it shows.`
 
 const run = (folder: string, command: string[]) =>
