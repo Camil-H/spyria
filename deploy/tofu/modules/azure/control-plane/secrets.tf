@@ -25,11 +25,22 @@ resource "azurerm_key_vault" "settings" {
   soft_delete_retention_days = 7
 }
 
+locals {
+  applying_object_id = lower(data.azurerm_client_config.current.object_id)
+  secret_admin_ids   = toset([for id in var.secret_admin_object_ids : lower(id)])
+}
+
 resource "azurerm_role_assignment" "deployer_writes_secrets" {
-  for_each             = toset(concat([data.azurerm_client_config.current.object_id], var.secret_admin_object_ids))
+  for_each             = length(local.secret_admin_ids) > 0 ? local.secret_admin_ids : toset([local.applying_object_id])
   scope                = azurerm_key_vault.settings.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = each.value
+  lifecycle {
+    precondition {
+      condition     = length(local.secret_admin_ids) == 0 || contains(local.secret_admin_ids, local.applying_object_id)
+      error_message = "secret_admin_object_ids lists every account that applies, and the one applying now is not in it: add its object id, or it would lose access to the secrets."
+    }
+  }
 }
 
 resource "azurerm_user_assigned_identity" "apps" {
