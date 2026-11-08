@@ -109,7 +109,7 @@ test('the variables file is read after tofu fmt aligned it, with comments, and k
   })
   const unreadable = () => tfVariablesFrom('hostname = "a"\nsmtp_url = <<EOT\nsmtps://u:secret@x\nEOT\n')
   expect(unreadable).toThrow(
-    'Line 2 of terraform.tfvars is not a text, number, true or false on one line: fix it, then run this again',
+    'Line 2 of terraform.tfvars is not a text, number, true or false, or list of texts on one line: fix it, then run this again',
   )
 })
 
@@ -322,4 +322,33 @@ test('the host update steps setup prints name what each cloud needs besides the 
   expect(hostUpdateStepsOf('azure', 'az vm run-command invoke --scripts @update.sh')).toBe(
     'When Spyria asks you to update that host, save the update command it shows as update.sh in the current folder, then run there: az vm run-command invoke --scripts @update.sh',
   )
+})
+
+test('a one-line list of texts in terraform.tfvars, such as the Azure secret admins, reads back and survives a run of setup', async () => {
+  const answers = { secret_admin_object_ids: ['00000000-0000-0000-0000-0000000000aa', ['odd$', '{x}'].join('')] }
+  expect(tfVariablesOf(answers)).toBe(
+    'secret_admin_object_ids = ["00000000-0000-0000-0000-0000000000aa", "odd$$' + '{x}"]\n',
+  )
+  expect(tfVariablesFrom(tfVariablesOf(answers))).toEqual(answers)
+  expect(tfVariablesFrom('admins = ["a", "b"] # who applies\n')).toEqual({ admins: ['a', 'b'] })
+
+  const azureFolder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
+  try {
+    const setupAzure = () =>
+      setupCloud(
+        parseFlags([
+          ...['setup', '--cloud', 'azure', '--unattended', '--no-start', '--folder', azureFolder, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--subscription', 'subscription-1'],
+        ]),
+        'azure',
+        { environment: {} },
+      )
+    await setupAzure()
+    const variablesFile = join(azureFolder, 'terraform.tfvars')
+    await Bun.write(variablesFile, `${readFileSync(variablesFile, 'utf8')}secret_admin_object_ids = ["ci-principal"]\n`)
+    await setupAzure()
+    expect(tfVariablesFrom(readFileSync(variablesFile, 'utf8')).secret_admin_object_ids).toEqual(['ci-principal'])
+  } finally {
+    rmSync(azureFolder, { recursive: true, force: true })
+  }
 })
