@@ -5,9 +5,10 @@ locals {
     module.settings.gateway_secrets,
   )
   optional_secrets = {
-    SPYRIA_SMTP_URL                = var.smtp_url
-    SPYRIA_GOOGLE_CLIENT_SECRET    = var.google_client_secret
-    SPYRIA_MICROSOFT_CLIENT_SECRET = var.microsoft_client_secret
+    SPYRIA_SMTP_URL                  = var.smtp_url
+    SPYRIA_GOOGLE_CLIENT_SECRET      = var.google_client_secret
+    SPYRIA_MICROSOFT_CLIENT_SECRET   = var.microsoft_client_secret
+    SPYRIA_SIGN_IN_APP_CLIENT_SECRET = var.sign_in_app_client_secret
   }
   unset_secrets = [for name, value in local.optional_secrets : name if nonsensitive(value == "")]
   secret_names  = setsubtract(nonsensitive(keys(local.secret_values)), local.unset_secrets)

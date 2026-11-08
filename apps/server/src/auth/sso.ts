@@ -456,6 +456,25 @@ export const replaceSignInApp = async (
   })
 }
 
+export const applyConfiguredSignInApp = async (
+  database: Database,
+  secretBox: SecretBox,
+  app: { clientId: string; clientSecret: string },
+) => {
+  const stored = await database.$client<
+    { clientId: string; encryptedClientSecret: string; usesInstanceApp: boolean }[]
+  >`
+    select client_id as "clientId", encrypted_client_secret as "encryptedClientSecret",
+      uses_instance_app as "usesInstanceApp"
+    from workspace_sso join workspaces using (workspace_id) where workspaces.join_by = 'invited_address'`
+  const isStored = async ({ clientId, encryptedClientSecret, usesInstanceApp }: (typeof stored)[number]) =>
+    !usesInstanceApp &&
+    clientId === app.clientId.trim() &&
+    (await secretBox.open(encryptedClientSecret).catch(() => '')) === app.clientSecret.trim()
+  if ((await Promise.all(stored.map(isStored))).every(Boolean)) return 0
+  return replaceSignInApp(database, secretBox, app)
+}
+
 export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
   const missing = (
     await database.$client<{ preset: SsoPreset; count: number }[]>`

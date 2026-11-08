@@ -25,6 +25,7 @@ Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples), replace each 
 | `join_by` | `domain` or `invited-address` ([who can join](../features/admin.md#who-can-join)). |
 | `smtp_url`, `mail_from` | Optional mail. |
 | `google_client_id` and `_secret`, `microsoft_client_id` and `_secret` | Optional sign-in apps of the instance. |
+| `sign_in_app_client_id` and `_secret` | Optional, together, when people join by invited address: replaces the one sign-in app of every workspace when the server restarts. |
 | `size` | `small`, `medium` or `large`: the server's CPU and memory and the database's class; for a runtime host, about 6, 14 or 30 runtimes at once. Changing it restarts the runtime host VMs, which stops their running runtimes until the next prompt. |
 
 | Output | Meaning |

@@ -10,10 +10,12 @@ afterAll(() => rmSync(folder, { recursive: true, force: true }))
 
 test('the root module uses the modules of the chosen release from GitHub', () => {
   const module = rootModuleOf('aws', '1.2.0')
-  expect(module).toContain(
-    'source          = "github.com/Camil-H/spyria//deploy/tofu/modules/aws/control-plane?ref=v1.2.0"',
+  expect(module).toMatch(
+    /source +=\s"github\.com\/Camil-H\/spyria\/\/deploy\/tofu\/modules\/aws\/control-plane\?ref=v1\.2\.0"/,
   )
-  expect(module).toContain('source     = "github.com/Camil-H/spyria//deploy/tofu/modules/aws/runtime-host?ref=v1.2.0"')
+  expect(module).toMatch(
+    /source +=\s"github\.com\/Camil-H\/spyria\/\/deploy\/tofu\/modules\/aws\/runtime-host\?ref=v1\.2\.0"/,
+  )
   expect(module).not.toContain('../../modules')
 })
 

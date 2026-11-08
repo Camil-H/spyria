@@ -56,6 +56,7 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare) (`cloudflare`), or behind a load balancer that appends the client to `X-Forwarded-For` and is the only way in (`x-forwarded-for:<hops from the end>`; the cloud modules set it). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
 | `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Optional mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`; the sender is required once SMTP is set. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
+| `SPYRIA_SIGN_IN_APP_CLIENT_ID`, `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` | Optional, together, when people join by invited address: the one sign-in app of every workspace, which the server applies when it starts if it differs from the stored one ([operations](./operations.md#sign-in-app-of-an-instance-joined-by-invited-address)). |
 | `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Admin login of the gateway. |
 | `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Encrypts members' API keys inside the gateway. Never change it without wiping the gateway's database. |
 | `SPYRIA_GATEWAY_SETUP_TOKEN` | Gateway setup token. |

@@ -6,7 +6,7 @@ import { rejectionOf, testAuthSettings, testSetupToken } from '../testing/testin
 import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
-import { replaceSignInApp } from './sso.ts'
+import { applyConfiguredSignInApp, replaceSignInApp } from './sso.ts'
 
 const instance = await createTestDatabase()
 const { database } = instance
@@ -307,6 +307,24 @@ test('an operator changes the sign-in app of every workspace joined by invited a
   expect(new URL(login.headers.get('location') ?? 'http://none').searchParams.get('client_id')).toBe('spyria-rotated')
   const signedIn = await callbackAfter(login, { sub: 'bob-subject', email: 'bob@gmail.com', email_verified: true })
   expect(signedIn.sessions.map((session) => session.workspaceId)).toContain(workspaceId)
+})
+
+test('a sign-in app set in the settings replaces the stored one when the server starts, and nothing happens while they match', async () => {
+  const secretBox = createSecretBox(secretsKey)
+  const ssoEventCount = async () =>
+    (await database.$client`select 1 from workspace_events where type like 'sso.%'`).length
+  const before = await ssoEventCount()
+  expect(await applyConfiguredSignInApp(database, secretBox, { clientId: 'spyria-rotated', clientSecret })).toBe(0)
+  expect(await ssoEventCount()).toBe(before)
+  expect(await applyConfiguredSignInApp(database, secretBox, { clientId: 'spyria-configured', clientSecret })).toBe(2)
+  expect([
+    ...(await database.$client`select distinct client_id from workspace_sso join workspaces using (workspace_id)
+      where join_by = 'invited_address'`),
+  ]).toEqual([{ client_id: 'spyria-configured' }])
+  const login = await app.request('/auth/login?email=bob%40gmail.com')
+  expect(new URL(login.headers.get('location') ?? 'http://none').searchParams.get('client_id')).toBe(
+    'spyria-configured',
+  )
 })
 
 test("another account at the provider claiming a member's address gets neither that member's account nor a session", async () => {

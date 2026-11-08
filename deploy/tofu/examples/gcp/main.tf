@@ -29,6 +29,15 @@ variable "mail_from" {
   type    = string
   default = ""
 }
+variable "sign_in_app_client_id" {
+  type    = string
+  default = ""
+}
+variable "sign_in_app_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
 variable "size" {
   type    = string
   default = "small"
@@ -40,16 +49,18 @@ provider "google" {
 }
 
 module "control_plane" {
-  source         = "../../modules/gcp/control-plane"
-  project        = var.project
-  region         = var.region
-  hostname       = var.hostname
-  spyria_version = var.spyria_version
-  join_by        = var.join_by
-  dns_zone_name  = var.dns_zone_name
-  smtp_url       = var.smtp_url
-  mail_from      = var.mail_from
-  size           = var.size
+  source                    = "../../modules/gcp/control-plane"
+  project                   = var.project
+  region                    = var.region
+  hostname                  = var.hostname
+  spyria_version            = var.spyria_version
+  join_by                   = var.join_by
+  dns_zone_name             = var.dns_zone_name
+  smtp_url                  = var.smtp_url
+  mail_from                 = var.mail_from
+  sign_in_app_client_id     = var.sign_in_app_client_id
+  sign_in_app_client_secret = var.sign_in_app_client_secret
+  size                      = var.size
 }
 
 module "runtime_host" {
