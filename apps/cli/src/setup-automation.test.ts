@@ -50,10 +50,13 @@ test('setup with Cloudflare Access and Resend prints the provider values once, a
     await setup(
       parseFlags([
         ...['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0'],
-        ...['--hostname', 'spyria.example.com', '--cloudflare-token', 'cloudflare-api-token'],
-        ...['--provider', 'cloudflare-access', '--owner-email', 'pat@gmail.com', '--resend-key', 're_full_access'],
+        ...['--hostname', 'spyria.example.com', '--provider', 'cloudflare-access', '--owner-email', 'pat@gmail.com'],
       ]),
-      { cloudflareApiUrl: cloudflare.url.origin, resendApiUrl: resend.url.origin },
+      {
+        cloudflareApiUrl: cloudflare.url.origin,
+        resendApiUrl: resend.url.origin,
+        processEnvironment: { CLOUDFLARE_API_TOKEN: 'cloudflare-api-token', RESEND_API_KEY: 're_full_access' },
+      },
     )
   } finally {
     log.mockRestore()

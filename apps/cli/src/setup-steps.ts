@@ -14,7 +14,8 @@ const mailChoices = ['skip', 'smtp', 'resend', 'keep'] as const
 export const removal = '-'
 
 const cloudflareOf = ({ cloudflare }: SetupContext, what: string) => {
-  if (!cloudflare) throw new Error(`${what} needs the Cloudflare API token: pass --cloudflare-token`)
+  if (!cloudflare)
+    throw new Error(`${what} needs the Cloudflare API token: set CLOUDFLARE_API_TOKEN or answer its question`)
   return cloudflare
 }
 
@@ -80,7 +81,7 @@ export const firstWorkspaceProviderOf = async (
   }
   if (provider === 'okta') {
     const orgUrl = asker.require('okta-url', 'Okta organization URL, for example https://acme.okta.com')
-    const apiToken = asker.require('okta-token', 'Okta API token of an admin (used now, never stored)')
+    const apiToken = asker.requireSecret('okta-token', 'Okta API token of an admin (used now, never stored)')
     const okta = await registerOktaApp({ orgUrl, apiToken, origin })
     return formLines('Other OIDC', {
       Issuer: okta.issuer,
@@ -113,7 +114,7 @@ export const mailOf = async (
   if (choice === 'skip') return undefined
   if (choice === 'keep') return { url: existing.SPYRIA_SMTP_URL ?? '', from: existing.SPYRIA_MAIL_FROM ?? '' }
   if (choice === 'resend') {
-    const apiKey = asker.require(
+    const apiKey = asker.requireSecret(
       'resend-key',
       'Resend API key with full access (used now; a sending-only key is stored)',
     )
@@ -126,7 +127,7 @@ export const mailOf = async (
     return { url: resend.smtpUrl, from: asker.ask('mail-from', 'Sender', resend.mailFrom) }
   }
   return {
-    url: asker.require('smtp-url', 'SMTP URL, for example smtps://user:pass@smtp.example.com:465'),
+    url: asker.requireSecret('smtp-url', 'SMTP URL, for example smtps://user:pass@smtp.example.com:465'),
     from: asker.require(
       'mail-from',
       'Sender, for example Spyria <spyria@example.com>',

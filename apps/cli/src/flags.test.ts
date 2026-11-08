@@ -38,3 +38,32 @@ test('spyria compose passes every argument to Compose except the install folder'
   expect(composeArgumentsOf(['--folder', '/srv/spyria', 'ps'])).toEqual(['ps'])
   expect(composeArgumentsOf(['ps', '--folder=/srv/spyria'])).toEqual(['ps'])
 })
+
+test('a secret is never a flag: it comes from its environment variable, or from a question that never shows the saved one', () => {
+  expect(() => askerOf(parseFlags(['setup', '--cloudflare-token', 'token']))).toThrow(
+    '--cloudflare-token would leave a secret in your shell history and process list: set CLOUDFLARE_API_TOKEN instead',
+  )
+  const unattended = askerOf(parseFlags(['--unattended']), true, { RESEND_API_KEY: ' re_key ' })
+  expect(unattended.secret('resend-key', 'Resend API key')).toBe('re_key')
+  expect(unattended.given('resend-key')).toBe(true)
+  expect(unattended.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('saved-secret')
+  expect(() => unattended.requireSecret('okta-token', 'Okta API token')).toThrow('OKTA_API_TOKEN is required')
+
+  const questions: string[] = []
+  const answers = ['', 'typed-secret']
+  const originalPrompt = globalThis.prompt
+  globalThis.prompt = (question?: string) => {
+    questions.push(question ?? '')
+    return answers.shift() ?? ''
+  }
+  try {
+    const interactive = askerOf(parseFlags([]), false, {})
+    expect(
+      interactive.secret('google-client-secret', 'Client secret (empty keeps the saved one)', 'saved-secret'),
+    ).toBe('saved-secret')
+    expect(interactive.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('typed-secret')
+  } finally {
+    globalThis.prompt = originalPrompt
+  }
+  expect(questions).toEqual(['Client secret (empty keeps the saved one)', 'Client secret'])
+})

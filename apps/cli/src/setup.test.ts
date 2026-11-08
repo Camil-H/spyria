@@ -27,21 +27,17 @@ afterAll(() => {
   cloudflare.stop(true)
   rmSync(folder, { recursive: true, force: true })
 })
-const runSetup = (extra: string[]) =>
+const runSetup = (extra: string[], processEnvironment = {}) =>
   setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0', ...extra]), {
     cloudflareApiUrl: cloudflare.url.origin,
+    processEnvironment,
   })
 const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'utf8'))
 
 test('an unattended setup creates the tunnel and writes the Compose file, the gateway config and a private .env', async () => {
-  await runSetup([
-    '--hostname',
-    'Spyria.Example.com',
-    '--cloudflare-token',
-    'api-token',
-    '--join-by',
-    'invited-address',
-  ])
+  await runSetup(['--hostname', 'Spyria.Example.com', '--join-by', 'invited-address'], {
+    CLOUDFLARE_API_TOKEN: 'api-token',
+  })
   expect(tunnelNames).toEqual(['spyria-spyria.example.com'])
   expect(readFileSync(join(folder, 'compose.yml'), 'utf8')).toContain('spyria-server:${SPYRIA_VERSION')
   expect(JSON.parse(readFileSync(join(folder, 'bifrost.json'), 'utf8'))).toMatchObject({
@@ -84,7 +80,10 @@ test('run from inside an install without --folder, setup keeps that install and 
   const originalDirectory = process.cwd()
   try {
     process.chdir(folder)
-    await setup(parseFlags(['setup', '--unattended', '--no-start']), { cloudflareApiUrl: cloudflare.url.origin })
+    await setup(parseFlags(['setup', '--unattended', '--no-start']), {
+      cloudflareApiUrl: cloudflare.url.origin,
+      processEnvironment: {},
+    })
     expect(environment()).toEqual(before)
   } finally {
     process.chdir(originalDirectory)
@@ -94,29 +93,27 @@ test('run from inside an install without --folder, setup keeps that install and 
 test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {
-    const attempt = (extra: string[]) =>
+    const attempt = (extra: string[], processEnvironment = {}) =>
       setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0', ...extra]), {
         cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment,
       }).catch((error: Error) => error.message)
     expect(await attempt([])).toBe('--hostname is required')
     expect(await attempt(['--hostname', 'spyria.example.com'])).toBe(
       'A Cloudflare API token is required to create the tunnel',
     )
     expect(
-      await attempt([
-        '--hostname',
-        'spyria.example.com',
-        '--cloudflare-token',
-        't',
-        '--google-client-id',
-        'not-google',
-      ]),
+      await attempt(['--hostname', 'spyria.example.com', '--google-client-id', 'not-google'], {
+        CLOUDFLARE_API_TOKEN: 't',
+      }),
     ).toBe('not-google is not a Google OAuth client id')
     expect(
-      await attempt([
-        ...['--hostname', 'spyria.example.com', '--cloudflare-token', 't'],
-        ...['--join-by', 'invited-address', '--provider', 'cloudflare-access'],
-      ]),
+      await attempt(
+        ['--hostname', 'spyria.example.com', '--join-by', 'invited-address', '--provider', 'cloudflare-access'],
+        {
+          CLOUDFLARE_API_TOKEN: 't',
+        },
+      ),
     ).toBe('--provider must be microsoft or okta or google or other or skip')
   } finally {
     rmSync(empty, { recursive: true, force: true })

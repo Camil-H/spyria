@@ -39,6 +39,7 @@ test('spyria setup --cloud writes the configuration and private variables of the
       ...['--hostname', 'Spyria.Example.com', '--project', 'acme-prod', '--join-by', 'invited-address'],
     ]),
     'gcp',
+    { environment: {} },
   )
   expect(readFileSync(join(folder, 'main.tf'), 'utf8')).toContain('deploy/tofu/modules/gcp/control-plane?ref=v1.2.0')
   expect(readFileSync(join(folder, 'terraform.tfvars'), 'utf8')).toBe(
@@ -66,16 +67,20 @@ test('the variables file reads back to the answers it was written from', () => {
 })
 
 test('spyria setup --cloud run again with only a new version upgrades and keeps every other answer', async () => {
-  const setupGcp = (extra: string[]) =>
+  const setupGcp = (extra: string[], environment = {}) =>
     setupCloud(
       parseFlags(['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--folder', folder, ...extra]),
       'gcp',
+      { environment },
     )
-  await setupGcp([
-    ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--project', 'acme-prod'],
-    ...['--join-by', 'invited-address', '--size', 'medium', '--region', 'europe-north1', '--dns-zone', 'example'],
-    ...['--smtp-url', 'smtps://u:p@smtp.example.com', '--mail-from', 'Spyria <spyria@example.com>'],
-  ])
+  await setupGcp(
+    [
+      ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--project', 'acme-prod'],
+      ...['--join-by', 'invited-address', '--size', 'medium', '--region', 'europe-north1', '--dns-zone', 'example'],
+      ...['--mail-from', 'Spyria <spyria@example.com>'],
+    ],
+    { SPYRIA_SMTP_URL: 'smtps://u:p@smtp.example.com' },
+  )
   const before = tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8'))
   await setupGcp(['--version', '1.3.0'])
   expect(tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8'))).toEqual({
@@ -116,13 +121,24 @@ test('run again by hand, a saved SMTP URL is never shown, empty keeps an answer 
     return answersByQuestion.find(([start]) => question?.startsWith(start))?.[1] ?? ''
   }
   try {
-    const setupAzure = (extra: string[] = []) =>
-      setupCloud(parseFlags(['setup', '--cloud', 'azure', '--no-start', '--folder', azureFolder, ...extra]), 'azure')
-    await setupAzure([
-      ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--subscription', 'subscription-1'],
-      ...['--smtp-url', 'smtps://u:secret@smtp.example.com', '--mail-from', 'Spyria <spyria@example.com>'],
-      ...['--dns-zone', 'example.com', '--dns-zone-resource-group', 'dns'],
-    ])
+    const setupAzure = (extra: string[] = [], environment = {}) =>
+      setupCloud(parseFlags(['setup', '--cloud', 'azure', '--no-start', '--folder', azureFolder, ...extra]), 'azure', {
+        environment,
+      })
+    await setupAzure(
+      [
+        ...['--version', '1.2.0', '--hostname', 'spyria.example.com', '--subscription', 'subscription-1'],
+        ...[
+          '--mail-from',
+          'Spyria <spyria@example.com>',
+          '--dns-zone',
+          'example.com',
+          '--dns-zone-resource-group',
+          'dns',
+        ],
+      ],
+      { SPYRIA_SMTP_URL: 'smtps://u:secret@smtp.example.com' },
+    )
     const saved = () => tfVariablesFrom(readFileSync(join(azureFolder, 'terraform.tfvars'), 'utf8'))
     expect(saved()).toMatchObject({ dns_zone_name: 'example.com', binds_hostname: true })
 
@@ -156,16 +172,17 @@ test('the variables file is read with Windows line endings and names with dashes
 test('- never becomes an answer, even with nothing saved, and --bind-hostname takes yes or no only', async () => {
   const freshFolder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
   try {
-    const setupAzure = (extra: string[]) =>
+    const setupAzure = (extra: string[], environment = {}) =>
       setupCloud(
         parseFlags([
           ...['setup', '--cloud', 'azure', '--unattended', '--no-start', '--folder', freshFolder, '--version', '1.2.0'],
           ...['--hostname', 'spyria.example.com', '--subscription', 'subscription-1', ...extra],
         ]),
         'azure',
+        { environment },
       )
     const saved = () => tfVariablesFrom(readFileSync(join(freshFolder, 'terraform.tfvars'), 'utf8'))
-    await setupAzure(['--dns-zone', '-', '--smtp-url', '-', '--bind-hostname', 'no'])
+    await setupAzure(['--dns-zone', '-', '--bind-hostname', 'no'], { SPYRIA_SMTP_URL: '-' })
     expect(saved().dns_zone_name).toBeUndefined()
     expect(saved().smtp_url).toBeUndefined()
     expect(saved().binds_hostname).toBe(false)
@@ -183,7 +200,13 @@ test('run from inside a cloud configuration without --folder, setup --cloud keep
   const originalDirectory = process.cwd()
   try {
     process.chdir(folder)
-    await setupCloud(parseFlags(['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--version', '1.4.0']), 'gcp')
+    await setupCloud(
+      parseFlags(['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--version', '1.4.0']),
+      'gcp',
+      {
+        environment: {},
+      },
+    )
     expect(tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8')).spyria_version).toBe('1.4.0')
   } finally {
     process.chdir(originalDirectory)

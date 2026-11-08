@@ -23,7 +23,14 @@ The script checks Docker (on Linux it offers to install Docker Engine with Docke
 
 It then pulls the images of its version, starts Spyria with a runtime host on this machine, waits until it answers, and prints the **setup link** that creates the first workspace. Open it, create the workspace through your provider, and the machine's runtime host is already in **Workspace settings**; then **Connect GitHub** there to work on repositories.
 
-Every question is also a flag, for an unattended install: `spyria setup --unattended --hostname spyria.example.com --cloudflare-token <token> --join-by invited-address` (`spyria --help` lists them). Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine and stays so on later runs, until `--host` turns it back on.
+Every question is also a flag, for an unattended install, except secrets: those come from environment variables (`CLOUDFLARE_API_TOKEN`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_SECRET`, `OKTA_API_TOKEN`, `RESEND_API_KEY`, `SPYRIA_SMTP_URL`), so they stay out of your shell history and process list. For example:
+
+```sh
+read -rsp 'Cloudflare API token: ' CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
+spyria setup --unattended --hostname spyria.example.com --join-by invited-address
+```
+
+`spyria --help` lists the flags. A saved secret is never shown again: an empty answer keeps it. Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine and stays so on later runs, until `--host` turns it back on.
 
 On a laptop or a personal computer: while it sleeps Spyria is unreachable, and running agent turns are interrupted; Docker and Compose's restart policies bring everything back when it wakes or restarts. `spyria doctor` checks Docker, each service, the server's start check, the disk and the versions; upgrades and backups are in [operations](./operations.md).
 

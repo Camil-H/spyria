@@ -19,7 +19,26 @@ export const parseFlags = (givenArguments: readonly string[]): Flags => {
   return flags
 }
 
-export const askerOf = (flags: Flags, isUnattended = flags.switches.has('unattended')) => {
+export const secretVariables: Record<string, string> = {
+  'cloudflare-token': 'CLOUDFLARE_API_TOKEN',
+  'google-client-secret': 'SPYRIA_GOOGLE_CLIENT_SECRET',
+  'microsoft-client-secret': 'SPYRIA_MICROSOFT_CLIENT_SECRET',
+  'okta-token': 'OKTA_API_TOKEN',
+  'resend-key': 'RESEND_API_KEY',
+  'smtp-url': 'SPYRIA_SMTP_URL',
+}
+
+export type ProcessEnvironment = Record<string, string | undefined>
+
+export const askerOf = (
+  flags: Flags,
+  isUnattended = flags.switches.has('unattended'),
+  environment: ProcessEnvironment = process.env,
+) => {
+  for (const [name, variable] of Object.entries(secretVariables))
+    if (flags.values[name] !== undefined || flags.switches.has(name))
+      throw new Error(`--${name} would leave a secret in your shell history and process list: set ${variable} instead`)
+  const secretFromEnvironment = (name: string) => environment[secretVariables[name] ?? '']?.trim() ?? ''
   const ask = (name: string, question: string, fallback = '') => {
     const given = flags.values[name]
     if (given !== undefined) return given.trim()
@@ -41,8 +60,18 @@ export const askerOf = (flags: Flags, isUnattended = flags.switches.has('unatten
     if (answer === '') throw new Error(`--${name} is required`)
     return answer
   }
-  const given = (name: string) => flags.values[name] !== undefined
-  return { ask, choose, require, given }
+  const secret = (name: string, question: string, saved = '') => {
+    const fromEnvironment = secretFromEnvironment(name)
+    if (fromEnvironment || isUnattended) return fromEnvironment || saved
+    return (prompt(question) ?? '').trim() || saved
+  }
+  const requireSecret = (name: string, question: string) => {
+    const answer = secret(name, question)
+    if (answer === '') throw new Error(`${secretVariables[name]} is required`)
+    return answer
+  }
+  const given = (name: string) => flags.values[name] !== undefined || secretFromEnvironment(name) !== ''
+  return { ask, choose, require, given, secret, requireSecret }
 }
 
 export const composeArgumentsOf = (afterCommand: readonly string[]) => {

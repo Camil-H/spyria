@@ -4,7 +4,7 @@ import awsExample from '../../../deploy/tofu/examples/aws/main.tf' with { type: 
 import azureExample from '../../../deploy/tofu/examples/azure/main.tf' with { type: 'text' }
 import gcpExample from '../../../deploy/tofu/examples/gcp/main.tf' with { type: 'text' }
 import { installFolderOf } from './commands.ts'
-import { askerOf, type Flags } from './flags.ts'
+import { askerOf, type Flags, type ProcessEnvironment } from './flags.ts'
 import { cliVersion, latestVersion, repository } from './release.ts'
 import { removal } from './setup-steps.ts'
 
@@ -80,11 +80,15 @@ const optionalAnswerOf =
   (asker: ReturnType<typeof askerOf>, existing: TfVariables) =>
   (flag: string, variable: string, question: string, whenEmpty: string, { isSecret = false } = {}) => {
     const saved = stringOf(existing[variable])
-    const answer = !saved
-      ? asker.ask(flag, `${question} (${whenEmpty})`)
-      : isSecret
-        ? asker.ask(flag, `${question} (empty keeps the saved one, ${removal} removes it)`) || saved
-        : asker.ask(flag, `${question} (${removal} removes it)`, saved)
+    const answer = isSecret
+      ? asker.secret(
+          flag,
+          saved ? `${question} (empty keeps the saved one, ${removal} removes it)` : `${question} (${whenEmpty})`,
+          saved,
+        )
+      : saved
+        ? asker.ask(flag, `${question} (${removal} removes it)`, saved)
+        : asker.ask(flag, `${question} (${whenEmpty})`)
     return answer === removal ? '' : answer
   }
 const joinBys = ['domain', 'invited-address'] as const
@@ -147,9 +151,13 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
 const run = (folder: string, command: string[]) =>
   Bun.spawnSync(command, { cwd: folder, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }).exitCode
 
-export const setupCloud = async (flags: Flags, cloud: Cloud) => {
+export const setupCloud = async (
+  flags: Flags,
+  cloud: Cloud,
+  { environment = process.env }: { environment?: ProcessEnvironment } = {},
+) => {
   const isUnattended = flags.switches.has('unattended')
-  const asker = askerOf(flags, isUnattended)
+  const asker = askerOf(flags, isUnattended, environment)
   const folder = installFolderOf({
     ...flags,
     values: {
