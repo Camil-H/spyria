@@ -32,6 +32,7 @@ output "dns_records" {
 output "runtime_host_subnet_id" {
   description = "A public subnet of the control plane's network, for the runtime-host module"
   value       = aws_subnet.public[0].id
+  depends_on  = [aws_route_table_association.public]
 }
 
 output "secrets_digest" {

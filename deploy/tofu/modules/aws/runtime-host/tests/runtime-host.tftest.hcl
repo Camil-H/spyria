@@ -39,6 +39,10 @@ run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpo
     condition     = !aws_instance.host.user_data_replace_on_change
     error_message = "A new version or AMI never replaces the host: it keeps its pairing and runtimes, and updates in place"
   }
+  assert {
+    condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "until apt-get update") && strcontains(base64decode(aws_instance.host.user_data_base64), "until docker pull ghcr.io/camil-h/spyria-host:1.2.0")
+    error_message = "The first boot retries the install and the image pull until the network answers, since cloud-init runs it once"
+  }
 }
 
 run "a_second_host_takes_its_own_name" {
