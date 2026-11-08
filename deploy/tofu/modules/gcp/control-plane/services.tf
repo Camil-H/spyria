@@ -3,9 +3,7 @@ locals {
 }
 
 locals {
-  secret_versions = {
-    SPYRIA_SECRET_VERSIONS = join(",", [for name in sort(local.secret_names) : google_secret_manager_secret_version.setting[name].version])
-  }
+  secrets_digest = { SPYRIA_SECRETS_DIGEST = nonsensitive(sha256(jsonencode(local.secret_values))) }
 }
 
 resource "google_cloud_run_v2_service" "server" {
@@ -42,7 +40,7 @@ resource "google_cloud_run_v2_service" "server" {
         limits   = { cpu = local.size.cpu, memory = local.size.memory }
       }
       dynamic "env" {
-        for_each = merge(module.settings.server_environment, local.secret_versions)
+        for_each = merge(module.settings.server_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value
@@ -121,7 +119,7 @@ resource "google_cloud_run_v2_service" "zero" {
         mount_path = "/data"
       }
       dynamic "env" {
-        for_each = merge(module.settings.zero_environment, local.secret_versions)
+        for_each = merge(module.settings.zero_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value
@@ -194,8 +192,8 @@ resource "google_cloud_run_v2_service" "gateway" {
         value = module.settings.gateway_environment.BIFROST_CONFIG
       }
       env {
-        name  = "SPYRIA_SECRET_VERSIONS"
-        value = local.secret_versions.SPYRIA_SECRET_VERSIONS
+        name  = "SPYRIA_SECRETS_DIGEST"
+        value = local.secrets_digest.SPYRIA_SECRETS_DIGEST
       }
       dynamic "env" {
         for_each = local.service_secret_names.configure
@@ -236,8 +234,8 @@ resource "google_cloud_run_v2_service" "gateway" {
         value = module.settings.gateway_environment.SPYRIA_GATEWAY_OAUTH_BASE
       }
       env {
-        name  = "SPYRIA_SECRET_VERSIONS"
-        value = local.secret_versions.SPYRIA_SECRET_VERSIONS
+        name  = "SPYRIA_SECRETS_DIGEST"
+        value = local.secrets_digest.SPYRIA_SECRETS_DIGEST
       }
       dynamic "env" {
         for_each = local.service_secret_names.gateway

@@ -33,9 +33,7 @@ resource "azurerm_container_app_environment" "main" {
 }
 
 locals {
-  secret_versions = {
-    SPYRIA_SECRET_VERSIONS = join(",", [for name in sort(local.secret_names) : azurerm_key_vault_secret.setting[name].version])
-  }
+  secrets_digest = { SPYRIA_SECRETS_DIGEST = nonsensitive(sha256(jsonencode(local.secret_values))) }
 }
 
 resource "azurerm_container_app" "server" {
@@ -86,7 +84,7 @@ resource "azurerm_container_app" "server" {
       cpu    = local.size.cpu
       memory = local.size.memory
       dynamic "env" {
-        for_each = merge(module.settings.server_environment, local.secret_versions)
+        for_each = merge(module.settings.server_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value
@@ -154,7 +152,7 @@ resource "azurerm_container_app" "zero" {
       cpu    = 1.0
       memory = "2Gi"
       dynamic "env" {
-        for_each = merge(module.settings.zero_environment, local.secret_versions)
+        for_each = merge(module.settings.zero_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value
@@ -222,7 +220,7 @@ resource "azurerm_container_app" "gateway" {
       cpu     = 0.25
       memory  = "0.5Gi"
       dynamic "env" {
-        for_each = merge(module.settings.gateway_environment, local.secret_versions)
+        for_each = merge(module.settings.gateway_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value
@@ -246,7 +244,7 @@ resource "azurerm_container_app" "gateway" {
       cpu    = 0.5
       memory = "1Gi"
       dynamic "env" {
-        for_each = merge(module.settings.gateway_environment, local.secret_versions)
+        for_each = merge(module.settings.gateway_environment, local.secrets_digest)
         content {
           name  = env.key
           value = env.value

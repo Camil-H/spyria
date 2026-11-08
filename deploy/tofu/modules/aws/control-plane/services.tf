@@ -9,12 +9,12 @@ locals {
     awslogs-region        = data.aws_region.current.region
     awslogs-stream-prefix = var.name
   }
-  secret_versions = { SPYRIA_SECRET_VERSIONS = aws_secretsmanager_secret_version.settings.version_id }
+  secrets_digest = { SPYRIA_SECRETS_DIGEST = nonsensitive(sha256(jsonencode(local.secret_values))) }
   environment_of = { for service, environment in {
     server  = module.settings.server_environment
     zero    = module.settings.zero_environment
     gateway = module.settings.gateway_environment
-  } : service => [for name, value in merge(environment, local.secret_versions) : { name = name, value = value }] }
+  } : service => [for name, value in merge(environment, local.secrets_digest) : { name = name, value = value }] }
   secrets_of = { for service, names in {
     migrate        = ["DATABASE_URL"]
     server         = nonsensitive(keys(module.settings.server_secrets))

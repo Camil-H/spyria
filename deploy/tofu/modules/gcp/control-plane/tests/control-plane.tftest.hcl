@@ -110,12 +110,12 @@ run "a_sign_in_app_takes_its_client_id_and_secret_together" {
   expect_failures = [var.sign_in_app_client_secret]
 }
 
-run "every_service_names_the_versions_of_its_secrets_so_a_changed_secret_restarts_it" {
+run "every_service_carries_a_digest_of_its_secret_values_so_a_changed_secret_restarts_it" {
   command = apply
   assert {
     condition = alltrue([for service in [google_cloud_run_v2_service.server, google_cloud_run_v2_service.zero, google_cloud_run_v2_service.gateway] :
       alltrue([for container in service.template[0].containers :
-    contains([for env in container.env : env.name], "SPYRIA_SECRET_VERSIONS")])])
-    error_message = "A new secret version changes every revision template, so Cloud Run restarts with it"
+    contains([for env in container.env : env.name], "SPYRIA_SECRETS_DIGEST")])])
+    error_message = "A changed secret value changes every revision template, so Cloud Run restarts with it"
   }
 }
