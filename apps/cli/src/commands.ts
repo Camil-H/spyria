@@ -10,7 +10,7 @@ import {
   spawnCompose,
 } from './compose.ts'
 import { type Environment, parseEnvironment, serializeEnvironment } from './environment.ts'
-import type { Flags } from './flags.ts'
+import { askerOf, type Flags } from './flags.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
@@ -240,6 +240,19 @@ export const verifyDomain = (folder: string, flags: Flags) => {
 }
 
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])
+
+export const changeSignInApp = async (folder: string, flags: Flags) => {
+  const asker = askerOf(flags)
+  const clientId = asker.require('client-id', 'Client id of the new sign-in app')
+  const clientSecret = (
+    process.stdin.isTTY ? (prompt('Client secret of the new sign-in app') ?? '') : await Bun.stdin.text()
+  ).trim()
+  if (clientSecret === '') throw new Error('The client secret is required, typed or on standard input')
+  mustSucceed(
+    runCompose(folder, operatorCommandOf(['sso:sign-in-app', '--client-id', clientId]), clientSecret),
+    'spyria sign-in-app',
+  )
+}
 
 export const sendsTestMessage = (folder: string, address: string) =>
   runCompose(folder, operatorCommandOf(['mail:test', '--to', address])) === 0

@@ -61,10 +61,9 @@ export const EmailNotConfirmed = errorKind(
   () => 'Your provider did not confirm this address',
   WorkspaceError,
 )
-export const ProviderFixed = errorKind(
-  'provider_fixed',
-  () =>
-    'People join this workspace by invited address, so its provider is set when the workspace is created: you can change its client and secret, not the provider or issuer',
+export const SignInAppFixed = errorKind(
+  'sign_in_app_fixed',
+  () => 'Every workspace on this Spyria signs in through one app, which an operator changes with spyria sign-in-app',
   WorkspaceError,
 )
 export const DomainClaimed = errorKind(

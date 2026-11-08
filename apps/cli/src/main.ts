@@ -1,5 +1,14 @@
 import { type Cloud, clouds, setupCloud } from './cloud.ts'
-import { backup, doctor, installFolderOf, printSetupLink, restore, upgrade, verifyDomain } from './commands.ts'
+import {
+  backup,
+  changeSignInApp,
+  doctor,
+  installFolderOf,
+  printSetupLink,
+  restore,
+  upgrade,
+  verifyDomain,
+} from './commands.ts'
 import { runCompose } from './compose.ts'
 import { composeArgumentsOf, parseFlags } from './flags.ts'
 import { cliVersion } from './release.ts'
@@ -15,6 +24,9 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
   spyria restore <file>            restore a dump from backups/
   spyria doctor                    check Docker, the services, the server's start check and the disk
   spyria setup-link                print the link that creates the first workspace
+  spyria sign-in-app --client-id <id>
+                                   change the sign-in app of every workspace joined by invited address (asks for the
+                                   secret, or reads it from standard input)
   spyria verify-domain --workspace <id> --domain <domain>
                                    verify a workspace's email domain without mail
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
@@ -50,6 +62,7 @@ const commands: Record<string, () => unknown> = {
   },
   'setup-link': () => printSetupLink(folder),
   'verify-domain': () => verifyDomain(folder, flags),
+  'sign-in-app': () => changeSignInApp(folder, flags),
   version: () => console.log(cliVersion),
   compose: () => {
     process.exitCode =

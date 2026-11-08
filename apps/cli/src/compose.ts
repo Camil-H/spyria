@@ -22,10 +22,11 @@ export const shellEnvironmentOf = (environment: Record<string, string | undefine
     ),
   )
 
-export const runCompose = (folder: string, composeArguments: string[]) =>
+export const runCompose = (folder: string, composeArguments: string[], input?: string) =>
   Bun.spawnSync(composeCommandOf(folder, composeArguments), {
     cwd: folder,
     env: shellEnvironmentOf(process.env),
+    ...(input !== undefined && { stdin: new TextEncoder().encode(input) }),
     stdout: 'inherit',
     stderr: 'inherit',
   }).exitCode

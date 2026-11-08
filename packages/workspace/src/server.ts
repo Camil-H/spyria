@@ -12,9 +12,9 @@ export {
   InvalidSsoSettings,
   MailNotConfigured,
   MailNotSent,
-  ProviderFixed,
   PublicEmailDomain,
   RepositoryNotGranted,
+  SignInAppFixed,
   SsoDiscoveryFailed,
   WorkspaceCreationClosed,
 } from './domain/errors.ts'

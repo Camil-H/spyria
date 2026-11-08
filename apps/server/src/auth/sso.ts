@@ -26,7 +26,7 @@ import {
   Name,
   normalizedDomain,
   normalizedEmail,
-  ProviderFixed,
+  SignInAppFixed,
   SsoDiscoveryFailed,
   type SsoDomainState,
   type SsoPreset,
@@ -67,10 +67,12 @@ const verificationLifetime = '24 hours'
 const installHostClaimLifetime = '24 hours'
 const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
-type ProviderFilter = { workspaceId?: string; email?: string; joinBy?: JoinBy }
-
-export const ssoProvidersOf = (database: Database, { workspaceId, email, joinBy }: ProviderFilter) =>
-  database.$client<SsoProvider[]>`
+export const ssoProviderOf = async (
+  database: Database,
+  { workspaceId, email, joinBy }: { workspaceId?: string; email?: string; joinBy?: JoinBy },
+) =>
+  (
+    await database.$client<SsoProvider[]>`
       select workspace_id as "workspaceId", workspaces.join_by as "joinBy", preset, issuer, client_id as "clientId",
         encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp",
         updated_at as "updatedAt"
@@ -82,17 +84,9 @@ export const ssoProvidersOf = (database: Database, { workspaceId, email, joinBy 
           or (workspaces.join_by = 'domain' and exists(
             select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
               and sso_domains.domain = ${domainOfEmail(email ?? '')}
-              and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)))
-          or (workspaces.join_by = 'invited_address' and (
-            exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
-              and invitations.email = ${email ?? ''} and revoked_at is null and accepted_at is null and expires_at > now())
-            or exists(select 1 from memberships join users on users.id = memberships.user_id
-              where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
-                and users.email = ${email ?? ''}))))
-      order by workspaces.created_at`
-
-export const ssoProviderOf = async (database: Database, filter: ProviderFilter) =>
-  (await ssoProvidersOf(database, filter))[0]
+              and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1))))
+      order by workspaces.created_at limit 1`
+  )[0]
 
 export const requireMemberPermission = async (
   sql: Sql,
@@ -227,8 +221,8 @@ export const saveSsoSettings = async (
   const current = await readSsoSettings(database, member)
   if (current?.domain && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
   const joinBy = current?.joinBy ?? (await database.$client.begin((sql) => joinByOfWorkspace(sql, member.workspaceId)))
+  if (joinBy === 'invited_address') throw new SignInAppFixed()
   const settings = await checkedSettings(input, joinBy, dependencies)
-  if (joinBy === 'invited_address' && current?.issuer !== settings.issuer) throw new ProviderFixed()
   const usesInstanceApp = input.usesInstanceApp === true
   const clientSecret = usesInstanceApp ? '' : String(input.clientSecret ?? '').trim()
   if (clientSecret !== '' && !dependencies.secretBox)
@@ -429,6 +423,38 @@ export const verifyDomainByToken = (database: Database, token: string) =>
 
 export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>
   database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actor: systemActor('operator') }))
+
+export const replaceSignInApp = async (
+  database: Database,
+  secretBox: SecretBox,
+  app: { clientId: string; clientSecret: string },
+) => {
+  const [clientId, clientSecret] = [app.clientId.trim(), app.clientSecret.trim()]
+  if (clientId === '' || clientSecret === '')
+    throw new InvalidSsoSettings('A client id and a client secret are required')
+  const encryptedClientSecret = await secretBox.seal(clientSecret)
+  return database.$client.begin(async (sql) => {
+    const changed = await sql<{ workspaceId: string; preset: string; issuer: string }[]>`
+      update workspace_sso set client_id = ${clientId}, encrypted_client_secret = ${encryptedClientSecret},
+        uses_instance_app = false, updated_at = now()
+      from workspaces
+      where workspaces.workspace_id = workspace_sso.workspace_id and workspaces.join_by = 'invited_address'
+      returning workspace_sso.workspace_id as "workspaceId", preset, issuer`
+    if (changed.length === 0)
+      throw new InvalidSsoSettings('No workspace joins by invited address: each workspace sets its app in Setup SSO')
+    for (const { workspaceId, preset, issuer } of changed) {
+      const operator = systemActor('operator')
+      await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', operator, {
+        preset,
+        issuer,
+        clientId,
+        domain: null,
+      })
+      await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', operator, {})
+    }
+    return changed.length
+  })
+}
 
 export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
   const missing = (
