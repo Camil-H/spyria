@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
@@ -220,6 +220,7 @@ test('the configuration folder, where OpenTofu keeps its state with every secret
   try {
     const existing = join(parent, 'existing')
     const created = join(parent, 'created')
+    await Bun.write(join(existing, 'main.tf'), rootModuleOf('gcp', '1.2.0'))
     await Bun.write(join(existing, 'terraform.tfstate'), '{}')
     chmodSync(existing, 0o755)
     for (const target of [existing, created]) {
@@ -255,11 +256,23 @@ test('setup --cloud never writes into a folder that holds Spyria on another clou
     await Bun.write(join(onAws, 'terraform.tfvars'), 'region = "eu-west-1"\n')
     expect(await setupGcpIn(onAws)).toBe(`${onAws} holds Spyria on aws: pass --folder with a folder for gcp`)
     expect(readFileSync(join(onAws, 'main.tf'), 'utf8')).toBe(rootModuleOf('aws', '1.2.0'))
-    const unrelated = join(parent, 'unrelated')
-    await Bun.write(join(unrelated, 'terraform.tfvars'), 'name = "x"\n')
-    expect(await setupGcpIn(unrelated)).toBe(
-      `${unrelated} holds another OpenTofu configuration: pass --folder with a folder of its own`,
-    )
+    for (const [name, files] of [
+      ['variables-only', { 'terraform.tfvars': 'name = "x"\n' }],
+      ['state-only', { 'terraform.tfstate': '{}' }],
+      ['other-project', { 'network.tf': 'resource "x" "y" {}\n', 'terraform.tfstate': '{}' }],
+      ['spyria-and-more', { 'main.tf': rootModuleOf('gcp', '1.2.0'), 'extra.tf': 'resource "x" "y" {}\n' }],
+    ] as const) {
+      const unrelated = join(parent, name)
+      for (const [file, content] of Object.entries(files)) await Bun.write(join(unrelated, file), content)
+      expect(await setupGcpIn(unrelated)).toBe(
+        `${unrelated} holds another OpenTofu configuration: pass --folder with a folder of its own`,
+      )
+    }
+    const applied = join(parent, 'applied')
+    await Bun.write(join(applied, 'main.tf'), rootModuleOf('gcp', '1.2.0'))
+    await Bun.write(join(applied, 'terraform.tfstate'), '{}')
+    mkdirSync(join(applied, '.terraform'))
+    expect(await setupGcpIn(applied)).toBeUndefined()
   } finally {
     rmSync(parent, { recursive: true, force: true })
   }
