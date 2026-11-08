@@ -6,11 +6,14 @@ resource "google_compute_global_address" "public" {
 
 resource "google_compute_managed_ssl_certificate" "hostname" {
   project = var.project
-  name    = var.name
+  name    = "${var.name}-${substr(sha1(var.hostname), 0, 8)}"
   managed {
     domains = [var.hostname]
   }
   depends_on = [google_project_service.api]
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_compute_region_network_endpoint_group" "server" {
