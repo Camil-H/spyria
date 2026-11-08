@@ -128,6 +128,6 @@ output "instance_id" {
 }
 
 output "host_access_command" {
-  description = "Opens a shell on the host through Session Manager, where the host's update command runs with sudo"
+  description = "Opens a shell on the host through Session Manager: run sudo -i there, then the host's update command"
   value       = "aws ssm start-session --region ${data.aws_region.current.region} --target ${aws_instance.host.id}"
 }

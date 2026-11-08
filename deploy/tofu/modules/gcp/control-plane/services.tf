@@ -117,7 +117,7 @@ resource "google_cloud_run_v2_service" "zero" {
       startup_probe {
         period_seconds    = 10
         timeout_seconds   = 5
-        failure_threshold = 180
+        failure_threshold = 60
         tcp_socket {
           port = 4848
         }
