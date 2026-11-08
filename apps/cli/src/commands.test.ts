@@ -26,6 +26,8 @@ case "$*" in
   *sso:sign-in-app*) cat > "$FAKE_DOCKER/stdin" ;;
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
+  *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
+  "ps -q --filter label=spyria.managed=1 --filter name=^spyria-rt-") cat "$FAKE_DOCKER/runtimes" 2>/dev/null ;;
 esac
 exit 0
 `,
@@ -70,6 +72,8 @@ beforeEach(() => {
   writeFileSync(join(install, '.env'), serializeEnvironment(installed), { mode: 0o600 })
   rmSync(join(fakeDocker, 'calls'), { force: true })
   rmSync(join(fakeDocker, 'stdin'), { force: true })
+  rmSync(join(fakeDocker, 'host-container'), { force: true })
+  rmSync(join(fakeDocker, 'runtimes'), { force: true })
 })
 const calls = () =>
   existsSync(join(fakeDocker, 'calls')) ? readFileSync(join(fakeDocker, 'calls'), 'utf8').trim().split('\n') : []
@@ -136,15 +140,34 @@ test('spyria doctor is satisfied when every expected service runs and names the 
   expect(printed).toContain('✗ zero-cache is exited')
 })
 
-test('setting up again without a runtime host removes the host container this machine was running', async () => {
+test('setting up again without a runtime host removes the host container this machine runs and stops its runtimes, and touches nothing when there was none', async () => {
+  writeFileSync(join(fakeDocker, 'host-container'), 'host-container-id\n')
+  writeFileSync(join(fakeDocker, 'runtimes'), 'runtime-a\nruntime-b\n')
+  const printed: string[] = []
+  quiet.mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  try {
+    await setup(parseFlags(['setup', '--unattended', '--no-host', '--folder', install, '--version', '1.2.0']), {
+      processEnvironment: {},
+    })
+  } finally {
+    quiet.mockImplementation(() => undefined)
+  }
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(indexOfCall('--profile host rm --stop --force host')).toBeGreaterThan(-1)
+  expect(calls()).toContain('stop runtime-a runtime-b')
+  expect(indexOfCall('stop runtime-a runtime-b')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(printed.join('\n')).toContain('its 2 runtimes are stopped, their files kept')
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  rmSync(join(fakeDocker, 'host-container'), { force: true })
   await setup(parseFlags(['setup', '--unattended', '--no-host', '--folder', install, '--version', '1.2.0']), {
     processEnvironment: {},
   })
-  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
-  expect(indexOfCall('--profile host rm --stop --force host')).toBeGreaterThan(-1)
-  expect(indexOfCall('--profile host rm --stop --force host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(indexOfCall('rm --stop --force host')).toBe(-1)
+  expect(calls().some((call) => call.startsWith('stop '))).toBe(false)
 
   rmSync(join(fakeDocker, 'calls'), { force: true })
+  writeFileSync(join(fakeDocker, 'host-container'), 'host-container-id\n')
   await setup(parseFlags(['setup', '--unattended', '--host', '--folder', install, '--version', '1.2.0']), {
     processEnvironment: {},
   })
