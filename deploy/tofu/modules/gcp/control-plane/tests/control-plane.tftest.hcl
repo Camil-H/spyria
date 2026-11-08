@@ -69,7 +69,7 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "With a Cloud DNS zone the hostname points at the load balancer by itself"
   }
   assert {
-    condition     = !contains(keys(google_secret_manager_secret.setting), "SPYRIA_SMTP_URL") && contains(keys(google_secret_manager_secret.setting), "SPYRIA_SECRETS_KEY")
+    condition     = !contains(keys(google_secret_manager_secret.setting), "SPYRIA_SMTP_URL") && !contains(keys(google_secret_manager_secret.setting), "SPYRIA_SIGN_IN_APP_CLIENT_SECRET") && contains(keys(google_secret_manager_secret.setting), "SPYRIA_SECRETS_KEY")
     error_message = "Set secrets live in Secret Manager; unset optional ones are left out"
   }
   assert {
@@ -87,4 +87,25 @@ run "without_a_cloud_dns_zone_it_names_the_record_to_create" {
     condition     = length(output.dns_records) == 1 && output.dns_records[0].value == "203.0.113.10" && output.dns_records[0].type == "A"
     error_message = "The hostname must point at the load balancer's address"
   }
+}
+
+run "a_sign_in_app_in_the_settings_reaches_the_server_with_its_secret_in_secret_manager" {
+  command = apply
+  variables {
+    join_by                   = "invited-address"
+    sign_in_app_client_id     = "garage-sign-in-app"
+    sign_in_app_client_secret = "garage-secret"
+  }
+  assert {
+    condition     = contains(keys(google_secret_manager_secret.setting), "SPYRIA_SIGN_IN_APP_CLIENT_SECRET") && module.settings.server_environment.SPYRIA_SIGN_IN_APP_CLIENT_ID == "garage-sign-in-app"
+    error_message = "The server gets the sign-in app's client id as a setting and its secret from Secret Manager"
+  }
+}
+
+run "a_sign_in_app_takes_its_client_id_and_secret_together" {
+  command = plan
+  variables {
+    sign_in_app_client_id = "garage-sign-in-app"
+  }
+  expect_failures = [var.sign_in_app_client_secret]
 }

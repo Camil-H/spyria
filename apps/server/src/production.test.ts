@@ -63,6 +63,13 @@ test('mail is optional, but a sender is required once SMTP is set', () => {
   expect(problemsWith({ SPYRIA_MAIL_FROM: undefined })).toEqual(['SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.'])
 })
 
+test('a sign-in app in the settings takes its client id and secret together', () => {
+  const together = 'SPYRIA_SIGN_IN_APP_CLIENT_ID and SPYRIA_SIGN_IN_APP_CLIENT_SECRET are set together or not at all.'
+  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app', SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([])
+  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app' })).toEqual([together])
+  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([together])
+})
+
 test.each(['SPYRIA_GATEWAY_URL'])('%s is required', (name) => {
   expect(problemsWith({ [name]: '' })).toEqual([`${name} is required.`])
 })

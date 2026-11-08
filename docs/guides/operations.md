@@ -75,7 +75,14 @@ It asks for the secret, or reads it from standard input. Members keep their acco
 printf '%s' "$CLIENT_SECRET" | spyria-compose exec -T server bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>
 ```
 
-On a cloud deployment, run `bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>` from a shell in the server container and type the secret, then end the input with Ctrl-D.
+On a cloud deployment, add the new app to the folder's `terraform.tfvars` and apply it with `spyria setup --cloud <cloud>`, which keeps your other answers:
+
+```hcl
+sign_in_app_client_id     = "<new client id>"
+sign_in_app_client_secret = "<new client secret>"
+```
+
+The server applies it to every workspace when it restarts with the new settings, and leaves the stored app alone while they match. An install made by hand can do the same with `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` in `.env.prod`.
 
 ## Jobs
 

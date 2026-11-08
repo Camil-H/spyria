@@ -98,3 +98,20 @@ variable "certificate_arn" {
     error_message = "certificate_arn is the ARN of an ACM certificate."
   }
 }
+
+variable "sign_in_app_client_id" {
+  description = "When people join by invited address: the client id of the one sign-in app of every workspace, applied when the server starts"
+  type        = string
+  default     = ""
+}
+
+variable "sign_in_app_client_secret" {
+  description = "The client secret of that sign-in app"
+  type        = string
+  default     = ""
+  sensitive   = true
+  validation {
+    condition     = (var.sign_in_app_client_id == "") == nonsensitive(var.sign_in_app_client_secret == "")
+    error_message = "Set sign_in_app_client_id and sign_in_app_client_secret together: the server refuses to start with one and not the other."
+  }
+}

@@ -9,7 +9,12 @@ import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { assertInstanceAppsConfigured, hasNoWorkspace, isInstallHostToken } from './auth/sso.ts'
+import {
+  applyConfiguredSignInApp,
+  assertInstanceAppsConfigured,
+  hasNoWorkspace,
+  isInstallHostToken,
+} from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -85,6 +90,19 @@ const instanceSignInApps = {
   ...instanceSignInAppOf('microsoft', 'SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'),
 }
 await assertInstanceAppsConfigured(database, instanceSignInApps)
+const configuredSignInApp = {
+  clientId: process.env.SPYRIA_SIGN_IN_APP_CLIENT_ID ?? '',
+  clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET ?? '',
+}
+if (configuredSignInApp.clientId && configuredSignInApp.clientSecret) {
+  const changedWorkspaces = await applyConfiguredSignInApp(database, createSecretBox(secretsKey), configuredSignInApp)
+  if (changedWorkspaces > 0)
+    log.info({
+      event: 'sso.sign_in_app_applied',
+      body: 'The sign-in app of the settings now signs in every workspace joined by invited address',
+      attributes: { 'spyria.workspace_count': changedWorkspaces },
+    })
+}
 const app = createApp({
   database,
   tokenSecret,
