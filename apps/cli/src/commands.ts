@@ -178,10 +178,10 @@ export const restore = async (folder: string, flags: Flags) => {
   step(`Restored ${file}`)
 }
 
-export const releaseFilesOf = async (version: string) => {
+export const releaseFilesOf = async (version: string, fileUrlOf = releaseFileUrlOf) => {
   const [compose = '', bifrost = ''] = await Promise.all(
     ['deploy/compose.prod.yml', 'deploy/bifrost.json'].map(async (path) => {
-      const response = await fetch(releaseFileUrlOf(version, path))
+      const response = await fetch(fileUrlOf(version, path))
       if (!response.ok) throw new Error(`Version ${version} has no ${path} (${response.status})`)
       return response.text()
     }),
@@ -194,11 +194,15 @@ export const writeReleaseFiles = (folder: string, { compose, bifrost }: { compos
   writeFileSync(join(folder, 'bifrost.json'), bifrost)
 }
 
-export const upgrade = async (folder: string, flags: Flags) => {
+export const upgrade = async (
+  folder: string,
+  flags: Flags,
+  { fileUrlOf = releaseFileUrlOf }: { fileUrlOf?: typeof releaseFileUrlOf } = {},
+) => {
   const environment = readEnvironment(folder)
   const version = flags.positionals[1] ?? (await latestVersion())
   step(`Upgrading from ${environment.SPYRIA_VERSION} to ${version}`)
-  const files = await releaseFilesOf(version)
+  const files = await releaseFilesOf(version, fileUrlOf)
   await backup(folder, flags)
   writeReleaseFiles(folder, files)
   const upgraded = { ...environment, SPYRIA_VERSION: version }
@@ -212,10 +216,8 @@ export const upgrade = async (folder: string, flags: Flags) => {
 export const doctor = (folder: string) => {
   const environment = readEnvironment(folder)
   const problems: string[] = []
-  if (
-    Bun.which('docker') === null ||
-    Bun.spawnSync(['docker', 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0
-  )
+  const docker = Bun.which('docker', { PATH: process.env.PATH ?? '' })
+  if (docker === null || Bun.spawnSync([docker, 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0)
     problems.push('Docker does not answer: start Docker')
   else {
     const profiles = (environment.COMPOSE_PROFILES ?? '').split(',').filter(Boolean)
@@ -248,12 +250,17 @@ export const verifyDomain = (folder: string, flags: Flags) => {
 
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])
 
-export const changeSignInApp = async (folder: string, flags: Flags) => {
+const typedOrPipedSecret = async () =>
+  process.stdin.isTTY ? (prompt('Client secret of the new sign-in app') ?? '') : await Bun.stdin.text()
+
+export const changeSignInApp = async (
+  folder: string,
+  flags: Flags,
+  { readSecret = typedOrPipedSecret }: { readSecret?: () => Promise<string> } = {},
+) => {
   const asker = askerOf(flags)
   const clientId = asker.require('client-id', 'Client id of the new sign-in app')
-  const clientSecret = (
-    process.stdin.isTTY ? (prompt('Client secret of the new sign-in app') ?? '') : await Bun.stdin.text()
-  ).trim()
+  const clientSecret = (await readSecret()).trim()
   if (clientSecret === '') throw new Error('The client secret is required, typed or on standard input')
   mustSucceed(
     runCompose(folder, operatorCommandOf(['sso:sign-in-app', '--client-id', clientId]), clientSecret),
