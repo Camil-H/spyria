@@ -62,6 +62,13 @@ export const waitForHealth = async (environment: Environment) => {
 }
 
 export const startStack = async (folder: string, environment: Environment) => {
+  if (!(environment.COMPOSE_PROFILES ?? '').split(',').includes('host')) {
+    step('Removing the runtime host of this machine, if any')
+    mustSucceed(
+      runCompose(folder, ['--profile', 'host', 'rm', '--stop', '--force', 'host']),
+      'Removing the runtime host',
+    )
+  }
   step('Pulling the images')
   mustSucceed(runCompose(folder, ['pull', '--quiet']), 'Pulling the images')
   step('Starting Spyria')

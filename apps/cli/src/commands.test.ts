@@ -135,3 +135,19 @@ test('spyria doctor is satisfied when every expected service runs and names the 
   }
   expect(printed).toContain('✗ zero-cache is exited')
 })
+
+test('setting up again without a runtime host removes the host container this machine was running', async () => {
+  await setup(parseFlags(['setup', '--unattended', '--no-host', '--folder', install, '--version', '1.2.0']), {
+    processEnvironment: {},
+  })
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(indexOfCall('--profile host rm --stop --force host')).toBeGreaterThan(-1)
+  expect(indexOfCall('--profile host rm --stop --force host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await setup(parseFlags(['setup', '--unattended', '--host', '--folder', install, '--version', '1.2.0']), {
+    processEnvironment: {},
+  })
+  expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
+  expect(indexOfCall('rm --stop --force host')).toBe(-1)
+})
