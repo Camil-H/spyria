@@ -76,6 +76,10 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     condition     = startswith(output.setup_link, "https://spyria.example.com/?setup=")
     error_message = "The setup link carries the setup token"
   }
+  assert {
+    condition     = google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].tcp_socket[0].port == 4848 && google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].period_seconds * google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].failure_threshold >= 1800
+    error_message = "zero-cache gets 30 minutes for its first sync before Cloud Run restarts it"
+  }
 }
 
 run "without_a_cloud_dns_zone_it_names_the_record_to_create" {

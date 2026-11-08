@@ -149,8 +149,15 @@ resource "azurerm_container_app" "zero" {
     container {
       name   = "zero-cache"
       image  = module.settings.zero_image
-      cpu    = 1.0
-      memory = "2Gi"
+      cpu    = local.size.zero_cpu
+      memory = local.size.zero_memory
+      startup_probe {
+        transport               = "TCP"
+        port                    = 4848
+        interval_seconds        = 60
+        timeout                 = 5
+        failure_count_threshold = 30
+      }
       dynamic "env" {
         for_each = merge(module.settings.zero_environment, local.secrets_digest)
         content {

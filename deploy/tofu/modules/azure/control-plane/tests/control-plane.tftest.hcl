@@ -113,6 +113,10 @@ run "the_control_plane_runs_one_server_with_public_ingress_and_keeps_the_rest_in
     condition     = startswith(output.setup_link, "https://spyria.example.com/?setup=")
     error_message = "The setup link carries the setup token"
   }
+  assert {
+    condition     = azurerm_container_app.zero.template[0].container[0].startup_probe[0].port == 4848 && azurerm_container_app.zero.template[0].container[0].startup_probe[0].interval_seconds * azurerm_container_app.zero.template[0].container[0].startup_probe[0].failure_count_threshold >= 1800
+    error_message = "zero-cache gets 30 minutes for its first sync before Container Apps restarts it"
+  }
 }
 
 run "without_an_azure_dns_zone_it_names_the_records_and_can_wait_to_bind" {

@@ -48,7 +48,7 @@ Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples), replace each 
 
 Every runtime host VM installs Docker and `spyria-host` with cloud-init, and drops its runtimes' traffic to the metadata endpoint and private ranges (DNS excepted), and on Azure to the WireServer (168.63.129.16), so an agent cannot read the VM's cloud credentials or reach internal services.
 
-zero-cache keeps its SQLite replica on the container's local storage and rebuilds it from Postgres when it starts: SQLite's write-ahead log does not work on network file systems (EFS, Azure Files). The first sync after a restart takes longer on a large database.
+zero-cache keeps its SQLite replica on the container's local storage and rebuilds it from Postgres when it starts: SQLite's write-ahead log does not work on network file systems (EFS, Azure Files). It answers only once that first sync is done, so the platforms wait up to 30 minutes for it before restarting it. The replica has to fit the local storage, which grows with `size`: on AWS 40 GiB at every size; on Azure the app's ephemeral storage, which Azure gives in proportion to its CPU, larger with each size; on Google Cloud an in-memory volume of 2, 5 and 12 GiB. Choose a size whose replica fits the database, with room to grow.
 
 On Azure, the provider cannot bind a managed certificate: the module adds the hostname to the server, and the `certificate_command` output (an `az containerapp hostname bind` command, which `spyria setup --cloud azure` prints) creates and binds the certificate. When the DNS zone is outside Azure, apply once with `binds_hostname = false`, create the two records of `dns_records`, then apply again.
 
