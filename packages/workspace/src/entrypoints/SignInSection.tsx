@@ -161,6 +161,38 @@ const EmailDomain = ({
   )
 }
 
+const SignInAppOfThisSpyria = ({ settings }: { settings: SsoSettingsView }) => {
+  const rows = [
+    ['Provider', presetLabels[settings.preset]],
+    ...(settings.preset === 'microsoft' ? [['Tenant id', settings.tenantId]] : []),
+    ...(settings.preset === 'oidc' ? [['Issuer', settings.issuer]] : []),
+    [
+      'Client id',
+      settings.usesInstanceApp ? `The ${instanceAppNames[settings.preset]} app of this Spyria` : settings.clientId,
+    ],
+  ]
+  return (
+    <LabelledSection title="Sign-in">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        {rows.map(([term, value]) => (
+          <div key={term} className="contents">
+            <dt className="text-muted">{term}</dt>
+            <dd className="break-all">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-sm text-muted">
+        Every workspace on this Spyria signs in through this app. Only the person who runs this Spyria can change it,
+        for every workspace at once.
+      </p>
+      <p className="text-sm text-muted">
+        Who can join: people you invite. Each person signs in with this provider at exactly the address you invited; the
+        provider must confirm that address.
+      </p>
+    </LabelledSection>
+  )
+}
+
 export const SignInSection = ({
   workspaceId,
   isDexSignIn,
@@ -199,6 +231,7 @@ const SsoSettingsForm = ({
         <p className="text-sm text-muted">{form === null ? 'This workspace has no SSO settings.' : 'Loading…'}</p>
       </LabelledSection>
     )
+  if (form.joinBy === 'invited_address') return <SignInAppOfThisSpyria settings={form} />
   const edit = (field: ProviderField) => (event: { target: { value: string } }) => {
     setForm({ ...form, [field]: event.target.value })
     setIsSaved(false)
@@ -238,7 +271,7 @@ const SsoSettingsForm = ({
           {isSaved && <span className="text-sm text-muted">Saved</span>}
         </div>
       </form>
-      {form.domainState ? (
+      {form.domainState && (
         <>
           <p className="text-sm text-muted">
             The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
@@ -247,11 +280,6 @@ const SsoSettingsForm = ({
           </p>
           <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
         </>
-      ) : (
-        <p className="text-sm text-muted">
-          Who can join: people you invite. Each person signs in with this provider at exactly the address you invited;
-          the provider must confirm that address.
-        </p>
       )}
     </LabelledSection>
   )
