@@ -86,5 +86,5 @@ test('variables other tools export never answer for setup, and setup names the v
   } finally {
     log.mockRestore()
   }
-  expect(printed).toEqual(['Resend API key: taken from SPYRIA_SETUP_RESEND_KEY'])
+  expect(printed).toEqual(['Using SPYRIA_SETUP_RESEND_KEY from the environment'])
 })
