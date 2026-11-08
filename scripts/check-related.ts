@@ -1,4 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs'
+import { unitTestOfScript } from './script-tests.ts'
 
 type Suite = { name: string; files: Set<string>; full: string[] }
 type Cruised = { modules: { source: string; dependencies: { resolved: string }[] }[] }
@@ -146,6 +147,8 @@ for (const changed of changedFiles) {
   if (changed.startsWith('deploy/tofu/') || changed === 'deploy/bifrost.json' || changed === 'scripts/check-tofu.ts')
     tofuReasons.push(changed)
   const isModule = /\.(ts|tsx)$/.test(changed) && /^(apps|packages)\//.test(changed)
+  const scriptTest = unitTestOfScript(changed, (file) => existsSync(`${repositoryRoot}${file}`))
+  if (scriptTest) select(unit, scriptTest, changed)
   if (isOutsideTests(changed)) continue
   if (isWebAsset(changed)) {
     e2e.full.push(changed)
