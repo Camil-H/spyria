@@ -91,8 +91,8 @@ const instanceSignInApps = {
 }
 await assertInstanceAppsConfigured(database, instanceSignInApps)
 const configuredSignInApp = {
-  clientId: process.env.SPYRIA_SIGN_IN_APP_CLIENT_ID ?? '',
-  clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET ?? '',
+  clientId: process.env.SPYRIA_SIGN_IN_APP_CLIENT_ID?.trim() ?? '',
+  clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET?.trim() ?? '',
 }
 if (configuredSignInApp.clientId && configuredSignInApp.clientSecret) {
   const changedWorkspaces = await applyConfiguredSignInApp(database, createSecretBox(secretsKey), configuredSignInApp)

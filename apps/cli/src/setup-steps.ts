@@ -2,7 +2,7 @@ import type { CloudflareCall } from './cloudflare.ts'
 import { createAccessOidcApp, routeAdminMail } from './cloudflare-access.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
 import type { Environment } from './environment.ts'
-import type { askerOf } from './flags.ts'
+import { type askerOf, secretVariables } from './flags.ts'
 import { registerOktaApp } from './okta.ts'
 import { resendApi, setUpResend } from './resend.ts'
 
@@ -10,6 +10,13 @@ export type Asker = ReturnType<typeof askerOf> & { isUnattended: boolean }
 type SetupContext = { asker: Asker; hostname: string; origin: string; cloudflare?: CloudflareCall }
 
 const providers = ['cloudflare-access', 'microsoft', 'okta', 'google', 'other', 'skip'] as const
+const smtpUrlOf = (asker: Asker, saved: string) => {
+  const question = 'SMTP URL, for example smtps://user:pass@smtp.example.com:465'
+  const url = asker.secret('smtp-url', saved ? `${question} (empty keeps the saved one)` : question, saved)
+  if (url === '') throw new Error(`${secretVariables['smtp-url']} is required`)
+  return url
+}
+
 const mailChoices = ['skip', 'smtp', 'resend', 'keep'] as const
 export const removal = '-'
 
@@ -127,7 +134,7 @@ export const mailOf = async (
     return { url: resend.smtpUrl, from: asker.ask('mail-from', 'Sender', resend.mailFrom) }
   }
   return {
-    url: asker.requireSecret('smtp-url', 'SMTP URL, for example smtps://user:pass@smtp.example.com:465'),
+    url: smtpUrlOf(asker, existing.SPYRIA_SMTP_URL ?? ''),
     from: asker.require(
       'mail-from',
       'Sender, for example Spyria <spyria@example.com>',

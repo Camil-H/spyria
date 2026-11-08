@@ -68,6 +68,9 @@ test('a sign-in app in the settings takes its client id and secret together', ()
   expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app', SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([])
   expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app' })).toEqual([together])
   expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([together])
+  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app', SPYRIA_SIGN_IN_APP_CLIENT_SECRET: '  ' })).toEqual([
+    together,
+  ])
 })
 
 test.each(['SPYRIA_GATEWAY_URL'])('%s is required', (name) => {
