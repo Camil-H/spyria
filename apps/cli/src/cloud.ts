@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import awsExample from '../../../deploy/tofu/examples/aws/main.tf' with { type: 'text' }
 import azureExample from '../../../deploy/tofu/examples/azure/main.tf' with { type: 'text' }
@@ -150,14 +150,21 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
 
 const markerFile = '.spyria-cloud'
 
-const markedCloudOf = (folder: string) => {
+const markedCloudOf = (folder: string): Cloud | 'unknown' | undefined => {
   const marker = join(folder, markerFile)
-  return existsSync(marker) ? readFileSync(marker, 'utf8').trim() : undefined
+  if (!existsSync(marker)) return undefined
+  const named = statSync(marker).isFile() ? readFileSync(marker, 'utf8').trim() : ''
+  return clouds.find((candidate) => candidate === named) ?? 'unknown'
 }
 
 const assertFolderFor = (folder: string, cloud: Cloud) => {
   if (!existsSync(folder)) return
+  if (!statSync(folder).isDirectory()) throw new Error(`${folder} is not a folder: pass --folder with a folder`)
   const markedCloud = markedCloudOf(folder)
+  if (markedCloud === 'unknown')
+    throw new Error(
+      `${join(folder, markerFile)} names no cloud: remove it, or pass --folder with a new or empty folder`,
+    )
   if (markedCloud === undefined && readdirSync(folder).length > 0)
     throw new Error(`${folder} was not made by spyria setup --cloud: pass --folder with a new or empty folder`)
   if (markedCloud !== undefined && markedCloud !== cloud)
@@ -188,7 +195,6 @@ export const setupCloud = async (
   assertFolderFor(folder, cloud)
   mkdirSync(folder, { recursive: true, mode: 0o700 })
   chmodSync(folder, 0o700)
-  writeFileSync(join(folder, markerFile), `${cloud}\n`)
   const variablesFile = join(folder, 'terraform.tfvars')
   const existing = existsSync(variablesFile) ? tfVariablesFrom(readFileSync(variablesFile, 'utf8')) : {}
   const was = (name: string) => stringOf(existing[name])
@@ -216,6 +222,7 @@ export const setupCloud = async (
       : '',
     ...cloudVariablesOf(cloud, asker, existing),
   }
+  writeFileSync(join(folder, markerFile), `${cloud}\n`)
   writeFileSync(join(folder, 'main.tf'), rootModuleOf(cloud, version))
   writeFileSync(variablesFile, tfVariablesOf(variables), { mode: 0o600 })
   chmodSync(variablesFile, 0o600)

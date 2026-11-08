@@ -271,6 +271,36 @@ test('setup --cloud marks the folders it makes, and writes only into a new or em
       expect(readdirSync(unmarked).sort()).toEqual(Object.keys(files).sort())
     }
 
+    const abandoned = join(parent, 'abandoned')
+    expect(
+      await setupCloud(
+        parseFlags([
+          'setup',
+          '--cloud',
+          'aws',
+          '--unattended',
+          '--no-start',
+          '--folder',
+          abandoned,
+          '--version',
+          '1.2.0',
+        ]),
+        'aws',
+        { environment: {} },
+      ).catch((error: Error) => error.message),
+    ).toBe('--hostname is required')
+    expect(readdirSync(abandoned)).toEqual([])
+    expect(await setupIn(abandoned)).toBeUndefined()
+
+    const garbled = join(parent, 'garbled')
+    await Bun.write(join(garbled, '.spyria-cloud'), '\n')
+    expect(await setupIn(garbled)).toBe(
+      `${join(garbled, '.spyria-cloud')} names no cloud: remove it, or pass --folder with a new or empty folder`,
+    )
+    const notAFolder = join(parent, 'not-a-folder')
+    await Bun.write(notAFolder, 'mine\n')
+    expect(await setupIn(notAFolder)).toBe(`${notAFolder} is not a folder: pass --folder with a folder`)
+
     const empty = join(parent, 'empty')
     mkdirSync(empty)
     expect(await setupIn(empty)).toBeUndefined()
