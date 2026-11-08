@@ -150,13 +150,19 @@ const cloudVariablesOf = (cloud: Cloud, asker: ReturnType<typeof askerOf>, exist
 
 const tofuEntryPattern = /(\.tf|\.tf\.json|\.tfvars|\.tfvars\.json|\.tfstate)$|^\.terraform$|^terraform\.tfstate\.d$/
 const configurationFilePattern = /\.tf(\.json)?$/
+const infrastructureBlockPattern = /^\s*(resource|module|data)\s+"/m
 
 const configurationIn = (folder: string): Cloud | 'other' | undefined => {
   if (!existsSync(folder)) return undefined
   const tofuEntries = readdirSync(folder).filter((entry) => tofuEntryPattern.test(entry))
   if (tofuEntries.length === 0) return undefined
   const configurationFiles = tofuEntries.filter((entry) => configurationFilePattern.test(entry))
-  if (configurationFiles.join() !== 'main.tf') return 'other'
+  const definesOtherInfrastructure = configurationFiles.some(
+    (entry) =>
+      entry !== 'main.tf' &&
+      (entry.endsWith('.json') || infrastructureBlockPattern.test(readFileSync(join(folder, entry), 'utf8'))),
+  )
+  if (!configurationFiles.includes('main.tf') || definesOtherInfrastructure) return 'other'
   const rootModule = readFileSync(join(folder, 'main.tf'), 'utf8')
   const [, cloud] = /deploy\/tofu\/modules\/(aws|azure|gcp)\/control-plane/.exec(rootModule) ?? []
   return clouds.find((candidate) => candidate === cloud) ?? 'other'
