@@ -10,7 +10,8 @@ import { removal } from './setup-steps.ts'
 
 export const clouds = ['aws', 'azure', 'gcp'] as const
 export type Cloud = (typeof clouds)[number]
-type TfVariables = Record<string, string | boolean | number>
+type TfValue = string | boolean | number | string[]
+type TfVariables = Record<string, TfValue>
 
 const examples: Record<Cloud, string> = { aws: awsExample, azure: azureExample, gcp: gcpExample }
 const signInChecks: Record<Cloud, { command: string[]; hint: string }> = {
@@ -34,47 +35,67 @@ const hclStringOf = (value: string) =>
     .replaceAll('${', () => '$${')
     .replaceAll('%{', () => '%%{')
 
+const hclValueOf = (value: TfValue) => {
+  if (Array.isArray(value)) return `[${value.map(hclStringOf).join(', ')}]`
+  return typeof value === 'string' ? hclStringOf(value) : String(value)
+}
+
 export const tfVariablesOf = (variables: TfVariables) =>
   Object.entries(variables)
     .filter(([, value]) => value !== '')
-    .map(([name, value]) => `${name} = ${typeof value === 'string' ? hclStringOf(value) : value}\n`)
+    .map(([name, value]) => `${name} = ${hclValueOf(value)}\n`)
     .join('')
 
 const isBlankOrComment = (text: string) => /^\s*((#|\/\/).*)?$/.test(text)
+
+const unescapedHclString = (text: string) => text.replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')
 
 const hclStringFrom = (value: string) => {
   let end = 1
   while (end < value.length && value[end] !== '"') end += value[end] === '\\' ? 2 : 1
   if (!isBlankOrComment(value.slice(end + 1))) return undefined
   try {
-    return (JSON.parse(value.slice(0, end + 1)) as string).replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')
+    return unescapedHclString(JSON.parse(value.slice(0, end + 1)) as string)
   } catch {
     return undefined
   }
 }
 
-const tfValueFrom = (value: string) => {
+const hclListFrom = (value: string) => {
+  const end = value.lastIndexOf(']')
+  if (end < 0 || !isBlankOrComment(value.slice(end + 1))) return undefined
+  try {
+    const items: unknown = JSON.parse(value.slice(0, end + 1))
+    if (!Array.isArray(items) || !items.every((item) => typeof item === 'string')) return undefined
+    return items.map(unescapedHclString)
+  } catch {
+    return undefined
+  }
+}
+
+const tfValueFrom = (value: string): TfValue | undefined => {
   const [, literal = '', rest = ''] = /^(true|false|-?\d+(?:\.\d+)?)(.*)$/.exec(value) ?? []
   if (literal && isBlankOrComment(rest))
     return literal === 'true' || literal === 'false' ? literal === 'true' : Number(literal)
+  if (value.startsWith('[')) return hclListFrom(value)
   return value.startsWith('"') ? hclStringFrom(value) : undefined
 }
 
 export const tfVariablesFrom = (text: string): TfVariables =>
   Object.fromEntries(
-    text.split(/\r?\n/).flatMap((line, index): [string, string | boolean | number][] => {
+    text.split(/\r?\n/).flatMap((line, index): [string, TfValue][] => {
       if (isBlankOrComment(line)) return []
       const [, name = '', value = ''] = /^\s*([A-Za-z_][\w-]*)\s*=\s*(.*)$/.exec(line) ?? []
       const parsed = name ? tfValueFrom(value) : undefined
       if (parsed === undefined)
         throw new Error(
-          `Line ${index + 1} of terraform.tfvars is not a text, number, true or false on one line: fix it, then run this again`,
+          `Line ${index + 1} of terraform.tfvars is not a text, number, true or false, or list of texts on one line: fix it, then run this again`,
         )
       return [[name, parsed]]
     }),
   )
 
-const stringOf = (value: string | boolean | number | undefined) => (typeof value === 'string' ? value : '')
+const stringOf = (value: TfValue | undefined) => (typeof value === 'string' ? value : '')
 
 const optionalAnswerOf =
   (asker: ReturnType<typeof askerOf>, existing: TfVariables) =>
