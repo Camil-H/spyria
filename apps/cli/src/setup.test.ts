@@ -79,6 +79,18 @@ test('setting up again keeps a deployment without a runtime host that way until 
   expect(environment().SPYRIA_HOST_CLAIM_URL).toStartWith('http://server:3000/h/')
 })
 
+test('run from inside an install without --folder, setup keeps that install and its secrets rather than writing another install', async () => {
+  const before = environment()
+  const originalDirectory = process.cwd()
+  try {
+    process.chdir(folder)
+    await setup(parseFlags(['setup', '--unattended', '--no-start']), { cloudflareApiUrl: cloudflare.url.origin })
+    expect(environment()).toEqual(before)
+  } finally {
+    process.chdir(originalDirectory)
+  }
+})
+
 test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {

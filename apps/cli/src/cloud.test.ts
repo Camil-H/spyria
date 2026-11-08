@@ -178,3 +178,14 @@ test('- never becomes an answer, even with nothing saved, and --bind-hostname ta
     rmSync(freshFolder, { recursive: true, force: true })
   }
 })
+
+test('run from inside a cloud configuration without --folder, setup --cloud keeps using that folder', async () => {
+  const originalDirectory = process.cwd()
+  try {
+    process.chdir(folder)
+    await setupCloud(parseFlags(['setup', '--cloud', 'gcp', '--unattended', '--no-start', '--version', '1.4.0']), 'gcp')
+    expect(tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8')).spyria_version).toBe('1.4.0')
+  } finally {
+    process.chdir(originalDirectory)
+  }
+})
