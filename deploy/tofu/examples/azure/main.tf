@@ -89,3 +89,4 @@ output "setup_link" {
   value     = module.control_plane.setup_link
   sensitive = true
 }
+output "runtime_host_access_command" { value = module.runtime_host.host_access_command }

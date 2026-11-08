@@ -52,6 +52,28 @@ locals {
   })
 }
 
+data "aws_partition" "current" {}
+
+data "aws_region" "current" {}
+
+resource "aws_iam_role" "host" {
+  name = "${var.name}-${var.host_name}"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "session_manager" {
+  role       = aws_iam_role.host.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "host" {
+  name = "${var.name}-${var.host_name}"
+  role = aws_iam_role.host.name
+}
+
 data "aws_subnet" "selected" {
   id = var.subnet_id
 }
@@ -82,6 +104,7 @@ resource "aws_instance" "host" {
   instance_type               = local.instance_types[var.size]
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [aws_security_group.host.id]
+  iam_instance_profile        = aws_iam_instance_profile.host.name
   associate_public_ip_address = true
   user_data_base64            = base64encode(local.user_data)
   user_data_replace_on_change = false
@@ -102,4 +125,9 @@ resource "aws_instance" "host" {
 
 output "instance_id" {
   value = aws_instance.host.id
+}
+
+output "host_access_command" {
+  description = "Opens a shell on the host through Session Manager, where the host's update command runs with sudo"
+  value       = "aws ssm start-session --region ${data.aws_region.current.region} --target ${aws_instance.host.id}"
 }

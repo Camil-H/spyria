@@ -61,6 +61,29 @@ locals {
   })
 }
 
+data "google_compute_subnetwork" "selected" {
+  self_link = var.subnet_id
+}
+
+resource "google_project_service" "iap" {
+  project            = var.project
+  service            = "iap.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_compute_firewall" "iap_ssh" {
+  project       = var.project
+  name          = "${var.name}-${var.host_name}-iap-ssh"
+  network       = data.google_compute_subnetwork.selected.network
+  direction     = "INGRESS"
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["${var.name}-${var.host_name}"]
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+}
+
 resource "google_compute_instance" "host" {
   project                   = var.project
   name                      = "${var.name}-${var.host_name}"
@@ -74,12 +97,14 @@ resource "google_compute_instance" "host" {
       type  = "pd-balanced"
     }
   }
+  tags = ["${var.name}-${var.host_name}"]
   network_interface {
     subnetwork = var.subnet_id
   }
   metadata = {
     user-data              = local.user_data
     block-project-ssh-keys = "true"
+    enable-oslogin         = "TRUE"
   }
   shielded_instance_config {
     enable_secure_boot = true
@@ -91,4 +116,10 @@ resource "google_compute_instance" "host" {
 
 output "instance_id" {
   value = google_compute_instance.host.id
+}
+
+output "host_access_command" {
+  description = "Opens a shell on the host through Identity-Aware Proxy, where the host's update command runs with sudo"
+  value       = "gcloud compute ssh ${google_compute_instance.host.name} --project ${var.project} --zone ${var.zone} --tunnel-through-iap"
+  depends_on  = [google_compute_firewall.iap_ssh, google_project_service.iap]
 }
