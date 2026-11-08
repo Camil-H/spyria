@@ -271,6 +271,7 @@ test('setup --cloud never writes into a folder that holds Spyria on another clou
     const applied = join(parent, 'applied')
     await Bun.write(join(applied, 'main.tf'), rootModuleOf('gcp', '1.2.0'))
     await Bun.write(join(applied, 'terraform.tfstate'), '{}')
+    await Bun.write(join(applied, 'backend.tf'), 'terraform {\n  backend "gcs" {\n    bucket = "acme-state"\n  }\n}\n')
     mkdirSync(join(applied, '.terraform'))
     expect(await setupGcpIn(applied)).toBeUndefined()
   } finally {
