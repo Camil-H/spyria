@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
+import { hostUpdateStepsOf, rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
 import { parseFlags } from './flags.ts'
 
 const folder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
@@ -310,4 +310,16 @@ test('setup --cloud marks the folders it makes, and writes only into a new or em
   } finally {
     rmSync(parent, { recursive: true, force: true })
   }
+})
+
+test('the host update steps setup prints name what each cloud needs besides the access command', () => {
+  expect(hostUpdateStepsOf('aws', 'aws ssm start-session --region eu-west-1 --target i-1')).toBe(
+    'When Spyria asks you to update that host, open a shell on it with aws ssm start-session --region eu-west-1 --target i-1 (it needs the Session Manager plugin of the AWS CLI), run sudo -i, then paste the update command it shows.',
+  )
+  expect(hostUpdateStepsOf('gcp', 'gcloud compute ssh h --tunnel-through-iap')).toBe(
+    'When Spyria asks you to update that host, open a shell on it with gcloud compute ssh h --tunnel-through-iap, run sudo -i, then paste the update command it shows.',
+  )
+  expect(hostUpdateStepsOf('azure', 'az vm run-command invoke --scripts @update.sh')).toBe(
+    'When Spyria asks you to update that host, save the update command it shows as update.sh, then run, from that folder: az vm run-command invoke --scripts @update.sh',
+  )
 })
