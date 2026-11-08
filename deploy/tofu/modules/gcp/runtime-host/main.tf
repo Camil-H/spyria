@@ -79,7 +79,7 @@ resource "google_project_service" "iap" {
 }
 
 resource "google_compute_firewall" "iap_ssh" {
-  project       = var.project
+  project       = local.subnet.project
   name          = "${var.name}-${var.host_name}-iap-ssh"
   network       = data.google_compute_subnetwork.selected.network
   direction     = "INGRESS"
