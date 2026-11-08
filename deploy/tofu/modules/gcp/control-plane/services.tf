@@ -2,6 +2,12 @@ locals {
   vpc_access = { network = google_compute_network.main.id, subnetwork = google_compute_subnetwork.main.id }
 }
 
+locals {
+  secret_versions = {
+    SPYRIA_SECRET_VERSIONS = join(",", [for name in sort(local.secret_names) : google_secret_manager_secret_version.setting[name].version])
+  }
+}
+
 resource "google_cloud_run_v2_service" "server" {
   project              = var.project
   name                 = local.service_names.server
@@ -36,7 +42,7 @@ resource "google_cloud_run_v2_service" "server" {
         limits   = { cpu = local.size.cpu, memory = local.size.memory }
       }
       dynamic "env" {
-        for_each = module.settings.server_environment
+        for_each = merge(module.settings.server_environment, local.secret_versions)
         content {
           name  = env.key
           value = env.value
@@ -115,7 +121,7 @@ resource "google_cloud_run_v2_service" "zero" {
         mount_path = "/data"
       }
       dynamic "env" {
-        for_each = module.settings.zero_environment
+        for_each = merge(module.settings.zero_environment, local.secret_versions)
         content {
           name  = env.key
           value = env.value
@@ -187,6 +193,10 @@ resource "google_cloud_run_v2_service" "gateway" {
         name  = "BIFROST_CONFIG"
         value = module.settings.gateway_environment.BIFROST_CONFIG
       }
+      env {
+        name  = "SPYRIA_SECRET_VERSIONS"
+        value = local.secret_versions.SPYRIA_SECRET_VERSIONS
+      }
       dynamic "env" {
         for_each = local.service_secret_names.configure
         content {
@@ -224,6 +234,10 @@ resource "google_cloud_run_v2_service" "gateway" {
       env {
         name  = "SPYRIA_GATEWAY_OAUTH_BASE"
         value = module.settings.gateway_environment.SPYRIA_GATEWAY_OAUTH_BASE
+      }
+      env {
+        name  = "SPYRIA_SECRET_VERSIONS"
+        value = local.secret_versions.SPYRIA_SECRET_VERSIONS
       }
       dynamic "env" {
         for_each = local.service_secret_names.gateway
