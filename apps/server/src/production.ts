@@ -33,7 +33,8 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     settingOf('SPYRIA_SMTP_URL') !== '' &&
       !settingOf('SPYRIA_MAIL_FROM') &&
       'SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.',
-    (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_ID') === '') !== (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_SECRET') === '') &&
+    (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_ID').trim() === '') !==
+      (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_SECRET').trim() === '') &&
       'SPYRIA_SIGN_IN_APP_CLIENT_ID and SPYRIA_SIGN_IN_APP_CLIENT_SECRET are set together or not at all.',
     !isTrustedProxySetting(environment.SPYRIA_TRUSTED_PROXY) &&
       'SPYRIA_TRUSTED_PROXY must be unset, cloudflare, or x-forwarded-for:1 to 3.',

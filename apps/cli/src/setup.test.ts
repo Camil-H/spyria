@@ -90,6 +90,14 @@ test('run from inside an install without --folder, setup keeps that install and 
   }
 })
 
+test('choosing an SMTP URL again keeps the saved one when none is given', async () => {
+  await runSetup(['--mail', 'smtp', '--mail-from', 'Spyria <spyria@example.com>'], {
+    SMTP_URL: 'smtps://user:saved@smtp.example.com:465',
+  })
+  await runSetup(['--mail', 'smtp'])
+  expect(environment().SPYRIA_SMTP_URL).toBe('smtps://user:saved@smtp.example.com:465')
+})
+
 test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {

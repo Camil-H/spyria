@@ -78,6 +78,12 @@ test.skipIf(!hasDocker)(
     expect(await backup(folder, parseFlags(['backup', '--keep', '0'])).catch((error: Error) => error.message)).toBe(
       '--keep takes a whole number of backups, at least 1',
     )
+
+    expect(compose('stop', 'postgres').exitCode).toBe(0)
+    expect(
+      await restore(folder, parseFlags(['restore', `backups/${spyriaDump}`])).catch((error: Error) => error.message),
+    ).toBe('Postgres is not running: start it with spyria compose up -d postgres, then restore again')
+    expect(compose('up', '-d', '--wait', 'postgres').exitCode).toBe(0)
   },
   180_000,
 )
