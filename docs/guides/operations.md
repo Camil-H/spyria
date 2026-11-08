@@ -82,7 +82,7 @@ sign_in_app_client_id     = "<new client id>"
 sign_in_app_client_secret = "<new client secret>"
 ```
 
-The server applies it to every workspace when it restarts with the new settings, and leaves the stored app alone while they match. An install made by hand can do the same with `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` in `.env.prod`.
+The server applies it to every workspace when it restarts with the new settings, and leaves the stored app alone while they match. An install made by hand can do the same with `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` in `.env.prod`. Once these settings are set they win: each start puts their app back, so change the app there rather than with `spyria sign-in-app`.
 
 ## Jobs
 
