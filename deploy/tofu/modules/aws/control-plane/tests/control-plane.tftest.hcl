@@ -135,11 +135,64 @@ run "it_refuses_an_unknown_join_setting_and_a_bad_name" {
   expect_failures = [var.join_by, var.name]
 }
 
+run "the_digest_before_a_change" {
+  command = apply
+  module {
+    source = "./"
+  }
+  override_resource {
+    target = module.secrets.random_password.secret
+    values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
+  }
+  override_resource {
+    target = module.secrets.random_string.gateway_admin_user
+    values = { result = "pinnedus" }
+  }
+  override_resource {
+    target = module.secrets.random_string.install_host_token
+    values = { result = "ABCDEFGHJKMNPQRS" }
+  }
+}
+
 run "every_task_carries_a_digest_of_its_secret_values_so_a_changed_secret_restarts_it" {
   command = apply
+  module {
+    source = "../control-plane"
+  }
+  override_resource {
+    target = module.secrets.random_password.secret
+    values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
+  }
+  override_resource {
+    target = module.secrets.random_string.gateway_admin_user
+    values = { result = "pinnedus" }
+  }
+  override_resource {
+    target = module.secrets.random_string.install_host_token
+    values = { result = "ABCDEFGHJKMNPQRS" }
+  }
+  variables {
+    smtp_url  = "smtps://user:rotated@smtp.example.com:465"
+    mail_from = "Spyria <spyria@example.com>"
+  }
   assert {
     condition = alltrue([for definition in [aws_ecs_task_definition.server, aws_ecs_task_definition.zero, aws_ecs_task_definition.gateway] :
-    strcontains(definition.container_definitions, "\"SPYRIA_SECRETS_DIGEST\"")])
-    error_message = "A changed secret value changes every task definition, so ECS restarts the tasks with it"
+    strcontains(definition.container_definitions, output.secrets_digest)])
+    error_message = "Every container carries the new digest, so the platform restarts it with the changed secret"
+  }
+}
+
+run "a_changed_secret_value_changes_the_digest" {
+  command = apply
+  module {
+    source = "../../shared/tests/values-differ"
+  }
+  variables {
+    before = run.the_digest_before_a_change.secrets_digest
+    after  = run.every_task_carries_a_digest_of_its_secret_values_so_a_changed_secret_restarts_it.secrets_digest
+  }
+  assert {
+    condition     = var.before != var.after
+    error_message = "A changed secret value changes the digest every service carries"
   }
 }

@@ -33,3 +33,8 @@ output "runtime_host_subnet_id" {
   description = "A public subnet of the control plane's network, for the runtime-host module"
   value       = aws_subnet.public[0].id
 }
+
+output "secrets_digest" {
+  description = "Changes whenever a secret value changes; every service carries it, so applying a changed secret restarts them"
+  value       = local.secrets_digest.SPYRIA_SECRETS_DIGEST
+}

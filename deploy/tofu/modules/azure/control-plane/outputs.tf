@@ -46,3 +46,8 @@ output "resource_group_name" {
   description = "Resource group of the deployment, for the runtime-host module"
   value       = azurerm_resource_group.main.name
 }
+
+output "secrets_digest" {
+  description = "Changes whenever a secret value changes; every service carries it, so applying a changed secret restarts them"
+  value       = local.secrets_digest.SPYRIA_SECRETS_DIGEST
+}

@@ -153,12 +153,65 @@ run "at_size_large_every_app_with_its_init_containers_fits_one_consumption_app" 
   }
 }
 
+run "the_digest_before_a_change" {
+  command = apply
+  module {
+    source = "./"
+  }
+  override_resource {
+    target = module.secrets.random_password.secret
+    values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
+  }
+  override_resource {
+    target = module.secrets.random_string.gateway_admin_user
+    values = { result = "pinnedus" }
+  }
+  override_resource {
+    target = module.secrets.random_string.install_host_token
+    values = { result = "ABCDEFGHJKMNPQRS" }
+  }
+}
+
 run "every_app_carries_a_digest_of_its_secret_values_so_a_changed_secret_restarts_it" {
   command = apply
+  module {
+    source = "../control-plane"
+  }
+  override_resource {
+    target = module.secrets.random_password.secret
+    values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
+  }
+  override_resource {
+    target = module.secrets.random_string.gateway_admin_user
+    values = { result = "pinnedus" }
+  }
+  override_resource {
+    target = module.secrets.random_string.install_host_token
+    values = { result = "ABCDEFGHJKMNPQRS" }
+  }
+  variables {
+    smtp_url  = "smtps://user:rotated@smtp.example.com:465"
+    mail_from = "Spyria <spyria@example.com>"
+  }
   assert {
     condition = alltrue([for app in [azurerm_container_app.server, azurerm_container_app.zero, azurerm_container_app.gateway] :
       alltrue([for container in app.template[0].container :
-    contains([for env in container.env : env.name], "SPYRIA_SECRETS_DIGEST")])])
-    error_message = "A changed secret value changes every app template, so Container Apps starts a new revision with it"
+    contains([for env in container.env : env.value if env.name == "SPYRIA_SECRETS_DIGEST"], output.secrets_digest)])])
+    error_message = "Every container carries the new digest, so the platform restarts it with the changed secret"
+  }
+}
+
+run "a_changed_secret_value_changes_the_digest" {
+  command = apply
+  module {
+    source = "../../shared/tests/values-differ"
+  }
+  variables {
+    before = run.the_digest_before_a_change.secrets_digest
+    after  = run.every_app_carries_a_digest_of_its_secret_values_so_a_changed_secret_restarts_it.secrets_digest
+  }
+  assert {
+    condition     = var.before != var.after
+    error_message = "A changed secret value changes the digest every service carries"
   }
 }
