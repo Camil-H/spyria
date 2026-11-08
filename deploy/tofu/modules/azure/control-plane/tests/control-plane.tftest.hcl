@@ -261,3 +261,14 @@ run "the_same_secret_values_give_the_same_digest" {
     error_message = "The digest depends on the secret values alone, so an apply that changes no secret restarts nothing"
   }
 }
+
+run "every_account_listed_to_apply_can_read_and_write_the_secrets" {
+  command = apply
+  variables {
+    secret_admin_object_ids = ["00000000-0000-0000-0000-0000000000aa"]
+  }
+  assert {
+    condition     = toset(keys(azurerm_role_assignment.deployer_writes_secrets)) == toset(["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-0000000000aa"])
+    error_message = "The account applying and every listed account are Key Vault Secrets Officers"
+  }
+}

@@ -46,6 +46,10 @@ variable "sign_in_app_client_secret" {
   default   = ""
   sensitive = true
 }
+variable "secret_admin_object_ids" {
+  type    = list(string)
+  default = []
+}
 variable "size" {
   type    = string
   default = "small"
@@ -69,6 +73,7 @@ module "control_plane" {
   mail_from                 = var.mail_from
   sign_in_app_client_id     = var.sign_in_app_client_id
   sign_in_app_client_secret = var.sign_in_app_client_secret
+  secret_admin_object_ids   = var.secret_admin_object_ids
   size                      = var.size
 }
 
