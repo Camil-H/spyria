@@ -2,9 +2,11 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
-import { testAuthSettings, testSetupToken } from '../testing/testing.ts'
+import { rejectionOf, testAuthSettings, testSetupToken } from '../testing/testing.ts'
+import { createSecretBox } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
+import { replaceSignInApp } from './sso.ts'
 
 const instance = await createTestDatabase()
 const { database } = instance
@@ -46,11 +48,12 @@ const idp = Bun.serve({
   },
 })
 const issuer = idp.url.origin
+const secretsKey = 'invited-integration-secrets-key-0123456789'
 const app = createApp({
   database,
   ...testAuthSettings,
   authMode: 'sso',
-  secretsKey: 'invited-integration-secrets-key-0123456789',
+  secretsKey,
   joinBy: 'invited_address',
 })
 afterAll(async () => {
@@ -211,7 +214,7 @@ test('an address with a membership, an open invite or neither gets the same answ
   expect(answers).toEqual(Array(3).fill({ status: 302, provider: `${issuer}/auth` }))
 })
 
-test('with workspaces on different clients, an invitee starts at the client of the workspace that invited them and joins it, while any other address starts at one of them chosen by a keyed hash', async () => {
+test('email-first sign-in starts every address at the one sign-in app of this Spyria, and an invitee of a second workspace joins it from there', async () => {
   const [owner] = await database.$client`select id from users where email = 'owner@gmail.com'`
   const secondWorkspaceId = crypto.randomUUID()
   await database.$client`
@@ -219,25 +222,30 @@ test('with workspaces on different clients, an invitee starts at the client of t
     values (${secondWorkspaceId}, 'Workshop', ${String(owner?.id)}, 'invited_address', now() + interval '1 second')`
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
-    select ${secondWorkspaceId}, preset, issuer, 'workshop-client', encrypted_client_secret, uses_instance_app, now()
+    select ${secondWorkspaceId}, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now()
     from workspace_sso where workspace_id = ${workspaceId}`
   await database.$client`
     insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
     values (${secondWorkspaceId}, ${crypto.randomUUID()}, 'gina@gmail.com', 'member', ${String(owner?.id)}, now(),
       now() + interval '7 days')`
-  const loginOf = (email: string) => app.request(`/auth/login?email=${encodeURIComponent(email)}`)
-  const clientOf = (login: Response) =>
-    new URL(login.headers.get('location') ?? 'http://none').searchParams.get('client_id')
+  const loginStartOf = async (email: string) => {
+    const login = await app.request(`/auth/login?email=${encodeURIComponent(email)}`)
+    const loginCookie = login.headers.getSetCookie().find((cookie) => cookie.includes('spyria_login=')) ?? ''
+    const signedValue = decodeURIComponent(loginCookie.split(';')[0]?.split('=').slice(1).join('=') ?? '')
+    const { providerWorkspaceId } = JSON.parse(signedValue.slice(0, signedValue.lastIndexOf('.')))
+    const location = new URL(login.headers.get('location') ?? 'http://none')
+    return { login, start: { providerWorkspaceId, clientId: location.searchParams.get('client_id') } }
+  }
+  const invited = await loginStartOf('gina@gmail.com')
+  const nobody = await loginStartOf('nobody@gmail.com')
+  expect(invited.start).toEqual(nobody.start)
+  expect(invited.start.providerWorkspaceId).toBe(workspaceId)
 
-  const invited = await loginOf('gina@gmail.com')
-  expect(clientOf(invited)).toBe('workshop-client')
-  expect(clientOf(await loginOf('owner@gmail.com'))).toBe('spyria')
-  const anyAddresses = Array.from({ length: 32 }, (_, index) => `nobody-${index}@gmail.com`)
-  const anyClients = await Promise.all(anyAddresses.map(async (email) => clientOf(await loginOf(email))))
-  expect(new Set(anyClients)).toEqual(new Set(['spyria', 'workshop-client']))
-  expect(clientOf(await loginOf(anyAddresses[0] ?? ''))).toBe(anyClients[0] ?? '')
-
-  const joined = await callbackAfter(invited, { sub: 'gina-subject', email: 'gina@gmail.com', email_verified: true })
+  const joined = await callbackAfter(invited.login, {
+    sub: 'gina-subject',
+    email: 'gina@gmail.com',
+    email_verified: true,
+  })
   expect(joined.sessions.map((session) => session.workspaceId)).toContain(secondWorkspaceId)
   expect(await pendingInvitesOf('gina@gmail.com')).toBe(0)
 })
@@ -257,40 +265,48 @@ const ssoSettingsRequest = async (body?: object) => {
   return { status: response.status, body: await response.json() }
 }
 
-test('Setup SSO of a workspace joined by invited address shows no domain, takes a new client of the same provider, and refuses a domain or another provider', async () => {
-  expect((await ssoSettingsRequest()).body.settings).toMatchObject({
-    joinBy: 'invited_address',
-    domain: null,
-    domainState: null,
-    issuer,
-  })
-  const sameProvider = { preset: 'oidc', issuer, clientId: 'spyria-rotated', clientSecret }
-  expect((await ssoSettingsRequest(sameProvider)).body.settings).toMatchObject({
-    clientId: 'spyria-rotated',
-    domainState: null,
-  })
-  const withDomain = await ssoSettingsRequest({ ...sameProvider, domain: 'gmail.com' })
-  expect(withDomain.body).toMatchObject({ message: 'A workspace joined by invited address owns no email domain' })
-  const otherIdp = Bun.serve({
-    port: 0,
-    fetch: (request) =>
-      Response.json({
-        issuer: new URL(request.url).origin,
-        authorization_endpoint: `${new URL(request.url).origin}/auth`,
-        token_endpoint: `${new URL(request.url).origin}/token`,
-        jwks_uri: `${new URL(request.url).origin}/keys`,
-        response_types_supported: ['code'],
-        subject_types_supported: ['public'],
-        id_token_signing_alg_values_supported: ['RS256'],
-      }),
-  })
-  try {
-    const moved = await ssoSettingsRequest({ ...sameProvider, issuer: otherIdp.url.origin })
-    expect(moved.body).toMatchObject({ error: 'provider_fixed' })
-  } finally {
-    await otherIdp.stop(true)
-  }
-  expect((await ssoSettingsRequest()).body.settings).toMatchObject({ issuer })
+test('Setup SSO of a workspace joined by invited address shows the sign-in app of this Spyria and refuses every change to it', async () => {
+  const shown = { joinBy: 'invited_address', domain: null, domainState: null, issuer, clientId: 'spyria' }
+  expect((await ssoSettingsRequest()).body.settings).toMatchObject(shown)
+  const sameApp = { preset: 'oidc', issuer, clientId: 'spyria', clientSecret }
+  for (const change of [
+    { ...sameApp, clientId: 'spyria-rotated' },
+    { ...sameApp, clientSecret: 'another-secret' },
+    { ...sameApp, domain: 'gmail.com' },
+    { ...sameApp, issuer: 'https://other-idp.example' },
+  ])
+    expect((await ssoSettingsRequest(change)).body).toMatchObject({
+      error: 'sign_in_app_fixed',
+      message:
+        'Every workspace on this Spyria signs in through one app, which an operator changes with spyria sign-in-app',
+    })
+  expect((await ssoSettingsRequest()).body.settings).toMatchObject(shown)
+})
+
+test('an operator changes the sign-in app of every workspace joined by invited address at once, and members sign in through the new one', async () => {
+  const secretBox = createSecretBox(secretsKey)
+  expect(
+    String(await rejectionOf(replaceSignInApp(database, secretBox, { clientId: 'spyria-rotated', clientSecret: ' ' }))),
+  ).toContain('A client id and a client secret are required')
+  expect(await replaceSignInApp(database, secretBox, { clientId: 'spyria-rotated', clientSecret })).toBe(2)
+  expect([
+    ...(await database.$client`select distinct client_id from workspace_sso join workspaces using (workspace_id)
+      where join_by = 'invited_address'`),
+  ]).toEqual([{ client_id: 'spyria-rotated' }])
+  expect([
+    ...(await database.$client`select type, actor_kind, actor_id from workspace_events
+      where workspace_id = ${workspaceId} and type like 'sso.%' order by created_at desc limit 2`),
+  ]).toEqual(
+    expect.arrayContaining([
+      { type: 'sso.configured', actor_kind: 'system', actor_id: 'operator' },
+      { type: 'sso.secret_rotated', actor_kind: 'system', actor_id: 'operator' },
+    ]),
+  )
+
+  const login = await app.request('/auth/login?email=bob%40gmail.com')
+  expect(new URL(login.headers.get('location') ?? 'http://none').searchParams.get('client_id')).toBe('spyria-rotated')
+  const signedIn = await callbackAfter(login, { sub: 'bob-subject', email: 'bob@gmail.com', email_verified: true })
+  expect(signedIn.sessions.map((session) => session.workspaceId)).toContain(workspaceId)
 })
 
 test("another account at the provider claiming a member's address gets neither that member's account nor a session", async () => {

@@ -119,7 +119,7 @@ Accounts are matched on the provider's issuer and subject, not the email, so a c
 An instance chooses how people join its workspaces when it is set up ([decision 0027](../decisions/0027-join-by-invited-address.md)):
 
 - **By email domain** (above): the workspace owns a verified domain.
-- **By invited address**: the workspace owns no domain. **Setup SSO** shows "Who can join: people you invite" and the provider, without the domain section. Invites open at once; an invitee signs in through the provider at exactly the invited address, and from then on is recognized by the provider identity, not the address. Through Google any confirmed Google account signs in, Gmail included; Microsoft consumer accounts never do. **New workspace** reuses the member's provider and the same setting.
+- **By invited address**: the workspace owns no domain. **Setup SSO** shows "Who can join: people you invite" and the sign-in app of the instance, read-only and without the domain section; an operator changes the app for every workspace with `spyria sign-in-app`. Invites open at once; an invitee signs in through the provider at exactly the invited address, and from then on is recognized by the provider identity, not the address. Through Google any confirmed Google account signs in, Gmail included; Microsoft consumer accounts never do. **New workspace** reuses the member's provider and the same setting.
 
 Either way, a Google or generic OIDC provider must confirm the address it returns; otherwise sign-in is refused with "Your provider did not confirm this address". A public email domain such as `gmail.com` cannot be a workspace's domain.
 

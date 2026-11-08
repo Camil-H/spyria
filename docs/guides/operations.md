@@ -61,6 +61,20 @@ spyria setup-link
 
 It is refused once a workspace exists.
 
+## Sign-in app of an instance joined by invited address
+
+When people join by invited address, every workspace signs in through one app of the provider, and workspace Admins cannot change it. To replace its client id and secret for every workspace at once, for example when the secret expires:
+
+```sh
+spyria sign-in-app --client-id <new client id>
+```
+
+It asks for the secret, or reads it from standard input. Members keep their accounts, since the provider and its issuer stay the same. By hand, or on a cloud deployment from a shell in the server container, pass the secret on standard input:
+
+```sh
+printf '%s' "$CLIENT_SECRET" | spyria compose exec -T server bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>
+```
+
 ## Jobs
 
 Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
