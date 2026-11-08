@@ -1,4 +1,10 @@
 mock_provider "aws" {
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
+  mock_data "aws_region" {
+    defaults = { region = "eu-west-1" }
+  }
   mock_data "aws_subnet" {
     defaults = { vpc_id = "vpc-1" }
   }
@@ -42,6 +48,10 @@ run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpo
   assert {
     condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "until apt-get update") && strcontains(base64decode(aws_instance.host.user_data_base64), "until docker pull ghcr.io/camil-h/spyria-host:1.2.0")
     error_message = "The first boot retries the install and the image pull until the network answers, since cloud-init runs it once"
+  }
+  assert {
+    condition     = aws_instance.host.iam_instance_profile == aws_iam_instance_profile.host.name && aws_iam_role_policy_attachment.session_manager.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" && output.host_access_command == "aws ssm start-session --region eu-west-1 --target ${aws_instance.host.id}"
+    error_message = "An operator reaches the host through Session Manager alone, to run its update command"
   }
 }
 

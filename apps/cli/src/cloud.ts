@@ -265,6 +265,11 @@ export const setupCloud = async (
         : []),
       `Create the first workspace from this setup link, which works once: ${outputs.setup_link?.value}`,
       'A runtime host VM pairs with it when you create it.',
+      ...(outputs.runtime_host_access_command?.value
+        ? [
+            `When Spyria asks you to update that host, run its update command there with: ${outputs.runtime_host_access_command.value}`,
+          ]
+        : []),
     ].join('\n'),
   )
 }

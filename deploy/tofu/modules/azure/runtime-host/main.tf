@@ -130,3 +130,8 @@ resource "azurerm_linux_virtual_machine" "host" {
 output "virtual_machine_id" {
   value = azurerm_linux_virtual_machine.host.id
 }
+
+output "host_access_command" {
+  description = "Runs a command on the host: append the host's update command, in quotes"
+  value       = "az vm run-command invoke --resource-group ${var.resource_group_name} --name ${azurerm_linux_virtual_machine.host.name} --command-id RunShellScript --scripts"
+}
