@@ -132,6 +132,6 @@ output "virtual_machine_id" {
 }
 
 output "host_access_command" {
-  description = "Runs a command on the host: append the host's update command, in quotes"
-  value       = "az vm run-command invoke --resource-group ${var.resource_group_name} --name ${azurerm_linux_virtual_machine.host.name} --command-id RunShellScript --scripts"
+  description = "Runs the host's update command on it, saved first as update.sh in the current folder"
+  value       = "az vm run-command invoke --resource-group ${var.resource_group_name} --name ${azurerm_linux_virtual_machine.host.name} --command-id RunShellScript --scripts @update.sh"
 }

@@ -36,7 +36,7 @@ run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpo
     error_message = "The first boot retries the install and the image pull until the network answers, since cloud-init runs it once"
   }
   assert {
-    condition     = startswith(output.host_access_command, "az vm run-command invoke --resource-group ") && endswith(output.host_access_command, " --command-id RunShellScript --scripts")
+    condition     = startswith(output.host_access_command, "az vm run-command invoke --resource-group ") && endswith(output.host_access_command, " --command-id RunShellScript --scripts @update.sh")
     error_message = "The host names the command that runs its update command on it"
   }
 }

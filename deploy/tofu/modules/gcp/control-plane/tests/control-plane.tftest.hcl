@@ -77,8 +77,8 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "The setup link carries the setup token"
   }
   assert {
-    condition     = google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].tcp_socket[0].port == 4848 && google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].period_seconds * google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].failure_threshold >= 1800
-    error_message = "zero-cache gets 30 minutes for its first sync before Cloud Run restarts it"
+    condition     = google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].tcp_socket[0].port == 4848 && google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].period_seconds * google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].failure_threshold == 600
+    error_message = "zero-cache gets the 10 minutes Cloud Run allows at most for its first sync before restarting it"
   }
 }
 

@@ -15,6 +15,10 @@ variable "host_name" {
   description = "Name of this host among the deployment's, for its cloud resources: give each runtime host its own"
   type        = string
   default     = "runtime-host"
+  validation {
+    condition     = length(var.name) + length(var.host_name) <= 54
+    error_message = "name and host_name take at most 54 characters together, so the host's firewall rule name fits 63."
+  }
 }
 
 variable "claim_url" {
@@ -53,6 +57,7 @@ variable "zone" {
 }
 
 locals {
+  subnet        = regex("projects/(?P<project>[^/]+)/regions/(?P<region>[^/]+)/subnetworks/(?P<name>[^/]+)$", var.subnet_id)
   machine_types = { small = "e2-standard-2", medium = "e2-standard-4", large = "e2-standard-8" }
   user_data = templatefile("${path.module}/../../shared/runtime-host/cloud-init.yaml.tftpl", {
     name       = var.name
@@ -62,7 +67,9 @@ locals {
 }
 
 data "google_compute_subnetwork" "selected" {
-  self_link = var.subnet_id
+  project = local.subnet.project
+  region  = local.subnet.region
+  name    = local.subnet.name
 }
 
 resource "google_project_service" "iap" {
@@ -119,7 +126,7 @@ output "instance_id" {
 }
 
 output "host_access_command" {
-  description = "Opens a shell on the host through Identity-Aware Proxy, where the host's update command runs with sudo"
+  description = "Opens a shell on the host through Identity-Aware Proxy: run sudo -i there, then the host's update command"
   value       = "gcloud compute ssh ${google_compute_instance.host.name} --project ${var.project} --zone ${var.zone} --tunnel-through-iap"
   depends_on  = [google_compute_firewall.iap_ssh, google_project_service.iap]
 }
