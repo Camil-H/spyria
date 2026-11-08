@@ -320,6 +320,6 @@ test('the host update steps setup prints name what each cloud needs besides the 
     'When Spyria asks you to update that host, open a shell on it with gcloud compute ssh h --tunnel-through-iap, run sudo -i, then paste the update command it shows.',
   )
   expect(hostUpdateStepsOf('azure', 'az vm run-command invoke --scripts @update.sh')).toBe(
-    'When Spyria asks you to update that host, save the update command it shows as update.sh, then run, from that folder: az vm run-command invoke --scripts @update.sh',
+    'When Spyria asks you to update that host, save the update command it shows as update.sh in the current folder, then run there: az vm run-command invoke --scripts @update.sh',
   )
 })
