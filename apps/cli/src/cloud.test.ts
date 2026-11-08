@@ -330,7 +330,8 @@ test('a one-line list of texts in terraform.tfvars, such as the Azure secret adm
     'secret_admin_object_ids = ["00000000-0000-0000-0000-0000000000aa", "odd$$' + '{x}"]\n',
   )
   expect(tfVariablesFrom(tfVariablesOf(answers))).toEqual(answers)
-  expect(tfVariablesFrom('admins = ["a", "b"] # who applies\n')).toEqual({ admins: ['a', 'b'] })
+  expect(tfVariablesFrom('admins = ["a", "b"] # who applies, see [docs]\n')).toEqual({ admins: ['a', 'b'] })
+  expect(tfVariablesFrom('admins = [ "a]", "b", ]\nnone = []\n')).toEqual({ admins: ['a]', 'b'], none: [] })
 
   const azureFolder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
   try {
