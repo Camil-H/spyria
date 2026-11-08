@@ -33,3 +33,8 @@ output "runtime_host_subnet_id" {
   description = "A subnetwork for runtime hosts, which reaches the internet through Cloud NAT and, unlike the services' subnetwork, not Google's private access to Cloud Run"
   value       = google_compute_subnetwork.hosts.id
 }
+
+output "secrets_digest" {
+  description = "Changes whenever a secret value changes; every service carries it, so applying a changed secret restarts them"
+  value       = local.secrets_digest.SPYRIA_SECRETS_DIGEST
+}
