@@ -55,7 +55,10 @@ test('setup with Cloudflare Access and Resend prints the provider values once, a
       {
         cloudflareApiUrl: cloudflare.url.origin,
         resendApiUrl: resend.url.origin,
-        processEnvironment: { CLOUDFLARE_API_TOKEN: 'cloudflare-api-token', RESEND_API_KEY: 're_full_access' },
+        processEnvironment: {
+          SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token',
+          SPYRIA_SETUP_RESEND_KEY: 're_full_access',
+        },
       },
     )
   } finally {

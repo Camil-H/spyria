@@ -81,7 +81,7 @@ test('spyria setup --cloud run again with only a new version upgrades and keeps 
       ...['--join-by', 'invited-address', '--size', 'medium', '--region', 'europe-north1', '--dns-zone', 'example'],
       ...['--mail-from', 'Spyria <spyria@example.com>'],
     ],
-    { SMTP_URL: 'smtps://u:p@smtp.example.com' },
+    { SPYRIA_SETUP_SMTP_URL: 'smtps://u:p@smtp.example.com' },
   )
   const before = tfVariablesFrom(readFileSync(join(folder, 'terraform.tfvars'), 'utf8'))
   await setupGcp(['--version', '1.3.0'])
@@ -139,7 +139,7 @@ test('run again by hand, a saved SMTP URL is never shown, empty keeps an answer 
           'dns',
         ],
       ],
-      { SMTP_URL: 'smtps://u:secret@smtp.example.com' },
+      { SPYRIA_SETUP_SMTP_URL: 'smtps://u:secret@smtp.example.com' },
     )
     const saved = () => tfVariablesFrom(readFileSync(join(azureFolder, 'terraform.tfvars'), 'utf8'))
     expect(saved()).toMatchObject({ dns_zone_name: 'example.com', binds_hostname: true })
@@ -184,7 +184,7 @@ test('- never becomes an answer, even with nothing saved, and --bind-hostname ta
         { environment },
       )
     const saved = () => tfVariablesFrom(readFileSync(join(freshFolder, 'terraform.tfvars'), 'utf8'))
-    await setupAzure(['--dns-zone', '-', '--bind-hostname', 'no'], { SMTP_URL: '-' })
+    await setupAzure(['--dns-zone', '-', '--bind-hostname', 'no'], { SPYRIA_SETUP_SMTP_URL: '-' })
     expect(saved().dns_zone_name).toBeUndefined()
     expect(saved().smtp_url).toBeUndefined()
     expect(saved().binds_hostname).toBe(false)
