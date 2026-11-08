@@ -65,3 +65,11 @@ run "a_second_host_takes_its_own_name" {
     error_message = "Each runtime host has its own resources"
   }
 }
+
+run "a_host_name_that_would_overflow_its_iam_role_name_is_refused" {
+  command = plan
+  variables {
+    host_name = "a-runtime-host-name-long-enough-to-overflow-the-iam-role-name-limit"
+  }
+  expect_failures = [var.host_name]
+}

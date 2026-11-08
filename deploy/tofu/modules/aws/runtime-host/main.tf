@@ -15,6 +15,10 @@ variable "host_name" {
   description = "Name of this host among the deployment's, for its cloud resources: give each runtime host its own"
   type        = string
   default     = "runtime-host"
+  validation {
+    condition     = length(var.name) + length(var.host_name) <= 63
+    error_message = "name and host_name take at most 63 characters together, so the host's IAM role name fits 64."
+  }
 }
 
 variable "claim_url" {
