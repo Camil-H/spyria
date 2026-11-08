@@ -115,6 +115,10 @@ run "the_digest_before_a_change" {
   module {
     source = "./"
   }
+  variables {
+    smtp_url  = "smtps://user:before@smtp.example.com:465"
+    mail_from = "Spyria <spyria@example.com>"
+  }
   override_resource {
     target = module.secrets.random_password.secret
     values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
@@ -161,7 +165,7 @@ run "every_service_carries_a_digest_of_its_secret_values_so_a_changed_secret_res
 run "a_changed_secret_value_changes_the_digest" {
   command = apply
   module {
-    source = "../../shared/tests/values-differ"
+    source = "../../shared/tests/two-values"
   }
   variables {
     before = run.the_digest_before_a_change.secrets_digest
@@ -170,5 +174,43 @@ run "a_changed_secret_value_changes_the_digest" {
   assert {
     condition     = var.before != var.after
     error_message = "A changed secret value changes the digest every service carries"
+  }
+}
+
+run "the_same_values_applied_again" {
+  command = apply
+  module {
+    source = "../../gcp/control-plane"
+  }
+  variables {
+    smtp_url  = "smtps://user:before@smtp.example.com:465"
+    mail_from = "Spyria <spyria@example.com>"
+  }
+  override_resource {
+    target = module.secrets.random_password.secret
+    values = { result = "PinnedSecretValueForTheDigestTest0123456789abcd" }
+  }
+  override_resource {
+    target = module.secrets.random_string.gateway_admin_user
+    values = { result = "pinnedus" }
+  }
+  override_resource {
+    target = module.secrets.random_string.install_host_token
+    values = { result = "ABCDEFGHJKMNPQRS" }
+  }
+}
+
+run "the_same_secret_values_give_the_same_digest" {
+  command = apply
+  module {
+    source = "../../shared/tests/two-values"
+  }
+  variables {
+    before = run.the_digest_before_a_change.secrets_digest
+    after  = run.the_same_values_applied_again.secrets_digest
+  }
+  assert {
+    condition     = var.before == var.after
+    error_message = "The digest depends on the secret values alone, so an apply that changes no secret restarts nothing"
   }
 }
