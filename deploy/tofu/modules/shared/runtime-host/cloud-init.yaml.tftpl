@@ -1,8 +1,13 @@
 #cloud-config
-package_update: true
-packages:
-  - docker.io
 write_files:
+  - path: /usr/local/sbin/spyria-host-install
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -u
+      until apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io; do sleep 15; done
+      systemctl enable --now docker
+      until docker pull ${host_image}; do sleep 15; done
   - path: /usr/local/sbin/spyria-runtime-firewall
     permissions: "0755"
     content: |
@@ -29,7 +34,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  - systemctl enable --now docker
+  - /usr/local/sbin/spyria-host-install
   - systemctl daemon-reload
   - systemctl enable --now spyria-runtime-firewall
   - >-

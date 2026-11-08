@@ -32,6 +32,7 @@ output "dns_records" {
 output "runtime_host_subnet_id" {
   description = "A subnetwork for runtime hosts, which reaches the internet through Cloud NAT and, unlike the services' subnetwork, not Google's private access to Cloud Run"
   value       = google_compute_subnetwork.hosts.id
+  depends_on  = [google_compute_router_nat.main]
 }
 
 output "secrets_digest" {
