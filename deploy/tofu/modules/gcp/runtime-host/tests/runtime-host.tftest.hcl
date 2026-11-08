@@ -46,10 +46,28 @@ run "a_second_host_takes_its_own_name" {
   }
 }
 
-run "a_host_name_that_would_overflow_its_firewall_rule_name_is_refused" {
+run "with_the_default_name_a_host_name_of_49_characters_overflows_the_firewall_rule_name" {
   command = plan
   variables {
-    host_name = "a-runtime-host-name-long-enough-to-overflow-the-rule"
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
   }
   expect_failures = [var.host_name]
+}
+
+run "with_the_default_name_a_host_name_of_48_characters_fits_the_firewall_rule_name" {
+  command = plan
+  variables {
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+  }
+}
+
+run "on_a_network_shared_from_another_project_the_iap_rule_lives_in_that_project" {
+  command = apply
+  variables {
+    subnet_id = "projects/network-project/regions/europe-west1/subnetworks/shared"
+  }
+  assert {
+    condition     = google_compute_firewall.iap_ssh.project == "network-project" && google_compute_instance.host.project == "project" && google_project_service.iap.project == "project"
+    error_message = "The firewall rule goes where the network is, the host and the IAP service where the deployment is"
+  }
 }
