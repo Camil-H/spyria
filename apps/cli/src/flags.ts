@@ -62,7 +62,7 @@ export const askerOf = (
   }
   const secret = (name: string, question: string, saved = '') => {
     const fromEnvironment = secretFromEnvironment(name)
-    if (fromEnvironment) console.log(`${question}: taken from ${secretVariables[name]}`)
+    if (fromEnvironment) console.log(`Using ${secretVariables[name]} from the environment`)
     if (fromEnvironment || isUnattended) return fromEnvironment || saved
     return (prompt(question) ?? '').trim() || saved
   }
