@@ -102,7 +102,7 @@ resource "google_cloud_run_v2_service" "zero" {
       name = "replica"
       empty_dir {
         medium     = "MEMORY"
-        size_limit = "2Gi"
+        size_limit = local.size.zero_replica
       }
     }
     containers {
@@ -112,7 +112,15 @@ resource "google_cloud_run_v2_service" "zero" {
       }
       resources {
         cpu_idle = false
-        limits   = { cpu = "1", memory = "4Gi" }
+        limits   = { cpu = local.size.zero_cpu, memory = local.size.zero_memory }
+      }
+      startup_probe {
+        period_seconds    = 10
+        timeout_seconds   = 5
+        failure_threshold = 180
+        tcp_socket {
+          port = 4848
+        }
       }
       volume_mounts {
         name       = "replica"

@@ -4,9 +4,9 @@ data "google_project" "current" {
 
 locals {
   sizes = {
-    small  = { cpu = "1", memory = "2Gi", database_tier = "db-custom-2-7680" }
-    medium = { cpu = "2", memory = "4Gi", database_tier = "db-custom-4-15360" }
-    large  = { cpu = "4", memory = "8Gi", database_tier = "db-custom-8-30720" }
+    small  = { cpu = "1", memory = "2Gi", database_tier = "db-custom-2-7680", zero_cpu = "1", zero_memory = "4Gi", zero_replica = "2Gi" }
+    medium = { cpu = "2", memory = "4Gi", database_tier = "db-custom-4-15360", zero_cpu = "2", zero_memory = "8Gi", zero_replica = "5Gi" }
+    large  = { cpu = "4", memory = "8Gi", database_tier = "db-custom-8-30720", zero_cpu = "4", zero_memory = "16Gi", zero_replica = "12Gi" }
   }
   size          = local.sizes[var.size]
   service_names = { server = "${var.name}-server", zero = "${var.name}-zero-cache", gateway = "${var.name}-gateway" }
