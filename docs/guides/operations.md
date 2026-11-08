@@ -69,11 +69,13 @@ When people join by invited address, every workspace signs in through one app of
 spyria sign-in-app --client-id <new client id>
 ```
 
-It asks for the secret, or reads it from standard input. Members keep their accounts, since the provider and its issuer stay the same. By hand, or on a cloud deployment from a shell in the server container, pass the secret on standard input:
+It asks for the secret, or reads it from standard input. Members keep their accounts, since the provider and its issuer stay the same. On an install made by hand, pass the secret on standard input to the operator command in the server container:
 
 ```sh
-printf '%s' "$CLIENT_SECRET" | spyria compose exec -T server bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>
+printf '%s' "$CLIENT_SECRET" | spyria-compose exec -T server bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>
 ```
+
+On a cloud deployment, run `bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>` from a shell in the server container and type the secret, then end the input with Ctrl-D.
 
 ## Jobs
 
