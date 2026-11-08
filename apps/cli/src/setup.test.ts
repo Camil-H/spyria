@@ -36,7 +36,7 @@ const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'u
 
 test('an unattended setup creates the tunnel and writes the Compose file, the gateway config and a private .env', async () => {
   await runSetup(['--hostname', 'Spyria.Example.com', '--join-by', 'invited-address'], {
-    CLOUDFLARE_API_TOKEN: 'api-token',
+    SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'api-token',
   })
   expect(tunnelNames).toEqual(['spyria-spyria.example.com'])
   expect(readFileSync(join(folder, 'compose.yml'), 'utf8')).toContain('spyria-server:${SPYRIA_VERSION')
@@ -92,7 +92,7 @@ test('run from inside an install without --folder, setup keeps that install and 
 
 test('choosing an SMTP URL again keeps the saved one when none is given', async () => {
   await runSetup(['--mail', 'smtp', '--mail-from', 'Spyria <spyria@example.com>'], {
-    SMTP_URL: 'smtps://user:saved@smtp.example.com:465',
+    SPYRIA_SETUP_SMTP_URL: 'smtps://user:saved@smtp.example.com:465',
   })
   await runSetup(['--mail', 'smtp'])
   expect(environment().SPYRIA_SMTP_URL).toBe('smtps://user:saved@smtp.example.com:465')
@@ -112,14 +112,14 @@ test('an unattended setup refuses what it cannot decide: no hostname, a new host
     )
     expect(
       await attempt(['--hostname', 'spyria.example.com', '--google-client-id', 'not-google'], {
-        CLOUDFLARE_API_TOKEN: 't',
+        SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't',
       }),
     ).toBe('not-google is not a Google OAuth client id')
     expect(
       await attempt(
         ['--hostname', 'spyria.example.com', '--join-by', 'invited-address', '--provider', 'cloudflare-access'],
         {
-          CLOUDFLARE_API_TOKEN: 't',
+          SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't',
         },
       ),
     ).toBe('--provider must be microsoft or okta or google or other or skip')

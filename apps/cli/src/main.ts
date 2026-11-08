@@ -39,8 +39,8 @@ skip|smtp|resend|keep, --mail-from, --mail-test <address>, --version, --images, 
 this machine; kept when you set up again), --host (turn it back on), --no-start, --unattended (no question at all).
 
 Secrets are never flags, so they stay out of your shell history and process list: setup asks for them, or reads them
-from CLOUDFLARE_API_TOKEN (Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Read), GOOGLE_CLIENT_SECRET,
-MICROSOFT_CLIENT_SECRET, OKTA_API_TOKEN, RESEND_API_KEY and SMTP_URL. A saved secret is never shown;
+from SPYRIA_SETUP_CLOUDFLARE_TOKEN (Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Read), SPYRIA_SETUP_GOOGLE_CLIENT_SECRET,
+SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET, SPYRIA_SETUP_OKTA_TOKEN, SPYRIA_SETUP_RESEND_KEY and SPYRIA_SETUP_SMTP_URL. A saved secret is never shown;
 an empty answer keeps it.
 A - answer removes a sign-in app, or a saved optional answer with --cloud; --mail skip removes mail. --provider
 cloudflare-access and --mail resend need the Cloudflare token to also hold Access: Apps and Policies Edit, Access:

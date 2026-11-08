@@ -22,7 +22,7 @@ export const removal = '-'
 
 const cloudflareOf = ({ cloudflare }: SetupContext, what: string) => {
   if (!cloudflare)
-    throw new Error(`${what} needs the Cloudflare API token: set CLOUDFLARE_API_TOKEN or answer its question`)
+    throw new Error(`${what} needs the Cloudflare API token: set SPYRIA_SETUP_CLOUDFLARE_TOKEN or answer its question`)
   return cloudflare
 }
 

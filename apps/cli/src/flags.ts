@@ -20,12 +20,12 @@ export const parseFlags = (givenArguments: readonly string[]): Flags => {
 }
 
 export const secretVariables: Record<string, string> = {
-  'cloudflare-token': 'CLOUDFLARE_API_TOKEN',
-  'google-client-secret': 'GOOGLE_CLIENT_SECRET',
-  'microsoft-client-secret': 'MICROSOFT_CLIENT_SECRET',
-  'okta-token': 'OKTA_API_TOKEN',
-  'resend-key': 'RESEND_API_KEY',
-  'smtp-url': 'SMTP_URL',
+  'cloudflare-token': 'SPYRIA_SETUP_CLOUDFLARE_TOKEN',
+  'google-client-secret': 'SPYRIA_SETUP_GOOGLE_CLIENT_SECRET',
+  'microsoft-client-secret': 'SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET',
+  'okta-token': 'SPYRIA_SETUP_OKTA_TOKEN',
+  'resend-key': 'SPYRIA_SETUP_RESEND_KEY',
+  'smtp-url': 'SPYRIA_SETUP_SMTP_URL',
 }
 
 export type ProcessEnvironment = Record<string, string | undefined>
@@ -62,6 +62,7 @@ export const askerOf = (
   }
   const secret = (name: string, question: string, saved = '') => {
     const fromEnvironment = secretFromEnvironment(name)
+    if (fromEnvironment) console.log(`${question}: taken from ${secretVariables[name]}`)
     if (fromEnvironment || isUnattended) return fromEnvironment || saved
     return (prompt(question) ?? '').trim() || saved
   }
