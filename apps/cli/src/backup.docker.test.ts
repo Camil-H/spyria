@@ -58,6 +58,14 @@ test.skipIf(!hasDocker)(
 
     sql('spyria', "insert into notes values ('after'); create table added_later (id int)")
     const [spyriaDump, bifrostDump] = written.map((path) => path.split('/').at(-1) ?? '')
+    const whole = await Bun.file(written[0] ?? '').bytes()
+    writeFileSync(join(folder, 'backups', 'spyria-truncated.dump'), whole.subarray(0, Math.floor(whole.length / 2)))
+    writeFileSync(join(folder, 'backups', 'spyria-plain.dump'), 'create table notes (body text);\n')
+    for (const unusable of ['spyria-truncated.dump', 'spyria-plain.dump'])
+      expect(
+        await restore(folder, parseFlags(['restore', `backups/${unusable}`])).catch((error: Error) => error.message),
+      ).toBe(`backups/${unusable} is not a complete backup made by spyria backup: nothing was changed`)
+    expect(sql('spyria', "select string_agg(body, ',' order by body) from notes")).toBe('after,before')
     await restore(folder, parseFlags(['restore', `backups/${spyriaDump}`]))
     expect(sql('spyria', "select string_agg(body, ',') from notes")).toBe('before')
     expect(sql('spyria', "select to_regclass('added_later') is null")).toBe('t')

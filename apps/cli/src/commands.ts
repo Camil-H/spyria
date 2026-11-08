@@ -126,6 +126,11 @@ export const restore = async (folder: string, flags: Flags) => {
   if (!database || !existsSync(path)) throw new Error(`${file} is not a backup of spyria or bifrost`)
   const environment = readEnvironment(folder)
   const profiles = (environment.COMPOSE_PROFILES ?? '').split(',')
+  step(`Reading ${file} whole before changing anything`)
+  const readable = await spawnCompose(folder, ['exec', '-T', 'postgres', 'pg_restore', '--file=/dev/null'], {
+    stdin: Bun.file(path),
+  })
+  if (readable !== 0) throw new Error(`${file} is not a complete backup made by spyria backup: nothing was changed`)
   step('Stopping the server, zero-cache, the gateway and the host')
   mustSucceed(
     runCompose(folder, ['stop', 'server', 'zero-cache', 'gateway', ...(profiles.includes('host') ? ['host'] : [])]),

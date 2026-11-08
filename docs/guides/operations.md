@@ -130,8 +130,8 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | `<deployment>-zero-data` | zero-cache's replica, rebuilt from Postgres. | No. |
 | `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
 
-By hand, a consistent dump of both databases:
+`spyria restore` reads each file whole before it changes anything, and refuses one it cannot restore completely, such as a truncated file or a plain SQL dump. By hand, a consistent dump of both databases, which `spyria restore` does not take (restore it with `psql` into an empty Postgres):
 
 ```sh
-spyria compose exec -T postgres pg_dumpall -U spyria > spyria-backup.sql
+spyria compose exec -T postgres pg_dumpall -U spyria > all-databases.sql
 ```
