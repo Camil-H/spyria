@@ -145,3 +145,36 @@ test('run again by hand, a saved SMTP URL is never shown, empty keeps an answer 
     rmSync(azureFolder, { recursive: true, force: true })
   }
 })
+
+test('the variables file is read with Windows line endings and names with dashes', () => {
+  expect(tfVariablesFrom('# saved on Windows\r\nhostname = "spyria.example.com"\r\nmy-own_name = "kept"\r\n')).toEqual({
+    hostname: 'spyria.example.com',
+    'my-own_name': 'kept',
+  })
+})
+
+test('- never becomes an answer, even with nothing saved, and --bind-hostname takes yes or no only', async () => {
+  const freshFolder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
+  try {
+    const setupAzure = (extra: string[]) =>
+      setupCloud(
+        parseFlags([
+          ...['setup', '--cloud', 'azure', '--unattended', '--no-start', '--folder', freshFolder, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--subscription', 'subscription-1', ...extra],
+        ]),
+        'azure',
+      )
+    const saved = () => tfVariablesFrom(readFileSync(join(freshFolder, 'terraform.tfvars'), 'utf8'))
+    await setupAzure(['--dns-zone', '-', '--smtp-url', '-', '--bind-hostname', 'no'])
+    expect(saved().dns_zone_name).toBeUndefined()
+    expect(saved().smtp_url).toBeUndefined()
+    expect(saved().binds_hostname).toBe(false)
+    await setupAzure(['--bind-hostname', 'yes'])
+    expect(saved().binds_hostname).toBe(true)
+    expect(await setupAzure(['--bind-hostname', 'false']).catch((error: Error) => error.message)).toBe(
+      '--bind-hostname must be yes or no',
+    )
+  } finally {
+    rmSync(freshFolder, { recursive: true, force: true })
+  }
+})
