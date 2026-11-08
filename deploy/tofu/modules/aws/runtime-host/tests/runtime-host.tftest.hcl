@@ -66,10 +66,17 @@ run "a_second_host_takes_its_own_name" {
   }
 }
 
-run "a_host_name_that_would_overflow_its_iam_role_name_is_refused" {
+run "with_the_default_name_a_host_name_of_58_characters_overflows_the_iam_role_name" {
   command = plan
   variables {
-    host_name = "a-runtime-host-name-long-enough-to-overflow-the-iam-role-name-limit"
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
   }
   expect_failures = [var.host_name]
+}
+
+run "with_the_default_name_a_host_name_of_57_characters_fits_the_iam_role_name" {
+  command = plan
+  variables {
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+  }
 }
