@@ -15,7 +15,7 @@ import {
 import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
 import { environmentOf, isDeploymentName, type SetupAnswers } from './environment.ts'
-import { askerOf, type Flags } from './flags.ts'
+import { askerOf, type Flags, type ProcessEnvironment, secretVariables } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
 import { type Asker, firstWorkspaceProviderOf, mailOf, removal } from './setup-steps.ts'
 
@@ -63,11 +63,13 @@ const instanceAppOf = (
     throw new Error(
       `${clientId} is not a ${provider === 'google' ? 'Google OAuth' : 'Microsoft application'} client id`,
     )
-  const clientSecret = asker.require(
+  const savedSecret = clientId === existing.clientId ? (existing.clientSecret ?? '') : ''
+  const clientSecret = asker.secret(
     `${flagPrefix}-secret`,
-    'Client secret',
-    clientId === existing.clientId ? (existing.clientSecret ?? '') : '',
+    savedSecret ? 'Client secret (empty keeps the saved one)' : 'Client secret',
+    savedSecret,
   )
+  if (clientSecret === '') throw new Error(`${secretVariables[`${flagPrefix}-secret`]} is required`)
   return { clientId, clientSecret }
 }
 
@@ -77,10 +79,16 @@ export const setup = async (
     cloudflareApiUrl = cloudflareApi,
     resendApiUrl,
     az = runAz,
-  }: { cloudflareApiUrl?: string; resendApiUrl?: string; az?: AzRunner } = {},
+    processEnvironment = process.env,
+  }: {
+    cloudflareApiUrl?: string
+    resendApiUrl?: string
+    az?: AzRunner
+    processEnvironment?: ProcessEnvironment
+  } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
-  const asker: Asker = { ...askerOf(flags, isUnattended), isUnattended }
+  const asker: Asker = { ...askerOf(flags, isUnattended, processEnvironment), isUnattended }
   const folder = installFolderOf({
     ...flags,
     values: { ...flags.values, folder: asker.ask('folder', 'Install folder', installFolderOf(flags)) },
@@ -102,7 +110,7 @@ export const setup = async (
   const origin = `https://${hostname}`
   const keepsTunnel =
     existing.CLOUDFLARE_TUNNEL_TOKEN !== undefined && hostnameOf(existing.SPYRIA_APP_ORIGIN) === hostname
-  const apiToken = asker.ask(
+  const apiToken = asker.secret(
     'cloudflare-token',
     `Cloudflare API token with Account > Cloudflare Tunnel > Edit, Zone > DNS > Edit and Zone > Zone > Read, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
   )

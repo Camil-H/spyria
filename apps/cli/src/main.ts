@@ -32,15 +32,20 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
 Setup flags, each a question it then skips (with --cloud: --region, --project, --subscription, --dns-zone,
---dns-zone-resource-group, --route53-zone-id, --certificate-arn, --size, --bind-hostname yes|no): --name, --hostname, --cloudflare-token (Account Cloudflare Tunnel Edit,
-Zone DNS Edit, Zone Read), --join-by domain|invited-address, --google-client-id and --google-client-secret,
---microsoft-client-id and --microsoft-client-secret (create to register it with az), --provider
-cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url and --okta-token,
---mail skip|smtp|resend|keep with --smtp-url or --resend-key, --mail-from, --mail-test <address>, --version,
---images, --port, --no-host (no runtime host on this machine; kept when you set up again), --host (turn it back on), --no-start, --unattended (no question at all).
-A - answer removes a sign-in app, or a saved optional answer with --cloud; --mail skip removes mail. --provider cloudflare-access and --mail resend need the
-Cloudflare token to also hold Access: Apps and Policies Edit, Access: Organizations, Identity Providers, and Groups
-Edit, Email Routing Addresses Edit, Zone Email Routing Rules Edit and Zone DNS Edit.
+--dns-zone-resource-group, --route53-zone-id, --certificate-arn, --size, --bind-hostname yes|no): --name, --hostname,
+--join-by domain|invited-address, --google-client-id, --microsoft-client-id (create to register it with az),
+--provider cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url, --mail
+skip|smtp|resend|keep, --mail-from, --mail-test <address>, --version, --images, --port, --no-host (no runtime host on
+this machine; kept when you set up again), --host (turn it back on), --no-start, --unattended (no question at all).
+
+Secrets are never flags, so they stay out of your shell history and process list: setup asks for them, or reads them
+from CLOUDFLARE_API_TOKEN (Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Read), SPYRIA_GOOGLE_CLIENT_SECRET,
+SPYRIA_MICROSOFT_CLIENT_SECRET, OKTA_API_TOKEN, RESEND_API_KEY and SPYRIA_SMTP_URL. A saved secret is never shown;
+an empty answer keeps it.
+A - answer removes a sign-in app, or a saved optional answer with --cloud; --mail skip removes mail. --provider
+cloudflare-access and --mail resend need the Cloudflare token to also hold Access: Apps and Policies Edit, Access:
+Organizations, Identity Providers, and Groups Edit, Email Routing Addresses Edit, Zone Email Routing Rules Edit and
+Zone DNS Edit.
 
 Every command takes --folder <path> (default ~/spyria, or the current folder when it holds an install).`
 
