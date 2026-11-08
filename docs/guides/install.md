@@ -23,7 +23,7 @@ The script checks Docker (on Linux it offers to install Docker Engine with Docke
 
 It then pulls the images of its version, starts Spyria with a runtime host on this machine, waits until it answers, and prints the **setup link** that creates the first workspace. Open it, create the workspace through your provider, and the machine's runtime host is already in **Workspace settings**; then **Connect GitHub** there to work on repositories.
 
-Every question is also a flag, for an unattended install, except secrets: those come from environment variables (`CLOUDFLARE_API_TOKEN`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_SECRET`, `OKTA_API_TOKEN`, `RESEND_API_KEY`, `SPYRIA_SMTP_URL`), so they stay out of your shell history and process list. For example:
+Every question is also a flag, for an unattended install, except secrets: those come from environment variables (`CLOUDFLARE_API_TOKEN`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_SECRET`, `OKTA_API_TOKEN`, `RESEND_API_KEY`, `SMTP_URL`), so they stay out of your shell history and process list. For example:
 
 ```sh
 read -rsp 'Cloudflare API token: ' CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN

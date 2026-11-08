@@ -21,11 +21,11 @@ export const parseFlags = (givenArguments: readonly string[]): Flags => {
 
 export const secretVariables: Record<string, string> = {
   'cloudflare-token': 'CLOUDFLARE_API_TOKEN',
-  'google-client-secret': 'SPYRIA_GOOGLE_CLIENT_SECRET',
-  'microsoft-client-secret': 'SPYRIA_MICROSOFT_CLIENT_SECRET',
+  'google-client-secret': 'GOOGLE_CLIENT_SECRET',
+  'microsoft-client-secret': 'MICROSOFT_CLIENT_SECRET',
   'okta-token': 'OKTA_API_TOKEN',
   'resend-key': 'RESEND_API_KEY',
-  'smtp-url': 'SPYRIA_SMTP_URL',
+  'smtp-url': 'SMTP_URL',
 }
 
 export type ProcessEnvironment = Record<string, string | undefined>

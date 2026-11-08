@@ -7,6 +7,7 @@ import {
   serializeEnvironment,
   setupLinkOf,
 } from './environment.ts'
+import { secretVariables } from './flags.ts'
 
 const answers: SetupAnswers = {
   deployment: 'spyria',
@@ -85,4 +86,16 @@ test('install codes use the claim code alphabet and differ', () => {
   const codes = new Set(Array.from({ length: 50 }, newInstallHostToken))
   expect(codes.size).toBe(50)
   for (const code of codes) expect(code).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{16}$/)
+})
+
+test("no secret setup reads from the environment is a setting it writes, so the install's own .env never answers for you", () => {
+  const written = Object.keys(environmentOf({ ...answers, smtp: { url: 'smtps://x', from: 'Spyria <s@x>' } }))
+  const everyInstanceApp = environmentOf({
+    ...answers,
+    instanceApps: { google: { clientId: 'g', clientSecret: 'g' }, microsoft: { clientId: 'm', clientSecret: 'm' } },
+  })
+  for (const variable of Object.values(secretVariables)) {
+    expect(written).not.toContain(variable)
+    expect(Object.keys(everyInstanceApp)).not.toContain(variable)
+  }
 })
