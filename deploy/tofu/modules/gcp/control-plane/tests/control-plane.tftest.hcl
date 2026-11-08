@@ -91,6 +91,10 @@ run "without_a_cloud_dns_zone_it_names_the_record_to_create" {
     condition     = length(output.dns_records) == 1 && output.dns_records[0].value == "203.0.113.10" && output.dns_records[0].type == "A"
     error_message = "The hostname must point at the load balancer's address"
   }
+  assert {
+    condition     = google_compute_managed_ssl_certificate.hostname.name == "spyria-${substr(sha1(var.hostname), 0, 8)}" && google_compute_managed_ssl_certificate.hostname.name != "spyria"
+    error_message = "The certificate is named after its hostname, so a new hostname gets a new certificate before the old one is released"
+  }
 }
 
 run "a_sign_in_app_in_the_settings_reaches_the_server_with_its_secret_in_secret_manager" {
