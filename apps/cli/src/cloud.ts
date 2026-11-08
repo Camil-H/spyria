@@ -50,27 +50,34 @@ const isBlankOrComment = (text: string) => /^\s*((#|\/\/).*)?$/.test(text)
 
 const unescapedHclString = (text: string) => text.replaceAll('$${', () => '${').replaceAll('%%{', () => '%{')
 
-const hclStringFrom = (value: string) => {
+const hclStringAt = (value: string) => {
   let end = 1
   while (end < value.length && value[end] !== '"') end += value[end] === '\\' ? 2 : 1
-  if (!isBlankOrComment(value.slice(end + 1))) return undefined
+  if (!value.startsWith('"') || end >= value.length) return undefined
   try {
-    return unescapedHclString(JSON.parse(value.slice(0, end + 1)) as string)
+    return { text: unescapedHclString(JSON.parse(value.slice(0, end + 1)) as string), rest: value.slice(end + 1) }
   } catch {
     return undefined
   }
 }
 
+const hclStringFrom = (value: string) => {
+  const string = hclStringAt(value)
+  return string && isBlankOrComment(string.rest) ? string.text : undefined
+}
+
 const hclListFrom = (value: string) => {
-  const end = value.lastIndexOf(']')
-  if (end < 0 || !isBlankOrComment(value.slice(end + 1))) return undefined
-  try {
-    const items: unknown = JSON.parse(value.slice(0, end + 1))
-    if (!Array.isArray(items) || !items.every((item) => typeof item === 'string')) return undefined
-    return items.map(unescapedHclString)
-  } catch {
-    return undefined
+  const items: string[] = []
+  let rest = value.slice(1).trimStart()
+  while (!rest.startsWith(']')) {
+    const item = hclStringAt(rest)
+    if (!item) return undefined
+    items.push(item.text)
+    rest = item.rest.trimStart()
+    if (rest.startsWith(',')) rest = rest.slice(1).trimStart()
+    else if (!rest.startsWith(']')) return undefined
   }
+  return isBlankOrComment(rest.slice(1)) ? items : undefined
 }
 
 const tfValueFrom = (value: string): TfValue | undefined => {
