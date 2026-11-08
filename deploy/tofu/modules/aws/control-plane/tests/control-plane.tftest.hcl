@@ -134,3 +134,12 @@ run "it_refuses_an_unknown_join_setting_and_a_bad_name" {
   }
   expect_failures = [var.join_by, var.name]
 }
+
+run "every_task_names_the_version_of_its_secrets_so_a_changed_secret_restarts_it" {
+  command = apply
+  assert {
+    condition = alltrue([for definition in [aws_ecs_task_definition.server, aws_ecs_task_definition.zero, aws_ecs_task_definition.gateway] :
+    strcontains(definition.container_definitions, "\"SPYRIA_SECRET_VERSIONS\"")])
+    error_message = "A new secret version changes every task definition, so ECS restarts the tasks with it"
+  }
+}

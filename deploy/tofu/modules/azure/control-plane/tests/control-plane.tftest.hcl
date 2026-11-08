@@ -152,3 +152,13 @@ run "at_size_large_every_app_with_its_init_containers_fits_one_consumption_app" 
     error_message = "A Consumption app takes at most 4 vCPU and 8 GiB across its containers and init containers"
   }
 }
+
+run "every_app_names_the_versions_of_its_secrets_so_a_changed_secret_restarts_it" {
+  command = apply
+  assert {
+    condition = alltrue([for app in [azurerm_container_app.server, azurerm_container_app.zero, azurerm_container_app.gateway] :
+      alltrue([for container in app.template[0].container :
+    contains([for env in container.env : env.name], "SPYRIA_SECRET_VERSIONS")])])
+    error_message = "A new secret version changes every app template, so Container Apps starts a new revision with it"
+  }
+}
