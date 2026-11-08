@@ -62,10 +62,11 @@ locals {
 }
 
 resource "google_compute_instance" "host" {
-  project      = var.project
-  name         = "${var.name}-${var.host_name}"
-  zone         = var.zone
-  machine_type = local.machine_types[var.size]
+  project                   = var.project
+  name                      = "${var.name}-${var.host_name}"
+  zone                      = var.zone
+  machine_type              = local.machine_types[var.size]
+  allow_stopping_for_update = true
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
