@@ -26,9 +26,10 @@ resource "azurerm_key_vault" "settings" {
 }
 
 resource "azurerm_role_assignment" "deployer_writes_secrets" {
+  for_each             = toset(concat([data.azurerm_client_config.current.object_id], var.secret_admin_object_ids))
   scope                = azurerm_key_vault.settings.id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = each.value
 }
 
 resource "azurerm_user_assigned_identity" "apps" {

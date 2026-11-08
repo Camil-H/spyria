@@ -127,3 +127,9 @@ variable "sign_in_app_client_secret" {
     error_message = "Set sign_in_app_client_id and sign_in_app_client_secret together: the server refuses to start with one and not the other."
   }
 }
+
+variable "secret_admin_object_ids" {
+  description = "Object ids of the other accounts that apply this configuration, such as another admin or a CI service principal, which read its Key Vault secrets when they plan; the account applying is added by itself"
+  type        = list(string)
+  default     = []
+}
