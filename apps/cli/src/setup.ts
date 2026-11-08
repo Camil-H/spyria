@@ -83,7 +83,7 @@ export const setup = async (
   const asker: Asker = { ...askerOf(flags, isUnattended), isUnattended }
   const folder = installFolderOf({
     ...flags,
-    values: { ...flags.values, folder: asker.ask('folder', 'Install folder', '~/spyria') },
+    values: { ...flags.values, folder: asker.ask('folder', 'Install folder', installFolderOf(flags)) },
   })
   mkdirSync(join(folder, 'backups'), { recursive: true })
   const existing = existsSync(environmentFileOf(folder)) ? readEnvironment(folder) : {}

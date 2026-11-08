@@ -154,7 +154,11 @@ export const setupCloud = async (flags: Flags, cloud: Cloud) => {
     ...flags,
     values: {
       ...flags.values,
-      folder: asker.ask('folder', 'Folder of the OpenTofu configuration', `~/spyria-${cloud}`),
+      folder: asker.ask(
+        'folder',
+        'Folder of the OpenTofu configuration',
+        existsSync(join(process.cwd(), 'terraform.tfvars')) ? process.cwd() : `~/spyria-${cloud}`,
+      ),
     },
   })
   mkdirSync(folder, { recursive: true })
