@@ -7,6 +7,7 @@ import {
   operatorCommandOf,
   readCompose,
   runCompose,
+  shellEnvironmentOf,
   spawnCompose,
 } from './compose.ts'
 import { type Environment, parseEnvironment, serializeEnvironment } from './environment.ts'
@@ -61,14 +62,42 @@ export const waitForHealth = async (environment: Environment) => {
   }
 }
 
-export const startStack = async (folder: string, environment: Environment) => {
-  if (!(environment.COMPOSE_PROFILES ?? '').split(',').includes('host')) {
-    step('Removing the runtime host of this machine, if any')
+const dockerOf = () => Bun.which('docker', { PATH: process.env.PATH ?? '' }) ?? 'docker'
+
+const stopRuntimesOf = (deployment: string) => {
+  const listed = Bun.spawnSync(
+    [dockerOf(), 'ps', '-q', '--filter', 'label=spyria.managed=1', '--filter', `name=^${deployment}-rt-`],
+    { env: shellEnvironmentOf(process.env), stdout: 'pipe', stderr: 'inherit' },
+  )
+  mustSucceed(listed.exitCode, 'Listing the runtimes of this machine')
+  const runtimes = listed.stdout.toString().split('\n').filter(Boolean)
+  if (runtimes.length > 0)
     mustSucceed(
-      runCompose(folder, ['--profile', 'host', 'rm', '--stop', '--force', 'host']),
-      'Removing the runtime host',
+      Bun.spawnSync([dockerOf(), 'stop', ...runtimes], {
+        env: shellEnvironmentOf(process.env),
+        stdout: 'ignore',
+        stderr: 'inherit',
+      }).exitCode,
+      'Stopping the runtimes of this machine',
     )
-  }
+  return runtimes.length
+}
+
+const removeHostOfThisMachine = (folder: string, environment: Environment) => {
+  if (readCompose(folder, ['--profile', 'host', 'ps', '--all', '--quiet', 'host']).output.trim() === '') return
+  step('Removing the runtime host of this machine and stopping its runtimes')
+  mustSucceed(runCompose(folder, ['--profile', 'host', 'rm', '--stop', '--force', 'host']), 'Removing the runtime host')
+  const stopped = stopRuntimesOf(environment.SPYRIA_DEPLOYMENT || 'spyria')
+  console.log(
+    [
+      `The runtime host of this machine is removed and its ${stopped} runtime${stopped === 1 ? ' is' : 's are'} stopped, their files kept.`,
+      'Remove it in Workspace settings > Connect runtime too, which revokes its token; the Machines guide shows how to delete its runtimes and their files.',
+    ].join(' '),
+  )
+}
+
+export const startStack = async (folder: string, environment: Environment) => {
+  if (!(environment.COMPOSE_PROFILES ?? '').split(',').includes('host')) removeHostOfThisMachine(folder, environment)
   step('Pulling the images')
   mustSucceed(runCompose(folder, ['pull', '--quiet']), 'Pulling the images')
   step('Starting Spyria')

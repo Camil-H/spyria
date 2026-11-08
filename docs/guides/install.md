@@ -31,7 +31,7 @@ export SPYRIA_SETUP_CLOUDFLARE_TOKEN
 spyria setup --unattended --hostname spyria.example.com --join-by invited-address
 ```
 
-`spyria --help` lists the flags. A saved secret is never shown again: an empty answer keeps it. Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine, removing one it already runs, and stays so on later runs, until `--host` turns it back on.
+`spyria --help` lists the flags. A saved secret is never shown again: an empty answer keeps it. Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine and stays so on later runs, until `--host` turns it back on. When this machine already runs one, setup removes it and stops its runtimes, keeping their files; remove the host in **Workspace settings > Connect runtime** too, which revokes its token, and see [removing a host](../features/machines.md#removing-a-host) to delete its runtimes and their files.
 
 On a laptop or a personal computer: while it sleeps Spyria is unreachable, and running agent turns are interrupted; Docker and Compose's restart policies bring everything back when it wakes or restarts. `spyria doctor` checks Docker, each service, the server's start check, the disk and the versions; upgrades and backups are in [operations](./operations.md).
 
