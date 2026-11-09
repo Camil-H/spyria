@@ -112,9 +112,9 @@ const connectFakeHost = async ({ answersPings = true } = {}) => {
   const frameOrClose = async (type: string) => {
     const closure = closed.then((close) => ({ closed: close }))
     for (;;) {
+      const outcome = await Promise.race([closure, Bun.sleep(10).then(() => null)])
       const frame = frames.find((received) => received.type === type)
       if (frame) return { frame }
-      const outcome = await Promise.race([closure, Bun.sleep(10).then(() => null)])
       if (outcome) return outcome
     }
   }
