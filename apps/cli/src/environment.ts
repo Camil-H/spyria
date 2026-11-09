@@ -54,7 +54,6 @@ export const serializeEnvironment = (environment: Environment) =>
 export const withSecrets = (existing: Environment): Environment => ({
   ...Object.fromEntries(secretNames.map((name) => [name, existing[name] || newSecret()])),
   SPYRIA_GATEWAY_ADMIN_USER: existing.SPYRIA_GATEWAY_ADMIN_USER || `admin-${randomBytes(4).toString('hex')}`,
-  SPYRIA_INSTALL_HOST_TOKEN: existing.SPYRIA_INSTALL_HOST_TOKEN || newInstallHostToken(),
 })
 
 export type SetupAnswers = {
@@ -72,6 +71,27 @@ export type SetupAnswers = {
     microsoft?: { clientId: string; clientSecret: string }
   }
   localPort: number
+  pairingCode?: string
+}
+
+const pairingCodePattern = new RegExp(`/h/([${claimCodeAlphabet}]{8,})`, 'g')
+const hostClaimUrlOf = (code: string) => `http://server:3000/h/${code}`
+
+export const pairingCodeOf = (command: string) => {
+  const code = [...command.matchAll(pairingCodePattern)].at(-1)?.[1]
+  if (!code)
+    throw new Error('This is not the command of Add runtime host: it ends with an address holding /h/ and a code')
+  return code
+}
+
+const hostPairingOf = (answers: SetupAnswers, existing: Environment) => {
+  if (!answers.runsHost) return { SPYRIA_INSTALL_HOST_TOKEN: '', SPYRIA_HOST_CLAIM_URL: '' }
+  if (answers.pairingCode)
+    return { SPYRIA_INSTALL_HOST_TOKEN: '', SPYRIA_HOST_CLAIM_URL: hostClaimUrlOf(answers.pairingCode) }
+  if (existing.SPYRIA_HOST_CLAIM_URL && !existing.SPYRIA_INSTALL_HOST_TOKEN)
+    return { SPYRIA_INSTALL_HOST_TOKEN: '', SPYRIA_HOST_CLAIM_URL: existing.SPYRIA_HOST_CLAIM_URL }
+  const installHostToken = existing.SPYRIA_INSTALL_HOST_TOKEN || newInstallHostToken()
+  return { SPYRIA_INSTALL_HOST_TOKEN: installHostToken, SPYRIA_HOST_CLAIM_URL: hostClaimUrlOf(installHostToken) }
 }
 
 export const environmentOf = (answers: SetupAnswers, existing: Environment = {}): Environment => {
@@ -89,11 +109,10 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_JOIN_BY: answers.joinBy,
     SPYRIA_LOCAL_PORT: String(answers.localPort),
     ...secrets,
-    SPYRIA_INSTALL_HOST_TOKEN: answers.runsHost ? (secrets.SPYRIA_INSTALL_HOST_TOKEN ?? '') : '',
+    ...hostPairingOf(answers, existing),
     COMPOSE_PROFILES: profiles.join(','),
     SPYRIA_TRUSTED_PROXY: answers.tunnelToken ? 'cloudflare' : '',
     CLOUDFLARE_TUNNEL_TOKEN: answers.tunnelToken ?? '',
-    SPYRIA_HOST_CLAIM_URL: answers.runsHost ? `http://server:3000/h/${secrets.SPYRIA_INSTALL_HOST_TOKEN}` : '',
     SPYRIA_DOCKER_GROUP: answers.runsHost ? answers.dockerGroup : '',
     SPYRIA_SMTP_URL: answers.smtp?.url ?? '',
     SPYRIA_MAIL_FROM: answers.smtp?.from ?? '',
