@@ -34,19 +34,42 @@ const runsHostOf = (flags: Flags, existingProfiles: string | undefined) =>
   flags.switches.has('host') ||
   (!flags.switches.has('no-host') && (existingProfiles === undefined || existingProfiles.split(',').includes('host')))
 
-const workspaceExistsIn = (folder: string) =>
-  Bun.which('docker', { PATH: process.env.PATH ?? '' }) !== null &&
-  readCompose(folder, operatorCommandOf(['has-workspace'])).output.trim() === 'yes'
+const workspaceExistsInRunningStack = (folder: string) => {
+  if (Bun.which('docker', { PATH: process.env.PATH ?? '' }) === null) return undefined
+  const answer = readCompose(folder, operatorCommandOf(['has-workspace']))
+  const output = answer.output.trim()
+  if (answer.exitCode !== 0 || (output !== 'yes' && output !== 'no')) return undefined
+  return output === 'yes'
+}
 
-const pairingCodeFor = (asker: Asker, folder: string, existing: Environment, runsHost: boolean) => {
+const addRuntimeHostGuide =
+  "this machine's runtime host pairs with the command an admin gets from Workspace settings > Connect runtime > Add runtime host"
+
+const pairingCodeFor = (
+  asker: Asker,
+  { folder, origin, existing, runsHost }: { folder: string; origin: string; existing: Environment; runsHost: boolean },
+  workspaceExistsIn: (folder: string) => boolean | undefined,
+) => {
   if (!runsHost) return undefined
+  const variable = secretVariables['host-claim-url']
+  if (asker.given('host-claim-url')) return pairingCodeOf(asker.requireSecret('host-claim-url', ''), origin)
   const turnsHostOn = existing.COMPOSE_PROFILES !== undefined && !existing.COMPOSE_PROFILES.split(',').includes('host')
-  if (!asker.given('host-claim-url') && !(turnsHostOn && workspaceExistsIn(folder))) return undefined
-  if (!asker.given('host-claim-url'))
+  if (!turnsHostOn) return undefined
+  const hasWorkspace = workspaceExistsIn(folder)
+  if (hasWorkspace === false) return undefined
+  if (hasWorkspace === undefined) {
+    if (asker.isUnattended)
+      throw new Error(
+        `Setup cannot tell whether a workspace exists, since Spyria does not answer: start it with spyria compose up -d and run setup again, or set ${variable} to the command of Add runtime host`,
+      )
     console.log(
-      `A workspace exists, so this machine's runtime host pairs with the command an admin gets from Workspace settings > Connect runtime > Add runtime host. Paste it here, or set ${secretVariables['host-claim-url']} to it and run setup again.`,
+      `Spyria does not answer, so setup cannot tell whether a workspace exists. Once one exists, ${addRuntimeHostGuide}.`,
     )
-  return pairingCodeOf(asker.requireSecret('host-claim-url', 'Command of Add runtime host'))
+    const command = asker.secret('host-claim-url', 'Command of Add runtime host (empty if no workspace exists yet)')
+    return command ? pairingCodeOf(command, origin) : undefined
+  }
+  console.log(`A workspace exists, so ${addRuntimeHostGuide}.`)
+  return pairingCodeOf(asker.requireSecret('host-claim-url', 'Command of Add runtime host'), origin)
 }
 
 const instanceAppOf = (
@@ -95,11 +118,13 @@ export const setup = async (
     resendApiUrl,
     az = runAz,
     processEnvironment = process.env,
+    workspaceExistsIn = workspaceExistsInRunningStack,
   }: {
     cloudflareApiUrl?: string
     resendApiUrl?: string
     az?: AzRunner
     processEnvironment?: ProcessEnvironment
+    workspaceExistsIn?: (folder: string) => boolean | undefined
   } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
@@ -123,6 +148,8 @@ export const setup = async (
     .toLowerCase()
   if (!hostnamePattern.test(hostname)) throw new Error(`${hostname} is not a hostname`)
   const origin = `https://${hostname}`
+  const runsHost = runsHostOf(flags, existing.COMPOSE_PROFILES)
+  const pairingCode = pairingCodeFor(asker, { folder, origin, existing, runsHost }, workspaceExistsIn)
   const keepsTunnel =
     existing.CLOUDFLARE_TUNNEL_TOKEN !== undefined && hostnameOf(existing.SPYRIA_APP_ORIGIN) === hostname
   const apiToken = asker.secret(
@@ -172,7 +199,6 @@ export const setup = async (
   const smtp = await mailOf(context, { existing, resendApiUrl })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
-  const runsHost = runsHostOf(flags, existing.COMPOSE_PROFILES)
   const answers: SetupAnswers = {
     deployment,
     version,
@@ -181,7 +207,7 @@ export const setup = async (
     joinBy,
     tunnelToken,
     runsHost,
-    pairingCode: pairingCodeFor(asker, folder, existing, runsHost),
+    pairingCode,
     dockerGroup: dockerGroupOf(),
     smtp,
     instanceApps: { google, microsoft },
