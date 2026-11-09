@@ -225,6 +225,16 @@ test('email-first sign-in starts every address at the one sign-in app of this Sp
     select ${secondWorkspaceId}, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now()
     from workspace_sso where workspace_id = ${workspaceId}`
   await database.$client`
+    insert into workspace_roles (workspace_id, id, name, built_in)
+    select ${secondWorkspaceId}, id, name, built_in from workspace_roles where workspace_id = ${workspaceId}`
+  await database.$client`
+    insert into workspace_role_permissions (workspace_id, role_id, permission)
+    select ${secondWorkspaceId}, role_id, permission from workspace_role_permissions where workspace_id = ${workspaceId}`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name)
+    select ${secondWorkspaceId}, user_id, role, display_name from memberships
+    where workspace_id = ${workspaceId} and user_id = ${String(owner?.id)}`
+  await database.$client`
     insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
     values (${secondWorkspaceId}, ${crypto.randomUUID()}, 'gina@gmail.com', 'member', ${String(owner?.id)}, now(),
       now() + interval '7 days')`
