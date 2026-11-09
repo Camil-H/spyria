@@ -75,7 +75,7 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'stdin'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
-  rmSync(join(fakeDocker, 'has-workspace'), { force: true })
+  writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
 })
 const calls = () =>
   existsSync(join(fakeDocker, 'calls')) ? readFileSync(join(fakeDocker, 'calls'), 'utf8').trim().split('\n') : []
@@ -178,7 +178,7 @@ test('setting up again without a runtime host removes the host container this ma
   expect(indexOfCall('rm --stop --force host')).toBe(-1)
 })
 
-test("turning this machine's host on once a workspace exists takes the command of Add runtime host and refuses to go on without it, while before the first workspace the install code still serves", async () => {
+test("turning this machine's host on once a workspace exists takes the command of Add runtime host and refuses to go on without it or when Spyria does not answer, while before the first workspace the install code still serves", async () => {
   writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, COMPOSE_PROFILES: 'cloudflare' }), {
     mode: 0o600,
   })
@@ -191,11 +191,14 @@ test("turning this machine's host on once a workspace exists takes the command o
   const refusal = await hostTurnedOn({}).catch((error: Error) => error.message)
   expect(refusal).toBe('SPYRIA_SETUP_HOST_CLAIM_URL is required')
   expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  rmSync(join(fakeDocker, 'has-workspace'))
+  const unanswered = await hostTurnedOn({}).catch((error: Error) => error.message)
+  expect(unanswered).toStartWith('Setup cannot tell whether a workspace exists, since Spyria does not answer')
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
   expect(indexOfCall('up -d')).toBe(-1)
 
-  await hostTurnedOn({
-    SPYRIA_SETUP_HOST_CLAIM_URL: 'docker run -d --name spyria-host spyria-host https://spyria.example.com/h/ABCD2345',
-  })
+  writeFileSync(join(fakeDocker, 'has-workspace'), 'yes\n')
+  await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/ABCD2345' })
   expect(environment()).toMatchObject({
     COMPOSE_PROFILES: 'host,cloudflare',
     SPYRIA_HOST_CLAIM_URL: 'http://server:3000/h/ABCD2345',

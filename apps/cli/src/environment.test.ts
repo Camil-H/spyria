@@ -119,12 +119,19 @@ test('without a runtime host on this machine, the server gets no install host to
   expect(hostTurnedOn.SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${hostTurnedOn.SPYRIA_INSTALL_HOST_TOKEN}`)
 })
 
-test("a pairing command from Add runtime host points this machine's host at its code instead of the install code, and is kept while the host stays on", () => {
+test("the command of Add runtime host for this Spyria points this machine's host at its code instead of the install code and is kept while the host stays on, while a member's machine command or another Spyria's is refused", () => {
   const command =
-    'docker rm -f spyria-host >/dev/null 2>&1; docker run -d --name spyria-host ghcr.io/camil-h/spyria-host https://spyria.example.com/h/ABCD2345'
-  expect(pairingCodeOf(command)).toBe('ABCD2345')
-  expect(pairingCodeOf('https://spyria.example.com/h/WXYZ6789')).toBe('WXYZ6789')
-  expect(() => pairingCodeOf('https://spyria.example.com/')).toThrow('not the command of Add runtime host')
+    'docker rm -f spyria-host >/dev/null 2>&1; docker volume rm spyria-host >/dev/null 2>&1; docker run -d --name spyria-host --restart unless-stopped -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY $(docker info -f \'{{.SecurityOptions}}\' | grep -q rootless && echo "--user 0 -v $XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock" || echo "--group-add $(test "$(uname)" = Darwin && echo 0 || stat -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock") --cap-drop ALL --security-opt no-new-privileges --read-only -v spyria-host:/state ghcr.io/camil-h/spyria-host:1.2.0 https://spyria.example.com/h/ABCD2345'
+  const origin = 'https://spyria.example.com'
+  expect(pairingCodeOf(command, origin)).toBe('ABCD2345')
+  expect(pairingCodeOf('https://spyria.example.com/h/WXYZ6789', origin)).toBe('WXYZ6789')
+  expect(() => pairingCodeOf('https://spyria.example.com/', origin)).toThrow('not the command of Add runtime host')
+  expect(() => pairingCodeOf(command.replace(' https://', ' --personal https://'), origin)).toThrow(
+    "a member's own machine",
+  )
+  expect(() => pairingCodeOf(command, 'https://other.example.com')).toThrow(
+    'This command pairs with https://spyria.example.com, not with https://other.example.com',
+  )
 
   const withoutHost = environmentOf({ ...answers, runsHost: false })
   const paired = environmentOf({ ...answers, pairingCode: 'ABCD2345' }, withoutHost)

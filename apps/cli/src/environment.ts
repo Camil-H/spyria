@@ -74,13 +74,17 @@ export type SetupAnswers = {
   pairingCode?: string
 }
 
-const pairingCodePattern = new RegExp(`/h/([${claimCodeAlphabet}]{8,})`, 'g')
+const pairingAddressPattern = new RegExp(`(https?://[^\\s/]+)/h/([${claimCodeAlphabet}]{8,})`, 'g')
+const personalFlagPattern = /(^|\s)--personal(\s|$)/
 const hostClaimUrlOf = (code: string) => `http://server:3000/h/${code}`
 
-export const pairingCodeOf = (command: string) => {
-  const code = [...command.matchAll(pairingCodePattern)].at(-1)?.[1]
+export const pairingCodeOf = (command: string, origin: string) => {
+  const [, commandOrigin, code] = [...command.matchAll(pairingAddressPattern)].at(-1) ?? []
   if (!code)
     throw new Error('This is not the command of Add runtime host: it ends with an address holding /h/ and a code')
+  if (personalFlagPattern.test(command))
+    throw new Error("This command adds a member's own machine: take the one of Add runtime host")
+  if (commandOrigin !== origin) throw new Error(`This command pairs with ${commandOrigin}, not with ${origin}`)
   return code
 }
 

@@ -31,6 +31,7 @@ const runSetup = (extra: string[], processEnvironment = {}) =>
   setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0', ...extra]), {
     cloudflareApiUrl: cloudflare.url.origin,
     processEnvironment,
+    workspaceExistsIn: () => false,
   })
 const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'utf8'))
 
