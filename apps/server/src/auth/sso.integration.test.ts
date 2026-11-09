@@ -228,6 +228,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     settings: {
       ...view,
       tenantId: '',
+      joinBy: 'domain',
       hasSecret: true,
       usesInstanceApp: false,
       domainState: unverified('example.com'),
@@ -248,6 +249,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   expect(JSON.parse((await readSso(acme)).body).settings).toEqual({
     ...view,
     tenantId: '',
+    joinBy: 'domain',
     hasSecret: true,
     usesInstanceApp: false,
     domainState: unverified('example.com'),
