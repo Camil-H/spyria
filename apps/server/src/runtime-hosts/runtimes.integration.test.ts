@@ -578,7 +578,7 @@ test('a runtime whose spyria-agent answers ready with a protocol below the minim
   const outdated = await ensure(chat)
   await runtimeIn(chat, 'failed')
   expect(await runtimeOf(chat)).toMatchObject({ id: outdated.id, failure: 'outdated', agent_protocol_version: null })
-  expect(host.containers.get(outdated.id)?.running).toBe(false)
+  await waitFor(() => host.containers.get(outdated.id)?.running === false)
 
   const placed = await ensure(chat)
   expect(placed.id).not.toBe(outdated.id)
