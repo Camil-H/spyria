@@ -323,7 +323,7 @@ test('heartbeats update last_seen_at, the free memory and the running count', as
 test('a second connection of a host replaces the first, which is closed, and the host stays online', async () => {
   const { id, token, host: firstConnection } = await pairedHost()
   const secondConnection = await connectFakeHost()
-  secondConnection.send({ type: 'hello', token, system: hostSystem })
+  secondConnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   expect((await firstConnection.closed).reason).toBe('Replaced by a newer connection of this host')
   await Bun.sleep(200)
   expect(secondConnection.socket.readyState).toBe(WebSocket.OPEN)
@@ -429,7 +429,7 @@ test('removing a host closes its connection and refuses its token afterwards', a
   await host.closed
   expect((await hostRow(id)).removed_at).toBeInstanceOf(Date)
   const reconnection = await connectFakeHost()
-  reconnection.send({ type: 'hello', token, system: hostSystem })
+  reconnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   expect((await reconnection.closed).reason).toBe('This host was removed')
 })
 
@@ -476,7 +476,7 @@ test('neither a claim code nor a host token is ever logged', async () => {
     await removeHost(aliceInAcme, acme, id)
     await host.closed
     const reconnection = await connectFakeHost()
-    reconnection.send({ type: 'hello', token, system: hostSystem })
+    reconnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
     await reconnection.closed
     for (const secret of [code, pairedCode, token]) expect(consoleCalls.logged()).not.toContain(secret)
   } finally {
@@ -491,7 +491,7 @@ const pairedMachine = async (member: Member) => {
   const { host: claimingHost, token } = await claim(body.code)
   claimingHost.socket.close()
   const host = await connectFakeHost()
-  host.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   await waitFor(async () => (await hostRow(body.id as string)).status === 'online')
   return { id: body.id, token, host }
 }
@@ -543,13 +543,13 @@ test('an offline machine gets a new command from its owner, which revokes its ol
   expect(renewed.status).toBe(200)
   expect(await hostRow(id)).toMatchObject({ status: 'waiting', token_hash: null })
   const oldToken = await connectFakeHost()
-  oldToken.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  oldToken.send({ type: 'hello', token, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   expect((await oldToken.closed).reason).toBe('This host is not registered')
   const { host: claimingHost, token: newToken } = await claim(renewed.body?.code ?? '')
   claimingHost.socket.close()
   expect(newToken).toBeDefined()
   const repaired = await connectFakeHost()
-  repaired.send({ type: 'hello', token: newToken, system: hostSystem, personal: true, signedIn: [] })
+  repaired.send({ type: 'hello', token: newToken, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
 
