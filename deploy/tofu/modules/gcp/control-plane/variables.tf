@@ -74,7 +74,7 @@ variable "microsoft_client_secret" {
 }
 
 variable "size" {
-  description = "small, medium or large: the server's CPU and memory and the database's class"
+  description = "small, medium or large: the CPU and memory of the server and zero-cache, and the database's class"
   type        = string
   default     = "small"
   validation {
