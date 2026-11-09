@@ -122,6 +122,7 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `tools-setup github\|notion` | `tools:setup` | Sets up a tool server in the gateway (above). |
 | `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Manual install](./self-hosting.md)). |
 | `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
+| `has-workspace` | none | Prints `yes` once a workspace exists and `no` before; `spyria setup --host` asks for a pairing command when it prints `yes`. |
 | `mail:test --to <address>` | none | Sends a test message through `SPYRIA_SMTP_URL`. |
 
 ## Running agents locally: a runtime host

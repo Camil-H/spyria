@@ -72,6 +72,9 @@ const commands: Record<string, () => Promise<void>> = {
     })
     console.log(`Sent a test message to ${to}`)
   },
+  'has-workspace': async () => {
+    console.log((await hasNoWorkspace(database.$client)) ? 'no' : 'yes')
+  },
   'setup-link': async () => {
     if (!(await hasNoWorkspace(database.$client)))
       throw new Error('A workspace already exists: the setup link is spent')
