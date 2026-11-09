@@ -23,7 +23,7 @@ The script checks Docker (on Linux it offers to install Docker Engine with Docke
 
 It then pulls the images of its version, starts Spyria with a runtime host on this machine, waits until it answers, and prints the **setup link** that creates the first workspace. Open it, create the workspace through your provider, and the machine's runtime host is already in **Workspace settings**; then **Connect GitHub** there to work on repositories.
 
-Every question is also a flag, for an unattended install, except secrets: those come from environment variables (`SPYRIA_SETUP_CLOUDFLARE_TOKEN`, `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`, `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`, `SPYRIA_SETUP_OKTA_TOKEN`, `SPYRIA_SETUP_RESEND_KEY`, `SPYRIA_SETUP_SMTP_URL`), so they stay out of your shell history and process list. Setup says when it takes one from the environment, never its value. For example:
+Every question is also a flag, for an unattended install, except secrets: those come from environment variables (`SPYRIA_SETUP_CLOUDFLARE_TOKEN`, `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`, `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`, `SPYRIA_SETUP_OKTA_TOKEN`, `SPYRIA_SETUP_RESEND_KEY`, `SPYRIA_SETUP_SMTP_URL`, `SPYRIA_SETUP_HOST_CLAIM_URL`), so they stay out of your shell history and process list. Setup says when it takes one from the environment, never its value. For example:
 
 ```sh
 printf 'Cloudflare API token: '; stty -echo; read -r SPYRIA_SETUP_CLOUDFLARE_TOKEN; stty echo; echo
@@ -31,7 +31,7 @@ export SPYRIA_SETUP_CLOUDFLARE_TOKEN
 spyria setup --unattended --hostname spyria.example.com --join-by invited-address
 ```
 
-`spyria --help` lists the flags. A saved secret is never shown again: an empty answer keeps it. Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine and stays so on later runs, until `--host` turns it back on. When this machine already runs one, setup removes it and stops its runtimes, keeping their files; remove the host in **Workspace settings > Connect runtime** too, which revokes its token, and see [removing a host](../features/machines.md#removing-a-host) to delete its runtimes and their files.
+`spyria --help` lists the flags. A saved secret is never shown again: an empty answer keeps it. Running `spyria setup` again keeps every secret, the tunnel and the answers you do not change. `--no-host` installs without a runtime host on this machine and stays so on later runs, until `--host` turns it back on. Before the first workspace exists, the host then joins it when you create it; once one exists, setup asks for the command an admin gets from **Workspace settings > Connect runtime > Add runtime host** (or reads it from `SPYRIA_SETUP_HOST_CLAIM_URL`), and the host joins that workspace. When this machine already runs one, setup removes it and stops its runtimes, keeping their files; remove the host in **Workspace settings > Connect runtime** too, which revokes its token, and see [removing a host](../features/machines.md#removing-a-host) to delete its runtimes and their files.
 
 On a laptop or a personal computer: while it sleeps Spyria is unreachable, and running agent turns are interrupted; Docker and Compose's restart policies bring everything back when it wakes or restarts. `spyria doctor` checks Docker, each service, the server's start check, the disk and the versions; upgrades and backups are in [operations](./operations.md).
 

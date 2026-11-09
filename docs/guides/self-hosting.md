@@ -170,7 +170,7 @@ A restore is refused once the erasing has started. When the last workspace of th
 
 Runtime chats run on runtime hosts: machines with Docker running the `spyria-host` program, which dials out to Spyria. See [machines](../features/machines.md) for what a host does and how members add their own machine.
 
-`spyria setup` pairs it by itself: it generates a one-time install code (`SPYRIA_INSTALL_HOST_TOKEN`), points the host at `http://server:3000/h/<code>` and adds the `host` profile; the host waits until the first workspace exists, then appears in **Workspace settings** as **This machine**, removable like any host. The code works once.
+`spyria setup` pairs it by itself: it generates a one-time install code (`SPYRIA_INSTALL_HOST_TOKEN`), points the host at `http://server:3000/h/<code>` and adds the `host` profile; the host waits until the first workspace exists, then appears in **Workspace settings** as **This machine**, removable like any host. The code works once, and only for the first workspace: to turn the host on once a workspace exists, `spyria setup --host` asks for the command of **Add runtime host** and points the host at its code instead.
 
 By hand, set those two settings yourself, or once the workspace exists:
 
