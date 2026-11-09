@@ -6,6 +6,7 @@ import { log, type RuntimeHostId, type WorkspaceId } from '@spyria/kernel'
 import {
   type ConnectedHost,
   createHostSessionHandlers,
+  HostNotRegistered,
   HostRefused,
   type HostSessionFrame,
   type PackageCacheScope,
@@ -289,10 +290,10 @@ export const createRuntimeHostGateway = ({
     }
     const sessionFrame = parseHostSessionFrame(frame)
     const { identified } = connection
-    if (!identified)
-      return sessionFrame
-        ? identify(connection, sessionFrame)
-        : connection.socket.close(refusedCloseCode, 'This host is not registered')
+    if (!identified) {
+      if (!sessionFrame) throw new HostNotRegistered()
+      return identify(connection, sessionFrame)
+    }
     if (sessionFrame?.type === 'heartbeat')
       return inOrder(identified.token, () => identified.handlers.heartbeat(identified.host, sessionFrame))
     settle(connection, frame)
