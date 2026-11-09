@@ -1,16 +1,14 @@
 locals {
-  vpc_access = { network = google_compute_network.main.id, subnetwork = google_compute_subnetwork.main.id }
-}
-
-locals {
+  vpc_access     = { network = google_compute_network.main.id, subnetwork = google_compute_subnetwork.main.id }
   secrets_digest = { SPYRIA_SECRETS_DIGEST = nonsensitive(sha256(jsonencode(local.secret_values))) }
 }
 
 resource "google_cloud_run_v2_service" "server" {
   project              = var.project
-  name                 = local.service_names.server
+  name                 = local.service_name
   location             = var.region
   ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  default_uri_disabled = true
   deletion_protection  = false
   invoker_iam_disabled = true
   template {
@@ -29,7 +27,22 @@ resource "google_cloud_run_v2_service" "server" {
         subnetwork = local.vpc_access.subnetwork
       }
     }
+    volumes {
+      name = "replica"
+      empty_dir {
+        medium     = "MEMORY"
+        size_limit = local.size.zero_replica
+      }
+    }
+    volumes {
+      name = "gateway-data"
+      empty_dir {
+        medium     = "MEMORY"
+        size_limit = "256Mi"
+      }
+    }
     containers {
+      name    = "server"
       image   = local.server_image
       command = module.settings.server_command
       ports {
@@ -64,52 +77,14 @@ resource "google_cloud_run_v2_service" "server" {
         failure_threshold     = 60
         http_get {
           path = "/health/live"
+          port = 3000
         }
       }
     }
-  }
-  depends_on = [
-    google_secret_manager_secret_iam_member.services_read,
-    google_secret_manager_secret_version.setting,
-    google_sql_database.spyria,
-    google_sql_user.spyria,
-  ]
-}
-
-resource "google_cloud_run_v2_service" "zero" {
-  project              = var.project
-  name                 = local.service_names.zero
-  location             = var.region
-  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection  = false
-  invoker_iam_disabled = true
-  template {
-    service_account                  = google_service_account.services.email
-    timeout                          = "3600s"
-    max_instance_request_concurrency = 1000
-    scaling {
-      min_instance_count = 1
-      max_instance_count = 1
-    }
-    vpc_access {
-      egress = "ALL_TRAFFIC"
-      network_interfaces {
-        network    = local.vpc_access.network
-        subnetwork = local.vpc_access.subnetwork
-      }
-    }
-    volumes {
-      name = "replica"
-      empty_dir {
-        medium     = "MEMORY"
-        size_limit = local.size.zero_replica
-      }
-    }
     containers {
-      image = module.settings.zero_image
-      ports {
-        container_port = 4848
-      }
+      name       = "zero-cache"
+      image      = module.settings.zero_image
+      depends_on = ["server"]
       resources {
         cpu_idle = false
         limits   = { cpu = local.size.zero_cpu, memory = local.size.zero_memory }
@@ -146,50 +121,13 @@ resource "google_cloud_run_v2_service" "zero" {
         }
       }
     }
-  }
-  depends_on = [
-    google_secret_manager_secret_iam_member.services_read,
-    google_secret_manager_secret_version.setting,
-    google_cloud_run_v2_service.server,
-    google_cloud_run_v2_service.gateway,
-  ]
-}
-
-resource "google_cloud_run_v2_service" "gateway" {
-  project              = var.project
-  name                 = local.service_names.gateway
-  location             = var.region
-  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-  deletion_protection  = false
-  invoker_iam_disabled = true
-  template {
-    service_account                  = google_service_account.services.email
-    timeout                          = "3600s"
-    max_instance_request_concurrency = 1000
-    scaling {
-      min_instance_count = 1
-      max_instance_count = 1
-    }
-    vpc_access {
-      egress = "PRIVATE_RANGES_ONLY"
-      network_interfaces {
-        network    = local.vpc_access.network
-        subnetwork = local.vpc_access.subnetwork
-      }
-    }
-    volumes {
-      name = "gateway-data"
-      empty_dir {
-        medium     = "MEMORY"
-        size_limit = "256Mi"
-      }
-    }
     containers {
       name    = "configure"
       image   = local.server_image
       command = ["bun", "-e", module.settings.gateway_config_script]
       resources {
-        limits = { cpu = "1", memory = "512Mi" }
+        cpu_idle = false
+        limits   = { cpu = "1", memory = "512Mi" }
       }
       volume_mounts {
         name       = "gateway-data"
@@ -227,11 +165,16 @@ resource "google_cloud_run_v2_service" "gateway" {
       name       = "gateway"
       image      = module.settings.gateway_image
       depends_on = ["configure"]
-      ports {
-        container_port = 8080
-      }
       resources {
-        limits = { cpu = "1", memory = "1Gi" }
+        cpu_idle = false
+        limits   = { cpu = "1", memory = "1Gi" }
+      }
+      startup_probe {
+        period_seconds    = 2
+        failure_threshold = 60
+        tcp_socket {
+          port = 8080
+        }
       }
       volume_mounts {
         name       = "gateway-data"

@@ -1,16 +1,11 @@
-data "google_project" "current" {
-  project_id = var.project
-}
-
 locals {
   sizes = {
     small  = { cpu = "1", memory = "2Gi", database_tier = "db-custom-2-7680", zero_cpu = "1", zero_memory = "4Gi", zero_replica = "2Gi" }
     medium = { cpu = "2", memory = "4Gi", database_tier = "db-custom-4-15360", zero_cpu = "2", zero_memory = "8Gi", zero_replica = "5Gi" }
-    large  = { cpu = "4", memory = "8Gi", database_tier = "db-custom-8-30720", zero_cpu = "4", zero_memory = "16Gi", zero_replica = "12Gi" }
+    large  = { cpu = "2", memory = "8Gi", database_tier = "db-custom-8-30720", zero_cpu = "4", zero_memory = "12Gi", zero_replica = "8Gi" }
   }
-  size          = local.sizes[var.size]
-  service_names = { server = "${var.name}-server", zero = "${var.name}-zero-cache", gateway = "${var.name}-gateway" }
-  service_url   = { for service, name in local.service_names : service => "https://${name}-${data.google_project.current.number}.${var.region}.run.app" }
+  size         = local.sizes[var.size]
+  service_name = "${var.name}-server"
   apis = [
     "run.googleapis.com",
     "sqladmin.googleapis.com",
@@ -63,9 +58,9 @@ module "settings" {
     spyria_name       = "spyria"
     gateway_name      = "bifrost"
   }
-  server_url        = local.service_url.server
-  zero_url          = local.service_url.zero
-  gateway_url       = local.service_url.gateway
+  server_url        = "http://localhost:3000"
+  zero_url          = "http://localhost:4848"
+  gateway_url       = "http://localhost:8080"
   zero_replica_file = "/data/spyria-replica.db"
   trusted_proxy     = "x-forwarded-for:2"
 }

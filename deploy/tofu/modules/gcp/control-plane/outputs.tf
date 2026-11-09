@@ -30,7 +30,7 @@ output "dns_records" {
 }
 
 output "runtime_host_subnet_id" {
-  description = "A subnetwork for runtime hosts, which reaches the internet through Cloud NAT and, unlike the services' subnetwork, not Google's private access to Cloud Run"
+  description = "A subnetwork for runtime hosts, which reaches the internet through Cloud NAT; from it, Spyria answers only through its load balancer, since the server has no run.app address and zero-cache and the gateway run beside it on localhost"
   value       = google_compute_subnetwork.hosts.id
   depends_on  = [google_compute_router_nat.main]
 }
