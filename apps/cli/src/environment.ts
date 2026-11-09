@@ -89,6 +89,7 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_JOIN_BY: answers.joinBy,
     SPYRIA_LOCAL_PORT: String(answers.localPort),
     ...secrets,
+    SPYRIA_INSTALL_HOST_TOKEN: answers.runsHost ? (secrets.SPYRIA_INSTALL_HOST_TOKEN ?? '') : '',
     COMPOSE_PROFILES: profiles.join(','),
     SPYRIA_TRUSTED_PROXY: answers.tunnelToken ? 'cloudflare' : '',
     CLOUDFLARE_TUNNEL_TOKEN: answers.tunnelToken ?? '',
