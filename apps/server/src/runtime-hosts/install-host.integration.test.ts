@@ -40,8 +40,7 @@ const workspaceExists = async () => {
       env: { ...process.env, DATABASE_URL: databaseUrlOf(instance.name) },
     },
   )
-  await operator.exited
-  return (await new Response(operator.stdout).text()).trim()
+  return { exitCode: await operator.exited, output: (await new Response(operator.stdout).text()).trim() }
 }
 
 test('the machine host waits with the install token until the first workspace exists, then pairs with it once as a workspace host, and the operator tells setup whether a workspace exists', async () => {
@@ -50,7 +49,7 @@ test('the machine host waits with the install token until the first workspace ex
     reason: 'Waiting for the first workspace of this Spyria',
   })
   expect(await claimWith('ZZZZZZZZZZZZZZZZ')).toMatchObject({ closeCode: 4001, reason: 'This code is not valid' })
-  expect(await workspaceExists()).toBe('no')
+  expect(await workspaceExists()).toEqual({ exitCode: 0, output: 'no' })
 
   const { workspaceId } = await createFirstWorkspace(
     database,
@@ -69,7 +68,7 @@ test('the machine host waits with the install token until the first workspace ex
     { email: 'owner@gmail.com', subject: 'owner-subject' },
     { installHostToken },
   )
-  expect(await workspaceExists()).toBe('yes')
+  expect(await workspaceExists()).toEqual({ exitCode: 0, output: 'yes' })
   const paired = await claimWith(installHostToken)
   expect(paired.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
   expect([
