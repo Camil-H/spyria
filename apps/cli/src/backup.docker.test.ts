@@ -35,8 +35,11 @@ writeFileSync(
 )
 const compose = (...composeArguments: string[]) =>
   Bun.spawnSync(composeCommandOf(folder, composeArguments), { cwd: folder, stdout: 'pipe', stderr: 'pipe' })
-const sql = (database: string, statement: string) =>
-  compose('exec', '-T', 'postgres', 'psql', '-U', 'spyria', '-d', database, '-tAc', statement).stdout.toString().trim()
+const sql = (database: string, statement: string) => {
+  const result = compose('exec', '-T', 'postgres', 'psql', '-U', 'spyria', '-d', database, '-tAc', statement)
+  if (result.exitCode !== 0) throw new Error(`${statement} failed: ${result.stderr.toString().trim()}`)
+  return result.stdout.toString().trim()
+}
 
 afterAll(() => {
   if (hasDocker) compose('down', '--volumes', '--timeout', '1')
@@ -49,8 +52,12 @@ test.skipIf(!hasDocker)(
   async () => {
     expect(compose('up', '-d', '--wait').exitCode).toBe(0)
     sql('spyria', "create table notes (body text); insert into notes values ('before')")
-    sql('spyria', "create role bifrost login password 'test'; create database bifrost owner bifrost")
-    compose('exec', '-T', 'postgres', 'psql', '-U', 'bifrost', '-d', 'bifrost', '-c', 'create table keys (id int)')
+    sql('spyria', "create role bifrost login password 'test'")
+    sql('spyria', 'create database bifrost owner bifrost')
+    expect(
+      compose('exec', '-T', 'postgres', 'psql', '-U', 'bifrost', '-d', 'bifrost', '-c', 'create table keys (id int)')
+        .exitCode,
+    ).toBe(0)
     const written = await backup(folder, parseFlags(['backup', '--keep', '2']))
     expect(written).toHaveLength(2)
     expect(statSync(join(folder, 'backups')).mode & 0o777).toBe(0o700)
