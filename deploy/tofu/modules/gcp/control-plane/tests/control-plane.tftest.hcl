@@ -1,7 +1,4 @@
 mock_provider "google" {
-  mock_data "google_project" {
-    defaults = { number = "123456789012" }
-  }
   mock_resource "google_compute_network" {
     defaults = { id = "projects/project/global/networks/spyria" }
   }
@@ -37,32 +34,32 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "The server keeps its CPU between requests, keeps a client on one instance and holds WebSockets for an hour"
   }
   assert {
-    condition     = google_cloud_run_v2_service.server.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" && google_cloud_run_v2_service.gateway.ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY" && google_cloud_run_v2_service.zero.ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY"
-    error_message = "The server is reached through the load balancer, the gateway and zero-cache from the network alone"
+    condition     = google_cloud_run_v2_service.server.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" && google_cloud_run_v2_service.server.default_uri_disabled && [for container in google_cloud_run_v2_service.server.template[0].containers : container.name if length(container.ports) > 0] == ["server"] && toset([for container in google_cloud_run_v2_service.server.template[0].containers : container.name]) == toset(["server", "zero-cache", "configure", "gateway"])
+    error_message = "Spyria answers only through the load balancer: the server has no run.app address, and zero-cache and the gateway run beside it on localhost with no address of their own"
   }
   assert {
     condition     = google_sql_database_instance.postgres.database_version == "POSTGRES_18" && one([for flag in google_sql_database_instance.postgres.settings[0].database_flags : flag.value if flag.name == "cloudsql.logical_decoding"]) == "on" && !google_sql_database_instance.postgres.settings[0].ip_configuration[0].ipv4_enabled
     error_message = "Postgres 18 with logical decoding, on a private address alone"
   }
   assert {
-    condition     = tolist(google_cloud_run_v2_service.gateway.template[0].containers[1].depends_on) == tolist(["configure"])
-    error_message = "The gateway starts once its configuration and database exist"
+    condition     = tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "gateway"]).depends_on) == tolist(["configure"]) && tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).depends_on) == tolist(["server"])
+    error_message = "The gateway starts once its configuration and database exist, and zero-cache once the server has migrated the database"
   }
   assert {
     condition     = google_cloud_run_v2_service.server.template[0].containers[0].image == "europe-west1-docker.pkg.dev/project/spyria-ghcr/camil-h/spyria-server:1.2.0" && google_artifact_registry_repository.ghcr.mode == "REMOTE_REPOSITORY"
     error_message = "Cloud Run pulls the published images through an Artifact Registry mirror of ghcr.io"
   }
   assert {
-    condition     = google_compute_subnetwork.main.private_ip_google_access && !google_compute_subnetwork.hosts.private_ip_google_access && output.runtime_host_subnet_id == google_compute_subnetwork.hosts.id
-    error_message = "The services reach each other privately; runtime hosts sit apart, without that private access"
+    condition     = google_compute_subnetwork.main.private_ip_google_access && output.runtime_host_subnet_id == google_compute_subnetwork.hosts.id && module.settings.server_environment.SPYRIA_ZERO_URL == "http://localhost:4848" && module.settings.server_environment.SPYRIA_GATEWAY_URL == "http://localhost:8080"
+    error_message = "The server reaches Google's APIs privately and its sidecars on localhost; runtime hosts get a subnetwork of their own"
   }
   assert {
-    condition     = google_cloud_run_v2_service.gateway.template[0].timeout == "3600s" && google_cloud_run_v2_service.server.template[0].containers[0].startup_probe[0].http_get[0].path == "/health/live" && module.settings.server_environment.SPYRIA_TRUSTED_PROXY == "x-forwarded-for:2"
+    condition     = google_cloud_run_v2_service.server.template[0].timeout == "3600s" && one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "server"]).startup_probe[0].http_get[0].path == "/health/live" && module.settings.server_environment.SPYRIA_TRUSTED_PROXY == "x-forwarded-for:2"
     error_message = "Streamed model calls last up to an hour, the platform judges the server by its own liveness, and rate limits key on the client behind Google's load balancer"
   }
   assert {
-    condition     = module.settings.server_environment.SPYRIA_ZERO_URL == "https://spyria-zero-cache-123456789012.europe-west1.run.app"
-    error_message = "The server reaches zero-cache at its Cloud Run address"
+    condition     = module.settings.zero_environment.ZERO_QUERY_URL == "http://localhost:3000/api/query" && module.settings.zero_environment.ZERO_MUTATE_URL == "http://localhost:3000/api/mutate"
+    error_message = "zero-cache calls the server beside it on localhost"
   }
   assert {
     condition     = tolist(google_dns_record_set.hostname[0].rrdatas) == tolist(["203.0.113.10"]) && length(output.dns_records) == 0
@@ -77,7 +74,7 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "The setup link carries the setup token"
   }
   assert {
-    condition     = google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].tcp_socket[0].port == 4848 && google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].period_seconds * google_cloud_run_v2_service.zero.template[0].containers[0].startup_probe[0].failure_threshold == 600
+    condition     = one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).startup_probe[0].tcp_socket[0].port == 4848 && one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).startup_probe[0].period_seconds * one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).startup_probe[0].failure_threshold == 600
     error_message = "zero-cache gets the 10 minutes Cloud Run allows at most for its first sync before restarting it"
   }
 }
@@ -163,9 +160,8 @@ run "every_service_carries_a_digest_of_its_secret_values_so_a_changed_secret_res
     mail_from = "Spyria <spyria@example.com>"
   }
   assert {
-    condition = alltrue([for service in [google_cloud_run_v2_service.server, google_cloud_run_v2_service.zero, google_cloud_run_v2_service.gateway] :
-      alltrue([for container in service.template[0].containers :
-    contains([for env in container.env : env.value if env.name == "SPYRIA_SECRETS_DIGEST"], output.secrets_digest)])])
+    condition = alltrue([for container in google_cloud_run_v2_service.server.template[0].containers :
+    contains([for env in container.env : env.value if env.name == "SPYRIA_SECRETS_DIGEST"], output.secrets_digest)])
     error_message = "Every container carries the new digest, so the platform restarts it with the changed secret"
   }
 }
