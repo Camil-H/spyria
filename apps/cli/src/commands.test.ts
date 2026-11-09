@@ -153,6 +153,7 @@ test('setting up again without a runtime host removes the host container this ma
     quiet.mockImplementation(() => undefined)
   }
   expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(environment().SPYRIA_INSTALL_HOST_TOKEN).toBeUndefined()
   expect(indexOfCall('--profile host rm --stop --force host')).toBeGreaterThan(-1)
   expect(calls()).toContain('stop runtime-a runtime-b')
   expect(indexOfCall('stop runtime-a runtime-b')).toBeLessThan(indexOfCall('up -d --remove-orphans'))

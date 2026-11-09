@@ -56,10 +56,18 @@ test('setting up again keeps every secret, so stored secrets and runtimes keep w
   const first = environmentOf(answers)
   const again = environmentOf({ ...answers, version: '1.3.0', runsHost: false, tunnelToken: undefined }, first)
   for (const name of Object.keys(first).filter(
-    (key) => /SECRET|KEY|TOKEN|PASSWORD|ADMIN_USER/.test(key) && key !== 'CLOUDFLARE_TUNNEL_TOKEN',
+    (key) =>
+      /SECRET|KEY|TOKEN|PASSWORD|ADMIN_USER/.test(key) &&
+      key !== 'CLOUDFLARE_TUNNEL_TOKEN' &&
+      key !== 'SPYRIA_INSTALL_HOST_TOKEN',
   ))
     expect(again[name]).toBe(first[name])
-  expect(again).toMatchObject({ SPYRIA_VERSION: '1.3.0', COMPOSE_PROFILES: '', SPYRIA_HOST_CLAIM_URL: '' })
+  expect(again).toMatchObject({
+    SPYRIA_VERSION: '1.3.0',
+    COMPOSE_PROFILES: '',
+    SPYRIA_HOST_CLAIM_URL: '',
+    SPYRIA_INSTALL_HOST_TOKEN: '',
+  })
 })
 
 test('the environment file round-trips, drops empty values and refuses a value spanning lines', () => {
@@ -98,4 +106,14 @@ test("no secret setup reads from the environment is a setting it writes, so the 
     expect(written).not.toContain(variable)
     expect(Object.keys(everyInstanceApp)).not.toContain(variable)
   }
+})
+
+test('without a runtime host on this machine, the server gets no install host token, so the first workspace gets no host that would never pair', () => {
+  const withoutHost = environmentOf({ ...answers, runsHost: false })
+  expect(withoutHost.SPYRIA_INSTALL_HOST_TOKEN).toBe('')
+  expect(withoutHost.SPYRIA_HOST_CLAIM_URL).toBe('')
+  expect(serializeEnvironment(withoutHost)).not.toContain('SPYRIA_INSTALL_HOST_TOKEN')
+  const hostTurnedOn = environmentOf(answers, parseEnvironment(serializeEnvironment(withoutHost)))
+  expect(hostTurnedOn.SPYRIA_INSTALL_HOST_TOKEN).toMatch(/^[A-HJ-NP-Z2-9]{16}$/)
+  expect(hostTurnedOn.SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${hostTurnedOn.SPYRIA_INSTALL_HOST_TOKEN}`)
 })
