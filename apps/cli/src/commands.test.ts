@@ -24,6 +24,7 @@ case "$*" in
     cp "$FAKE_INSTALL/.env" "$FAKE_DOCKER/env-at-backup"
     printf 'dump' ;;
   *sso:sign-in-app*) cat > "$FAKE_DOCKER/stdin" ;;
+  *has-workspace*) cat "$FAKE_DOCKER/has-workspace" 2>/dev/null ;;
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
@@ -74,6 +75,7 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'stdin'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
+  rmSync(join(fakeDocker, 'has-workspace'), { force: true })
 })
 const calls = () =>
   existsSync(join(fakeDocker, 'calls')) ? readFileSync(join(fakeDocker, 'calls'), 'utf8').trim().split('\n') : []
@@ -174,4 +176,36 @@ test('setting up again without a runtime host removes the host container this ma
   })
   expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
   expect(indexOfCall('rm --stop --force host')).toBe(-1)
+})
+
+test("turning this machine's host on once a workspace exists takes the command of Add runtime host and refuses to go on without it, while before the first workspace the install code still serves", async () => {
+  writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, COMPOSE_PROFILES: 'cloudflare' }), {
+    mode: 0o600,
+  })
+  writeFileSync(join(fakeDocker, 'has-workspace'), 'yes\n')
+  const hostTurnedOn = (processEnvironment: Record<string, string>) =>
+    setup(parseFlags(['setup', '--unattended', '--host', '--folder', install, '--version', '1.2.0']), {
+      processEnvironment,
+    })
+
+  const refusal = await hostTurnedOn({}).catch((error: Error) => error.message)
+  expect(refusal).toBe('SPYRIA_SETUP_HOST_CLAIM_URL is required')
+  expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
+  expect(indexOfCall('up -d')).toBe(-1)
+
+  await hostTurnedOn({
+    SPYRIA_SETUP_HOST_CLAIM_URL: 'docker run -d --name spyria-host spyria-host https://spyria.example.com/h/ABCD2345',
+  })
+  expect(environment()).toMatchObject({
+    COMPOSE_PROFILES: 'host,cloudflare',
+    SPYRIA_HOST_CLAIM_URL: 'http://server:3000/h/ABCD2345',
+  })
+  expect(environment().SPYRIA_INSTALL_HOST_TOKEN).toBeUndefined()
+
+  writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, COMPOSE_PROFILES: 'cloudflare' }), {
+    mode: 0o600,
+  })
+  writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
+  await hostTurnedOn({})
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${environment().SPYRIA_INSTALL_HOST_TOKEN}`)
 })

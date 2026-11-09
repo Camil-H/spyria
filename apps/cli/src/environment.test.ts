@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import {
   environmentOf,
   newInstallHostToken,
+  pairingCodeOf,
   parseEnvironment,
   type SetupAnswers,
   serializeEnvironment,
@@ -116,4 +117,21 @@ test('without a runtime host on this machine, the server gets no install host to
   const hostTurnedOn = environmentOf(answers, parseEnvironment(serializeEnvironment(withoutHost)))
   expect(hostTurnedOn.SPYRIA_INSTALL_HOST_TOKEN).toMatch(/^[A-HJ-NP-Z2-9]{16}$/)
   expect(hostTurnedOn.SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${hostTurnedOn.SPYRIA_INSTALL_HOST_TOKEN}`)
+})
+
+test("a pairing command from Add runtime host points this machine's host at its code instead of the install code, and is kept while the host stays on", () => {
+  const command =
+    'docker rm -f spyria-host >/dev/null 2>&1; docker run -d --name spyria-host ghcr.io/camil-h/spyria-host https://spyria.example.com/h/ABCD2345'
+  expect(pairingCodeOf(command)).toBe('ABCD2345')
+  expect(pairingCodeOf('https://spyria.example.com/h/WXYZ6789')).toBe('WXYZ6789')
+  expect(() => pairingCodeOf('https://spyria.example.com/')).toThrow('not the command of Add runtime host')
+
+  const withoutHost = environmentOf({ ...answers, runsHost: false })
+  const paired = environmentOf({ ...answers, pairingCode: 'ABCD2345' }, withoutHost)
+  expect(paired.SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/ABCD2345')
+  expect(paired.SPYRIA_INSTALL_HOST_TOKEN).toBe('')
+  const again = environmentOf(answers, parseEnvironment(serializeEnvironment(paired)))
+  expect(again.SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/ABCD2345')
+  expect(again.SPYRIA_INSTALL_HOST_TOKEN).toBe('')
+  expect(environmentOf({ ...answers, runsHost: false }, again).SPYRIA_HOST_CLAIM_URL).toBe('')
 })

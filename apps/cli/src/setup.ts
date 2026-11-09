@@ -14,7 +14,7 @@ import {
 } from './commands.ts'
 import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
-import { environmentOf, isDeploymentName, type SetupAnswers } from './environment.ts'
+import { type Environment, environmentOf, isDeploymentName, pairingCodeOf, type SetupAnswers } from './environment.ts'
 import { askerOf, type Flags, type ProcessEnvironment, secretVariables } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
 import { type Asker, firstWorkspaceProviderOf, mailOf, removal } from './setup-steps.ts'
@@ -33,6 +33,21 @@ const dockerGroupOf = () => {
 const runsHostOf = (flags: Flags, existingProfiles: string | undefined) =>
   flags.switches.has('host') ||
   (!flags.switches.has('no-host') && (existingProfiles === undefined || existingProfiles.split(',').includes('host')))
+
+const workspaceExistsIn = (folder: string) =>
+  Bun.which('docker', { PATH: process.env.PATH ?? '' }) !== null &&
+  readCompose(folder, operatorCommandOf(['has-workspace'])).output.trim() === 'yes'
+
+const pairingCodeFor = (asker: Asker, folder: string, existing: Environment, runsHost: boolean) => {
+  if (!runsHost) return undefined
+  const turnsHostOn = existing.COMPOSE_PROFILES !== undefined && !existing.COMPOSE_PROFILES.split(',').includes('host')
+  if (!asker.given('host-claim-url') && !(turnsHostOn && workspaceExistsIn(folder))) return undefined
+  if (!asker.given('host-claim-url'))
+    console.log(
+      `A workspace exists, so this machine's runtime host pairs with the command an admin gets from Workspace settings > Connect runtime > Add runtime host. Paste it here, or set ${secretVariables['host-claim-url']} to it and run setup again.`,
+    )
+  return pairingCodeOf(asker.requireSecret('host-claim-url', 'Command of Add runtime host'))
+}
 
 const instanceAppOf = (
   asker: Asker,
@@ -157,6 +172,7 @@ export const setup = async (
   const smtp = await mailOf(context, { existing, resendApiUrl })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
+  const runsHost = runsHostOf(flags, existing.COMPOSE_PROFILES)
   const answers: SetupAnswers = {
     deployment,
     version,
@@ -164,7 +180,8 @@ export const setup = async (
     origin,
     joinBy,
     tunnelToken,
-    runsHost: runsHostOf(flags, existing.COMPOSE_PROFILES),
+    runsHost,
+    pairingCode: pairingCodeFor(asker, folder, existing, runsHost),
     dockerGroup: dockerGroupOf(),
     smtp,
     instanceApps: { google, microsoft },
@@ -192,7 +209,11 @@ export const setup = async (
       setupLink.exitCode === 0
         ? `Create the first workspace from this setup link, which works once: ${setupLink.output.trim()}`
         : '',
-      answers.runsHost ? 'This machine runs a runtime host: it joins the first workspace when you create it.' : '',
+      answers.pairingCode
+        ? 'This machine runs a runtime host: it joins the workspace whose admin made its command.'
+        : answers.runsHost && setupLink.exitCode === 0
+          ? 'This machine runs a runtime host: it joins the first workspace when you create it.'
+          : '',
       'Then, in Workspace settings, Connect GitHub to work on repositories.',
     ]
       .filter(Boolean)
