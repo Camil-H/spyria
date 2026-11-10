@@ -70,15 +70,19 @@ export const setUpResend = async ({
     await Bun.sleep(pollMilliseconds)
   }
   const keyName = `Spyria on ${hostname}`
-  const { data: keys } = await resend<{ data: { id: string; name: string }[] }>('GET', '/api-keys')
-  for (const replaced of keys.filter((key) => key.name === keyName)) await resend('DELETE', `/api-keys/${replaced.id}`)
-  const { token } = await resend<{ token: string }>('POST', '/api-keys', {
+  const created = await resend<{ id: string; token: string }>('POST', '/api-keys', {
     name: keyName,
     permission: 'sending_access',
     domain_id: id,
   })
+  const retireReplacedKeys = async () => {
+    const { data: keys } = await resend<{ data: { id: string; name: string }[] }>('GET', '/api-keys')
+    for (const replaced of keys.filter((key) => key.name === keyName && key.id !== created.id))
+      await resend('DELETE', `/api-keys/${replaced.id}`)
+  }
   return {
-    smtpUrl: `smtps://resend:${encodeURIComponent(token)}@smtp.resend.com:465`,
+    smtpUrl: `smtps://resend:${encodeURIComponent(created.token)}@smtp.resend.com:465`,
     mailFrom: `Spyria <spyria@${zone.name}>`,
+    retireReplacedKeys,
   }
 }

@@ -224,6 +224,7 @@ export const setup = async (
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
+  await smtp?.retireReplacedKeys?.()
   const testAddress = smtp && asker.ask('mail-test', 'Address to send a test message to (empty to skip)', '')
   if (testAddress && !sendsTestMessage(folder, testAddress))
     console.log('The test message was not sent: check the SMTP URL and the sender, then run spyria setup again.')
