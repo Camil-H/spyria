@@ -29,17 +29,17 @@ fake(
 )
 fake('docker', 'exit 0')
 const cosignCalls = join(work, 'cosign-calls')
-const cosignOf = (exitCode: number) => {
+const cosignOf = (exitCode: number, reason = '') => {
   const tools = mkdtempSync(join(work, 'cosign-'))
   writeFileSync(
     join(tools, 'cosign'),
-    `#!/bin/sh\nfor argument in "$@"; do case "$argument" in /*) basename "$argument" ;; *) echo "$argument" ;; esac; done > "${cosignCalls}"\ncat "$4" >> "${cosignCalls}"\nexit ${exitCode}\n`,
+    `#!/bin/sh\nfor argument in "$@"; do case "$argument" in /*) basename "$argument" ;; *) echo "$argument" ;; esac; done > "${cosignCalls}"\ncat "$4" >> "${cosignCalls}"\necho "${reason}" >&2\nexit ${exitCode}\n`,
   )
   chmodSync(join(tools, 'cosign'), 0o755)
   return tools
 }
 const verifyingCosign = cosignOf(0)
-const refusingCosign = cosignOf(1)
+const refusingCosign = cosignOf(1, 'Error: none of the expected identities matched what was in the certificate')
 
 const install = (
   release: string,
@@ -91,7 +91,19 @@ test('install.sh checks with cosign that the checksums were signed by the Publis
 test('install.sh refuses checksums whose signature cosign does not verify, and installs nothing', () => {
   const { installDir, exitCode, output } = install(releaseWith('#!/bin/sh\necho spyria\n'), { cosign: refusingCosign })
   expect(exitCode).toBe(1)
-  expect(output).toContain('the checksums of this release are not signed by its Publish workflow')
+  expect(output).toContain('Error: none of the expected identities matched what was in the certificate')
+  expect(output).toContain(
+    'cosign could not verify that the Publish workflow of Camil-H/spyria signed the checksums of this release',
+  )
+  expect(() => statSync(join(installDir, 'spyria'))).toThrow()
+})
+
+test('with cosign, install.sh refuses a release that publishes no signature of its checksums', () => {
+  const release = releaseWith('#!/bin/sh\necho spyria\n')
+  rmSync(join(release, 'latest/download/spyria-checksums.txt.sigstore.json'))
+  const { installDir, exitCode, output } = install(release, { cosign: verifyingCosign })
+  expect(exitCode).toBe(1)
+  expect(output).toContain('the release publishes no signature of its checksums')
   expect(() => statSync(join(installDir, 'spyria'))).toThrow()
 })
 
