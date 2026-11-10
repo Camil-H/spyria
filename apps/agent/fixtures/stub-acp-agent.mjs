@@ -758,6 +758,27 @@ const turn = async (id, { sessionId, prompt }) => {
         _meta: { terminal_exit: { ...terminal, exit_code: 0, signal: null } },
       })
     }
+    if (has('no-input') || has('stalled')) {
+      const toolCallId = `${has('stalled') ? 'stalled' : 'no-input'}-${session.prompts}`
+      update({
+        sessionUpdate: 'tool_call',
+        toolCallId,
+        title: 'mcp__github__get_me',
+        kind: 'other',
+        status: 'pending',
+        rawInput: {},
+      })
+      await say('waiting ')
+      if (has('stalled')) for (;;) await step()
+      update({ sessionUpdate: 'tool_call_update', toolCallId, status: 'in_progress' })
+      await step()
+      update({
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        status: 'completed',
+        content: [{ type: 'content', content: { type: 'text', text: 'octocat' } }],
+      })
+    }
     if (has('long')) {
       const command = `long-${session.prompts}`
       update({

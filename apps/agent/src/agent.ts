@@ -425,7 +425,7 @@ export const startAgent = ({
     const output = outputTailOf((previous?.output ?? '') + outputChunkOf(update), keptCommandOutputCharacters)
     const isFinished = terminalToolStatuses.includes(String(update.status))
     const wasAnnounced = previous?.isAnnounced ?? true
-    const isAnnounced = wasAnnounced || isFinished || !hasNoInput(merged)
+    const isAnnounced = wasAnnounced || isFinished || update.status === 'in_progress' || !hasNoInput(merged)
     if (!wasAnnounced && isAnnounced) emit(conversation, { ...merged, sessionUpdate: 'tool_call' })
     if (!isFinished) {
       conversation.toolCalls.set(toolCallId, { call: merged, isAnnounced, output })
@@ -435,6 +435,14 @@ export const startAgent = ({
     }
     conversation.toolCalls.delete(toolCallId)
     emit(conversation, withTerminalOutput(merged, output, terminalMetaOf(update).terminal_exit?.exit_code), true)
+  }
+
+  const announceHeldToolCalls = (conversation: Conversation) => {
+    for (const [toolCallId, held] of conversation.toolCalls) {
+      if (held.isAnnounced) continue
+      conversation.toolCalls.set(toolCallId, { ...held, isAnnounced: true })
+      emit(conversation, { ...held.call, sessionUpdate: 'tool_call' })
+    }
   }
 
   const setConfigOption = async (conversation: Conversation, key: string, value: string) => {
@@ -662,6 +670,7 @@ export const startAgent = ({
     )
     previous.close()
     closeQuestions(conversation, 'stopped')
+    announceHeldToolCalls(conversation)
     conversation.toolCalls.clear()
     conversation.status = 'starting'
     conversation.failure = undefined
@@ -777,6 +786,7 @@ export const startAgent = ({
     const endTurn = (stopReason: unknown) => {
       const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
       if (promptId) conversation.turnEnds.set(promptId, update)
+      announceHeldToolCalls(conversation)
       emit(conversation, update)
     }
     const ended = (result: Json) => {
