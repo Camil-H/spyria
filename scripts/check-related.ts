@@ -81,7 +81,7 @@ const isInWebBundle = (file: string) =>
     file,
   ) && !isTestCode(file)
 const isDockerArea = (file: string) =>
-  /^(apps\/(host|agent)\/|deploy\/compose\.prod\.yml$|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
+  /^(apps\/(host|agent)\/|deploy\/(compose\.prod\.yml|bifrost\.json)$|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
     file,
   )
 const e2eSegmentsByArea: [RegExp, string[]][] = [
@@ -243,7 +243,9 @@ if (e2eSelection === 'all') testResults.push(runInherited('e2e', ['bun', 'run', 
 else if (e2eSelection.length > 0)
   testResults.push(runInherited('e2e', ['bun', 'run', 'test:e2e', '--', ...e2eSelection]))
 if (dockerReasons.length > 0)
-  console.log('\nThe change reaches the host, the agent, the images or the backups: run check:docker too')
+  console.log(
+    '\nThe change reaches the host, the agent, the images, the gateway config or the backups: run check:docker too',
+  )
 if (tofuReasons.length > 0) console.log('\nThe change reaches the OpenTofu modules: run check:tofu too')
 
 const results = [...fastResults, ...testResults]
