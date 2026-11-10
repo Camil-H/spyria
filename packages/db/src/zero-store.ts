@@ -17,6 +17,7 @@ type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] 
 type SourceRows = Partial<Record<string, readonly object[]>>
 export const scopedQueryNames = [
   'chatMessages',
+  'chatEarlierRoot',
   'chatPinnedSteps',
   'chatBrowserPages',
   'chatUsage',
@@ -260,7 +261,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       contextTokens: chat.contextTokens ?? null,
       contextWindow: chat.contextWindow ?? null,
       ownerId: ownerUserId ?? '',
-      createdAt: isoOf(createdAt),
     }),
   )
   const readMarkersOf = mappedRows(withMemberId<ZeroRows['readMarkers'][number]>)

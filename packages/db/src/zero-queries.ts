@@ -88,6 +88,11 @@ export const caseVariantsOf = (text: string) => {
 
 const messagesOf = (ctx: ZeroContext, chatId: string) =>
   zql.messages.where('workspaceId', ctx.workspaceId).where('chatId', chatId).whereExists('chat', readableBy(ctx.userId))
+const rootMessagesOf = (ctx: ZeroContext, chatId: string) =>
+  messagesOf(ctx, chatId)
+    .where('threadRootId', 'IS', null)
+    .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
+const time = z.int().check(z.nonnegative())
 
 const activeMember = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
   membership.where('userId', userId).where('removedAt', 'IS', null)
@@ -185,17 +190,16 @@ export const queries = defineQueries({
           .limit(1),
     ),
   ),
-  chatMessages: defineQuery(
-    z.object({ chatId: id, limit: z.number(), since: z.int().check(z.nonnegative()) }),
-    ({ ctx, args }) =>
-      messagesOf(ctx, args.chatId)
-        .where('createdAt', '>=', args.since)
-        .where('threadRootId', 'IS', null)
-        .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
-        .orderBy('seq', 'desc')
-        .limit(args.limit)
-        .related('replies')
-        .related('threadReplies'),
+  chatMessages: defineQuery(z.object({ chatId: id, limit: z.number(), since: time }), ({ ctx, args }) =>
+    rootMessagesOf(ctx, args.chatId)
+      .where('createdAt', '>=', args.since)
+      .orderBy('seq', 'desc')
+      .limit(args.limit)
+      .related('replies')
+      .related('threadReplies'),
+  ),
+  chatEarlierRoot: defineQuery(z.object({ chatId: id, before: time }), ({ ctx, args }) =>
+    rootMessagesOf(ctx, args.chatId).where('createdAt', '<', args.before).orderBy('seq', 'desc').limit(1),
   ),
   searchMessages: defineQuery(z.object({ text: searchText }), ({ ctx, args }) =>
     zql.messages
