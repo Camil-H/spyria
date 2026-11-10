@@ -32,7 +32,6 @@ bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs f
 bun run check:docker       # agent:build, then the docker tests
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
 bun run check:tofu         # OpenTofu fmt, validate and the tests with mock providers, for every module and example
-bun scripts/docs-site.ts .check/site   # the public docs site, refusing any link to a missing page or heading
 bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
@@ -86,7 +85,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 | Job | On a pull request | On a push to `develop` |
 |---|---|---|
 | `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
-| `checks` | lint, typecheck, boundaries, locks (and the docs site build, refusing broken links) | the same |
+| `checks` | lint, typecheck, boundaries, locks | the same |
 | `secrets` | gitleaks on the pull request's commits; fails when one adds a credential (key, token, private key) | gitleaks on the pushed commits |
 | `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
 | `bundle` | when the web app or a package changed | always |

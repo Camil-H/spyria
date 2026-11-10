@@ -216,7 +216,7 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | `packages/kernel`, `packages/db`, `packages/ui`, `packages/session` | The shared layer: kernel types and logging, the database client and Zero schema, UI components, the signed-in member. |
 | `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`. |
 | `deploy/` | Production: `compose.prod.yml` (published images), `compose.build.yml` (the override that builds from this clone), `bifrost.json` (the gateway's configuration, shared with the dev stack). |
-| `scripts/` | Checks and tooling: `check-all.ts`, `check-related.ts`, `check-bundle.ts`, `check-locks.ts`, `check-licenses.ts`, `agent-image.ts`, `smoke-prod.ts`, `check-tofu.ts`, `docs-site.ts`. |
+| `scripts/` | Checks and tooling: `check-all.ts`, `check-related.ts`, `check-bundle.ts`, `check-locks.ts`, `check-licenses.ts`, `agent-image.ts`, `smoke-prod.ts`, `check-tofu.ts`. |
 
 ## Where to start reading
 
