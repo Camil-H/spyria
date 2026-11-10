@@ -212,3 +212,58 @@ test("turning this machine's host on once a workspace exists takes the command o
   await hostTurnedOn({})
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${environment().SPYRIA_INSTALL_HOST_TOKEN}`)
 })
+
+test('setting up Resend again revokes the key it replaces only once Spyria runs on the new one, and a refused revocation leaves setup done', async () => {
+  const cloudflareResult = (result: unknown) => Response.json({ success: true, errors: [], result })
+  const cloudflare = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname } = new URL(request.url)
+      if (pathname === '/zones')
+        return cloudflareResult([{ id: 'zone-1', name: 'example.com', account: { id: 'account-1' } }])
+      if (pathname.endsWith('/token')) return cloudflareResult('tunnel-token')
+      return cloudflareResult(request.method === 'GET' ? [] : { id: 'tunnel-1' })
+    },
+  })
+  const revocations: { key: string; isRunning: boolean }[] = []
+  let refusesRevocation = false
+  const resend = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname } = new URL(request.url)
+      if (pathname === '/domains' && request.method === 'GET') return Response.json({ data: [] })
+      if (pathname === '/api-keys' && request.method === 'GET')
+        return Response.json({ data: [{ id: 'old-key', name: 'Spyria on spyria.example.com' }] })
+      if (pathname === '/api-keys') return Response.json({ id: 'new-key', token: 're_sending' })
+      if (request.method === 'DELETE') {
+        revocations.push({ key: pathname, isRunning: indexOfCall('up -d --remove-orphans') > -1 })
+        return refusesRevocation ? Response.json({ message: 'rate limited' }, { status: 429 }) : Response.json({})
+      }
+      return Response.json({ id: 'domain-1', name: 'example.com', status: 'verified', records: [] })
+    },
+  })
+  const printed: string[] = []
+  quiet.mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  const setUpResend = () =>
+    setup(parseFlags(['setup', '--unattended', '--mail', 'resend', '--folder', install, '--version', '1.2.0']), {
+      cloudflareApiUrl: cloudflare.url.origin,
+      resendApiUrl: resend.url.origin,
+      processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'api-token', SPYRIA_SETUP_RESEND_KEY: 're_full' },
+    })
+  try {
+    await setUpResend()
+    expect(revocations).toEqual([{ key: '/api-keys/old-key', isRunning: true }])
+    expect(environment().SPYRIA_SMTP_URL).toBe('smtps://resend:re_sending@smtp.resend.com:465')
+
+    refusesRevocation = true
+    rmSync(join(fakeDocker, 'calls'), { force: true })
+    await setUpResend()
+    expect(printed).toContain(
+      'The Resend key this setup replaced is still valid (Resend refused DELETE /api-keys/old-key: rate limited): revoke it in Resend.',
+    )
+  } finally {
+    quiet.mockImplementation(() => undefined)
+    cloudflare.stop(true)
+    resend.stop(true)
+  }
+})
