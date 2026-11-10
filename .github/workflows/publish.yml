@@ -13,15 +13,22 @@ jobs:
     outputs:
       version: ${{ steps.names.outputs.version }}
       stable: ${{ steps.names.outputs.stable }}
+      latest: ${{ steps.names.outputs.latest }}
       images: ${{ steps.names.outputs.images }}
     steps:
       - id: names
         env:
           OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          [[ "${GITHUB_REF_NAME#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && stable=true || stable=false
+          version=${GITHUB_REF_NAME#v}
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && stable=true || stable=false
           echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          highest=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" --jq '.[].ref' |
+            sed 's|^refs/tags/v||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          [ "$stable" = true ] && [ "$version" = "$highest" ] && latest=true || latest=false
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "images=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
 
   agent:
@@ -93,6 +100,7 @@ jobs:
     with:
       image: ${{ needs.version.outputs.images }}/spyria-agent
       version: ${{ needs.version.outputs.version }}
+      latest: ${{ needs.version.outputs.latest == 'true' }}
 
   host-manifest:
     needs: [version, host]
@@ -104,6 +112,7 @@ jobs:
     with:
       image: ${{ needs.version.outputs.images }}/spyria-host
       version: ${{ needs.version.outputs.version }}
+      latest: ${{ needs.version.outputs.latest == 'true' }}
 
   server:
     needs: [version, agent-manifest]
@@ -144,6 +153,7 @@ jobs:
     with:
       image: ${{ needs.version.outputs.images }}/spyria-server
       version: ${{ needs.version.outputs.version }}
+      latest: ${{ needs.version.outputs.latest == 'true' }}
 
   cli:
     needs: [version, server-manifest, host-manifest]
@@ -153,6 +163,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       STABLE: ${{ needs.version.outputs.stable }}
+      LATEST: ${{ needs.version.outputs.latest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -170,5 +181,5 @@ jobs:
         run: |
           prerelease=$([ "$STABLE" = true ] || echo --prerelease)
           gh release view "v$VERSION" >/dev/null 2>&1 ||
-            gh release create "v$VERSION" --verify-tag --generate-notes --title "Spyria $VERSION" $prerelease
+            gh release create "v$VERSION" --verify-tag --generate-notes --title "Spyria $VERSION" $prerelease --latest="$LATEST"
           gh release upload "v$VERSION" dist/* deploy/install.sh --clobber
