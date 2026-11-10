@@ -159,9 +159,9 @@ services:
     profiles: [host]
     image: ${SPYRIA_IMAGES:-ghcr.io/camil-h}/spyria-host:${SPYRIA_VERSION}
     container_name: ${SPYRIA_DEPLOYMENT}-host
-    command: ['${SPYRIA_HOST_CLAIM_URL:-}']
     environment:
       SPYRIA_ENV: production
+      SPYRIA_HOST_CLAIM_URL: ${SPYRIA_HOST_CLAIM_URL:-}
       SPYRIA_DEPLOYMENT: ${SPYRIA_DEPLOYMENT}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}

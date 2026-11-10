@@ -30,11 +30,35 @@ export const secretVariables: Record<string, string> = {
 }
 
 export type ProcessEnvironment = Record<string, string | undefined>
+export type SecretReader = (question: string) => string
+
+const interruptedExitCode = 130
+const hiddenLineReader = [
+  'stty -echo',
+  "trap 'stty echo' EXIT",
+  `trap 'exit ${interruptedExitCode}' INT TERM`,
+  'printf "%s " "$1" >/dev/tty',
+  'IFS= read -r answer',
+  'printf "\\n" >/dev/tty',
+  'printf "%s" "$answer"',
+].join('\n')
+
+export const hiddenAnswerTo: SecretReader = (question) => {
+  if (!process.stdin.isTTY) return prompt(question) ?? ''
+  const reading = Bun.spawnSync(['sh', '-c', hiddenLineReader, 'sh', question], {
+    stdin: 'inherit',
+    stdout: 'pipe',
+    stderr: 'inherit',
+  })
+  if (reading.exitCode === interruptedExitCode) process.exit(interruptedExitCode)
+  return reading.stdout.toString()
+}
 
 export const askerOf = (
   flags: Flags,
   isUnattended = flags.switches.has('unattended'),
   environment: ProcessEnvironment = process.env,
+  readSecret: SecretReader = hiddenAnswerTo,
 ) => {
   for (const [name, variable] of Object.entries(secretVariables))
     if (flags.values[name] !== undefined || flags.switches.has(name))
@@ -65,7 +89,7 @@ export const askerOf = (
     const fromEnvironment = secretFromEnvironment(name)
     if (fromEnvironment) console.log(`Using ${secretVariables[name]} from the environment`)
     if (fromEnvironment || isUnattended) return fromEnvironment || saved
-    return (prompt(question) ?? '').trim() || saved
+    return readSecret(question).trim() || saved
   }
   const requireSecret = (name: string, question: string) => {
     const answer = secret(name, question)

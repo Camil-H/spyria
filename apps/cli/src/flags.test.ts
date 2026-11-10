@@ -1,5 +1,11 @@
-import { expect, spyOn, test } from 'bun:test'
+import { afterAll, expect, spyOn, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { askerOf, composeArgumentsOf, parseFlags } from './flags.ts'
+
+const work = mkdtempSync(join(tmpdir(), 'spyria-flags-'))
+afterAll(() => rmSync(work, { recursive: true, force: true }))
 
 test('flags take a value after them or inline, switches stand alone, and the rest are positionals', () => {
   expect(
@@ -51,20 +57,14 @@ test('a secret is never a flag: it comes from its environment variable, or from 
 
   const questions: string[] = []
   const answers = ['', 'typed-secret']
-  const originalPrompt = globalThis.prompt
-  globalThis.prompt = (question?: string) => {
-    questions.push(question ?? '')
+  const interactive = askerOf(parseFlags([]), false, {}, (question) => {
+    questions.push(question)
     return answers.shift() ?? ''
-  }
-  try {
-    const interactive = askerOf(parseFlags([]), false, {})
-    expect(
-      interactive.secret('google-client-secret', 'Client secret (empty keeps the saved one)', 'saved-secret'),
-    ).toBe('saved-secret')
-    expect(interactive.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('typed-secret')
-  } finally {
-    globalThis.prompt = originalPrompt
-  }
+  })
+  expect(interactive.secret('google-client-secret', 'Client secret (empty keeps the saved one)', 'saved-secret')).toBe(
+    'saved-secret',
+  )
+  expect(interactive.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('typed-secret')
   expect(questions).toEqual(['Client secret (empty keeps the saved one)', 'Client secret'])
 })
 
@@ -88,3 +88,42 @@ test('variables other tools export never answer for setup, and setup names the v
   }
   expect(printed).toEqual(['Using SPYRIA_SETUP_RESEND_KEY from the environment'])
 })
+
+test('a secret typed in a terminal never shows on it, and the terminal echoes again once it is read', async () => {
+  const flagsModule = new URL('./flags.ts', import.meta.url).pathname
+  const asking = join(work, 'ask-secret.ts')
+  writeFileSync(
+    asking,
+    [
+      `import { hiddenAnswerTo } from ${JSON.stringify(flagsModule)}`,
+      "const answer = hiddenAnswerTo('Resend API key')",
+      "console.log(answer === 'typed-secret' ? 'answered as typed' : 'answered something else')",
+      "console.log(Bun.spawnSync(['stty', '-a'], { stdin: 'inherit' }).stdout.toString().includes('-echo ') ? 'echo off' : 'echo on')",
+    ].join('\n'),
+  )
+  const command = [process.execPath, asking]
+  const inTerminal =
+    process.platform === 'darwin'
+      ? ['script', '-q', '/dev/null', ...command]
+      : ['script', '-qec', command.join(' '), '/dev/null']
+  const terminal = Bun.spawn(inTerminal, { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
+  const decoder = new TextDecoder()
+  let output = ''
+  const reader = terminal.stdout.getReader()
+  const readUntil = async (text: string) => {
+    while (!output.includes(text)) {
+      const { done, value } = await reader.read()
+      if (done) break
+      output += decoder.decode(value)
+    }
+  }
+  await readUntil('Resend API key')
+  terminal.stdin.write('typed-secret\n')
+  await terminal.stdin.flush()
+  await readUntil('echo o')
+  await readUntil('\n')
+  terminal.kill()
+  expect(output).toContain('answered as typed')
+  expect(output).toContain('echo on')
+  expect(output).not.toContain('typed-secret')
+}, 20_000)
