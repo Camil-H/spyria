@@ -160,6 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
       STABLE: ${{ needs.version.outputs.stable }}
@@ -176,6 +177,8 @@ jobs:
               apps/cli/src/main.ts --outfile "dist/spyria-$target"
           done
           (cd dist && sha256sum spyria-* > spyria-checksums.txt)
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - run: cosign sign-blob --yes --bundle dist/spyria-checksums.txt.sigstore.json dist/spyria-checksums.txt
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |

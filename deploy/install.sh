@@ -5,6 +5,8 @@ repository=Camil-H/spyria
 version=${SPYRIA_VERSION:-latest}
 install_dir=${SPYRIA_INSTALL_DIR:-$HOME/.local/bin}
 download_base=${SPYRIA_DOWNLOAD_BASE:-https://github.com/$repository/releases}
+signer="^https://github.com/$repository/\\.github/workflows/publish\\.yml@refs/tags/v"
+signer_issuer=https://token.actions.githubusercontent.com
 
 fail() {
   echo "spyria: $1" >&2
@@ -54,6 +56,16 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 curl -fsSL "$download_base/$release_path/$binary" -o "$work/$binary"
 curl -fsSL "$download_base/$release_path/spyria-checksums.txt" -o "$work/checksums.txt"
+if command -v cosign >/dev/null 2>&1; then
+  curl -fsSL "$download_base/$release_path/spyria-checksums.txt.sigstore.json" -o "$work/checksums.sigstore.json"
+  cosign verify-blob "$work/checksums.txt" --bundle "$work/checksums.sigstore.json" \
+    --certificate-identity-regexp "$signer" --certificate-oidc-issuer "$signer_issuer" >/dev/null 2>&1 ||
+    fail "the checksums of this release are not signed by its Publish workflow"
+elif [ "${SPYRIA_REQUIRE_SIGNATURE:-}" = 1 ]; then
+  fail "cosign is missing, and SPYRIA_REQUIRE_SIGNATURE=1 asks for the signature to be checked: install cosign (https://docs.sigstore.dev/cosign/system_config/installation/), then run this again."
+else
+  echo "cosign is missing, so the release's signature is not checked, only its checksums: install cosign to have it checked."
+fi
 expected=$(grep " $binary\$" "$work/checksums.txt" | cut -d ' ' -f 1)
 [ -n "$expected" ] || fail "the release lists no checksum for $binary"
 if command -v sha256sum >/dev/null 2>&1; then
