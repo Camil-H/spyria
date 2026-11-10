@@ -2,9 +2,7 @@ import { type Browser, expect, test } from '../fixtures'
 
 const signedOutPageOf = async (browser: Browser, canCreateWorkspace: boolean, isBeingSetUp = canCreateWorkspace) => {
   const page = await browser.newPage({ reducedMotion: 'reduce' })
-  await page.route('**/auth/sessions', (route) =>
-    route.fulfill({ json: { sessions: [], deployment: 'test', version: 'test' } }),
-  )
+  await page.route('**/auth/sessions', (route) => route.fulfill({ json: { sessions: [] } }))
   await page.route('**/auth/mode**', (route) =>
     route.fulfill({ json: { authMode: 'sso', isBeingSetUp, canCreateWorkspace } }),
   )
@@ -43,9 +41,7 @@ test.describe('Sign-in screens of an instance that joins people by invited addre
   }, async ({ browser }) => {
     const pageWith = async (canCreateWorkspace: boolean) => {
       const page = await browser.newPage({ reducedMotion: 'reduce' })
-      await page.route('**/auth/sessions', (route) =>
-        route.fulfill({ json: { sessions: [], deployment: 'test', version: 'test' } }),
-      )
+      await page.route('**/auth/sessions', (route) => route.fulfill({ json: { sessions: [] } }))
       await page.route('**/auth/mode**', (route) =>
         route.fulfill({
           json: { authMode: 'sso', joinBy: 'invited_address', isBeingSetUp: canCreateWorkspace, canCreateWorkspace },
