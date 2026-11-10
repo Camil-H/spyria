@@ -14,6 +14,7 @@ export {
 export { createRuntimeJobs } from './entrypoints/jobs.ts'
 export { runtimeMutators } from './entrypoints/mutators.ts'
 export { createHttpRuntimeHostCommands, runtimeHostsPath } from './integrations/http-runtime-hosts.ts'
+export { addInstallHost } from './integrations/install-host.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
 export { ensureRuntimeRunning, retryRuntime } from './operations/ensure-runtime-running.ts'
 export { removeChatRuntime } from './operations/remove-chat-runtime.ts'

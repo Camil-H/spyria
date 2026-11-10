@@ -12,6 +12,7 @@ import {
   systemActor,
   type WorkspacePermission,
 } from '@spyria/kernel'
+import { addInstallHost } from '@spyria/runtime/server'
 import {
   DomainClaimed,
   DomainFixed,
@@ -64,7 +65,6 @@ type Member = { workspaceId: string; userId: string }
 
 export const domainVerificationLinkPath = '/auth/verify-domain'
 const verificationLifetime = '24 hours'
-const installHostClaimLifetime = '24 hours'
 const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
 export const ssoProviderOf = async (
@@ -336,12 +336,7 @@ export const createFirstWorkspace = async (
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)
       values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
-    if (installHostToken)
-      await sql`
-        insert into runtime_hosts (workspace_id, id, name, claim_code_hash, claim_expires_at, status, running_runtimes,
-          created_by, created_at)
-        values (${workspaceId}, ${crypto.randomUUID()}, 'This machine', ${hashOf(installHostToken)},
-          now() + ${installHostClaimLifetime}::interval, 'waiting', 0, ${userId}, now())`
+    if (installHostToken) await addInstallHost(sql, { workspaceId, createdBy: userId, installHostToken })
     return { workspaceId, userId }
   })
 }
