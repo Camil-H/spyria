@@ -65,14 +65,15 @@ if (claimUrlArgument === 'login' || claimUrlArgument === 'logout') {
   tellRunningHostSignInsChanged()
   process.exit(0)
 }
-if (!claimUrlArgument) {
+const givenClaimUrl = claimUrlArgument || process.env.SPYRIA_HOST_CLAIM_URL
+if (!givenClaimUrl) {
   console.error(
-    `Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE> (the origin alone once paired), or spyria-host login|logout ${credentialsTools.join('|')}`,
+    `Usage: spyria-host [--personal] <https://spyria.example.com/h/CODE> (the origin alone once paired, or in SPYRIA_HOST_CLAIM_URL), or spyria-host login|logout ${credentialsTools.join('|')}`,
   )
   process.exit(2)
 }
 const telemetry = startTelemetry()
-const claimUrl = new URL(claimUrlArgument)
+const claimUrl = new URL(givenClaimUrl)
 const claimCode = claimUrl.pathname.match(/\/h\/([A-Za-z0-9]+)$/)?.[1]
 const socketUrl = new URL('/host', claimUrl)
 socketUrl.protocol = claimUrl.protocol === 'https:' ? 'wss:' : 'ws:'
