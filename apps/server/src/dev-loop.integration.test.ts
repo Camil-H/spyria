@@ -543,3 +543,53 @@ test('As a chat owner, a conflict with the base hands over at once when CI may n
   }, 60_000)
   expect((await loopOf(refused.id))?.step.outcome).toBe('The branch conflicts with main in src/app.ts: over to you')
 })
+
+test('As a chat owner whose pull request GitHub still says conflicts, the gates run again once after a clean update from the base, then hand over; an update the runtime refuses hands over at once', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]))).toEqual(succeeded)
+  await stack.agentHost('Stale conflict host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const markConflicting = (branch: string) => {
+    const pullRequest = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)
+    expect(pullRequest).toBeDefined()
+    if (pullRequest) pullRequest.isConflicting = true
+  }
+  const stale = await newDevChat()
+  await readyChat(stale.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 10', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(stale.id, 'Fix the totals')
+  await loopStateIs(stale.id, 'waiting_for_ci')
+  const firstHead = String((await loopOf(stale.id))?.step.pushedHead)
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: 'main',
+    files: { 'docs/totals.md': 'How totals add up\n' },
+    message: 'Document the totals',
+  })
+  markConflicting(stale.branch)
+  await loopStateIs(stale.id, 'stopped')
+  const pushedHead = (await loopOf(stale.id))?.step.pushedHead
+  expect(pushedHead).not.toBe(firstHead)
+  expect(pushedHead).toBe(fakeGitHub.branchHeadOf('acme/app', stale.branch))
+  expect(fakeGitHub.commitSubjectsOf('acme/app', 'main', stale.branch)).toEqual([])
+  expect((await loopOf(stale.id))?.step).toMatchObject({
+    rounds: [0, 0],
+    outcome:
+      'The branch conflicts with main and could not be updated from it (Already up to date with main): over to you',
+  })
+  expect(await loopPromptsOf(stale.id)).toEqual([])
+
+  expect(await setSetupCommands(alice, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
+    succeeded,
+  )
+  const dirty = await newDevChat()
+  await readyChat(dirty.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 11', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(dirty.id, 'Fix the totals')
+  await loopStateIs(dirty.id, 'waiting_for_ci')
+  markConflicting(dirty.branch)
+  await loopStateIs(dirty.id, 'stopped')
+  expect((await loopOf(dirty.id))?.step.outcome).toBe(
+    'The branch conflicts with main and could not be updated from it (Commit the uncommitted changes before updating from base): over to you',
+  )
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+})
