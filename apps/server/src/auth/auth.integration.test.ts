@@ -93,7 +93,7 @@ const sessionsOf = async (cookie: string, server = app) =>
   (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
     userId?: string
     sessions: { workspaceId: string; token: string; expiresAt: number }[]
-    deployment: string
+    deployment?: string
     version?: string
     hostImage?: string
   }
@@ -296,9 +296,11 @@ test('a new session for another workspace needs a bearer token of a member of bo
   expect((await queryWith(((await opened.json()) as { token: string }).token)).status).toBe(200)
 })
 
-test('Bob signed in through the IdP has a session in Acme only', async () => {
-  const { sessions } = await sessionsOf((await signInAs('bob@example.com')).cookie)
+test('Bob signed in through the IdP has a session in Acme only and learns the release; without a session, no release is told', async () => {
+  const { sessions, deployment, version } = await sessionsOf((await signInAs('bob@example.com')).cookie)
   expect(sessions.map((session) => session.workspaceId)).toEqual([acme])
+  expect({ deployment, version }).toEqual({ deployment: 'spyria', version: 'dev' })
+  expect(await sessionsOf('')).toEqual({ sessions: [] })
 })
 
 test('without test hooks the app ignores the spyria_test cookie, the test routes and database claims', async () => {
@@ -306,7 +308,7 @@ test('without test hooks the app ignores the spyria_test cookie, the test routes
   if (!aliceInOther) throw new Error('missing session')
   const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: otherDatabase.name, user: 'member-alice', tokenSeconds: 1 }))}`
   const cookie = `${testCookie}; spyria_s_${acme}=${aliceInOther.sessionId}`
-  expect(await sessionsOf(cookie)).toEqual({ sessions: [], deployment: 'spyria', version: 'dev' })
+  expect(await sessionsOf(cookie)).toEqual({ sessions: [] })
   const login = await startLogin()
   const loginWithTestCookie = await app.request('/auth/login', { headers: { cookie: testCookie } })
   expect(loginWithTestCookie.status).toBe(302)

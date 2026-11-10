@@ -61,7 +61,6 @@ const hostSessionFrame = z.discriminatedUnion('type', [
       limitsEnforced: z.boolean(),
     }),
     personal: z.optional(z.boolean()),
-    relayVersion: z.optional(z.int().check(z.positive())),
     hostVersion: z.optional(boundedText(64)),
     protocolVersion: z.optional(z.int().check(z.nonnegative())),
     signedIn,

@@ -204,7 +204,7 @@ A host that reaches Spyria only through an HTTP proxy takes it from `HTTPS_PROXY
 
 ### Relay limits
 
-A host relays each HTTP call between the server and a runtime in base64 chunks of 256 KiB, so a body travels unchanged whatever its bytes, up to 256 MiB instead of the 64 MiB of one frame. A runtime's event stream gets 1 MiB of credit: the host sends that much ahead of the server's acknowledgements, holds the rest, and closes only that stream once it holds more than 8 MiB. A host older than these limits declares no relay version; the server then sends it each body in one frame of at most 64 MiB, and the host closes a stream when it buffers more than 16 MiB.
+A host relays each HTTP call between the server and a runtime in base64 chunks of 256 KiB, so a body travels unchanged whatever its bytes, up to 256 MiB instead of the 64 MiB of one frame. A runtime's event stream gets 1 MiB of credit: the host sends that much ahead of the server's acknowledgements, holds the rest, and closes only that stream once it holds more than 8 MiB. A host too old for this relay is below the minimum protocol: the server refuses it with the command that updates it, rather than speaking its older relay.
 
 ### Egress
 

@@ -33,7 +33,6 @@ type Connection = {
     handlers: HostSessionHandlers
     database?: Database
     gatewayUrl: string
-    relayVersion: number
   }
   missedPings: number
   identifying: PromiseWithResolvers<void>
@@ -54,8 +53,6 @@ const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 export const maximumFrameBytes = 64 * 1024 * 1024
-const chunkedRelayVersion = 2
-const packageCacheRelayVersion = 3
 const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const streamCreditBytes = 1024 * 1024
@@ -73,8 +70,6 @@ const bodyFramesOf = (sid: number, body: string) => {
     frames.push({ type: 'http_body', sid, data: bytes.subarray(offset, offset + relayChunkBytes).toString('base64') })
   return [...frames, { type: 'http_end', sid }]
 }
-
-const speaksChunkedRelay = (connection: Connection) => (connection.identified?.relayVersion ?? 1) >= chunkedRelayVersion
 
 const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {
@@ -182,7 +177,6 @@ export const createRuntimeHostGateway = ({
             token: frame.token,
             handlers,
             gatewayUrl: frame.gatewayUrl ?? defaultGatewayRelayUrl,
-            relayVersion: frame.relayVersion ?? 1,
           }
           connectionByHost.set(keyOf(identifiedHost), connection)
           if (replaced !== connection)
@@ -249,7 +243,6 @@ export const createRuntimeHostGateway = ({
   }
 
   const acknowledgeStream = (connection: Connection, sid: number, data: string) => {
-    if (!speaksChunkedRelay(connection)) return
     const received = (connection.receivedStreamBytes.get(sid) ?? 0) + Buffer.byteLength(data)
     if (received < streamCreditBytes / 2) return void connection.receivedStreamBytes.set(sid, received)
     connection.receivedStreamBytes.set(sid, 0)
@@ -391,13 +384,11 @@ export const createRuntimeHostGateway = ({
   const createWith =
     (op: 'create' | 'recreate'): SandboxProvider['create'] =>
     async ({ image, packageCache, ...sandbox }) => {
-      const hasPackageCache = (connectionOf(sandbox).identified?.relayVersion ?? 1) >= packageCacheRelayVersion
       await command(sandbox, op, {
         runtimeId: sandbox.runtimeId,
         image,
         apiKey: apiKeyOf(sandbox),
-        ...(packageCache &&
-          hasPackageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
+        ...(packageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
       })
     }
   const sandboxProvider: SandboxProvider = {
@@ -416,18 +407,25 @@ export const createRuntimeHostGateway = ({
     connect: (sandbox) => ({
       gatewayUrl: connectionByHost.get(keyOf(sandbox))?.identified?.gatewayUrl ?? defaultGatewayRelayUrl,
       fetch: async ({ body: requestBody, ...sandboxRequest }) => {
-        const isChunked = speaksChunkedRelay(connectionOf(sandbox))
-        const { status, headers, body } = isChunked
-          ? await request(sandbox, { type: 'http', ...sandboxRequest, chunked: true }, undefined, requestBody ?? '')
-          : await request(sandbox, { type: 'http', ...sandboxRequest, body: requestBody })
+        const { status, headers, body } = await request(
+          sandbox,
+          { type: 'http', ...sandboxRequest, chunked: true },
+          undefined,
+          requestBody ?? '',
+        )
         return { status, headers, body } as SandboxResponse
       },
       openSocket: (path, listener) => {
         const connection = connectionOf(sandbox)
         const sid = nextRequestId++
         connection.streams.set(sid, listener)
-        const credit = speaksChunkedRelay(connection) ? { creditBytes: streamCreditBytes } : {}
-        sendTo(connection, { type: 'ws_connect', sid, runtimeId: sandbox.runtimeId, path, ...credit })
+        sendTo(connection, {
+          type: 'ws_connect',
+          sid,
+          runtimeId: sandbox.runtimeId,
+          path,
+          creditBytes: streamCreditBytes,
+        })
         return {
           send: (data) => sendTo(connection, { type: 'ws_msg', sid, data }),
           close: () => {
