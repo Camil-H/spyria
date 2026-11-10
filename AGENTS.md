@@ -58,7 +58,7 @@ bun run check:locks     # after any dependency change; reinstall where it names 
 bun run test
 ```
 
-Integration, e2e and docker tests need Postgres, Zero and Docker. Where they are available, run `bun run check:related`, plus `bun run check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers) and `bun run check:docker` for the host, the agent or the images. In a Spyria runtime they are not available: write the tests anyway and say in the description which ones you could not run.
+Integration, e2e and docker tests need Postgres, Zero and Docker. Where they are available, run `bun run check:related`, plus `bun run check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers) and `bun run check:docker` for the host, the agent, the images or the backups. In a Spyria runtime they are not available: write the tests anyway and say in the description which ones you could not run.
 
 Never get a check to pass by making it check less: no skipped or loosened tests, no `biome-ignore` to silence a real finding, no new boundary exceptions, no hand-edited lockfiles. If a check fails on code your change did not touch, say so rather than fixing it.
 

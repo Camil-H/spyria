@@ -44,7 +44,7 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 ### Before a pull request
 
-Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent or the images.
+Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent, the images or the backups.
 
 ### How `check:related` chooses
 
@@ -71,7 +71,7 @@ It prints what it selected and why. It runs a whole suite when it cannot decide:
 - `apps/server/src/testing/integration-setup.ts` runs every integration test;
 - app code outside the table (`kernel`, `db`, `ui`, `session`, `workspace`, `apps/web/src`, the rest of `apps/server/src`), a web asset such as a stylesheet, or an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
 
-Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts) and `check:bundle` (the web app and the packages).
+Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts, and the backup code of `spyria` with `deploy/compose.prod.yml`) and `check:bundle` (the web app and the packages).
 
 With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker` and `bundle` are booleans.
 
@@ -92,7 +92,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 | `bundle` | when the web app or a package changed | always |
 | `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |
 | `e2e-repeat` | the changed specs, 3 times each, without retry | not run |
-| `docker` | `check:docker` when the host, the agent, `infra` or the images changed | always |
+| `docker` | `check:docker` when the host, the agent, `infra`, the images or the backups changed | always |
 | `tofu` | `check:tofu` when `deploy/tofu`, `deploy/bifrost.json` or the script changed | always |
 | `ci-ok` | fails when any job failed or was cancelled; skipped jobs pass | the same |
 | `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
