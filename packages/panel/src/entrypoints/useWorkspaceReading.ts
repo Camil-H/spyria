@@ -1,30 +1,40 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
-import { usePanelCommands } from './providers.tsx'
+import { usePanelCommands, useWorkspaceReadings } from './providers.tsx'
+
+const failedReading: WorkspaceReading = { isLive: false }
 
 export const useWorkspaceReading = (workspaceId: WorkspaceId, chatId: ChatId, read: WorkspaceRead, path = '') => {
   const { refreshKey } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { readWorkspace } = usePanelCommands()
-  const [refreshCount, setRefreshCount] = useState(0)
-  const [reading, setReading] = useState<{ version: string; value: WorkspaceReading }>()
-  const version = `${refreshKey}|${refreshCount}`
+  const readings = useWorkspaceReadings()
+  const key = JSON.stringify([workspaceId, chatId, read, path])
+  const kept = useSyncExternalStore(readings.subscribe, () => readings.keptOf(key))
+  const refreshCount = useSyncExternalStore(readings.subscribe, () => readings.refreshCountOf(key))
+  const [failedRead, setFailedRead] = useState<string>()
+  const [opening] = useState(() => crypto.randomUUID())
+  const version = `${refreshKey}|${refreshCount}|${opening}`
+  const isFailed = failedRead === `${key}|${version}`
+  const isCurrent = isFailed || kept?.version === version
+  useEffect(() => readings.watch(key), [readings, key])
   useEffect(() => {
-    let isCurrent = true
+    if (isCurrent) return
+    let isWanted = true
     void readWorkspace({ workspaceId, chatId, read, path }).then(
-      (value) => isCurrent && setReading({ version, value }),
-      () => isCurrent && setReading({ version, value: { isLive: false } }),
+      (value) => isWanted && readings.keep(key, { version, value }),
+      () => isWanted && setFailedRead(`${key}|${version}`),
     )
     return () => {
-      isCurrent = false
+      isWanted = false
     }
-  }, [readWorkspace, workspaceId, chatId, read, path, version])
+  }, [readWorkspace, readings, key, workspaceId, chatId, read, path, version, isCurrent])
   return {
-    reading: reading?.value,
-    readingVersion: reading?.version,
-    isLoading: reading?.version !== version,
-    refresh: () => setRefreshCount(refreshCount + 1),
+    reading: isFailed ? failedReading : kept?.value,
+    readingVersion: isFailed ? version : kept?.version,
+    isLoading: !isCurrent,
+    refresh: () => readings.refresh(key),
   }
 }

@@ -107,6 +107,7 @@ import {
   workspaceMutators,
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
+import { compress } from 'hono/compress'
 import { HTTPException } from 'hono/http-exception'
 import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
@@ -564,7 +565,7 @@ export const createApp = ({
         .answerQuestion({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId, questionId, answer)
       return new Response(null, { status })
     })
-    .get(chatWorkspacePathOf(':chatId', ':read'), async (context) => {
+    .get(chatWorkspacePathOf(':chatId', ':read'), compress(), async (context) => {
       const read = context.req.param('read') ?? ''
       if (!isWorkspaceRead(read)) return context.json({ error: 'invalid_read' }, 400)
       const { workspaceId, userId } = context.get('zeroContext')

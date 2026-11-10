@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import {
   branchStatusOf,
   branchStatusPartsOf,
+  changedFilesOf,
   changeGroupsOf,
   changeMarkOf,
   codeFenceOf,
@@ -160,15 +161,24 @@ test('changes split into the files not staged, the files staged but not committe
   ])
 })
 
-test('changes from a snapshot taken before the split read as one untitled group, cut when the snapshot was', () => {
-  const older = { isLive: false, patch, log: '', truncated: true }
-  expect(changeGroupsOf(older, older)).toEqual([{ title: '', changes: fileChangesOf(patch), isCut: true }])
-  expect(changeGroupsOf({ isLive: true, unstaged: '', staged: '', patch: '' }, undefined)).toEqual([])
-  expect(changeGroupsOf(undefined, undefined)).toEqual([])
+test('changes show no group until both the changes and the commits are read', () => {
+  expect(changeGroupsOf({ isLive: true, unstaged: patch, staged: '' }, undefined)).toEqual([])
+  expect(changeGroupsOf(undefined, { isLive: true, commitPatches: '', log: '' })).toEqual([])
+})
+
+test('changed files read from the status and path pairs against the base, a type change as modified', () => {
+  expect(changedFilesOf('M\0README.md\0A\0src/new.ts\0D\0old.txt\0T\0link\0')).toEqual([
+    { path: 'README.md', status: 'Modified' },
+    { path: 'src/new.ts', status: 'Added' },
+    { path: 'old.txt', status: 'Deleted' },
+    { path: 'link', status: 'Modified' },
+  ])
+  expect(changedFilesOf('')).toEqual([])
+  expect(changedFilesOf(undefined)).toEqual([])
 })
 
 test('tree entries are marked by their change, folders when they contain one', () => {
-  const changes = fileChangesOf(patch)
+  const changes = changedFilesOf('A\0src/new.ts\0M\0README.md\0')
   const entries = treeEntriesOf({
     isLive: true,
     entries: [

@@ -120,7 +120,7 @@ const expectedFor = (viewerId: MemberId, workspaceIds: readonly WorkspaceId[]) =
   normalized(visibleTo(createMockSnapshot(), viewerId, workspaceIds))
 type ZeroStore = Awaited<ReturnType<typeof openZeroStore<ReturnType<typeof createZeroStore>>>>
 const chatQueries = (chatId: string): [ScopedQueryName, Record<string, string | number>][] => [
-  ['chatMessages', { chatId, limit: 1000 }],
+  ['chatMessages', { chatId, limit: 1000, since: 0 }],
   ['chatPinnedSteps', { chatId }],
   ['chatBrowserPages', { chatId }],
   ['chatUsage', { chatId }],

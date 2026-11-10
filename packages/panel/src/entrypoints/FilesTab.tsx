@@ -3,10 +3,10 @@ import { focusRing } from '@spyria/ui'
 import { ArrowLeft, ChevronDown, ChevronRight, FolderTree } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import {
+  type ChangedFile,
+  changedFilesOf,
   changeMarkOf,
   codeFenceOf,
-  type FileChange,
-  fileChangesOf,
   type TreeEntry,
   treeEntriesOf,
 } from '../domain/workspace.ts'
@@ -19,7 +19,7 @@ import { WorkspaceStatus } from './WorkspaceStatus.tsx'
 type TreeProps = {
   workspaceId: WorkspaceId
   chatId: ChatId
-  changes: readonly FileChange[]
+  changes: readonly ChangedFile[]
   onOpen: (path: string) => void
 }
 
@@ -102,7 +102,7 @@ export const FilesTab = (props: TabProps) => {
   const { workspaceId, chatId } = props
   const [openedPath, setOpenedPath] = useState<string | null>(null)
   const { reading } = useWorkspaceReading(workspaceId, chatId, 'changes')
-  const changes = fileChangesOf(reading?.patch)
+  const changes = changedFilesOf(reading?.files)
   return (
     <>
       <WorkspaceStatus workspaceId={workspaceId} chatId={chatId} />

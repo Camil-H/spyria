@@ -17,6 +17,7 @@ type ZeroRows = { [Table in TableName]: readonly Row<Schema['tables'][Table]>[] 
 type SourceRows = Partial<Record<string, readonly object[]>>
 export const scopedQueryNames = [
   'chatMessages',
+  'chatEarlierRoot',
   'chatPinnedSteps',
   'chatBrowserPages',
   'chatUsage',
