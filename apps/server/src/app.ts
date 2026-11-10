@@ -154,7 +154,7 @@ import { contextOf, withSpan } from './telemetry.ts'
 import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
-import { createZeroForwarding, zeroPathPrefix } from './zero-forwarding.ts'
+import { createZeroForwarding, isWebSocketUpgrade, zeroPathPrefix } from './zero-forwarding.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -403,7 +403,11 @@ export const createApp = ({
       const failing = checks.flatMap(([name], index) => (passed[index] ? [] : [name]))
       return failing.length === 0 ? context.json({ status: 'ok' }) : context.json({ status: 'degraded', failing }, 503)
     })
-    .all(`${zeroPathPrefix}/*`, zeroUrl ? createZeroForwarding(zeroUrl) : (context) => context.notFound())
+    .all(
+      `${zeroPathPrefix}/*`,
+      (context, next) => (isWebSocketUpgrade(context) ? rateLimited('zeroConnections')(context, next) : next()),
+      zeroUrl ? createZeroForwarding(zeroUrl) : (context) => context.notFound(),
+    )
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
