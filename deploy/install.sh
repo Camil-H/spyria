@@ -57,10 +57,13 @@ trap 'rm -rf "$work"' EXIT
 curl -fsSL "$download_base/$release_path/$binary" -o "$work/$binary"
 curl -fsSL "$download_base/$release_path/spyria-checksums.txt" -o "$work/checksums.txt"
 if command -v cosign >/dev/null 2>&1; then
-  curl -fsSL "$download_base/$release_path/spyria-checksums.txt.sigstore.json" -o "$work/checksums.sigstore.json"
-  cosign verify-blob "$work/checksums.txt" --bundle "$work/checksums.sigstore.json" \
-    --certificate-identity-regexp "$signer" --certificate-oidc-issuer "$signer_issuer" >/dev/null 2>&1 ||
-    fail "the checksums of this release are not signed by its Publish workflow"
+  curl -fsSL "$download_base/$release_path/spyria-checksums.txt.sigstore.json" -o "$work/checksums.sigstore.json" ||
+    fail "the release publishes no signature of its checksums (spyria-checksums.txt.sigstore.json)"
+  if ! verification=$(cosign verify-blob "$work/checksums.txt" --bundle "$work/checksums.sigstore.json" \
+    --certificate-identity-regexp "$signer" --certificate-oidc-issuer "$signer_issuer" 2>&1); then
+    echo "$verification" >&2
+    fail "cosign could not verify that the Publish workflow of $repository signed the checksums of this release"
+  fi
 elif [ "${SPYRIA_REQUIRE_SIGNATURE:-}" = 1 ]; then
   fail "cosign is missing, and SPYRIA_REQUIRE_SIGNATURE=1 asks for the signature to be checked: install cosign (https://docs.sigstore.dev/cosign/system_config/installation/), then run this again."
 else
