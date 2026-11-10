@@ -15,7 +15,8 @@ export const useWorkspaceReading = (workspaceId: WorkspaceId, chatId: ChatId, re
   const kept = useSyncExternalStore(readings.subscribe, () => readings.keptOf(key))
   const refreshCount = useSyncExternalStore(readings.subscribe, () => readings.refreshCountOf(key))
   const [failedRead, setFailedRead] = useState<string>()
-  const version = `${refreshKey}|${refreshCount}`
+  const [opening] = useState(() => crypto.randomUUID())
+  const version = `${refreshKey}|${refreshCount}|${opening}`
   const isFailed = failedRead === `${key}|${version}`
   const isCurrent = isFailed || kept?.version === version
   useEffect(() => readings.watch(key), [readings, key])
