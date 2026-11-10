@@ -138,19 +138,6 @@ test.describe('Messaging', () => {
       expect(welcomeCounts).toHaveLength(1)
     })
 
-    await test.step('opens on the last week of messages and loads the older ones when scrolling up', async () => {
-      await workerStack.database.$client`
-        update messages set created_at = timestamptz '2026-09-01T00:00:00Z'
-        where workspace_id = 'workspace-acme' and id in ('message-welcome-1', 'message-welcome-2')`
-      await openChat(page, 'Standup')
-      await openChat(page, 'Welcome')
-      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
-      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
-      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
-    })
-
     await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {
       const goToLastMessage = mainOf(page).getByRole('button', { name: 'Go to last message' })
       await expect(goToLastMessage).toHaveCount(0)
@@ -190,6 +177,40 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
       await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
     })
+  })
+
+  test('As a member, I open a chat on its last week of messages and load the older ones when scrolling up', async ({
+    page,
+    workerStack,
+  }) => {
+    await workerStack.database.$client.begin(async (sql) => {
+      await sql`select 1 from chats where id = 'chat-standup' for update`
+      await sql`
+        with posted_messages as (
+          select 'standup-older-' || number as id, 'Last month ' || number as body,
+            timestamptz '2026-09-01T00:00:00Z' + number * interval '1 minute' as created_at, number
+          from generate_series(1, 2) as number
+          union all
+          select 'standup-recent-' || number, 'This week ' || number, now(), 2 + number
+          from generate_series(1, 30) as number
+        ), numbered as (
+          select *, (select max(seq) from events where chat_id = 'chat-standup') + number as seq from posted_messages
+        ), posted as (
+          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+          select 'workspace-acme', 'chat-standup', id, seq, 'message.posted', 'member-alice',
+            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), created_at
+          from numbered
+        )
+        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+        select 'workspace-acme', 'chat-standup', id, seq, 'member', 'member-alice', body, created_at from numbered`
+    })
+    await openChat(page, 'Standup')
+    await expect(messageContaining(page, 'This week 30')).toBeInViewport()
+    await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
+    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
+    await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
+    await expect(messageContaining(page, 'Last month 1')).toHaveCount(1)
+    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
   })
 
   test('As a member, a message refused for sending too fast shows why and I resend it', {
