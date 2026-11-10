@@ -440,3 +440,106 @@ test('As a chat owner, the quality gates card shows each command of a group pass
     outcome: 'Broken failed: over to you',
   })
 })
+
+const moveMainTotals = (total: number) =>
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: 'main',
+    files: { 'src/app.ts': `export const total = ${total}\nexport const total = ${total + 1}\n` },
+    message: `Move the totals to ${total}`,
+  })
+const loopPromptBodiesOf = async (id: ChatId) =>
+  (
+    await database.$client`select body from messages where chat_id = ${id} and step->>'type' = 'dev_loop_prompt' order by seq`
+  ).map(({ body }) => String(body))
+
+test('As a chat owner whose base moved under the branch, the quality gates send the conflicting files to the agent instead of waiting for CI, then run again once it merges the base', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]))).toEqual(succeeded)
+  await stack.agentHost('Conflicting branch host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id, branch } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({
+    steps: [committing('export const total = 3', 'Change the totals'), finish],
+    text: 'Done.',
+    whenPrompted: [
+      {
+        includes: 'The branch conflicts with main',
+        script: {
+          steps: [
+            { tool: 'fetch_branch', arguments: { branch: 'main' } },
+            {
+              command: "git -c user.name=Pi -c user.email=pi@example.com merge -q -X ours origin/main -m 'Merge main'",
+            },
+            finish,
+          ],
+          text: 'Merged main.',
+        },
+      },
+    ],
+  })
+
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'waiting_for_ci')
+  const firstHead = String((await loopOf(id))?.step.pushedHead)
+  const movedMain = moveMainTotals(2)
+  await waitFor(async () => (await loopPromptsOf(id)).some(({ phase }) => phase === 'ci'), 60_000)
+  const [conflictPrompt] = await loopPromptBodiesOf(id)
+  expect(conflictPrompt).toStartWith(
+    'The branch conflicts with main, so CI cannot run on the pull request (attempt 1 of 1). Call fetch_branch for main, merge origin/main into the branch (do not rebase), resolve the conflicts, commit, then call finish_work again.',
+  )
+  expect(conflictPrompt).toEndWith('```\nsrc/app.ts\n```')
+
+  await waitFor(async () => {
+    const step = (await loopOf(id))?.step
+    return step?.state === 'waiting_for_ci' && step.pushedHead !== firstHead
+  }, 60_000)
+  const mergedHead = fakeGitHub.branchHeadOf('acme/app', branch)
+  expect((await loopOf(id))?.step.pushedHead).toBe(mergedHead)
+  pushCheckRun(mergedHead, 'unit', 'success')
+  await loopStateIs(id, 'done')
+  const number = fakeGitHub.pullRequests.at(-1)?.number
+  expect((await loopOf(id))?.step).toMatchObject({
+    rounds: [0, 1],
+    outcome: `Ready for your review on pull request #${number}: CI passed`,
+  })
+  expect((await loopPromptsOf(id)).map(({ phase }) => phase)).toEqual(['ci'])
+  expect(fakeGitHub.branchHeadOf('acme/app', 'main')).toBe(movedMain)
+  expect(fakeGitHub.commitSubjectsOf('acme/app', 'main', branch)).toEqual([])
+})
+
+test('As a chat owner, a conflict with the base hands over at once when CI may not be fixed, and when a refused push leaves the open pull request conflicting', async () => {
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 0 }]))).toEqual(succeeded)
+  await stack.agentHost('Strict conflicts host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const strict = await newDevChat()
+  await readyChat(strict.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 7', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(strict.id, 'Fix the totals')
+  await loopStateIs(strict.id, 'waiting_for_ci')
+  moveMainTotals(4)
+  await loopStateIs(strict.id, 'stopped')
+  expect((await loopOf(strict.id))?.step.outcome).toBe('The branch conflicts with main in src/app.ts: over to you')
+  expect(await loopPromptsOf(strict.id)).toEqual([])
+  expect(await noticesOf(strict.id)).toContain('The branch conflicts with main in src/app.ts: over to you')
+
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }]))).toEqual(succeeded)
+  const refused = await newDevChat()
+  await readyChat(refused.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 8', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(refused.id, 'Fix the totals')
+  await loopStateIs(refused.id, 'done')
+  const firstLoop = (await loopOf(refused.id))?.step.startPromptId
+  moveMainTotals(6)
+  fakeGitHub.refusePushesTo('acme/app', refused.branch)
+  stack.setFakeLlmScript({
+    steps: [committing('export const total = 9', 'Change the totals again'), finish],
+    text: 'Done.',
+  })
+  await stack.prompt(refused.id, 'Change the totals again')
+  await waitFor(async () => {
+    const step = (await loopOf(refused.id))?.step
+    return step?.startPromptId !== firstLoop && step?.state === 'stopped'
+  }, 60_000)
+  expect((await loopOf(refused.id))?.step.outcome).toBe('The branch conflicts with main in src/app.ts: over to you')
+})

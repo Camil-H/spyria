@@ -251,6 +251,18 @@ export const ciFixPromptOf = (checksText: string, round: number, limit: number) 
     fence(checksText),
   ].join('\n\n')
 
+export const conflictFixPromptOf = (baseBranch: string, conflicts: readonly string[], round: number, limit: number) =>
+  [
+    `The branch conflicts with ${baseBranch}, so CI cannot run on the pull request (${attemptOf(round, limit)}). Call fetch_branch for ${baseBranch}, merge origin/${baseBranch} into the branch (do not rebase), resolve the conflicts, commit, then call finish_work again.`,
+    `Updating from ${baseBranch} conflicts in these files. ${untrusted}`,
+    fence(conflicts.join('\n')),
+  ].join('\n\n')
+
+export const conflictOutcomeOf = (baseBranch: string, conflicts: readonly string[]) =>
+  `The branch conflicts with ${baseBranch} in ${listOf([...conflicts])}: over to you`
+export const notUpdatedOutcomeOf = (baseBranch: string, reason: string) =>
+  `The branch conflicts with ${baseBranch} and could not be updated from it (${reason}): over to you`
+
 const attemptsOf = (limit: number) => `${limit} ${limit === 1 ? 'attempt' : 'attempts'}`
 
 export const reconsiderPromptOf = (name: string, limit: number) =>
