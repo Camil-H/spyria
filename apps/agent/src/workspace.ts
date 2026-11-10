@@ -123,19 +123,19 @@ const cutPartsOf = (parts: Record<string, { isCut: boolean }>) =>
 
 export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
   const mergeBase = await mergeBaseOf(root, base, env)
-  if (!mergeBase) return { patch: '', unstaged: '', staged: '', truncated: false, cut: [] }
+  if (!mergeBase) return { files: '', unstaged: '', staged: '', truncated: false, cut: [] }
   const index = join(tmpdir(), `spyria-index-${crypto.randomUUID()}`)
   try {
     await copyFile(join(root, '.git', 'index'), index).catch(() => undefined)
     const indexEnvironment = { ...env, GIT_INDEX_FILE: index }
     await git(root, ['add', '--ignore-removal', '--intent-to-add', '.'], indexEnvironment)
-    const [patch, unstaged, staged] = await Promise.all([
-      cappedGit(root, ['diff', '--no-renames', '--no-color', mergeBase], indexEnvironment),
+    const [files, unstaged, staged] = await Promise.all([
+      cappedGit(root, ['diff', '--name-status', '--no-renames', '-z', mergeBase], indexEnvironment),
       cappedGit(root, ['diff', '--no-renames', '--no-color'], indexEnvironment),
       cappedGit(root, ['diff', '--cached', '--no-renames', '--no-color', 'HEAD'], env),
     ])
-    const cut = cutPartsOf({ patch, unstaged, staged })
-    return { patch: patch.text, unstaged: unstaged.text, staged: staged.text, truncated: cut.length > 0, cut }
+    const cut = cutPartsOf({ files, unstaged, staged })
+    return { files: files.text, unstaged: unstaged.text, staged: staged.text, truncated: cut.length > 0, cut }
   } finally {
     await rm(index, { force: true })
   }
