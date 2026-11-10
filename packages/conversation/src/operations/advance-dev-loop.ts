@@ -10,6 +10,8 @@ import {
   ciQuietMilliseconds,
   ciVerdictOf,
   commandGroupAt,
+  conflictFixPromptOf,
+  conflictOutcomeOf,
   type DevLoopPromptStep,
   type DevLoopStep,
   devLoopJobTypes,
@@ -19,9 +21,11 @@ import {
   limitOutcomeOf,
   noCiOutcomeOf,
   notRunOutcome,
+  notUpdatedOutcomeOf,
   pausedOutcome,
   readyOutcomeOf,
   reconsiderPromptOf,
+  refusedPushOutcomeOf,
   restarted,
   reviewFixPromptOf,
   reviewRequestOf,
@@ -30,15 +34,19 @@ import {
   stopOutcomeOf,
   stopped,
   turnedOffOutcome,
+  unreadHeadOutcomeOf,
+  updateFailureOf,
   withFinishedChecks,
   withOutcomes,
 } from '../domain/dev-loop.ts'
 import { checkRunsTextOf } from '../domain/github-tools.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
+import { isOpenPullRequest } from '../domain/pull-requests.ts'
 import { agentWorkspacePathOf, runtimeHeadsOf } from '../domain/workspace-reads.ts'
 import { type AgentDependencies, appendNotice } from './agent-turn.ts'
 import { devLoopActor, type Loop, loopOf, saveLoop } from './dev-loop-turns.ts'
+import { runGitAction } from './git-actions.ts'
 import { publishBranch } from './publish-branch.ts'
 
 type Dependencies = Pick<
@@ -210,6 +218,55 @@ const startCommands = async (dependencies: Dependencies, job: LoopJob, loop: Loo
   })
 }
 
+const ciRunsOf = async ({ checkouts }: Dependencies, loop: Loop) =>
+  checkouts && loop.step.pullRequestNumber !== null
+    ? checkouts.checkRunsOf(chatOf(loop), loop.step.pullRequestNumber)
+    : undefined
+
+const isOpenPullRequestConflicting = async ({ transactor, checkouts }: Dependencies, loop: Loop) => {
+  const card = await transactor.run(({ messages }) => messages.pullRequestCard(loop.card.chatId))
+  const pullRequest = card?.step?.type === 'pull_request' && isOpenPullRequest(card.step) ? card.step : undefined
+  if (!checkouts || !pullRequest) return false
+  const checks = await checkouts.checkRunsOf(chatOf(loop), pullRequest.number).catch(() => undefined)
+  return checks?.isConflicting === true
+}
+
+const updateFromBase = (dependencies: Dependencies, loop: Loop, isLastAttempt: boolean) =>
+  runGitAction(dependencies, { chat: chatOf(loop), memberId: loop.ownerId, action: 'update', message: '' }).catch(
+    (error: unknown) => updateFailureOf(error, isLastAttempt),
+  )
+
+const resolveConflict = async (dependencies: Dependencies, job: LoopJob, loop: Loop, isLastAttempt: boolean) => {
+  const isStillWaiting = await withLoop(
+    dependencies,
+    job,
+    ['waiting_for_ci'],
+    async (_, current) => current.step.pushedHead === loop.step.pushedHead,
+  )
+  if (!isStillWaiting) return undefined
+  const updated = await updateFromBase(dependencies, loop, isLastAttempt)
+  const head = updated.isRefused ? null : await headOf(dependencies, loop, await endpointOfLoop(dependencies, loop))
+  return withLoop(dependencies, job, ['waiting_for_ci'], async (unitOfWork, current) => {
+    if (current.step.pushedHead !== loop.step.pushedHead) return undefined
+    const baseBranch = (await unitOfWork.chats.get(current.card.chatId)).baseBranch ?? ''
+    const { conflicts } = updated
+    if (!conflicts) {
+      if (!updated.isRefused && head === null)
+        return endLoop(unitOfWork, current, stopped(current.step, unreadHeadOutcomeOf(updated.text)))
+      if (!updated.isRefused && head !== current.step.pushedHead)
+        return moveOn(unitOfWork, current, restarted(current.step), 0)
+      return endLoop(unitOfWork, current, stopped(current.step, notUpdatedOutcomeOf(baseBranch, updated.text)))
+    }
+    const ci = current.step.pipeline.findIndex((config) => config.kind === 'ci')
+    const { kind, limit } = failedAt(current.step, [ci])
+    if (ci === -1 || kind === 'stop')
+      return endLoop(unitOfWork, current, stopped(current.step, conflictOutcomeOf(baseBranch, conflicts)))
+    return sendBack(unitOfWork, current, [ci], (rounds) =>
+      conflictFixPromptOf(baseBranch, conflicts, rounds[ci] ?? 1, limit),
+    )
+  })
+}
+
 const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => {
   const head = await headOf(dependencies, loop, await endpointOfLoop(dependencies, loop))
   if (head !== null && loop.step.checkedHead !== null && head !== loop.step.checkedHead)
@@ -222,7 +279,12 @@ const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => 
     action: 'pull_request',
     draft: loop.step.summary,
   })
+  const isConflicting = published.isRefused && (await isOpenPullRequestConflicting(dependencies, loop))
   return withLoop(dependencies, job, ['running'], async (unitOfWork, current) => {
+    if (isConflicting) {
+      const baseBranch = (await unitOfWork.chats.get(current.card.chatId)).baseBranch ?? ''
+      return endLoop(unitOfWork, current, stopped(current.step, refusedPushOutcomeOf(baseBranch, published.text)))
+    }
     if (published.isRefused) return endLoop(unitOfWork, current, stopped(current.step, published.text))
     const card = await unitOfWork.messages.pullRequestCard(current.card.chatId)
     const pullRequest = card?.step?.type === 'pull_request' ? card.step : undefined
@@ -340,16 +402,12 @@ export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) =
   return undefined
 }
 
-const ciRunsOf = async ({ checkouts }: Dependencies, loop: Loop) =>
-  checkouts && loop.step.pullRequestNumber !== null
-    ? checkouts.checkRunsOf(chatOf(loop), loop.step.pullRequestNumber)
-    : undefined
-
-export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob) => {
+export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob, isLastAttempt: boolean) => {
   const loop = await loopIn(dependencies, job)
   if (loop?.step.state !== 'waiting_for_ci') return undefined
   const checks = await ciRunsOf(dependencies, loop).catch(() => undefined)
   const isCurrent = checks !== undefined && checks.headSha === loop.step.pushedHead
+  if (isCurrent && checks.isConflicting) return resolveConflict(dependencies, job, loop, isLastAttempt)
   const verdict = isCurrent ? ciVerdictOf(checks.runs) : 'pending'
   const isQuiet = verdict === 'none' && Date.now() - (loop.step.publishedAt ?? 0) >= ciQuietMilliseconds
   const text = checks && checkRunsTextOf(loop.step.pullRequestNumber ?? 0, checks)

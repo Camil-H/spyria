@@ -119,6 +119,7 @@ test.skipIf(!hasImage)(
     expect(inspected.Config.User).toBe('10001:10001')
     expect(inspected.Config.Labels).toMatchObject({ 'spyria.managed': '1', 'spyria.runtime': 'docker-test' })
     expect(inspected.HostConfig).toMatchObject({
+      Init: true,
       NetworkMode: `${containerName}-net`,
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
@@ -169,6 +170,14 @@ test.skipIf(!hasImage)(
     expect((await rejectionOf(transport.fetch({ method: 'GET', path: '@169.254.169.254/' }))).message).toContain(
       'refused',
     )
+    const zombies = dockerText(
+      'exec',
+      containerName,
+      'sh',
+      '-c',
+      '(sleep 0.2 &); sleep 1; grep -l "^State:[[:space:]]*Z" /proc/[0-9]*/status || true',
+    )
+    expect(zombies).toBe('')
 
     await provider.stop(runtime)
     expect(await provider.status(runtime)).toBe('stopped')
