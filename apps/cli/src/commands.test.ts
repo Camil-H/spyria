@@ -34,6 +34,7 @@ case "$*" in
     printf 'dump' ;;
   *sso:sign-in-app*) cat > "$FAKE_DOCKER/stdin" ;;
   *has-workspace*) cat "$FAKE_DOCKER/has-workspace" 2>/dev/null ;;
+  *pg_database*) cat "$FAKE_DOCKER/database-exists" 2>/dev/null ;;
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
@@ -88,6 +89,7 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
+  writeFileSync(join(fakeDocker, 'database-exists'), '1\n')
 })
 const calls = () =>
   existsSync(join(fakeDocker, 'calls')) ? readFileSync(join(fakeDocker, 'calls'), 'utf8').trim().split('\n') : []
@@ -168,6 +170,17 @@ test('spyria restore replaces a database only once confirmed, and backs it up as
   await restoreAnswering(false, ['--yes'])
   expect(questions).toHaveLength(2)
   expect(indexOfCall('dropdb')).toBeGreaterThan(indexOfCall('pg_dump'))
+})
+
+test('spyria restore brings back a database that no longer exists, with nothing to back up first', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  mkdirSync(join(install, 'backups'), { recursive: true })
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  rmSync(join(fakeDocker, 'database-exists'))
+  await restore(install, parseFlags(['restore', `backups/${restored}`, '--yes', '--folder', install]))
+  expect(calls().filter((call) => call.includes('pg_dump'))).toEqual([])
+  expect(indexOfCall('createdb')).toBeGreaterThan(-1)
+  expect(indexOfCall('pg_restore -U spyria -d spyria')).toBeGreaterThan(indexOfCall('createdb'))
 })
 
 test('spyria sign-in-app hands the trimmed secret to the operator command on standard input, never as an argument, and refuses an empty one', async () => {
