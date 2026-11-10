@@ -13,6 +13,7 @@ const claudeConfigSeenAtLaunch = (existingConfig?: string) => {
   const launched = Bun.spawnSync([...harnesses['claude-code'].launch], {
     env: { HOME: home, PATH: `${home}:${process.env.PATH}` },
   })
+  expect(launched.exitCode).toBe(0)
   return launched.stdout.toString()
 }
 
