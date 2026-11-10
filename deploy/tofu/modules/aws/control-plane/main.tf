@@ -5,9 +5,9 @@ data "aws_availability_zones" "available" {
 
 locals {
   sizes = {
-    small  = { cpu = 1024, memory = 2048, database_class = "db.t4g.small" }
-    medium = { cpu = 2048, memory = 4096, database_class = "db.t4g.medium" }
-    large  = { cpu = 4096, memory = 8192, database_class = "db.m7g.large" }
+    small  = { cpu = 1024, memory = 2048, database_class = "db.t4g.small", zero_cpu = 1024, zero_memory = 2048 }
+    medium = { cpu = 2048, memory = 4096, database_class = "db.t4g.medium", zero_cpu = 2048, zero_memory = 4096 }
+    large  = { cpu = 4096, memory = 8192, database_class = "db.m7g.large", zero_cpu = 4096, zero_memory = 8192 }
   }
   size        = local.sizes[var.size]
   zones       = slice(data.aws_availability_zones.available.names, 0, 2)
