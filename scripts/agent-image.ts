@@ -47,7 +47,7 @@ const fillTestHarnesses = (image: string) => {
   for (const harness of harnessIds)
     run([
       ...['docker', 'run', '--rm', '--user', '10001:10001', '--read-only', '--tmpfs', '/tmp'],
-      ...['--tmpfs', '/home/openhands:uid=10001,gid=10001,mode=0700'],
+      ...['--tmpfs', '/home/spyria:uid=10001,gid=10001,mode=0700'],
       ...['--mount', `type=volume,src=${testHarnessesVolume},dst=/harnesses`, '--entrypoint', 'sh', image],
       ...['-c', installScriptOf(harness, '')],
     ])

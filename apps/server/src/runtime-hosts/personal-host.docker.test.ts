@@ -106,7 +106,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   const [inspected] = JSON.parse(dockerText('inspect', containerName))
   expect(
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
-  ).toContainEqual([`${prefix}cred-claude-code`, '/home/openhands/.claude'])
+  ).toContainEqual([`${prefix}cred-claude-code`, '/home/spyria/.claude'])
   await gateway.sandboxProvider.start(runtime)
   const transport = gateway.sandboxProvider.connect(runtime)
   const isReady = () =>
@@ -170,11 +170,11 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   )
   expect(written.stderr.toString()).toBe('')
 
-  expect(dockerText('exec', containerName, 'cat', '/home/openhands/.claude/.credentials.json')).toBe(credentialsFile)
+  expect(dockerText('exec', containerName, 'cat', '/home/spyria/.claude/.credentials.json')).toBe(credentialsFile)
   const download = await rejectionOf(
     transport.fetch({
       method: 'GET',
-      path: '/api/file/download?path=/home/openhands/.claude/.credentials.json',
+      path: '/api/file/download?path=/home/spyria/.claude/.credentials.json',
       headers,
     }),
   )
@@ -184,7 +184,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
       method: 'POST',
       path: '/api/bash/execute_bash_command',
       headers,
-      body: JSON.stringify({ command: 'cat /home/openhands/.claude/.credentials.json' }),
+      body: JSON.stringify({ command: 'cat /home/spyria/.claude/.credentials.json' }),
     }),
   )
   expect(command.message).toContain('refused')

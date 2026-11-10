@@ -144,7 +144,7 @@ test.skipIf(!hasImage)(
       ),
     ).toEqual([
       `volume ${containerName}-ws /workspace`,
-      `volume ${containerName}-home /home/openhands`,
+      `volume ${containerName}-home /home/spyria`,
       `volume ${containerName}-tmp /tmp`,
     ])
 
