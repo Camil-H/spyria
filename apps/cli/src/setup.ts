@@ -4,6 +4,7 @@ import bifrostConfig from '../../../deploy/bifrost.json'
 import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
+  assertNoOtherProjectIn,
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
@@ -133,6 +134,7 @@ export const setup = async (
     ...flags,
     values: { ...flags.values, folder: asker.ask('folder', 'Install folder', installFolderOf(flags)) },
   })
+  assertNoOtherProjectIn(folder)
   mkdirSync(join(folder, 'backups'), { recursive: true })
   const existing = existsSync(environmentFileOf(folder)) ? readEnvironment(folder) : {}
   if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its secrets are kept.`)

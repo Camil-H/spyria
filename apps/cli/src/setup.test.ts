@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { installFolderOf, readEnvironment } from './commands.ts'
 import { parseEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
@@ -126,5 +127,30 @@ test('an unattended setup refuses what it cannot decide: no hostname, a new host
     ).toBe('--provider must be microsoft or okta or google or other or skip')
   } finally {
     rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test("setup refuses a folder holding another project's compose.yml or .env and leaves it as it was, and no command takes such a folder for an install", async () => {
+  const project = mkdtempSync(join(tmpdir(), 'other-project-'))
+  const theirCompose = 'services:\n  web:\n    image: nginx\n'
+  const theirEnvironment = 'POSTGRES_PASSWORD=theirs\n'
+  writeFileSync(join(project, 'compose.yml'), theirCompose)
+  writeFileSync(join(project, '.env'), theirEnvironment)
+  const originalDirectory = process.cwd()
+  try {
+    const refusal = await setup(
+      parseFlags(['setup', '--unattended', '--no-start', '--folder', project, '--hostname', 'spyria.example.com']),
+      { cloudflareApiUrl: cloudflare.url.origin, processEnvironment: {}, workspaceExistsIn: () => false },
+    ).catch((error: Error) => error.message)
+    expect(refusal).toBe(`The .env and compose.yml in ${project} are not Spyria's: choose another folder with --folder`)
+    expect(readdirSync(project).sort()).toEqual(['.env', 'compose.yml'])
+    expect(readFileSync(join(project, 'compose.yml'), 'utf8')).toBe(theirCompose)
+    expect(readFileSync(join(project, '.env'), 'utf8')).toBe(theirEnvironment)
+    expect(() => readEnvironment(project)).toThrow(`No Spyria install in ${project}`)
+    process.chdir(project)
+    expect(installFolderOf(parseFlags(['setup']))).toBe(join(homedir(), 'spyria'))
+  } finally {
+    process.chdir(originalDirectory)
+    rmSync(project, { recursive: true, force: true })
   }
 })
