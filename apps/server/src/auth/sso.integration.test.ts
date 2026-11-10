@@ -698,13 +698,14 @@ const countsOf = async () =>
       select (select count(*) from workspaces)::int as workspaces, (select count(*) from users)::int as users`
   )[0]
 
-test('sign-in routing, the sign-in callback, workspace creation and the verification link answer 429 with Retry-After past their budget per address', async () => {
+test('sign-in routing, the sign-in callback, workspace creation, setup link checks and the verification link answer 429 with Retry-After past their budget per address; the sign-in mode without a setup link stays open', async () => {
   const limitedApp = createApp({ database: emptyInstance.database, ...ssoSettings, rateLimits: rateBudgets })
   const requests = {
     emailRouting: () => limitedApp.request('/auth/login?email=pat@other.com'),
     signInCallback: () => limitedApp.request('/auth/callback?code=forged&state=forged'),
     firstWorkspace: () =>
       limitedApp.request('/auth/first-workspace', { method: 'POST', headers: { origin: 'https://elsewhere.example' } }),
+    setupToken: () => limitedApp.request('/auth/mode?setup=guessed'),
     verificationLink: () => limitedApp.request('/auth/verify-domain?token=forged'),
   }
   const logs = captureLogs()
@@ -720,6 +721,7 @@ test('sign-in routing, the sign-in callback, workspace creation and the verifica
       )
       expect(await refused.text()).toBe(`Too many requests: try again in ${retryAfter} seconds.`)
     }
+    expect((await limitedApp.request('/auth/mode')).status).toBe(200)
   } finally {
     logs.restore()
   }

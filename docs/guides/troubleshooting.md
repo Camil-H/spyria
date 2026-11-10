@@ -16,6 +16,7 @@ Start with `spyria doctor`: it checks Docker, each service and its healthcheck, 
 | `spyria setup` stops at the Cloudflare step | The API token lacks a permission: *Account > Cloudflare Tunnel > Edit*, *Zone > DNS > Edit* and *Zone > Zone > Read*, plus the Access and Email Routing ones for those steps (`spyria --help` lists them). |
 | Docker refuses `spyria setup` on Linux | Your user is not in the `docker` group: `sudo usermod -aG docker $(id -un)`, log out and back in. |
 | The first workspace's link says the deployment is being set up | The link lacks the setup token, or a workspace already exists: `spyria setup-link` prints it again while none exists. |
+| Sign-in says "Your provider did not confirm this address" | The provider sent no `email_verified: true` for the address. Through a generic OIDC provider, add a claim mapping that sends it ([who can join](./who-can-join.md)); through Google, the account is not a confirmed one. |
 | A runtime host shows **Update needed** and stays offline | Its protocol is older than the server's minimum: run the command its badge shows on that machine. |
 | On a cloud, the site answers `503` for a while after a restart | zero-cache rebuilds its replica from Postgres at each start; the server itself stays up (`/health/live`). |
 | On Azure, the hostname has no HTTPS | Run the `certificate_command` output once the DNS records exist ([cloud](./cloud.md)). |

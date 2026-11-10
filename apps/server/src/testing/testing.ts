@@ -862,7 +862,8 @@ const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export const fakeHostVersion = 'test'
-export const fakeHostProtocolVersion = 1
+export const fakeHostProtocolVersion = 2
+export const fakeAgentProtocolVersion = 1
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
@@ -877,8 +878,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       ownerId,
       signedIn = [],
       relayLimitMilliseconds,
-      relayVersion,
-      agentProtocolVersion = fakeHostProtocolVersion,
+      agentProtocolVersion = fakeAgentProtocolVersion,
     }: {
       memoryGibibytes?: number
       containerAgent?: ContainerAgent
@@ -886,7 +886,6 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       ownerId?: string
       signedIn?: string[]
       relayLimitMilliseconds?: number
-      relayVersion?: number
       agentProtocolVersion?: number
     } = {},
   ) => {
@@ -995,6 +994,41 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         socket = opened
         closed = new Promise((resolve) => opened.addEventListener('close', () => resolve()))
         const send = (frame: object) => opened.send(JSON.stringify(frame))
+        const incomingRequests = new Map<number, { request: HostFrame; parts: string[] }>()
+        const answerHttp = (request: HostFrame) => {
+          const container = containers.get(request.runtimeId ?? '')
+          const isReadyProbe = request.path === '/ready'
+          const isReady = isReadyProbe && container?.running && container.isBooted !== false
+          const answered =
+            container?.running && !isReadyProbe
+              ? Promise.resolve(
+                  containerAgent?.respond(request as Parameters<ContainerAgent['respond']>[0], container),
+                ).catch((error: Error) => ({ error: error.message }))
+              : undefined
+          const limited =
+            relayLimitMilliseconds === undefined
+              ? answered
+              : Promise.race([
+                  answered,
+                  Bun.sleep(relayLimitMilliseconds).then(() => ({ error: 'The operation timed out.' })),
+                ])
+          void Promise.resolve(limited).then((response) =>
+            send({
+              type: 'http_res',
+              sid: request.sid,
+              status: isReady ? 200 : 503,
+              headers: {},
+              body: isReady
+                ? JSON.stringify({
+                    status: 'ready',
+                    agentVersion: fakeHostVersion,
+                    protocolVersion: agentProtocolVersion,
+                  })
+                : '',
+              ...(response as object),
+            }),
+          )
+        }
         opened.onmessage = (message) => {
           receivedFrames.push(String(message.data))
           const frame = JSON.parse(String(message.data)) as HostFrame
@@ -1021,40 +1055,17 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
               }
             })
           }
-          if (frame.type === 'http') {
-            const isReadyProbe = frame.path === '/ready'
-            const isReady = isReadyProbe && container?.running && container.isBooted !== false
-            const answered =
-              container?.running && !isReadyProbe
-                ? Promise.resolve(
-                    containerAgent?.respond(frame as Parameters<ContainerAgent['respond']>[0], container),
-                  ).catch((error: Error) => ({ error: error.message }))
-                : undefined
-            const limited =
-              relayLimitMilliseconds === undefined
-                ? answered
-                : Promise.race([
-                    answered,
-                    Bun.sleep(relayLimitMilliseconds).then(() => ({ error: 'The operation timed out.' })),
-                  ])
-            void Promise.resolve(limited).then((response) =>
-              send({
-                type: 'http_res',
-                sid: frame.sid,
-                status: isReady ? 200 : 503,
-                headers: {},
-                body: isReady
-                  ? JSON.stringify({
-                      status: 'ready',
-                      agentVersion: fakeHostVersion,
-                      protocolVersion: agentProtocolVersion,
-                    })
-                  : '',
-                ...(response as object),
-              }),
-            )
-          }
           const sid = frame.sid ?? 0
+          if (frame.type === 'http') incomingRequests.set(sid, { request: frame, parts: [] })
+          if (frame.type === 'http_body') incomingRequests.get(sid)?.parts.push(frame.data ?? '')
+          const incoming = frame.type === 'http_end' ? incomingRequests.get(sid) : undefined
+          if (incoming) {
+            incomingRequests.delete(sid)
+            const body = Buffer.concat(incoming.parts.map((part) => Buffer.from(part, 'base64'))).toString('utf8')
+            const request = { ...incoming.request, body: body === '' ? undefined : body }
+            receivedFrames.push(JSON.stringify(request))
+            answerHttp(request)
+          }
           if (frame.type === 'ws_connect' && containerAgent && container?.running) {
             send({ type: 'ws_open', sid })
             streams.set(
@@ -1082,7 +1093,6 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           gatewayUrl: fakeHostGatewayUrl,
           hostVersion: fakeHostVersion,
           protocolVersion: fakeHostProtocolVersion,
-          ...(relayVersion && { relayVersion }),
           ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {
             cpus: 4,

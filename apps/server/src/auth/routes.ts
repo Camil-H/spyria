@@ -164,6 +164,9 @@ export const createAuthRoutes = ({
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     return popup(context, { status: 'signed_in' })
   }
+  const setupTokenLimited = rateLimited('setupToken')
+  const setupLinkLimited: MiddlewareHandler = (context, next) =>
+    context.req.query('setup') === undefined ? next() : setupTokenLimited(context, next)
   const sessionIdOf = (context: Context, workspaceId: string) =>
     getCookie(context, `${sessionCookiePrefix}${workspaceId}`) ?? ''
 
@@ -173,7 +176,7 @@ export const createAuthRoutes = ({
         return context.json({ error: 'forbidden' }, 403)
       await next()
     })
-    .get('/mode', async (context) => {
+    .get('/mode', setupLinkLimited, async (context) => {
       const isBeingSetUp = authMode === 'sso' && (await hasNoWorkspace(scopeOf(context).database.$client))
       return context.json({
         authMode,
@@ -284,6 +287,7 @@ export const createAuthRoutes = ({
       const liveSessions = await findLiveSessions(scope.database, sessionIdByWorkspace)
       const userId = liveSessions.toSorted((first, second) => +second.createdAt - +first.createdAt)[0]?.userId
       const sessions = await Promise.all(liveSessions.filter((session) => session.userId === userId).map(scope.issue))
+      if (!userId) return context.json({ sessions: [] })
       return context.json({ userId, sessions, deployment, version, hostImage })
     })
     .post('/renew', async (context) => {

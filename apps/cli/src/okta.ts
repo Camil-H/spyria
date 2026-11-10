@@ -1,5 +1,10 @@
 export class OktaRefused extends Error {}
 
+const loopbackHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+const carriesTokenSafely = ({ protocol, hostname }: URL) =>
+  protocol === 'https:' || (protocol === 'http:' && loopbackHostnames.has(hostname))
+
 export const registerOktaApp = async ({
   orgUrl,
   apiToken,
@@ -9,7 +14,10 @@ export const registerOktaApp = async ({
   apiToken: string
   origin: string
 }) => {
-  const org = new URL(orgUrl).origin.replace(/-admin(\.(?:okta|oktapreview)\.com)$/, '$1')
+  const orgAddress = new URL(orgUrl)
+  if (!carriesTokenSafely(orgAddress))
+    throw new OktaRefused('The Okta organization URL must start with https://, so the API token never travels in clear')
+  const org = orgAddress.origin.replace(/-admin(\.(?:okta|oktapreview)\.com)$/, '$1')
   const call = async <Result>(method: string, path: string, body?: object): Promise<Result> => {
     const response = await fetch(`${org}${path}`, {
       method,
