@@ -194,3 +194,31 @@ test('every command of an install refuses a folder that is not one and writes no
     rmSync(project, { recursive: true, force: true })
   }
 })
+
+test('setup refuses a --port that is not a port number before it creates a tunnel or writes a file', async () => {
+  const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const tunnelsBefore = tunnelNames.length
+  try {
+    for (const port of ['abc', '0', '65536', '3300.5']) {
+      const refusal = await setup(
+        parseFlags([
+          'setup',
+          '--unattended',
+          '--no-start',
+          '--folder',
+          empty,
+          '--hostname',
+          'spyria.example.com',
+          '--port',
+          port,
+        ]),
+        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' } },
+      ).catch((error: Error) => error.message)
+      expect({ port, refusal }).toEqual({ port, refusal: '--port takes a port number from 1 to 65535' })
+    }
+    expect(readdirSync(empty)).toEqual(['backups'])
+    expect(tunnelNames).toHaveLength(tunnelsBefore)
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
+  }
+})
