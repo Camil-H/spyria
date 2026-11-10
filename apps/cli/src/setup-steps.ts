@@ -131,7 +131,11 @@ export const mailOf = async (
       cloudflare: cloudflareOf(context, 'Resend'),
       api: resendApiUrl,
     })
-    return { url: resend.smtpUrl, from: asker.ask('mail-from', 'Sender', resend.mailFrom) }
+    return {
+      url: resend.smtpUrl,
+      from: asker.ask('mail-from', 'Sender', resend.mailFrom),
+      retireReplacedKeys: resend.retireReplacedKeys,
+    }
   }
   return {
     url: smtpUrlOf(asker, existing.SPYRIA_SMTP_URL ?? ''),

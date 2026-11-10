@@ -48,6 +48,7 @@ const resend = Bun.serve({
       return Response.json({
         data: [
           { id: 'old-key', name: 'Spyria on spyria.example.com' },
+          { id: 'key-1', name: 'Spyria on spyria.example.com' },
           { id: 'other', name: 'Other' },
         ],
       })
@@ -67,7 +68,7 @@ afterAll(() => {
   resend.stop(true)
 })
 
-test('Resend gets the domain, its DNS records land in the Cloudflare zone once, and SMTP uses a sending-only key', async () => {
+test('Resend gets the domain, its DNS records land in the Cloudflare zone once, SMTP uses a new sending-only key, and the key it replaces is revoked only when setup asks, once the new one is in use', async () => {
   const mail = await setUpResend({
     apiKey: 're_full',
     hostname: 'spyria.example.com',
@@ -75,9 +76,11 @@ test('Resend gets the domain, its DNS records land in the Cloudflare zone once, 
     api: resend.url.origin,
     pollMilliseconds: 1,
   })
+  const { retireReplacedKeys } = mail
   expect(mail).toEqual({
     smtpUrl: 'smtps://resend:re_sending@smtp.resend.com:465',
     mailFrom: 'Spyria <spyria@example.com>',
+    retireReplacedKeys: expect.any(Function),
   })
   expect(dnsRecords).toEqual([
     { type: 'TXT', name: 'resend._domainkey.example.com', content: '"p=KEY"' },
@@ -87,6 +90,8 @@ test('Resend gets the domain, its DNS records land in the Cloudflare zone once, 
   expect(apiKeys).toEqual([
     { name: 'Spyria on spyria.example.com', permission: 'sending_access', domain_id: 'domain-1' },
   ])
+  expect(deletedKeys).toEqual([])
+  await retireReplacedKeys()
   expect(deletedKeys).toEqual(['old-key'])
   expect(JSON.stringify(mail)).not.toContain('re_full')
 })

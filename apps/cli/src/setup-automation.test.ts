@@ -26,12 +26,15 @@ const cloudflare = Bun.serve({
     return ok(request.method === 'GET' ? [] : {})
   },
 })
+const revokedKeys: string[] = []
 const resend = Bun.serve({
   port: 0,
   async fetch(request) {
     const { pathname } = new URL(request.url)
     if (pathname === '/domains' && request.method === 'GET') return Response.json({ data: [] })
-    if (pathname === '/api-keys' && request.method === 'GET') return Response.json({ data: [] })
+    if (pathname === '/api-keys' && request.method === 'GET')
+      return Response.json({ data: [{ id: 'old-key', name: 'Spyria on spyria.example.com' }] })
+    if (request.method === 'DELETE') revokedKeys.push(pathname)
     if (pathname === '/api-keys') return Response.json({ id: 'key-1', token: 're_sending' })
     return Response.json({ id: 'domain-1', name: 'example.com', status: 'verified', records: [] })
   },
@@ -43,7 +46,7 @@ afterAll(() => {
   rmSync(folder, { recursive: true, force: true })
 })
 
-test('setup with Cloudflare Access and Resend prints the provider values once, and stores only the sending key and the tunnel token', async () => {
+test('setup with Cloudflare Access and Resend prints the provider values once, and stores only the sending key and the tunnel token, and keeps the key of the running install while it has not started on the new one', async () => {
   const printed: string[] = []
   const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
   try {
@@ -77,4 +80,5 @@ test('setup with Cloudflare Access and Resend prints the provider values once, a
     CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
   })
   for (const secret of ['access-secret', 're_full_access', 'cloudflare-api-token']) expect(stored).not.toContain(secret)
+  expect(revokedKeys).toEqual([])
 })
