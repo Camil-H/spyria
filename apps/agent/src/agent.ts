@@ -266,6 +266,7 @@ export const startAgent = ({
     checks: async (_directory: string, body: unknown) => checksRunner.start(body),
   }
   const conversations = new Map<string, Conversation>()
+  const timedOutConnections = new WeakSet<AdapterConnection>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
   const runningSetups = new Map<string, string>()
@@ -315,6 +316,7 @@ export const startAgent = ({
       )
       reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
       fail(conversation, error)
+      timedOutConnections.add(conversation.connection)
       conversation.connection.close()
       expired.reject(error)
     }, requestTimeoutMilliseconds)
@@ -596,7 +598,7 @@ export const startAgent = ({
         onCancelRequest: (requestId) => closeQuestions(conversation(), 'cancelled', requestId),
         onExit: (code) => {
           const exited = conversation()
-          if (conversations.get(exited.id) !== exited || !isCurrent() || exited.status === 'error') return
+          if (conversations.get(exited.id) !== exited || !isCurrent() || timedOutConnections.has(connection)) return
           const errorOutput = errorOutputOf(exited, connection)
           const error = new AcpError(withSummary(`The adapter exited with code ${code}`, errorOutput))
           reportAdapterFailure(exited, errorOutput, error)
