@@ -105,6 +105,25 @@ test.describe('Workspace panel', () => {
     await expect(commit.getByRole('button', { name: /^src\/app\.ts/ })).toContainText(/Modified \+1 [−-]1/)
   })
 
+  test('As a member, I come back to Changes and see its diffs at once, read again from the runtime only when I refresh', {
+    tag: ['@spec-40'],
+  }, async ({ page, agentScript }) => {
+    await devChatWithEdits(page, agentScript, 'Revisit totals')
+    await panelTabOf(page, 'Changes').click()
+    await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified/)
+    const reads: string[] = []
+    page.on('request', (request) => {
+      if (/\/workspace\/(changes|commits|status)\b/.test(request.url())) reads.push(request.url())
+    })
+    await panelTabOf(page, 'Files').click()
+    await panelTabOf(page, 'Changes').click()
+    await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified/)
+    expect(reads).toEqual([])
+    await tabPanelOf(page).getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByText('Changes refreshed')).toBeVisible()
+    expect(reads).toHaveLength(3)
+  })
+
   test('As a member, I close every file in Changes with Collapse all and open them all again with Open all', {
     tag: ['@spec-40'],
   }, async ({ page, agentScript }) => {
