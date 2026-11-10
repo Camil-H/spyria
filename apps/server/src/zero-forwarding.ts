@@ -19,11 +19,16 @@ const bodylessMethods = ['GET', 'HEAD']
 const maximumCloseReasonBytes = 123
 const unreachableStatus = 502
 const upstreamOpenTimeoutMilliseconds = 5000
+const maximumHeldBytes = 1024 * 1024
 
 type Relayed = string | ArrayBuffer | Uint8Array<ArrayBuffer>
 type UpstreamClosing = { code: number; reason: string }
 type HonoSocketData = { events: WSEvents; url: URL; protocol: string }
 const unreachableClosing: UpstreamClosing = { code: 1011, reason: 'The sync service is unreachable' }
+const overHeldClosing: UpstreamClosing = { code: 1009, reason: 'Too much was sent before the sync service answered' }
+
+const byteLengthOf = (message: Relayed) =>
+  typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength
 
 const withoutHeaders = (headers: Headers, dropped: string[]) => {
   const kept = new Headers(headers)
@@ -45,6 +50,7 @@ const logUnreachable = (error: unknown) =>
 const bridgeTo = (url: URL, protocols: string[]): WSEvents => {
   let upstream: WebSocket | undefined
   const heldForUpstream: Relayed[] = []
+  let heldBytes = 0
   let hasBrowserLeft = false
   return {
     onOpen: (_, downstream) => {
@@ -57,6 +63,7 @@ const bridgeTo = (url: URL, protocols: string[]): WSEvents => {
         hasOpened = true
         for (const message of heldForUpstream) opening.send(message)
         heldForUpstream.length = 0
+        heldBytes = 0
       }
       opening.onmessage = (event) => downstream.send(event.data)
       opening.onclose = (event) => {
@@ -67,10 +74,13 @@ const bridgeTo = (url: URL, protocols: string[]): WSEvents => {
         closeLike(downstream, unreachableClosing)
       }
     },
-    onMessage: (event) =>
-      upstream?.readyState === WebSocket.OPEN
-        ? upstream.send(event.data as Relayed)
-        : heldForUpstream.push(event.data as Relayed),
+    onMessage: (event, downstream) => {
+      const message = event.data as Relayed
+      if (upstream?.readyState === WebSocket.OPEN) return upstream.send(message)
+      heldBytes += byteLengthOf(message)
+      if (heldBytes > maximumHeldBytes) return closeLike(downstream, overHeldClosing)
+      heldForUpstream.push(message)
+    },
     onClose: (event) => {
       hasBrowserLeft = true
       heldForUpstream.length = 0

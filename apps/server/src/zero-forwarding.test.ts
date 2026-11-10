@@ -165,6 +165,14 @@ test('holds what the browser sends while zero-cache is still opening, then relay
   socket.close()
 })
 
+test('closes the browser socket when it sends more than 1 MiB before zero-cache opens', async () => {
+  const { socket, closed } = await openSocket('/zero/sync/slow', ['zero.v1.init'])
+  socket.send('x'.repeat(1024 * 1024 + 1))
+  const closeEvent = await closed
+  expect(closeEvent.code).toBe(1009)
+  expect(closeEvent.reason).toBe('Too much was sent before the sync service answered')
+})
+
 test('answers 502 when zero-cache is unreachable', async () => {
   const unreachableApp = new Hono().all('/zero/*', createZeroForwarding('http://127.0.0.1:1'))
   const response = await unreachableApp.request('/zero/keepalive')
