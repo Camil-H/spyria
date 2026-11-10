@@ -164,6 +164,17 @@ const dumpDatabase = async (folder: string, database: (typeof backupDatabases)[n
   return path
 }
 
+export const assertPostgresRuns = (folder: string, thenWhat: string) => {
+  if (runCompose(folder, ['exec', '-T', 'postgres', 'pg_isready', '-U', 'spyria']) !== 0)
+    throw new Error(`Postgres is not running: start it with spyria compose up -d postgres, then ${thenWhat}`)
+}
+
+const databaseExists = (folder: string, database: string) =>
+  readCompose(folder, [
+    ...['exec', '-T', 'postgres', 'psql', '-U', 'spyria', '-d', 'postgres', '-tAc'],
+    `select 1 from pg_database where datname = '${database}'`,
+  ]).output.trim() === '1'
+
 export const backup = async (folder: string, flags: Flags) => {
   const keep = keptBackupsOf(flags)
   const now = new Date()
@@ -205,8 +216,7 @@ export const restore = async (
   if (!database || !existsSync(path)) throw new Error(`${file} is not a backup of spyria or bifrost`)
   const environment = readEnvironment(folder)
   const profiles = (environment.COMPOSE_PROFILES ?? '').split(',')
-  if (runCompose(folder, ['exec', '-T', 'postgres', 'pg_isready', '-U', 'spyria']) !== 0)
-    throw new Error('Postgres is not running: start it with spyria compose up -d postgres, then restore again')
+  assertPostgresRuns(folder, 'restore again')
   step(`Reading ${file} whole before changing anything`)
   const readable = await spawnCompose(folder, ['exec', '-T', 'postgres', 'pg_restore', '--file=/dev/null'], {
     stdin: Bun.file(path),
@@ -217,8 +227,10 @@ export const restore = async (
     !confirms(`Replace the ${database} database with ${file}? What changed since that backup is lost`)
   )
     throw new Error('Nothing was restored: answer y, or pass --yes to restore without the question')
-  step(`Backing up the ${database} database as it is now`)
-  step(`Backed up to ${await dumpDatabase(folder, database, new Date())}`)
+  if (databaseExists(folder, database)) {
+    step(`Backing up the ${database} database as it is now`)
+    step(`Backed up to ${await dumpDatabase(folder, database, new Date())}`)
+  } else step(`The ${database} database does not exist, so there is nothing to back up first`)
   step('Stopping the server, zero-cache, the gateway and the host')
   mustSucceed(
     runCompose(folder, ['stop', 'server', 'zero-cache', 'gateway', ...(profiles.includes('host') ? ['host'] : [])]),
