@@ -212,11 +212,22 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
   expect((await prompt(id, 'after the crash')).status).toBe(409)
 
-  const failing = await call('POST', '/api/conversations', {
-    ...launchOf(),
-    agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
-  })
-  expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const failing = await call('POST', '/api/conversations', {
+      ...launchOf(),
+      agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
+    })
+    expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
+    const adapterFailures = () => lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
+    for (const deadline = Date.now() + 5_000; adapterFailures().length === 0 && Date.now() < deadline; )
+      await Bun.sleep(10)
+    await Bun.sleep(200)
+    expect(adapterFailures()).toHaveLength(1)
+  } finally {
+    await telemetry.shutdown()
+  }
 
   const missing = await create({ ...launchOf(), agent: { acp_command: ['spyria-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
