@@ -86,7 +86,7 @@ const rowsOf = async (ast: AST) => {
 const tokenOf = (workspace: string, user: string) => sessionTokenOf(testDatabase.database, workspace, user)
 
 const perChatReads: Record<string, (chatId: string) => readonly [string, object]> = {
-  messages: (chatId) => ['chatMessages', { chatId, limit: 1000 }],
+  messages: (chatId) => ['chatMessages', { chatId, limit: 1000, since: 0 }],
   usageEntries: (chatId) => ['chatUsage', { chatId }],
   browserPages: (chatId) => ['chatBrowserPages', { chatId }],
 }
@@ -196,6 +196,7 @@ test('there is one synced query per replicated table, messages, usage and pages 
       'latestMessages',
       'latestAgentActivity',
       'chatMessages',
+      'chatEarlierRoot',
       'chatPinnedSteps',
       'chatBrowserPages',
       'chatUsage',
@@ -206,7 +207,7 @@ test('there is one synced query per replicated table, messages, usage and pages 
 })
 
 test.each(readers)(
-  '$name reads the newest window, pinned steps and month usage only of the chats it may read',
+  '$name reads the newest window, the root before it, pinned steps and month usage only of the chats it may read',
   async (reader) => {
     const token = await tokenOf(reader.workspace, reader.user)
     const readableChatIds = new Set(
@@ -216,17 +217,43 @@ test.each(readers)(
         ?.map((row) => row.id),
     )
     const month = new Date().toISOString().slice(0, 7)
-    const roots = await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1 }])
+    const roots = await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1, since: 0 }])
+    const earlier = await readPerChat(token, (chatId) => ['chatEarlierRoot', { chatId, before: Date.now() }])
     const pinned = await readPerChat(token, (chatId) => ['chatPinnedSteps', { chatId }])
     const { astByTable } = await transformOf(token, [{ id: 'month', name: 'monthUsage', args: [{ month }] }])
     const monthUsage = await rowsOf(astByTable.get('month') as AST)
-    for (const row of [...roots, ...pinned, ...monthUsage]) expect(readableChatIds.has(row.chat_id)).toBe(true)
+    for (const row of [...roots, ...earlier, ...pinned, ...monthUsage])
+      expect(readableChatIds.has(row.chat_id)).toBe(true)
     expect(roots.length).toBeGreaterThan(0)
+    expect(earlier.length).toBeGreaterThan(0)
     expect(monthUsage).toEqual(
       (rowsByReader.get(reader.name)?.get('usage_entries') ?? []).filter((row) => row.month === month),
     )
   },
 )
+
+test('a chat window opens on the roots written since the time it asks from, and only a root older than that offers earlier messages', async () => {
+  const token = await tokenOf(acme, alice)
+  const isRoot = (row: Row) => row.thread_root_id === null && (row.reply_to_id === null || row.kind === 'member')
+  const [{ newest = 0 } = {}] = await testDatabase.database.$client<{ newest: number }[]>`
+    select floor(extract(epoch from max(created_at)) * 1000)::float8 as newest from messages
+    where workspace_id = ${acme} and chat_id = 'chat-welcome' and thread_root_id is null`
+  const rootsSince = async (since: number) =>
+    (await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1000, since }])).filter(
+      (row) => row.chat_id === 'chat-welcome' && isRoot(row),
+    )
+  const all = await rootsSince(0)
+  const recent = await rootsSince(newest)
+  expect(recent.length).toBeGreaterThan(0)
+  expect(recent.length).toBeLessThan(all.length)
+  expect(recent.map(({ id }) => id)).toEqual(all.map(({ id }) => id).slice(0, recent.length))
+  const earlierRootIdsBefore = async (before: number) =>
+    (await readPerChat(token, (chatId) => ['chatEarlierRoot', { chatId, before }]))
+      .filter((row) => row.chat_id === 'chat-welcome')
+      .map(({ id }) => id)
+  expect(await earlierRootIdsBefore(newest)).toEqual([all[recent.length]?.id])
+  expect(await earlierRootIdsBefore(0)).toEqual([])
+})
 
 test.each(readers.flatMap((reader) => tenantTables.map((table) => [reader.name, table, reader] as const)))(
   '%s reads only the rows of %s it may read in its own workspace',

@@ -80,27 +80,46 @@ export const useScoped = (
 }
 
 export const chatPageSize = 50
+const openingHistoryMilliseconds = 7 * 24 * 60 * 60 * 1000
+const hourMilliseconds = 60 * 60 * 1000
+const unbounded = 0
+
+export const openingSinceOf = (now: number) =>
+  Math.floor((now - openingHistoryMilliseconds) / hourMilliseconds) * hourMilliseconds
 
 const oldestSeqOf = (roots: readonly object[]) => Math.min(...roots.map((root) => (root as { seq: number }).seq))
 
 export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
-  const [shown, setShown] = useState({ chatId, limit: chatPageSize, oldestSeq: Number.POSITIVE_INFINITY })
-  const limit = shown.chatId === chatId ? shown.limit : chatPageSize
-  const roots = useScoped(workspaceId, 'chatMessages', { chatId, limit })
+  const [shown, setShown] = useState(() => ({
+    chatId,
+    limit: chatPageSize,
+    since: openingSinceOf(Date.now()),
+    oldestSeq: Number.POSITIVE_INFINITY,
+  }))
+  const isShownChat = shown.chatId === chatId
+  const limit = isShownChat ? shown.limit : chatPageSize
+  const since = isShownChat ? shown.since : openingSinceOf(Date.now())
+  const roots = useScoped(workspaceId, 'chatMessages', { chatId, limit, since })
+  const earlierRoot = useScoped(workspaceId, 'chatEarlierRoot', since === unbounded ? null : { chatId, before: since })
   useScoped(workspaceId, 'chatPinnedSteps', { chatId })
-  const hasEarlier = roots?.rows.length === limit
-  const oldestSeq = roots?.isComplete && roots.rows.length > 0 ? oldestSeqOf(roots.rows) : undefined
-  const hasWindow =
-    roots?.isComplete === true || (shown.chatId === chatId && shown.oldestSeq !== Number.POSITIVE_INFINITY)
-  if (shown.chatId !== chatId) setShown({ chatId, limit, oldestSeq: Number.POSITIVE_INFINITY })
+  const rowCount = roots?.rows.length ?? 0
+  const hasEarlier = rowCount === limit || (since !== unbounded && (earlierRoot?.rows.length ?? 0) > 0)
+  const isComplete = roots?.isComplete === true && (since === unbounded || earlierRoot?.isComplete === true)
+  const oldestSeq = roots?.isComplete && rowCount > 0 ? oldestSeqOf(roots.rows) : undefined
+  const hasWindow = roots?.isComplete === true || (isShownChat && shown.oldestSeq !== Number.POSITIVE_INFINITY)
+  const loadEarlier = () => setShown({ ...shown, chatId, since: unbounded, limit: rowCount + chatPageSize })
+  if (!isShownChat) setShown({ chatId, limit, since, oldestSeq: Number.POSITIVE_INFINITY })
+  else if (isComplete && rowCount === 0 && hasEarlier) loadEarlier()
   else if (oldestSeq !== undefined && oldestSeq !== shown.oldestSeq)
     setShown(
-      hasEarlier && oldestSeq > shown.oldestSeq ? { ...shown, limit: limit + chatPageSize } : { ...shown, oldestSeq },
+      rowCount === limit && oldestSeq > shown.oldestSeq
+        ? { ...shown, limit: limit + chatPageSize }
+        : { ...shown, oldestSeq },
     )
   return {
-    isComplete: roots?.isComplete === true,
+    isComplete,
     hasWindow,
     hasEarlier,
-    loadEarlier: () => setShown({ ...shown, chatId, limit: limit + chatPageSize }),
+    loadEarlier,
   }
 }
