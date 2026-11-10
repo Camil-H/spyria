@@ -7,9 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run --filter '*' --sequential typecheck",
     "lint": "biome check .",
-    "test": "bun test ./packages ./apps/server ./apps/host ./apps/agent --path-ignore-patterns='**/*.integration.test.ts' --path-ignore-patterns='**/*.docker.test.ts'",
+    "test": "bun test ./packages ./apps/server ./apps/host ./apps/agent ./apps/cli ./scripts --path-ignore-patterns='**/*.integration.test.ts' --path-ignore-patterns='**/*.docker.test.ts'",
     "test:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration.xml .integration.test.ts",
     "dev": "COMPOSE_PROFILES=zero,gateway bun --env-file=.env.dev run stack:up && bun --env-file=.env.dev run --filter '@spyria/server' --filter '@spyria/web' dev",
     "test:docker:integration": "bun test --preload ./apps/server/src/testing/integration-setup.ts --reporter=junit --reporter-outfile=.check/integration-docker.xml .docker.test.ts",
@@ -22,6 +22,7 @@
     "check:docker": "bun scripts/check-all.ts --docker",
     "check:related": "bun scripts/check-related.ts",
     "smoke:prod": "bun scripts/smoke-prod.ts",
+    "check:tofu": "bun scripts/check-tofu.ts",
     "load:websockets": "bun apps/server/src/testing/load-websockets.ts",
     "agent:build": "bun scripts/agent-image.ts build",
     "agent:versions": "bun scripts/agent-image.ts versions",

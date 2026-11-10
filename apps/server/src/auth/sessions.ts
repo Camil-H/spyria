@@ -76,8 +76,18 @@ export const signInUser = (database: Database, identity: Identity, isSso = false
         select workspace_id as "workspaceId", verified_at is not null as "isVerified"
         from workspace_sso join sso_domains using (workspace_id)
         where issuer = ${issuer} and domain = ${domainOfEmail(email)}
-          and workspace_id in (select workspace_id from workspaces where deleted_at is null)
-          and (verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)`
+          and workspace_id in (select workspace_id from workspaces where deleted_at is null and join_by = 'domain')
+          and (verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)
+        union all
+        select workspace_id, false from workspace_sso join workspaces using (workspace_id)
+        where issuer = ${issuer} and workspaces.join_by = 'invited_address' and workspaces.deleted_at is null
+          and (exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
+              and invitations.email = ${email} and revoked_at is null and accepted_at is null and expires_at > now())
+            or exists(select 1 from memberships join users on users.id = memberships.user_id
+              where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
+                and users.email = ${email})
+            or exists(select 1 from identities where identities.workspace_id = workspace_sso.workspace_id
+              and identities.issuer = ${issuer} and identities.subject in (${subject}, ${legacySubject})))`
     const ssoWorkspaceIds = ssoWorkspaces.map(({ workspaceId }) => workspaceId)
     const verifiedWorkspaceIds = ssoWorkspaces
       .filter(({ isVerified }) => isVerified)

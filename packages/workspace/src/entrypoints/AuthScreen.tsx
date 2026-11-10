@@ -8,7 +8,7 @@ export const AuthScreen = ({
 }: {
   title: string
   description?: string
-  children: ReactNode
+  children?: ReactNode
 }) => (
   <main className="relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden bg-app p-6 text-ink">
     <SpiresBackground />

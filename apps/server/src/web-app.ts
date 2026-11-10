@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-const serverPaths = /^\/(api|auth|host|health|mcp|test|fake-llm|gateway-oauth)(\/|$)/
+const serverPaths = /^\/(api|auth|host|health|mcp|test|fake-llm|gateway-oauth|zero)(\/|$)/
 const hashedAssetsPath = '/assets/'
 const immutable = 'public, max-age=31536000, immutable'
 const reportFramePath = '/report-frame.html'

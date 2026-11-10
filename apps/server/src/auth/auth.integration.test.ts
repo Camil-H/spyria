@@ -94,6 +94,8 @@ const sessionsOf = async (cookie: string, server = app) =>
     userId?: string
     sessions: { workspaceId: string; token: string; expiresAt: number }[]
     deployment: string
+    version?: string
+    hostImage?: string
   }
 
 const queryWith = (token: string) =>
@@ -189,12 +191,18 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
         .setExpirationTime(nowInSeconds() + 60)
         .sign((await generateKeyPair('RS256')).privateKey),
   ],
-  ['an unverified email', (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: false })],
 ])('the callback refuses %s', async (_, idTokenOf) => {
   const previousLogin = await startLogin()
   const signIn = await signInWith((nonce) => idTokenOf(nonce, previousLogin.nonce))
   expect(signIn.status).toBe(400)
   expect(signIn.page).toContain('"status":"failed"')
+  expect(signIn.cookie).not.toContain('spyria_s_')
+})
+
+test('the callback refuses an address the provider did not confirm, saying so', async () => {
+  const signIn = await signInWith((nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: false }))
+  expect(signIn.status).toBe(403)
+  expect(signIn.page).toContain('Your provider did not confirm this address')
   expect(signIn.cookie).not.toContain('spyria_s_')
 })
 
@@ -298,7 +306,7 @@ test('without test hooks the app ignores the spyria_test cookie, the test routes
   if (!aliceInOther) throw new Error('missing session')
   const testCookie = `spyria_test=${encodeURIComponent(JSON.stringify({ db: otherDatabase.name, user: 'member-alice', tokenSeconds: 1 }))}`
   const cookie = `${testCookie}; spyria_s_${acme}=${aliceInOther.sessionId}`
-  expect(await sessionsOf(cookie)).toEqual({ sessions: [], deployment: 'spyria' })
+  expect(await sessionsOf(cookie)).toEqual({ sessions: [], deployment: 'spyria', version: 'dev' })
   const login = await startLogin()
   const loginWithTestCookie = await app.request('/auth/login', { headers: { cookie: testCookie } })
   expect(loginWithTestCookie.status).toBe(302)

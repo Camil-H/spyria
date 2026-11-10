@@ -13,6 +13,7 @@ import {
   globex,
   rejectionOf,
   testAuthSettings,
+  testSetupToken,
   workspaceEventsOf,
 } from '../testing/testing.ts'
 import { createSmtpMailer } from './mail.ts'
@@ -28,7 +29,7 @@ await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKey = 'sso-integration-secrets-key-0123456789'
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
-const startFakeIdp = async (issuerPath = '') => {
+const startFakeIdp = async (issuerPath = '', { confirmsEmail = true } = {}) => {
   const keys = await generateKeyPair('RS256')
   const publicKey = { ...(await exportJWK(keys.publicKey)), kid: 'fake-idp', alg: 'RS256', use: 'sig' }
   const idp = {
@@ -65,6 +66,7 @@ const startFakeIdp = async (issuerPath = '') => {
         aud: form.get('client_id') ?? '',
         iat: nowInSeconds(),
         exp: nowInSeconds() + 60,
+        ...(confirmsEmail && { email_verified: true }),
         ...(idp.claimsByCode.get(form.get('code') ?? '') ?? idp.claims),
       })
         .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
@@ -78,7 +80,7 @@ type FakeIdp = Awaited<ReturnType<typeof startFakeIdp>>
 
 const acmeIdp = await startFakeIdp()
 const otherIdp = await startFakeIdp()
-const entraIdp = await startFakeIdp('/tenant-1/v2.0')
+const entraIdp = await startFakeIdp('/tenant-1/v2.0', { confirmsEmail: false })
 const firstWorkspaceIdp = Object.assign(await startFakeIdp(), { clientSecret: 'umbrella-secret' })
 const smtp = startFakeSmtp()
 const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
@@ -191,20 +193,48 @@ const identitiesOf = async (subject: string) => [
     select workspace_id, issuer, user_id from identities where subject = ${subject} order by workspace_id`),
 ]
 
+test('the operator sends a test message through the configured SMTP server, and asks for an address without one', async () => {
+  const mailSettings = { SPYRIA_SMTP_URL: smtp.url, SPYRIA_MAIL_FROM: 'Spyria <spyria@test.local>' }
+  expect(await runOperator(['mail:test', '--to', 'ops@example.com'], mailSettings)).toEqual({
+    exitCode: 0,
+    stdout: 'Sent a test message to ops@example.com\n',
+    stderr: '',
+  })
+  expect(smtp.mails.findLast((mail) => mail.to.includes('ops@example.com'))?.text).toContain(
+    'This test message shows that Spyria can send mail.',
+  )
+  expect(await runOperator(['mail:test'], mailSettings)).toEqual({
+    exitCode: 1,
+    stdout: '',
+    stderr: 'Usage: bun run operator mail:test --to <address>\n',
+  })
+})
+
 test('the server tells its auth mode and whether a workspace can be created', async () => {
   expect(await (await app.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
+    isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
   })
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
+    isBeingSetUp: true,
+    canCreateWorkspace: false,
+    instanceApps: [],
+  })
+  expect(await (await emptyInstanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
+    authMode: 'sso',
+    joinBy: 'domain',
+    isBeingSetUp: true,
     canCreateWorkspace: true,
     instanceApps: [],
   })
   expect(
     await (await createApp({ database: emptyInstance.database, ...testAuthSettings }).request('/auth/mode')).json(),
-  ).toEqual({ authMode: 'dex', canCreateWorkspace: false, instanceApps: [] })
+  ).toEqual({ authMode: 'dex', joinBy: 'domain', isBeingSetUp: false, canCreateWorkspace: false, instanceApps: [] })
 })
 
 test('an admin saves the SSO settings: the secret is encrypted at rest, never returned, and changes are recorded', async () => {
@@ -215,6 +245,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
     settings: {
       ...view,
       tenantId: '',
+      joinBy: 'domain',
       hasSecret: true,
       usesInstanceApp: false,
       domainState: unverified('example.com'),
@@ -235,6 +266,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   expect(JSON.parse((await readSso(acme)).body).settings).toEqual({
     ...view,
     tenantId: '',
+    joinBy: 'domain',
     hasSecret: true,
     usesInstanceApp: false,
     domainState: unverified('example.com'),
@@ -404,8 +436,7 @@ test('a domain verifies through a single-use emailed link; until then it does no
 test('without SMTP the verification link is refused with a clear message', async () => {
   expect((await sendVerification(acme, 'example.com', 'it@example.com', appWithoutMail)).body).toEqual({
     error: 'mail_not_configured',
-    message:
-      'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+    message: "Mail isn't set up on this deployment; an operator can verify the domain with spyria verify-domain",
   })
 })
 
@@ -649,7 +680,7 @@ const startCreation = (form: Record<string, string>, origin = testAuthSettings.a
   emptyInstanceApp.request('/auth/first-workspace', {
     method: 'POST',
     headers: { origin },
-    body: new URLSearchParams(form),
+    body: new URLSearchParams({ setupToken: testSetupToken, ...form }),
   })
 const completeCreation = async (started: Response, code: string, claims: JWTPayload) => {
   const location = new URL(started.headers.get('location') ?? '')
@@ -769,6 +800,8 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
 
   expect(await (await emptyInstanceApp.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
+    joinBy: 'domain',
+    isBeingSetUp: false,
     canCreateWorkspace: false,
     instanceApps: [],
   })
@@ -811,8 +844,10 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
   })
   entraIdp.clientSecret = 'instance-secret'
   try {
-    expect(await (await instanceApp.request('/auth/mode')).json()).toEqual({
+    expect(await (await instanceApp.request(`/auth/mode?setup=${testSetupToken}`)).json()).toEqual({
       authMode: 'sso',
+      joinBy: 'domain',
+      isBeingSetUp: true,
       canCreateWorkspace: true,
       instanceApps: ['microsoft'],
     })
@@ -820,7 +855,13 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
       instanceApp.request('/auth/first-workspace', {
         method: 'POST',
         headers: { origin: testAuthSettings.appOrigin },
-        body: new URLSearchParams({ name: 'Initech', domain: 'initech.com', usesInstanceApp: 'true', ...form }),
+        body: new URLSearchParams({
+          setupToken: testSetupToken,
+          name: 'Initech',
+          domain: 'initech.com',
+          usesInstanceApp: 'true',
+          ...form,
+        }),
       })
     const googleRefusal = await create({ preset: 'google' })
     expect(await googleRefusal.text()).toContain(
@@ -896,4 +937,49 @@ test('the server refuses to start when workspaces sign in through an app of this
 test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'stark'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
+})
+
+test('the first workspace needs the setup token: refused without it, with a wrong one, and once a workspace exists; the sign-in mode only offers creation with it', async () => {
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  const modeOf = async (query = '') => (await emptyInstanceApp.request(`/auth/mode${query}`)).json()
+  expect(await modeOf()).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf('?setup=not-the-token')).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: true })
+  const form = { ...umbrellaForm(), setupToken: '' }
+  for (const refusedToken of ['', 'not-the-token', `${testSetupToken} `]) {
+    const refused = await startCreation({ ...form, setupToken: refusedToken })
+    expect(refused.status).toBe(403)
+    expect(await refused.text()).toContain('This Spyria is being set up: open the setup link')
+    expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(0)
+  }
+  const started = await startCreation(umbrellaForm())
+  expect(started.status).toBe(302)
+  await completeCreation(started, 'setup-token-code', { sub: 'u-setup', email: 'owner@umbrella.com' })
+  expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(1)
+  expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: false, canCreateWorkspace: false })
+  const spent = await startCreation(umbrellaForm())
+  expect(spent.status).toBe(400)
+  expect(await spent.text()).toContain('Workspace creation is closed on this instance')
+})
+
+test('a workspace joined by email domain cannot claim a public email domain, and says why', async () => {
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  const refused = await startCreation({ ...umbrellaForm(), domain: 'gmail.com' })
+  expect(refused.status).toBe(400)
+  expect(await refused.text()).toContain('gmail.com is a public email domain: a workspace cannot own it')
+  expect(await emptyInstance.database.$client`select 1 from workspaces`).toHaveLength(0)
+})
+
+test('through a generic OIDC provider, an address the provider does not confirm is refused with the reason', async () => {
+  await addWorkspace('confirming')
+  await configureIdp(otherIdp, 'confirming', 'confirming.com')
+  await database.$client`update sso_domains set verified_at = now() where workspace_id = 'confirming'`
+  const refused = await signInThrough(otherIdp, 'email=pat@confirming.com', {
+    sub: 'pat-unconfirmed',
+    email: 'pat@confirming.com',
+    email_verified: false,
+  })
+  expect(refused.status).toBe(403)
+  expect(refused.page).toContain('Your provider did not confirm this address')
+  expect(refused.sessions).toEqual([])
 })

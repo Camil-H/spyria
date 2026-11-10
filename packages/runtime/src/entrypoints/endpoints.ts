@@ -3,7 +3,7 @@ import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
 import { type RuntimeHostId, requirePermissionIn, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
-import type { HostDeclaration, HostSystem } from '../domain/runtime-host.ts'
+import type { HostDeclaration, HostSystem, RuntimeHost } from '../domain/runtime-host.ts'
 import {
   contextPermissionsOf,
   createTransactingZeroTransactor,
@@ -62,6 +62,8 @@ const hostSessionFrame = z.discriminatedUnion('type', [
     }),
     personal: z.optional(z.boolean()),
     relayVersion: z.optional(z.int().check(z.positive())),
+    hostVersion: z.optional(boundedText(64)),
+    protocolVersion: z.optional(z.int().check(z.nonnegative())),
     signedIn,
     credentialsChangedAt,
   }),
@@ -79,16 +81,35 @@ export type ConnectedHost = { workspaceId: WorkspaceId; hostId: RuntimeHostId }
 
 export const parseHostSessionFrame = (frame: unknown) => hostSessionFrame.safeParse(frame).data
 
-export const createHostSessionHandlers = (transact: Transact) => ({
+export const createHostSessionHandlers = (
+  transact: Transact,
+  { hostUpdateCommandOf }: { hostUpdateCommandOf?: (host: RuntimeHost) => string } = {},
+) => ({
   claim: async (code: string) => {
     const outcome = await transact((tx) => claimRuntimeHost(dependenciesOf(tx), { code, now: Date.now() }))
     if ('refusal' in outcome) throw outcome.refusal
     return outcome
   },
-  hello: (
-    hello: Partial<HostDeclaration> & { token: string; system: HostSystem },
+  hello: async (
+    hello: Partial<HostDeclaration> & {
+      token: string
+      system: HostSystem
+      hostVersion?: string
+      protocolVersion?: number
+    },
     beforeOnline: (host: ConnectedHost) => void,
-  ) => transact((tx) => recordHostHello(dependenciesOf(tx), { ...hello, now: Date.now(), beforeOnline })),
+  ) => {
+    const outcome = await transact((tx) =>
+      recordHostHello(dependenciesOf(tx), {
+        ...hello,
+        now: Date.now(),
+        beforeOnline,
+        updateCommandOf: hostUpdateCommandOf,
+      }),
+    )
+    if ('refusal' in outcome) throw outcome.refusal
+    return outcome
+  },
   heartbeat: (
     host: ConnectedHost,
     heartbeat: { memoryFreeBytes: number; running: number } & Partial<Omit<HostDeclaration, 'personal'>>,

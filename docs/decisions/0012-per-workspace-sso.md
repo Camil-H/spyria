@@ -18,3 +18,4 @@ Spyria is self-hosted by organizations that already have an identity provider. A
 - Access follows the organization's own identity provider, including leavers.
 - A deployment needs SMTP for verification (or an operator command to verify a domain directly).
 - One organization per deployment in practice; a second organization's domain cannot join an existing instance.
+- An instance can instead join people by invited address, without a domain ([decision 0027](0027-join-by-invited-address.md)).

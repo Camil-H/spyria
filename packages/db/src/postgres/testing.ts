@@ -437,7 +437,7 @@ export const startTestGateway = async ({
   const containerName = `spyria-test-gateway-${name}`
   const databaseName = `spyria_test_gateway_${name}`
   const configFile = join(tmpdir(), `${containerName}.json`)
-  const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../infra/bifrost.json', import.meta.url), 'utf8'))
+  const gatewayConfig = JSON.parse(readFileSync(new URL('../../../../deploy/bifrost.json', import.meta.url), 'utf8'))
   const clientConfig = { ...gatewayConfig.client, mcp_oauth_private_allowlist: ['host.docker.internal'] }
   const networkConfig = {
     base_url: fakeLlmUrl,

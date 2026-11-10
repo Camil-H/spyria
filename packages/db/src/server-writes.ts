@@ -152,6 +152,11 @@ export const copyWorkspaceSignIn = async (
     [fromWorkspaceId, toWorkspaceId],
   )
   if (!provider) return
+  await onServer(
+    tx,
+    `update workspaces set join_by = (select join_by from workspaces where workspace_id = $1) where workspace_id = $2`,
+    [fromWorkspaceId, toWorkspaceId],
+  )
   const [copied] = await onServer<{ domain: string }>(
     tx,
     `insert into sso_domains (workspace_id, domain, verified_at)
@@ -173,6 +178,7 @@ export const awaitsDomainVerification = async (tx: Transaction, workspaceId: str
     await firstOnServer<{ awaits: boolean }>(
       tx,
       `select exists(select 1 from workspace_sso where workspace_id = $1)
+         and (select join_by from workspaces where workspace_id = $1) = 'domain'
          and not exists(select 1 from sso_domains where workspace_id = $1 and verified_at is not null) as awaits`,
       [workspaceId],
     )

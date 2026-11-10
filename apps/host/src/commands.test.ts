@@ -325,3 +325,112 @@ test("two deployments on one Docker daemon never count or manage each other's ru
   expect(await runnerOf('spyria-rt').run({ op: 'status', runtimeId: 'b' })).toBe('running')
   expect(await runnerOf('spyria').run({ op: 'status', runtimeId: 'c' })).toBe('missing')
 })
+
+const images = 'ghcr.io/camil-h'
+const digest = `sha256:${'c'.repeat(64)}`
+const publishedImage = `${images}/spyria-agent@${digest}`
+
+test('accepts the deployment’s published runtime image by digest when the host knows where its images come from, and refuses it otherwise', () => {
+  expect(parseCommand('prepare', { image: publishedImage }, images)).toEqual({ op: 'prepare', image: publishedImage })
+  expect(parseCommand('create', { ...create, image: publishedImage }, images)).toMatchObject({ image: publishedImage })
+  expect(parseCommand('create', create, images)).toEqual({ op: 'create', ...create })
+  expect(() => parseCommand('prepare', { image: publishedImage })).toThrow('local content ID')
+})
+
+test.each([
+  `${images}/spyria-agent:1.0.0`,
+  `${images}/spyria-agent`,
+  `${images}/spyria-host@${digest}`,
+  `ghcr.io/evil/spyria-agent@${digest}`,
+  `docker.io/${images}/spyria-agent@${digest}`,
+  `${images}/spyria-agent@sha256:${'c'.repeat(63)}`,
+  `${images}/spyria-agent@${digest}:latest`,
+  `${images}/spyria-agent@${digest} --privileged`,
+])(
+  'refuses the image %p even when the host knows where its images come from, naming what it accepts',
+  (refusedImage) => {
+    expect(() => parseCommand('prepare', { image: refusedImage }, images)).toThrow(
+      `${images}/spyria-agent@sha256:<digest>`,
+    )
+    expect(() => parseCommand('create', { ...create, image: refusedImage }, images)).toThrow('local content ID')
+  },
+)
+
+const dockerWithPull = (pullAnswer: string) => {
+  const calls: string[] = []
+  let isPulled = false
+  const docker = (async (method: string, path: string) => {
+    calls.push(`${method} ${path}`)
+    if (method === 'POST') {
+      isPulled = true
+      return pullAnswer
+    }
+    if (!isPulled) throw new DockerError(404, 'No such image')
+    return {}
+  }) as Docker
+  return { docker, calls }
+}
+
+test('preparing a missing published image pulls it by digest, and a present one is not pulled', async () => {
+  const { docker, calls } = dockerWithPull(
+    '{"status":"Pulling from camil-h/spyria-agent"}\n{"status":"Downloaded newer image"}\n',
+  )
+  const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  await runner.run({ op: 'prepare', image: publishedImage })
+  expect(calls).toEqual([
+    `GET /images/${publishedImage}/json`,
+    `POST /images/create?fromImage=${encodeURIComponent(`${images}/spyria-agent`)}&tag=${digest}`,
+  ])
+  await runner.run({ op: 'prepare', image: publishedImage })
+  expect(calls).toHaveLength(3)
+})
+
+test('a pull the registry refuses fails with its reason', async () => {
+  const { docker } = dockerWithPull(
+    '{"status":"Pulling"}\n{"error":"manifest unknown","errorDetail":{"message":"manifest unknown"}}\n',
+  )
+  await expect(
+    createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'prepare', image: publishedImage }),
+  ).rejects.toThrow('manifest unknown')
+})
+
+test('a recreate removes the managed container alone and creates it again on the same volumes; without a container it just creates', async () => {
+  const calls: string[] = []
+  const bodies: ReturnType<typeof containerBodyOf>[] = []
+  let exists = true
+  const docker = (async (method: string, path: string, body?: unknown) => {
+    calls.push(`${method} ${path.split('?')[0]}`)
+    if (method === 'POST' && path.startsWith('/containers/create'))
+      bodies.push(body as ReturnType<typeof containerBodyOf>)
+    if (method === 'GET' && path.startsWith('/containers/')) {
+      if (!exists) throw new DockerError(404, 'No such container')
+      return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    }
+    if (method === 'DELETE') exists = false
+    return {}
+  }) as Docker
+  const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  await runner.run({ op: 'recreate', ...create })
+  expect(calls).toEqual([
+    'GET /containers/spyria-rt-runtime-1/json',
+    'DELETE /containers/spyria-rt-runtime-1',
+    'POST /networks/create',
+    `GET /images/${image}/json`,
+    'POST /containers/create',
+  ])
+  expect(bodies[0]?.HostConfig.Mounts.map(({ Source }) => Source)).toEqual([
+    'spyria-rt-runtime-1-ws',
+    'spyria-rt-runtime-1-home',
+    'spyria-rt-runtime-1-tmp',
+  ])
+  calls.length = 0
+  await runner.run({ op: 'recreate', ...create })
+  expect(calls).toEqual([
+    'GET /containers/spyria-rt-runtime-1/json',
+    'POST /networks/create',
+    `GET /images/${image}/json`,
+    'POST /containers/create',
+  ])
+  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
+  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
+})

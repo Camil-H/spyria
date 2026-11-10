@@ -6,10 +6,12 @@ import { log, type RuntimeHostId, type WorkspaceId } from '@spyria/kernel'
 import {
   type ConnectedHost,
   createHostSessionHandlers,
+  HostNotRegistered,
   HostRefused,
   type HostSessionFrame,
   type PackageCacheScope,
   parseHostSessionFrame,
+  type RuntimeHost,
   type SandboxLocation,
   type SandboxProvider,
   type SandboxResponse,
@@ -45,6 +47,8 @@ type IncomingBody = { head: Frame; parts: Buffer[]; size: number }
 
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
+const maximumCloseReasonBytes = 123
+const tryAgainLaterCloseCode = 1013
 const requestTimeoutMilliseconds = 180_000
 const installTimeoutMilliseconds = 240_000
 const identifyTimeoutMilliseconds = 10_000
@@ -88,6 +92,8 @@ export const createRuntimeHostGateway = ({
   relayModelCall,
   spyriaAgentImage,
   runtimeKeySecret,
+  hostUpdateCommandOf,
+  awaitsFirstWorkspace = async () => false,
 }: {
   databases: () => Iterable<Database>
   pingIntervalMilliseconds?: number
@@ -95,6 +101,8 @@ export const createRuntimeHostGateway = ({
   relayModelCall?: ModelCallRelay
   spyriaAgentImage?: string
   runtimeKeySecret: string
+  hostUpdateCommandOf?: (host: RuntimeHost) => string
+  awaitsFirstWorkspace?: (claimCode: string) => Promise<boolean>
 }) => {
   const connectionByHost = new Map<string, Connection>()
   const operationChains = new Map<string, Promise<unknown>>()
@@ -112,7 +120,9 @@ export const createRuntimeHostGateway = ({
   const firstAccepted = async <Result>(attempt: (handlers: HostSessionHandlers) => Promise<Result>) => {
     let lastRefusal: unknown
     for (const database of databases()) {
-      const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work))
+      const handlers = createHostSessionHandlers((work) => zeroDrizzle(schema, database).transaction(work), {
+        hostUpdateCommandOf,
+      })
       try {
         return { database, handlers, result: await attempt(handlers) }
       } catch (error) {
@@ -149,8 +159,14 @@ export const createRuntimeHostGateway = ({
 
   const identify = async (connection: Connection, frame: HostSessionFrame) => {
     if (frame.type === 'claim') {
-      const { result } = await firstAccepted((handlers) => handlers.claim(frame.code))
-      return sendTo(connection, { type: 'token', token: result.token })
+      const claimed = await firstAccepted((handlers) => handlers.claim(frame.code)).catch(async (error: unknown) => {
+        const isWaiting =
+          error instanceof HostRefused && error.code === 'code_not_valid' && (await awaitsFirstWorkspace(frame.code))
+        if (!isWaiting) throw error
+      })
+      if (!claimed)
+        return connection.socket.close(tryAgainLaterCloseCode, 'Waiting for the first workspace of this Spyria')
+      return sendTo(connection, { type: 'token', token: claimed.result.token })
     }
     if (frame.type !== 'hello') return connection.socket.close(refusedCloseCode, 'This host is not registered')
     const {
@@ -274,10 +290,10 @@ export const createRuntimeHostGateway = ({
     }
     const sessionFrame = parseHostSessionFrame(frame)
     const { identified } = connection
-    if (!identified)
-      return sessionFrame
-        ? identify(connection, sessionFrame)
-        : connection.socket.close(refusedCloseCode, 'This host is not registered')
+    if (!identified) {
+      if (!sessionFrame) throw new HostNotRegistered()
+      return identify(connection, sessionFrame)
+    }
     if (sessionFrame?.type === 'heartbeat')
       return inOrder(identified.token, () => identified.handlers.heartbeat(identified.host, sessionFrame))
     settle(connection, frame)
@@ -311,7 +327,10 @@ export const createRuntimeHostGateway = ({
       },
       onMessage: (event, socket) =>
         receive(connection, String(event.data)).catch((error) => {
-          if (error instanceof HostRefused) return socket.close(refusedCloseCode, error.message)
+          if (error instanceof HostRefused) {
+            sendTo(connection, { type: 'refused', reason: error.message })
+            return socket.close(refusedCloseCode, error.message.slice(0, maximumCloseReasonBytes))
+          }
           log.error({ event: 'runtime_host.connection_failed', body: 'A runtime host connection failed', error })
           socket.close(1011, 'Internal error')
         }),
@@ -369,17 +388,21 @@ export const createRuntimeHostGateway = ({
   const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
     createHmac('sha256', runtimeKeySecret).update(`runtime-api-key.${workspaceId}.${runtimeId}`).digest('base64url')
 
-  const sandboxProvider: SandboxProvider = {
-    create: async ({ image, packageCache, ...sandbox }) => {
+  const createWith =
+    (op: 'create' | 'recreate'): SandboxProvider['create'] =>
+    async ({ image, packageCache, ...sandbox }) => {
       const hasPackageCache = (connectionOf(sandbox).identified?.relayVersion ?? 1) >= packageCacheRelayVersion
-      await command(sandbox, 'create', {
+      await command(sandbox, op, {
         runtimeId: sandbox.runtimeId,
         image,
         apiKey: apiKeyOf(sandbox),
         ...(packageCache &&
           hasPackageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
       })
-    },
+    }
+  const sandboxProvider: SandboxProvider = {
+    create: createWith('create'),
+    recreate: createWith('recreate'),
     apiKeyOf,
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),

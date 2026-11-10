@@ -15,6 +15,7 @@ import { buttonClass, Dialog, ErrorMessage, ghostButtonClass, LabelledSection, u
 import { useEffect, useState } from 'react'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice, useCloseOnceDone } from './HostCommandDialog.tsx'
+import { HostVersion } from './HostVersion.tsx'
 import { useRuntimeCommands } from './providers.tsx'
 import { statusLabelOf } from './RuntimeHostsSection.tsx'
 
@@ -142,6 +143,7 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
         <div className={`${rowClass} text-sm`}>
           <span className="font-medium">{machine.name}</span>
           <span className="text-muted">{statusLabelOf(machine)}</span>
+          <HostVersion host={machine} />
           <span className="ml-auto flex gap-2">
             {!isOnline && (
               <button type="button" className={buttonClass} onClick={() => setOpenDialog('start')}>

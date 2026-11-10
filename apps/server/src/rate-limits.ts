@@ -4,7 +4,17 @@ import type { Context, MiddlewareHandler } from 'hono'
 type Budget = { count: number; perMilliseconds: number; per: 'address' | 'workspace' | 'member' }
 type Requester = { address?: string; workspaceId?: string; userId?: string; databaseName?: string | undefined }
 type RequestIp = { requestIP?: (request: Request) => { address: string } | null }
-export type TrustedProxy = 'cloudflare' | undefined
+export type TrustedProxy = 'cloudflare' | { forwardedHops: number } | undefined
+const forwardedForPattern = /^x-forwarded-for:([1-3])$/
+
+export const isTrustedProxySetting = (setting: string | undefined) =>
+  setting === undefined || setting === '' || setting === 'cloudflare' || forwardedForPattern.test(setting)
+
+export const trustedProxyOf = (setting: string | undefined): TrustedProxy => {
+  if (setting === 'cloudflare') return 'cloudflare'
+  const hops = setting?.match(forwardedForPattern)?.[1]
+  return hops ? { forwardedHops: Number(hops) } : undefined
+}
 
 const minute = 60_000
 const hour = 60 * minute
@@ -89,8 +99,19 @@ export const createRateLimiter = (budgets: RateBudgets, now = Date.now) => {
 }
 export type RateLimiter = (name: RateLimitName, requester: Requester) => void
 
+const forwardedAddressOf = (request: Request, hops: number) => {
+  const addresses = (request.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((address) => address.trim())
+    .filter(Boolean)
+  return addresses[addresses.length - hops]
+}
+
 export const clientAddressOf = (request: Request, socketAddress: string | undefined, trustedProxy: TrustedProxy) =>
-  (trustedProxy === 'cloudflare' && request.headers.get('cf-connecting-ip')) || socketAddress || ''
+  (trustedProxy === 'cloudflare' && request.headers.get('cf-connecting-ip')) ||
+  (typeof trustedProxy === 'object' && forwardedAddressOf(request, trustedProxy.forwardedHops)) ||
+  socketAddress ||
+  ''
 
 export const rateLimitedBy =
   (limit: RateLimiter, trustedProxy: TrustedProxy) =>

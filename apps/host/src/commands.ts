@@ -15,7 +15,17 @@ export class Refused extends Error {
   }
 }
 
-const imagePattern = /^sha256:[a-f0-9]{64}$/
+const digestPattern = /^sha256:[a-f0-9]{64}$/
+const publishedAgentImageOf = (images: string) => `${images}/spyria-agent`
+const isAcceptedImage = (image: string, images?: string) =>
+  digestPattern.test(image) ||
+  (images !== undefined &&
+    image.startsWith(`${publishedAgentImageOf(images)}@`) &&
+    digestPattern.test(image.slice(publishedAgentImageOf(images).length + 1)))
+const imageRefusalOf = (images?: string) =>
+  `image other than a local content ID (sha256:<64 hex>)${images ? ` or ${publishedAgentImageOf(images)}@sha256:<digest>` : ''}`
+const isPublishedImage = (image: string) => image.includes('@')
+const pullTimeoutMilliseconds = 10 * 60_000
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
 const packageCacheKeyPattern = /^[a-f0-9]{32}$/
@@ -24,12 +34,22 @@ const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
 const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
-const operations = ['create', 'prepare', 'start', 'stop', 'remove', 'status', 'installed', 'install'] as const
-const imageRefusal = 'image other than a local content ID (sha256:<64 hex>)'
+const operations = [
+  'create',
+  'recreate',
+  'prepare',
+  'start',
+  'stop',
+  'remove',
+  'status',
+  'installed',
+  'install',
+] as const
 
 type Operation = (typeof operations)[number]
 type HarnessOperation = 'installed' | 'install'
-type RuntimeOperation = Exclude<Operation, 'create' | 'prepare' | HarnessOperation>
+type CreateOperation = 'create' | 'recreate'
+type RuntimeOperation = Exclude<Operation, CreateOperation | 'prepare' | HarnessOperation>
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string>; Image?: string }
   State?: { Running?: boolean }
@@ -37,7 +57,7 @@ type ContainerInfo = {
 }
 type CreateRequest = { runtimeId: string; image: string; apiKey: string; packageCacheKey?: string }
 export type Command =
-  | ({ op: 'create' } & CreateRequest)
+  | ({ op: CreateOperation } & CreateRequest)
   | { op: 'prepare'; image: string }
   | { op: RuntimeOperation; runtimeId: string }
   | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
@@ -48,25 +68,30 @@ const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp,
   return value
 }
 
-export const parseCommand = (op: unknown, args: unknown): Command => {
+export const parseCommand = (op: unknown, args: unknown, images?: string): Command => {
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
   const allowedFields = {
     create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
+    recreate: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
     prepare: ['image'],
     installed: ['runtimeId', 'harness'],
     install: ['runtimeId', 'harness'],
   }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
-  const imageOf = () => fieldOf(fields, 'image', imagePattern, imageRefusal)
+  const imageOf = () => {
+    const image = fields.image
+    if (typeof image !== 'string' || !isAcceptedImage(image, images)) throw new Refused(imageRefusalOf(images))
+    return image
+  }
   if (op === 'prepare') return { op, image: imageOf() }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
   if (op === 'installed' || op === 'install') {
     if (!harnessIds.includes(fields.harness as HarnessId)) throw new Refused('unknown harness')
     return { op, runtimeId, harness: fields.harness as HarnessId }
   }
-  if (op !== 'create') return { op: op as RuntimeOperation, runtimeId }
+  if (op !== 'create' && op !== 'recreate') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
     runtimeId,
@@ -186,11 +211,37 @@ export const createCommandRunner = ({
       )
     await docker('DELETE', `/networks/${network}`).catch(ignoringMissing)
   }
+  const pull = async (image: string) => {
+    const [name = '', digest = ''] = image.split('@')
+    const progress = await docker<string>(
+      'POST',
+      `/images/create?fromImage=${encodeURIComponent(name)}&tag=${digest}`,
+      undefined,
+      pullTimeoutMilliseconds,
+    )
+    const failure = progress
+      .split('\n')
+      .flatMap((line): { error?: string }[] => {
+        try {
+          return [JSON.parse(line)]
+        } catch {
+          return []
+        }
+      })
+      .find((event) => event.error)
+    if (failure) throw new Error(`Pulling Spyria's runtime image failed: ${failure.error}`)
+  }
   const prepare = async (image: string) => {
-    await docker('GET', `/images/${image}/json`).catch((error) => {
-      ignoringMissing(error)
+    const isPresent = await docker('GET', `/images/${image}/json`).then(
+      () => true,
+      (error) => {
+        ignoringMissing(error)
+        return false
+      },
+    )
+    if (!isPresent && !isPublishedImage(image))
       throw new Error("Spyria's runtime image is missing on this machine: run bun run agent:build")
-    })
+    if (!isPresent) await pull(image)
     if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
   const create = async (request: CreateRequest) => {
@@ -205,6 +256,11 @@ export const createCommandRunner = ({
     if (command.op === 'prepare') return void (await prepare(command.image))
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
+    if (command.op === 'recreate') {
+      const replaced = await managedContainer(command.runtimeId).catch(ignoringMissing)
+      if (replaced) await docker('DELETE', `/containers/${name}?force=true`)
+      return create(command)
+    }
     if (command.op === 'installed' || command.op === 'install') {
       if (!personal) throw new Refused('harnesses install only on a personal host')
       if (command.op === 'installed') return isHarnessInstalled(docker, name, command.harness)

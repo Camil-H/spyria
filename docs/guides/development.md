@@ -1,6 +1,6 @@
 # Development
 
-This guide takes you from a fresh clone to a running Spyria on your machine: the web app, the server, the sync layer, the model gateway and, when you need agents, a runtime host. It also lists the commands you use every day and where to start reading the code. For the test suites, see [Testing](./testing.md); for a production deployment, see [Self-hosting](./self-hosting.md).
+This guide takes you from a fresh clone to a running Spyria on your machine: the web app, the server, the sync layer, the model gateway and, when you need agents, a runtime host. It also lists the commands you use every day and where to start reading the code. For the test suites, see [Testing](./testing.md); for a production deployment, see [Manual install](./self-hosting.md).
 
 ## Prerequisites
 
@@ -50,11 +50,11 @@ The seed adds no model API key. To prompt an agent, add a real provider key (Ope
 
 The server refuses to start without `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY`, `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_REDIRECT_URI`, `SPYRIA_APP_ORIGIN`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD`. `bun run dev` sets a dev value for each one (a random token secret per start, and a fixed secrets key so runtimes keep working across restarts), so nothing is needed to get going.
 
-Every setting is listed with its dev default and a comment in `.env.example`. To change one, copy it to `.env.dev`: `bun run dev` and `bun run operator` read that file. Production reads `.env.prod` instead (see [Self-hosting](./self-hosting.md)). Both files are git-ignored.
+Every setting is listed with its dev default and a comment in `.env.example`. To change one, copy it to `.env.dev`: `bun run dev` and `bun run operator` read that file. Production reads `.env.prod` instead (see [Manual install](./self-hosting.md)). Both files are git-ignored.
 
 ## The model gateway in development
 
-`bun run dev` starts `spyria-gateway` (Bifrost, pinned by digest, configured by `infra/bifrost.json`) on `127.0.0.1:8180`. On its first start, the one-shot `spyria-gateway-database` container creates a `bifrost` role and database on `spyria-postgres`, outside Spyria's migrations. The gateway's own data lives in the `spyria-gateway-data` volume.
+`bun run dev` starts `spyria-gateway` (Bifrost, pinned by digest, configured by `deploy/bifrost.json`, shared with production) on `127.0.0.1:8180`. On its first start, the one-shot `spyria-gateway-database` container creates a `bifrost` role and database on `spyria-postgres`, outside Spyria's migrations. The gateway's own data lives in the `spyria-gateway-data` volume.
 
 Members' API keys are stored in the gateway only; Spyria keeps a reference and the last 4 characters. The gateway's dev secrets come from `SPYRIA_GATEWAY_ENCRYPTION_KEY`, `SPYRIA_GATEWAY_SETUP_TOKEN`, `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` and `SPYRIA_GATEWAY_DB_PASSWORD`, with dev defaults in `infra/docker-compose.yml`. The encryption key can never change without wiping the gateway's database, because every stored key is encrypted with it.
 
@@ -120,7 +120,10 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `failed-jobs` | `jobs:failed` | Lists jobs that exhausted their attempts, with the last error. |
 | `retry-jobs <id>\|--all` | `jobs:retry` | Requeues failed jobs with their attempts reset. |
 | `tools-setup github\|notion` | `tools:setup` | Sets up a tool server in the gateway (above). |
-| `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Self-hosting](./self-hosting.md)). |
+| `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Manual install](./self-hosting.md)). |
+| `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
+| `has-workspace` | none | Prints `yes` once a workspace exists and `no` before; `spyria setup --host` asks for a pairing command when it prints `yes`. |
+| `mail:test --to <address>` | none | Sends a test message through `SPYRIA_SMTP_URL`. |
 
 ## Running agents locally: a runtime host
 
@@ -128,7 +131,7 @@ Agents run in runtimes (containers of Spyria's runtime image with spyria-agent) 
 
 ### Build the runtime image
 
-Runtime hosts never pull images. Build Spyria's runtime image before the first runtime:
+In development nothing is pulled: hosts run the image built here, by its content ID (a published deployment pulls `spyria-agent` by digest instead, see [install on one machine](./install.md)). Build Spyria's runtime image before the first runtime:
 
 ```sh
 bun run agent:build          # compile spyria-agent and build the image; cached by Docker
@@ -181,7 +184,7 @@ A removed host stops for good: it turns off its container's restart policy on th
 
 ### Deployment names
 
-Every Docker object Spyria names comes from `SPYRIA_DEPLOYMENT` (default `spyria`). Another deployment on the same Docker daemon, such as `spyria-prod`, uses the image, container and state volume `spyria-prod-host`, runtimes `spyria-prod-rt-*`, sign-ins `spyria-prod-cred-*` and harnesses `spyria-prod-harnesses`, and its Add host and sign-in commands carry these names. Neither host ever sees the other's runtimes. See [Self-hosting](./self-hosting.md).
+Every Docker object Spyria names comes from `SPYRIA_DEPLOYMENT` (default `spyria`). Another deployment on the same Docker daemon, such as `spyria-prod`, uses the image, container and state volume `spyria-prod-host`, runtimes `spyria-prod-rt-*`, sign-ins `spyria-prod-cred-*` and harnesses `spyria-prod-harnesses`, and its Add host and sign-in commands carry these names. Neither host ever sees the other's runtimes. See [Manual install](./self-hosting.md).
 
 ### Claude Code and Codex on your own machine
 
@@ -211,9 +214,9 @@ The host image installs exactly `apps/host/bun.lock`. After changing a host depe
 | `packages/usage` | Usage metering, spend, budgets and the audit log. |
 | `packages/onboarding` | The setup checklist: which tasks a member sees, what is done or skipped. |
 | `packages/kernel`, `packages/db`, `packages/ui`, `packages/session` | The shared layer: kernel types and logging, the database client and Zero schema, UI components, the signed-in member. |
-| `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`, `bifrost.json`. |
-| `deploy/` | The production Compose file `compose.prod.yml`. |
-| `scripts/` | Checks and tooling: `check-all.ts`, `check-related.ts`, `check-bundle.ts`, `check-locks.ts`, `check-licenses.ts`, `agent-image.ts`, `smoke-prod.ts`. |
+| `infra/` | The dev stack: `docker-compose.yml`, `dex.yaml`. |
+| `deploy/` | Production: `compose.prod.yml` (published images), `compose.build.yml` (the override that builds from this clone), `bifrost.json` (the gateway's configuration, shared with the dev stack). |
+| `scripts/` | Checks and tooling: `check-all.ts`, `check-related.ts`, `check-bundle.ts`, `check-locks.ts`, `check-licenses.ts`, `agent-image.ts`, `smoke-prod.ts`, `check-tofu.ts`, `docs-site.ts`. |
 
 ## Where to start reading
 

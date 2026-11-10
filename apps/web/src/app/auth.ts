@@ -23,13 +23,19 @@ export const loadSessions = async (): Promise<{
   userId?: MemberId
   sessions: WorkspaceSession[]
   deployment: string
+  version: string
+  hostImage?: string
 }> => (await fetch('/auth/sessions')).json()
 
-export const loadAuthMode = async (): Promise<{
+export const loadAuthMode = async (
+  setupToken?: string,
+): Promise<{
   authMode: 'dex' | 'sso'
+  joinBy: 'domain' | 'invited_address'
+  isBeingSetUp: boolean
   canCreateWorkspace: boolean
   instanceApps: ('google' | 'microsoft')[]
-}> => (await fetch('/auth/mode')).json()
+}> => (await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')).json()
 
 let sharedAuthModeLoading: ReturnType<typeof loadAuthMode> | undefined
 export const sharedAuthMode = () => {

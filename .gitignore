@@ -15,3 +15,8 @@ __boundary-probes__/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/architecture
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars

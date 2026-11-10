@@ -36,6 +36,8 @@ export const addRuntimeHost = async (
     claimExpiresAt: now + claimLifetimeMilliseconds,
     capacity: null,
     runningRuntimes: 0,
+    hostVersion: null,
+    protocolVersion: 0,
     lastSeenAt: null,
     createdBy: memberId,
     ownerId: personal ? memberId : null,

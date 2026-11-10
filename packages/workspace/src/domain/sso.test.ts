@@ -3,6 +3,8 @@ import {
   domainOfEmail,
   entraObjectIdPattern,
   instanceAppFor,
+  isPublicEmailDomain,
+  joinByOf,
   ssoCanBindByEmail,
   ssoEmailOf,
   ssoSettingsFrom,
@@ -21,7 +23,7 @@ test('presets give the issuer, and the domain is normalized', () => {
   expect(ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 'tenant-1' }).issuer).toBe(
     'https://login.microsoftonline.com/tenant-1/v2.0',
   )
-  expect(ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 't' }, 'http://localhost:9').issuer).toBe(
+  expect(ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 't' }, 'domain', 'http://localhost:9').issuer).toBe(
     'http://localhost:9/t/v2.0',
   )
   expect(ssoSettingsFrom({ ...base, preset: 'oidc', issuer: 'https://idp.acme.com/' }).issuer).toBe(
@@ -41,15 +43,56 @@ test.each([
   [{ preset: 'oidc', issuer: 'https://idp.acme.com', clientId: ' ' }, 'A client id is required'],
   [{ preset: 'google', domain: ' ' }, 'An email domain is required'],
   [{ preset: 'google', domain: 'acme' }, 'acme is not an email domain'],
+  [{ preset: 'google', domain: 'Gmail.com' }, 'gmail.com is a public email domain'],
 ] as const)('refuses %o', (input, message) => {
   expect(() => ssoSettingsFrom({ ...base, ...input } as Parameters<typeof ssoSettingsFrom>[0])).toThrow(message)
 })
 
-test('Entra reads the user principal name before the mail attribute, other presets read only email', () => {
-  expect(ssoEmailOf('microsoft', { preferred_username: 'pat@acme.com' })).toBe('pat@acme.com')
-  expect(ssoEmailOf('microsoft', { email: 'x@acme.com', preferred_username: 'pat@acme.com' })).toBe('pat@acme.com')
-  expect(ssoEmailOf('microsoft', { email: 'pat@acme.com' })).toBe('pat@acme.com')
-  expect(ssoEmailOf('oidc', { preferred_username: 'pat@acme.com' })).toBeUndefined()
+test('a workspace joined by invited address owns no domain: none is required and one is refused', () => {
+  expect(ssoSettingsFrom({ ...base, domain: undefined, preset: 'google' }, 'invited_address')).toEqual({
+    preset: 'google',
+    issuer: 'https://accounts.google.com',
+    clientId: 'spyria',
+    domain: null,
+  })
+  expect(
+    ssoSettingsFrom({ ...base, domain: ' ', preset: 'oidc', issuer: 'https://idp.x.com' }, 'invited_address').domain,
+  ).toBeNull()
+  expect(() => ssoSettingsFrom({ ...base, preset: 'google' }, 'invited_address')).toThrow(
+    'A workspace joined by invited address owns no email domain',
+  )
+  expect(() => ssoSettingsFrom({ ...base, preset: 'microsoft', tenantId: 'common' }, 'invited_address')).toThrow(
+    'Only a tenant-specific Microsoft Entra issuer is accepted',
+  )
+})
+
+test('the instance setting names how people join, with domain as the default', () => {
+  expect(joinByOf(undefined)).toBe('domain')
+  expect(joinByOf('')).toBe('domain')
+  expect(joinByOf('domain')).toBe('domain')
+  expect(joinByOf('invited-address')).toBe('invited_address')
+  expect(() => joinByOf('anyone')).toThrow('SPYRIA_JOIN_BY must be domain or invited-address')
+  expect(isPublicEmailDomain('outlook.com')).toBe(true)
+  expect(isPublicEmailDomain('acme.com')).toBe(false)
+})
+
+test('Entra reads the user principal name before the mail attribute; other presets read only a confirmed email', () => {
+  expect(ssoEmailOf('microsoft', { preferred_username: 'pat@acme.com' }, 'domain')).toEqual({ email: 'pat@acme.com' })
+  expect(ssoEmailOf('microsoft', { email: 'x@acme.com', preferred_username: 'pat@acme.com' }, 'domain')).toEqual({
+    email: 'pat@acme.com',
+  })
+  expect(ssoEmailOf('microsoft', { email: 'pat@acme.com' }, 'domain')).toEqual({ email: 'pat@acme.com' })
+  expect(ssoEmailOf('microsoft', {}, 'domain')).toEqual({ refusal: 'untrusted' })
+  expect(ssoEmailOf('oidc', { preferred_username: 'pat@acme.com', email_verified: true }, 'domain')).toEqual({
+    refusal: 'untrusted',
+  })
+  expect(ssoEmailOf('oidc', { email: 'pat@acme.com', email_verified: true }, 'domain')).toEqual({
+    email: 'pat@acme.com',
+  })
+  expect(ssoEmailOf('oidc', { email: 'pat@acme.com' }, 'domain')).toEqual({ refusal: 'unconfirmed' })
+  expect(ssoEmailOf('oidc', { email: 'pat@acme.com', email_verified: false }, 'invited_address')).toEqual({
+    refusal: 'unconfirmed',
+  })
   expect(domainOfEmail(' Pat@Acme.COM ')).toBe('acme.com')
 })
 
@@ -64,14 +107,26 @@ test('the app of this Spyria serves Google and Microsoft once configured, never 
   )
 })
 
-test('through Google, only a verified email of an account managed by the Google Workspace of its domain signs in', () => {
+test('through Google, a by-domain workspace takes only a confirmed account managed by the Google Workspace of its domain', () => {
   const verified = { email: 'pat@acme.com', email_verified: true, hd: 'acme.com' }
-  expect(ssoEmailOf('google', verified)).toBe('pat@acme.com')
-  expect(ssoEmailOf('google', { ...verified, email_verified: false })).toBeUndefined()
-  expect(ssoEmailOf('google', { email: 'pat@acme.com', hd: 'acme.com' })).toBeUndefined()
-  expect(ssoEmailOf('google', { ...verified, hd: undefined })).toBeUndefined()
-  expect(ssoEmailOf('google', { ...verified, hd: 'globex.com' })).toBeUndefined()
-  expect(ssoEmailOf('google', { ...verified, email: 'pat@gmail.com' })).toBeUndefined()
+  expect(ssoEmailOf('google', verified, 'domain')).toEqual({ email: 'pat@acme.com' })
+  expect(ssoEmailOf('google', { ...verified, email_verified: false }, 'domain')).toEqual({ refusal: 'unconfirmed' })
+  expect(ssoEmailOf('google', { email: 'pat@acme.com', hd: 'acme.com' }, 'domain')).toEqual({ refusal: 'unconfirmed' })
+  expect(ssoEmailOf('google', { ...verified, hd: undefined }, 'domain')).toEqual({ refusal: 'untrusted' })
+  expect(ssoEmailOf('google', { ...verified, hd: 'globex.com' }, 'domain')).toEqual({ refusal: 'untrusted' })
+  expect(ssoEmailOf('google', { ...verified, email: 'pat@gmail.com' }, 'domain')).toEqual({ refusal: 'untrusted' })
+})
+
+test('through Google, a workspace joined by invited address takes any confirmed account, Gmail included', () => {
+  expect(ssoEmailOf('google', { email: 'pat@gmail.com', email_verified: true }, 'invited_address')).toEqual({
+    email: 'pat@gmail.com',
+  })
+  expect(
+    ssoEmailOf('google', { email: 'pat@acme.com', email_verified: true, hd: 'acme.com' }, 'invited_address'),
+  ).toEqual({ email: 'pat@acme.com' })
+  expect(ssoEmailOf('google', { email: 'pat@gmail.com', email_verified: false }, 'invited_address')).toEqual({
+    refusal: 'unconfirmed',
+  })
 })
 
 test('an Entra guest, whose identity provider is another tenant, is never bound to a member by email', () => {

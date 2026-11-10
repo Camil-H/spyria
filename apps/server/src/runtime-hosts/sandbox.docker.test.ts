@@ -396,3 +396,36 @@ test.skipIf(!hasImage)(
   },
   60_000,
 )
+
+test.skipIf(!hasImage)(
+  'recreating a runtime replaces its container on the image given but keeps its volumes and the files in them',
+  async () => {
+    const id = await hostId()
+    const provider = gateway.sandboxProvider
+    const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'docker-recreate' }
+    const containerName = `${prefix}rt-docker-recreate`
+    const inWorkspaceVolume = (...command: string[]) =>
+      dockerText(
+        'run',
+        '--rm',
+        '-v',
+        `${containerName}-ws:/workspace`,
+        '--entrypoint',
+        'sh',
+        spyriaImage,
+        '-c',
+        ...command,
+      )
+    await provider.create({ ...runtime, image: spyriaImage })
+    inWorkspaceVolume('echo kept > /workspace/kept.txt')
+    const [before] = JSON.parse(dockerText('inspect', containerName))
+    await provider.recreate({ ...runtime, image: spyriaImage })
+    const [after] = JSON.parse(dockerText('inspect', containerName))
+    expect(after.Id).not.toBe(before.Id)
+    expect(after.Config.Labels).toMatchObject({ 'spyria.managed': '1', 'spyria.runtime': 'docker-recreate' })
+    expect(inWorkspaceVolume('cat /workspace/kept.txt')).toBe('kept')
+    await provider.remove(runtime)
+    expect(await provider.status(runtime)).toBe('missing')
+  },
+  60_000,
+)

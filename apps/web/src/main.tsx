@@ -53,13 +53,13 @@ const sessionMissing = {
 } as const
 
 const openApp = async () => {
-  const { userId, sessions, deployment } = await loadSessions()
+  const { userId, sessions, ...instance } = await loadSessions()
   const [defaultSession] = sessions
   if (!userId || !defaultSession) return 'signed_out'
   const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
   rememberSignedIn()
   const slowLoadTimer = setTimeout(() => root.render(<WorkspaceLoadingScreen />), slowWorkspaceLoadMilliseconds)
-  const app = await createApp(userId, defaultSession.workspaceId, sessions, deployment).finally(() =>
+  const app = await createApp(userId, defaultSession.workspaceId, sessions, instance).finally(() =>
     clearTimeout(slowLoadTimer),
   )
   if (!app) return 'session_ended'
@@ -82,12 +82,16 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithP
 }
 
 const showSignIn = async (notice?: string) => {
-  const { authMode, canCreateWorkspace, instanceApps } = await loadAuthMode()
+  const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
+  const { authMode, joinBy, isBeingSetUp, canCreateWorkspace, instanceApps } = await loadAuthMode(setupToken)
   root.render(
     <>
       <SignInScreen
         isEmailFirst={authMode === 'sso'}
+        isBeingSetUp={isBeingSetUp}
+        joinsByInvitedAddress={joinBy === 'invited_address'}
         canCreateWorkspace={canCreateWorkspace}
+        setupToken={setupToken}
         instanceApps={instanceApps}
         notice={notice}
         signIn={async (email) => openAppWhenSignedIn(await signInWithPopup({ email }))}

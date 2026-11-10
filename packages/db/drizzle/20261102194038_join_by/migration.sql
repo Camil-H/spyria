@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "join_by" text DEFAULT 'domain' NOT NULL;

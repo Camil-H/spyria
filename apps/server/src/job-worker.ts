@@ -47,6 +47,7 @@ export const startJobWorker = (
     cleanupPollMilliseconds = 30_000,
     failedCleanupRetryMilliseconds = 60 * 60_000,
     sandboxProvider,
+    spyriaAgentImage,
     agentBridge,
     llmGateway,
     usageLogs,
@@ -59,6 +60,7 @@ export const startJobWorker = (
     cleanupPollMilliseconds?: number
     failedCleanupRetryMilliseconds?: number
     sandboxProvider?: SandboxProvider
+    spyriaAgentImage?: string
     agentBridge?: AgentBridge
     llmGateway?: ReturnType<typeof createLlmGateway>
     usageLogs?: Parameters<typeof createUsageJobs>[0]
@@ -66,7 +68,7 @@ export const startJobWorker = (
 ) => {
   const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = sessionJobs
   const jobHandlers: Record<string, JobHandler | undefined> = {
-    ...(sandboxProvider && createRuntimeJobs(sandboxProvider)),
+    ...(sandboxProvider && createRuntimeJobs(sandboxProvider, { currentImage: spyriaAgentImage })),
     ...agentBridge?.forDatabase(database).jobs,
     ...(llmGateway && createProfileJobs(llmGateway)),
     ...(usageLogs && createUsageJobs(usageLogs)),

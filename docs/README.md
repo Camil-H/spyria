@@ -2,6 +2,8 @@
 
 Start with the architecture overview, then the page for what you are doing. The project rules for contributors are in [AGENTS.md](../AGENTS.md).
 
+The guides for installing and running Spyria are also published at [spyria.dev](https://spyria.dev), built from this folder by `scripts/docs-site.ts` (the pages it lists), which also serves `install.sh` at `https://spyria.dev/install`. Each published release publishes the site from its tag (or a manual run of the Docs site workflow), so `/install` and the guides match the release the script downloads. It goes to the `gh-pages` branch; GitHub Pages serves that branch with the custom domain `spyria.dev`, set and verified once in the repository and account settings.
+
 ## Architecture
 
 - [Overview](architecture/overview.md): the system in one diagram, the life of an agent turn, why tokens stream outside Zero, where state lives.
@@ -16,8 +18,12 @@ Start with the architecture overview, then the page for what you are doing. The 
 
 - [Development](guides/development.md): prerequisites, the dev stack, `.env.dev`, daily commands, a local runtime host, the project layout.
 - [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the looks, the docker suite, manual checks.
-- [Self-hosting](guides/self-hosting.md): requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example, pitfalls.
-- [Operations](guides/operations.md): logs, traces, health, upgrades, jobs, connections, disk, backups.
+- [Install on one machine](guides/install.md): `install.sh` and `spyria setup`: the tunnel, who can join, the provider and mail, the runtime host on the machine.
+- [Manual install](guides/self-hosting.md): what `spyria setup` does underneath: requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example.
+- [Install on AWS, Azure or Google Cloud](guides/cloud.md): the OpenTofu modules of the managed control plane and the runtime host VMs, and `spyria setup --cloud`.
+- [Operations](guides/operations.md): upgrades and backups with `spyria`, logs, traces, health, jobs, connections, disk.
+- [Who can join and sign-in](guides/who-can-join.md): by email domain or by invited address, the setup link, confirmed addresses.
+- [Troubleshooting](guides/troubleshooting.md): `spyria doctor` and the symptoms that cost the most time.
 
 ## Features
 

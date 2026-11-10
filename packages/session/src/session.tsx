@@ -5,6 +5,8 @@ export type Session = {
   memberId: MemberId
   defaultWorkspaceId: WorkspaceId
   deployment: string
+  version: string
+  hostImage?: string
   signedInWorkspaceIds: () => ReadonlySet<WorkspaceId>
   subscribe: (listener: () => void) => () => void
   signOut: (workspaceId: WorkspaceId) => Promise<void>

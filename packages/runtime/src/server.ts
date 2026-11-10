@@ -1,5 +1,7 @@
 export type * from './contracts/sandbox-provider.ts'
-export { HostRefused } from './domain/errors.ts'
+export { HostNotRegistered, HostRefused } from './domain/errors.ts'
+export { hostUpdateCommandOf } from './domain/host-command.ts'
+export type { RuntimeHost } from './domain/runtime-host.ts'
 export type { RuntimeCommands } from './entrypoints/commands.ts'
 export {
   addRuntimeHostFromRequest,
@@ -12,6 +14,7 @@ export {
 export { createRuntimeJobs } from './entrypoints/jobs.ts'
 export { runtimeMutators } from './entrypoints/mutators.ts'
 export { createHttpRuntimeHostCommands, runtimeHostsPath } from './integrations/http-runtime-hosts.ts'
+export { addInstallHost } from './integrations/install-host.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
 export { ensureRuntimeRunning, retryRuntime } from './operations/ensure-runtime-running.ts'
 export { removeChatRuntime } from './operations/remove-chat-runtime.ts'

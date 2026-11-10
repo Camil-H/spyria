@@ -101,7 +101,7 @@ services:
       - 127.0.0.1:8180:8080
     volumes:
       - gateway-data:/app/data
-      - ./bifrost.json:/app/data/config.json:ro
+      - ../deploy/bifrost.json:/app/data/config.json:ro
     healthcheck:
       test: wget -q -O /dev/null http://127.0.0.1:8080/health
       interval: 1s

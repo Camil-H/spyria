@@ -2,17 +2,25 @@ import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
+import { hostUpdateCommandOf } from '@spyria/runtime/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
+import { joinByOf } from '@spyria/workspace/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { assertInstanceAppsConfigured } from './auth/sso.ts'
+import {
+  applyConfiguredSignInApp,
+  assertInstanceAppsConfigured,
+  hasNoWorkspace,
+  isInstallHostToken,
+} from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { productionProblemsOf } from './production.ts'
+import { trustedProxyOf } from './rate-limits.ts'
 import { createRuntimeHostGateway, serverWebSocket } from './runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from './spyria-agent-image.ts'
 import { startTelemetry } from './telemetry.ts'
@@ -51,9 +59,17 @@ const llmGateway = createLlmGateway(gatewaySettings)
 const tokenSecret = requiredEnvironment('SPYRIA_TOKEN_SECRET')
 const secretsKey = requiredEnvironment('SPYRIA_SECRETS_KEY')
 const spyriaAgentImage = await readSpyriaAgentImage()
+const appOrigin = requiredEnvironment('SPYRIA_APP_ORIGIN')
+const version = process.env.SPYRIA_VERSION || undefined
+const images = process.env.SPYRIA_IMAGES || undefined
+const hostImage = version && images ? `${images}/spyria-host:${version}` : undefined
+const installHostToken = process.env.SPYRIA_INSTALL_HOST_TOKEN || undefined
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
+  awaitsFirstWorkspace: async (claimCode) =>
+    isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
   runtimeKeySecret: secretsKey,
+  hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
   relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
@@ -74,6 +90,19 @@ const instanceSignInApps = {
   ...instanceSignInAppOf('microsoft', 'SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'),
 }
 await assertInstanceAppsConfigured(database, instanceSignInApps)
+const configuredSignInApp = {
+  clientId: process.env.SPYRIA_SIGN_IN_APP_CLIENT_ID?.trim() ?? '',
+  clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET?.trim() ?? '',
+}
+if (configuredSignInApp.clientId && configuredSignInApp.clientSecret) {
+  const changedWorkspaces = await applyConfiguredSignInApp(database, createSecretBox(secretsKey), configuredSignInApp)
+  if (changedWorkspaces > 0)
+    log.info({
+      event: 'sso.sign_in_app_applied',
+      body: 'The sign-in app of the settings now signs in every workspace joined by invited address',
+      attributes: { 'spyria.workspace_count': changedWorkspaces },
+    })
+}
 const app = createApp({
   database,
   tokenSecret,
@@ -89,19 +118,26 @@ const app = createApp({
   mail: process.env.SPYRIA_SMTP_URL
     ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }
     : undefined,
-  appOrigin: requiredEnvironment('SPYRIA_APP_ORIGIN'),
+  appOrigin,
   deployment,
   webDist: process.env.SPYRIA_WEB_DIST || undefined,
   llmGateway,
   runtimeHosts,
   agentBridge,
   spyriaAgentImage,
-  trustedProxy: process.env.SPYRIA_TRUSTED_PROXY === 'cloudflare' ? 'cloudflare' : undefined,
+  trustedProxy: trustedProxyOf(process.env.SPYRIA_TRUSTED_PROXY),
+  zeroUrl: process.env.SPYRIA_ZERO_URL || undefined,
+  version,
+  hostImage,
+  setupToken: process.env.SPYRIA_SETUP_TOKEN || undefined,
+  joinBy: joinByOf(process.env.SPYRIA_JOIN_BY),
+  installHostToken,
 })
 setModelDirectory(llmGateway.listedModels)
 void llmGateway.refreshListedModels()
 const jobWorker = startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,
+  spyriaAgentImage,
   agentBridge,
   llmGateway,
   usageLogs: createBifrostUsageLogs(gatewaySettings),

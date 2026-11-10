@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { pruneBuildCache } from './build-cache.ts'
 
 const repositoryRoot = new URL('..', import.meta.url).pathname
-const composeFile = `${repositoryRoot}deploy/compose.prod.yml`
+const composeFiles = ['compose.prod.yml', 'compose.build.yml'].flatMap((file) => [
+  '-f',
+  `${repositoryRoot}deploy/${file}`,
+])
 const deployment = `spyria-smoke-${randomBytes(4).toString('hex')}`
 const secretOf = () => randomBytes(24).toString('hex')
 const freePort = () => {
@@ -20,9 +23,11 @@ const environmentDirectory = mkdtempSync(join(tmpdir(), `${deployment}-`))
 const environmentFile = join(environmentDirectory, '.env')
 const smokeEnvironment = {
   SPYRIA_DEPLOYMENT: deployment,
+  SPYRIA_VERSION: 'dev',
   SPYRIA_APP_ORIGIN: 'https://localhost',
   SPYRIA_TOKEN_SECRET: secretOf(),
   SPYRIA_SECRETS_KEY: secretOf(),
+  SPYRIA_SETUP_TOKEN: secretOf(),
   SPYRIA_SMTP_URL: `smtp://smoke:${secretOf()}@127.0.0.1:2525`,
   SPYRIA_MAIL_FROM: 'Spyria smoke <smoke@example.com>',
   SPYRIA_GATEWAY_ADMIN_USER: `admin-${secretOf().slice(0, 8)}`,
@@ -42,7 +47,7 @@ const run = (command: string[]) =>
 const output = (command: string[]) =>
   Bun.spawnSync(command, { env: shellEnvironment, stdout: 'pipe', stderr: 'pipe' }).stdout.toString().trim()
 const compose = (...composeArguments: string[]) =>
-  run(['docker', 'compose', '--env-file', environmentFile, '-f', composeFile, ...composeArguments])
+  run(['docker', 'compose', '--env-file', environmentFile, ...composeFiles, ...composeArguments])
 const step = (message: string) => console.log(`[smoke ${new Date().toISOString().slice(11, 19)}] ${message}`)
 const check = (isPassed: boolean, message: string) => {
   if (!isPassed) throw new Error(message)
@@ -135,8 +140,26 @@ const smoke = async () => {
   )
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
-    authMode.authMode === 'sso' && authMode.canCreateWorkspace === true,
-    '/auth/mode offers creating the first workspace',
+    authMode.authMode === 'sso' && authMode.isBeingSetUp === true && authMode.canCreateWorkspace === false,
+    '/auth/mode says the deployment is being set up and refuses creating a workspace without the setup link',
+  )
+  const setupMode = await (
+    await fetch(`${serverUrl}/auth/mode?${new URLSearchParams({ setup: smokeEnvironment.SPYRIA_SETUP_TOKEN })}`)
+  ).json()
+  check(setupMode.canCreateWorkspace === true, '/auth/mode offers creating the first workspace with the setup token')
+  const zeroKeepalive = await fetch(`${serverUrl}/zero/keepalive`)
+  await zeroKeepalive.arrayBuffer()
+  check(zeroKeepalive.status === 200, 'the server forwards /zero/keepalive to zero-cache')
+  const zeroAnswer = await new Promise<string>((resolve) => {
+    const socket = new WebSocket(`${serverUrl.replace('http', 'ws')}/zero/sync/v51/connect`)
+    socket.onmessage = (event) => resolve(`message ${String(event.data).slice(0, 80)}`)
+    socket.onclose = (event) => resolve(`close ${event.code}`)
+    socket.onerror = () => resolve('error')
+    setTimeout(() => resolve('timeout'), 10_000)
+  })
+  check(
+    zeroAnswer.startsWith('message') || zeroAnswer.startsWith('close'),
+    `the server forwards the /zero WebSocket to zero-cache, which answered (${zeroAnswer})`,
   )
 }
 
