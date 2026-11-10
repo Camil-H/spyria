@@ -1,5 +1,5 @@
 import { type createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -228,6 +228,14 @@ export const startFakeGitHub = () => {
     } finally {
       rmSync(source, { recursive: true, force: true })
     }
+  }
+  const refusePushesTo = (repository: string, branch: string) => {
+    const hook = join(bareOf(repository), 'hooks', 'pre-receive')
+    writeFileSync(
+      hook,
+      `#!/bin/sh\nwhile read old new ref; do [ "$ref" = "refs/heads/${branch}" ] && exit 1; done\nexit 0\n`,
+    )
+    chmodSync(hook, 0o755)
   }
   const commitSubjectsOf = (repository: string, branch: string, base = 'main') =>
     branchHeadOf(repository, branch)
@@ -624,6 +632,7 @@ export const startFakeGitHub = () => {
     branchHeadOf,
     commitSubjectsOf,
     commitToBranch,
+    refusePushesTo,
     userTokens: () => [...userTokens.keys()],
     expireUserTokens: () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
