@@ -169,11 +169,15 @@ export const assertPostgresRuns = (folder: string, thenWhat: string) => {
     throw new Error(`Postgres is not running: start it with spyria compose up -d postgres, then ${thenWhat}`)
 }
 
-const databaseExists = (folder: string, database: string) =>
-  readCompose(folder, [
+const databaseExists = (folder: string, database: string) => {
+  const answer = readCompose(folder, [
     ...['exec', '-T', 'postgres', 'psql', '-U', 'spyria', '-d', 'postgres', '-tAc'],
     `select 1 from pg_database where datname = '${database}'`,
-  ]).output.trim() === '1'
+  ])
+  if (answer.exitCode !== 0)
+    throw new Error(`Postgres did not say whether the ${database} database exists: nothing was changed`)
+  return answer.output.trim() === '1'
+}
 
 export const backup = async (folder: string, flags: Flags) => {
   const keep = keptBackupsOf(flags)
