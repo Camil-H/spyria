@@ -4,7 +4,7 @@ import awsExample from '../../../deploy/tofu/examples/aws/main.tf' with { type: 
 import azureExample from '../../../deploy/tofu/examples/azure/main.tf' with { type: 'text' }
 import gcpExample from '../../../deploy/tofu/examples/gcp/main.tf' with { type: 'text' }
 import { installFolderOf } from './commands.ts'
-import { askerOf, type Flags, type ProcessEnvironment } from './flags.ts'
+import { askerOf, type Flags, hiddenAnswerTo, type ProcessEnvironment, type SecretReader } from './flags.ts'
 import { cliVersion, latestVersion, repository } from './release.ts'
 import { removal } from './setup-steps.ts'
 
@@ -210,10 +210,13 @@ const run = (folder: string, command: string[]) =>
 export const setupCloud = async (
   flags: Flags,
   cloud: Cloud,
-  { environment = process.env }: { environment?: ProcessEnvironment } = {},
+  {
+    environment = process.env,
+    readSecret = hiddenAnswerTo,
+  }: { environment?: ProcessEnvironment; readSecret?: SecretReader } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
-  const asker = askerOf(flags, isUnattended, environment)
+  const asker = askerOf(flags, isUnattended, environment, readSecret)
   const folder = installFolderOf({
     ...flags,
     values: {

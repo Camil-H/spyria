@@ -126,6 +126,7 @@ test('run again by hand, a saved SMTP URL is never shown, empty keeps an answer 
     const setupAzure = (extra: string[] = [], environment = {}) =>
       setupCloud(parseFlags(['setup', '--cloud', 'azure', '--no-start', '--folder', azureFolder, ...extra]), 'azure', {
         environment,
+        readSecret: (question) => prompt(question) ?? '',
       })
     await setupAzure(
       [
