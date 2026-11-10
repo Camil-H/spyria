@@ -79,11 +79,19 @@ test.skipIf(!hasDocker)(
       await restore(folder, parseFlags(['restore', `backups/${spyriaDump}`])).catch((error: Error) => error.message),
     ).toBe('Postgres is not running: start it with spyria compose up -d postgres, then restore again')
     expect(compose('up', '-d', '--wait', 'postgres').exitCode).toBe(0)
-    await restore(folder, parseFlags(['restore', `backups/${spyriaDump}`]))
+    await restore(folder, parseFlags(['restore', `backups/${spyriaDump}`, '--yes']))
     expect(sql('spyria', "select string_agg(body, ',') from notes")).toBe('before')
     expect(sql('spyria', "select to_regclass('added_later') is null")).toBe('t')
 
-    await restore(folder, parseFlags(['restore', `backups/${bifrostDump}`]))
+    const safetyCopies = readdirSync(join(folder, 'backups')).filter(
+      (file) => file.startsWith('spyria-') && file !== spyriaDump,
+    )
+    expect(safetyCopies).toHaveLength(1)
+    await restore(folder, parseFlags(['restore', `backups/${safetyCopies[0]}`, '--yes']))
+    expect(sql('spyria', "select string_agg(body, ',' order by body) from notes")).toBe('after,before')
+    expect(sql('spyria', "select to_regclass('added_later') is null")).toBe('f')
+
+    await restore(folder, parseFlags(['restore', `backups/${bifrostDump}`, '--yes']))
     expect(sql('bifrost', "select tableowner from pg_tables where tablename = 'keys'")).toBe('bifrost')
 
     await backup(folder, parseFlags(['backup', '--keep', '1']))
