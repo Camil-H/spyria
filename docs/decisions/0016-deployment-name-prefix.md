@@ -15,4 +15,4 @@ Spyria creates Docker objects on several machines: its own containers and volume
 - Development and production can share one machine safely, as long as production gets its own name (for example `spyria-prod`).
 - Changing the name of a running deployment means recreating its objects.
 
-See [self-hosting](../guides/self-hosting.md#deployment-name).
+See [manual install](../guides/self-hosting.md#deployment-name).

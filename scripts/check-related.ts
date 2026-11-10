@@ -1,4 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs'
+import { unitTestOfScript } from './script-tests.ts'
 
 type Suite = { name: string; files: Set<string>; full: string[] }
 type Cruised = { modules: { source: string; dependencies: { resolved: string }[] }[] }
@@ -61,7 +62,7 @@ const fastChecks = planFile
     ])
 
 const isUnitTest = (file: string) =>
-  /^(packages|apps\/server|apps\/host|apps\/agent)\/.+\.test\.tsx?$/.test(file) &&
+  /^(packages|apps\/server|apps\/host|apps\/agent|apps\/cli|scripts)\/.+\.test\.tsx?$/.test(file) &&
   !/\.(integration|docker)\.test\.ts$/.test(file)
 const isIntegrationTest = (file: string) => file.endsWith('.integration.test.ts')
 const isE2eSpec = (file: string) => /^apps\/web\/e2e\/.+\.spec\.ts$/.test(file)
@@ -80,7 +81,7 @@ const isInWebBundle = (file: string) =>
     file,
   ) && !isTestCode(file)
 const isDockerArea = (file: string) =>
-  /^(apps\/(host|agent)\/|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
+  /^(apps\/(host|agent)\/|deploy\/(compose\.prod\.yml|bifrost\.json)$|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
     file,
   )
 const e2eSegmentsByArea: [RegExp, string[]][] = [
@@ -109,6 +110,7 @@ const integration: Suite = { name: 'integration', files: new Set(), full: [] }
 const e2e: Suite = { name: 'e2e', files: new Set(), full: [] }
 const e2eSegments = new Map<string, string[]>()
 const dockerReasons: string[] = []
+const tofuReasons: string[] = []
 const reasons = new Map<string, string[]>()
 const select = (suite: Suite, testFile: string, changed: string) => {
   suite.files.add(testFile)
@@ -140,9 +142,16 @@ const dependentsOf = (file: string) => {
   return reached
 }
 
+const reachesCliDockerTest = (file: string) =>
+  [...dependentsOf(file)].some((dependent) => /^apps\/cli\/.+\.docker\.test\.ts$/.test(dependent))
+
 for (const changed of changedFiles) {
-  if (isDockerArea(changed)) dockerReasons.push(changed)
+  if (isDockerArea(changed) || reachesCliDockerTest(changed)) dockerReasons.push(changed)
+  if (changed.startsWith('deploy/tofu/') || changed === 'deploy/bifrost.json' || changed === 'scripts/check-tofu.ts')
+    tofuReasons.push(changed)
   const isModule = /\.(ts|tsx)$/.test(changed) && /^(apps|packages)\//.test(changed)
+  const scriptTest = unitTestOfScript(changed, (file) => existsSync(`${repositoryRoot}${file}`))
+  if (scriptTest) select(unit, scriptTest, changed)
   if (isOutsideTests(changed)) continue
   if (isWebAsset(changed)) {
     e2e.full.push(changed)
@@ -200,12 +209,13 @@ else {
 }
 console.log(dockerReasons.length > 0 ? `\ndocker: yes, because of ${dockerReasons.join(', ')}` : '\ndocker: no')
 console.log(bundleReasons.length > 0 ? `bundle: yes, because of ${bundleReasons.join(', ')}` : 'bundle: no')
+console.log(tofuReasons.length > 0 ? `tofu: yes, because of ${tofuReasons.join(', ')}` : 'tofu: no')
 
 const selectionOf = (suite: Suite) => (suite.full.length > 0 ? ('all' as const) : [...suite.files])
 if (planFile) {
   const isFull = process.argv.includes('--full')
   const selection = isFull
-    ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true }
+    ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true, tofu: true }
     : {
         unit: selectionOf(unit),
         integration: selectionOf(integration),
@@ -213,6 +223,7 @@ if (planFile) {
         e2eRepeat: changedSpecs.map(playwrightPathOf),
         docker: dockerReasons.length > 0,
         bundle: bundleReasons.length > 0,
+        tofu: tofuReasons.length > 0,
       }
   writeFileSync(planFile, `${JSON.stringify({ base, changedFiles, ...selection }, null, 2)}\n`)
   console.log(`\n${isFull ? 'Full plan' : 'Plan'} written to ${planFile}`)
@@ -232,7 +243,10 @@ if (e2eSelection === 'all') testResults.push(runInherited('e2e', ['bun', 'run', 
 else if (e2eSelection.length > 0)
   testResults.push(runInherited('e2e', ['bun', 'run', 'test:e2e', '--', ...e2eSelection]))
 if (dockerReasons.length > 0)
-  console.log('\nThe change reaches the host, the agent or the images: run check:docker too')
+  console.log(
+    '\nThe change reaches the host, the agent, the images, the gateway config or the backups: run check:docker too',
+  )
+if (tofuReasons.length > 0) console.log('\nThe change reaches the OpenTofu modules: run check:tofu too')
 
 const results = [...fastResults, ...testResults]
 console.log(`\ncheck:related in ${((performance.now() - startedAt) / 1000).toFixed(1)} s`)

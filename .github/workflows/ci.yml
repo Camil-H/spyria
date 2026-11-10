@@ -24,6 +24,7 @@ jobs:
       e2e-repeat: ${{ steps.plan.outputs.e2eRepeat }}
       docker: ${{ steps.plan.outputs.docker }}
       bundle: ${{ steps.plan.outputs.bundle }}
+      tofu: ${{ steps.plan.outputs.tofu }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,6 +45,7 @@ jobs:
             done
             echo "docker=$(jq -r .docker "$plan")"
             echo "bundle=$(jq -r .bundle "$plan")"
+            echo "tofu=$(jq -r .tofu "$plan")"
           } >> "$GITHUB_OUTPUT"
 
   checks:
@@ -57,6 +59,7 @@ jobs:
       - run: bun run typecheck
       - run: bun run check:boundaries
       - run: bun run check:locks
+      - run: bun scripts/docs-site.ts .check/site
 
   secrets:
     runs-on: ubuntu-latest
@@ -100,6 +103,17 @@ jobs:
           PLAN: ${{ needs.plan.outputs.plan }}
       - if: failure()
         uses: ./.github/actions/test-stack-logs
+
+  tofu:
+    needs: plan
+    if: needs.plan.outputs.tofu == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun run check:tofu
 
   bundle:
     needs: plan
@@ -177,7 +191,7 @@ jobs:
 
   ci-ok:
     if: always()
-    needs: [plan, checks, secrets, unit, integration, bundle, e2e, e2e-repeat, docker]
+    needs: [plan, checks, secrets, unit, integration, bundle, tofu, e2e, e2e-repeat, docker]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

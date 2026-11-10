@@ -31,6 +31,8 @@ bun run test:e2e:smoke     # only the tests tagged @smoke, after the platform ga
 bun run test:e2e -- e2e/04-agent   # one segment (the platform gate still runs first)
 bun run check:docker       # agent:build, then the docker tests
 bun run smoke:prod         # the production Compose file under a throwaway name; not in check:all
+bun run check:tofu         # OpenTofu fmt, validate and the tests with mock providers, for every module and example
+bun scripts/docs-site.ts .check/site   # the public docs site, refusing any link to a missing page or heading
 bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
@@ -38,11 +40,11 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 `check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, when React, react-dom, react-router or Zero is installed more than once across the web app and the packages, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
 
-`smoke:prod` is described in [Self-hosting](./self-hosting.md).
+`smoke:prod` is described in [Manual install](./self-hosting.md).
 
 ### Before a pull request
 
-Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent or the images.
+Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent, the images, the gateway config or the backups.
 
 ### How `check:related` chooses
 
@@ -69,9 +71,9 @@ It prints what it selected and why. It runs a whole suite when it cannot decide:
 - `apps/server/src/testing/integration-setup.ts` runs every integration test;
 - app code outside the table (`kernel`, `db`, `ui`, `session`, `workspace`, `apps/web/src`, the rest of `apps/server/src`), a web asset such as a stylesheet, or an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
 
-Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts) and `check:bundle` (the web app and the packages).
+Markdown, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test; a file in `scripts/` selects only its own unit test (`scripts/<name>.test.ts`), when it has one. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts, the `spyria` code its docker tests import, `deploy/compose.prod.yml` and the gateway config `deploy/bifrost.json`), `check:bundle` (the web app and the packages) and `check:tofu` (`deploy/tofu`, `deploy/bifrost.json` or `scripts/check-tofu.ts`), and prints `run check:docker too` or `run check:tofu too` when one is needed.
 
-With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker` and `bundle` are booleans.
+With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker`, `bundle` and `tofu` are booleans.
 
 ### What `check:all` records
 
@@ -84,13 +86,14 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 | Job | On a pull request | On a push to `develop` |
 |---|---|---|
 | `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
-| `checks` | lint, typecheck, boundaries, locks | the same |
+| `checks` | lint, typecheck, boundaries, locks (and the docs site build, refusing broken links) | the same |
 | `secrets` | gitleaks on the pull request's commits; fails when one adds a credential (key, token, private key) | gitleaks on the pushed commits |
 | `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
 | `bundle` | when the web app or a package changed | always |
 | `e2e` | the selected segments and specs, in 4 shards of 2 workers | the whole suite, in 4 shards |
 | `e2e-repeat` | the changed specs, 3 times each, without retry | not run |
-| `docker` | `check:docker` when the host, the agent, `infra` or the images changed | always |
+| `docker` | `check:docker` when the host, the agent, `infra`, the images, the gateway config or the backups changed | always |
+| `tofu` | `check:tofu` when `deploy/tofu`, `deploy/bifrost.json` or the script changed | always |
 | `ci-ok` | fails when any job failed or was cancelled; skipped jobs pass | the same |
 | `report-failure` | not run | comments the failed jobs on each pull request merged since `main` |
 

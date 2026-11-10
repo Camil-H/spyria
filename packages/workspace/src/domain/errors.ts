@@ -50,6 +50,22 @@ export const ChatOwnerActive = errorKind(
   WorkspaceError,
 )
 export const InvalidSsoSettings = errorKind('invalid_sso_settings', (reason: string) => reason, WorkspaceError)
+export const PublicEmailDomain = errorKind(
+  'public_email_domain',
+  (domain: string) =>
+    `${domain} is a public email domain: a workspace cannot own it. Set up Spyria to join people by invited address instead`,
+  WorkspaceError,
+)
+export const EmailNotConfirmed = errorKind(
+  'email_not_confirmed',
+  () => 'Your provider did not confirm this address',
+  WorkspaceError,
+)
+export const SignInAppFixed = errorKind(
+  'sign_in_app_fixed',
+  () => 'Every workspace on this Spyria signs in through one app, which an operator changes with spyria sign-in-app',
+  WorkspaceError,
+)
 export const DomainClaimed = errorKind(
   'domain_claimed',
   (domain: string) => `${domain} already signs in through another provider`,
@@ -68,8 +84,7 @@ export const SsoDiscoveryFailed = errorKind(
 )
 export const MailNotConfigured = errorKind(
   'mail_not_configured',
-  () =>
-    'Email is not configured on this server (SPYRIA_SMTP_URL): the operator can verify the domain with sso:verify-domain',
+  () => "Mail isn't set up on this deployment; an operator can verify the domain with spyria verify-domain",
   WorkspaceError,
 )
 export const MailNotSent = errorKind(

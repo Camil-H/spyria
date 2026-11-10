@@ -50,12 +50,14 @@ import {
 } from './spyria-agent-relay.ts'
 
 export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
+export const testSetupToken = 'e2e-and-integration-test-setup-token'
 const unlimitedRateBudgets = Object.fromEntries(
   Object.entries(rateBudgets).map(([name, budget]) => [name, { ...budget, count: 1_000_000_000 }]),
 ) as RateBudgets
 export const testAuthSettings = {
   rateLimits: unlimitedRateBudgets,
   tokenSecret: 'integration-test-secret',
+  setupToken: testSetupToken,
   appOrigin: 'http://localhost:5190',
   oidc: { issuer: 'http://localhost:5557/dex', clientId: 'spyria', redirectUri: 'http://localhost:3100/auth/callback' },
 }
@@ -859,6 +861,9 @@ export const promptedBy = async (chatId: string, prompterId: string) =>
 const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
+export const fakeHostVersion = 'test'
+export const fakeHostProtocolVersion = 1
+
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
   const hostStatus = async (hostId: string) =>
@@ -873,6 +878,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signedIn = [],
       relayLimitMilliseconds,
       relayVersion,
+      agentProtocolVersion = fakeHostProtocolVersion,
     }: {
       memoryGibibytes?: number
       containerAgent?: ContainerAgent
@@ -881,6 +887,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       signedIn?: string[]
       relayLimitMilliseconds?: number
       relayVersion?: number
+      agentProtocolVersion?: number
     } = {},
   ) => {
     const id = crypto.randomUUID()
@@ -909,7 +916,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       if (op === 'install' && installFailure) throw new Error(installFailure)
       if (op === 'install') installedHarnesses.add(harness)
       const container = containers.get(runtimeId)
-      if (op === 'create') containers.set(runtimeId, { running: false, apiKey })
+      if (op === 'create' || op === 'recreate') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container) {
         Object.assign(container, { running: true, isBooted: false })
         void boot().then(() => {
@@ -977,7 +984,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         }
       }) satisfies ModelCall,
       lifecycleCommands: () =>
-        commands.filter(({ op }) => ['create', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
+        commands.filter(({ op }) => ['create', 'recreate', 'start', 'stop', 'remove'].includes(op)).map(({ op }) => op),
       closed: () => closed,
       signIn: (tools: string[]) => {
         currentSignIns = tools
@@ -1036,7 +1043,13 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
                 sid: frame.sid,
                 status: isReady ? 200 : 503,
                 headers: {},
-                body: '',
+                body: isReady
+                  ? JSON.stringify({
+                      status: 'ready',
+                      agentVersion: fakeHostVersion,
+                      protocolVersion: agentProtocolVersion,
+                    })
+                  : '',
                 ...(response as object),
               }),
             )
@@ -1067,6 +1080,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           type: 'hello',
           token,
           gatewayUrl: fakeHostGatewayUrl,
+          hostVersion: fakeHostVersion,
+          protocolVersion: fakeHostProtocolVersion,
           ...(relayVersion && { relayVersion }),
           ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {

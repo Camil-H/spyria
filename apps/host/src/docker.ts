@@ -8,6 +8,7 @@ export class DockerError extends Error {
 }
 
 export const hostMachineMapping = 'host.docker.internal:host-gateway'
+const progressStreamPaths = ['/images/create']
 
 export type Mount = { Type: 'volume'; Source: string; Target: string; ReadOnly?: boolean }
 
@@ -34,5 +35,8 @@ export const createDocker =
         response.status,
         `Docker ${method} ${path.split('?')[0]} failed with ${response.status}: ${text.trim()}`,
       )
-    return (text && response.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text) as Result
+    const isJson =
+      response.headers.get('content-type')?.includes('json') &&
+      !progressStreamPaths.some((streamPath) => path.startsWith(streamPath))
+    return (text && isJson ? JSON.parse(text) : text) as Result
   }

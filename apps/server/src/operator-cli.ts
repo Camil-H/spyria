@@ -3,7 +3,9 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
-import { verifyDomainByOperator } from './auth/sso.ts'
+import { createSmtpMailer } from './auth/mail.ts'
+import { createSecretBox } from './auth/secret-box.ts'
+import { hasNoWorkspace, replaceSignInApp, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
@@ -56,12 +58,45 @@ const commands: Record<string, () => Promise<void>> = {
     const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
   },
+  'mail:test': async () => {
+    const to = optionOf('--to')
+    if (!to) throw new Error('Usage: bun run operator mail:test --to <address>')
+    const mailer = createSmtpMailer({
+      smtpUrl: requiredEnvironment('SPYRIA_SMTP_URL'),
+      from: requiredEnvironment('SPYRIA_MAIL_FROM'),
+    })
+    await mailer.send({
+      to,
+      subject: 'Spyria can send mail',
+      text: 'This test message shows that Spyria can send mail.',
+    })
+    console.log(`Sent a test message to ${to}`)
+  },
+  'has-workspace': async () => {
+    console.log((await hasNoWorkspace(database.$client)) ? 'no' : 'yes')
+  },
+  'setup-link': async () => {
+    if (!(await hasNoWorkspace(database.$client)))
+      throw new Error('A workspace already exists: the setup link is spent')
+    const origin = requiredEnvironment('SPYRIA_APP_ORIGIN')
+    console.log(`${origin}/?${new URLSearchParams({ setup: requiredEnvironment('SPYRIA_SETUP_TOKEN') })}`)
+  },
   'sso:verify-domain': async () => {
     const [workspaceId, domain] = ['--workspace', '--domain'].map(optionOf)
     if (!workspaceId || !domain)
       throw new Error('Usage: bun run operator sso:verify-domain --workspace <id> --domain <domain>')
     await verifyDomainByOperator(database, workspaceId, domain)
     console.log(`${domain} is verified for workspace ${workspaceId}`)
+  },
+  'sso:sign-in-app': async () => {
+    const clientId = optionOf('--client-id')
+    if (!clientId)
+      throw new Error(
+        'Usage: bun run operator sso:sign-in-app --client-id <id>, with the client secret on standard input',
+      )
+    const secretBox = createSecretBox(requiredEnvironment('SPYRIA_SECRETS_KEY'))
+    const count = await replaceSignInApp(database, secretBox, { clientId, clientSecret: await Bun.stdin.text() })
+    console.log(`${count} workspace${count === 1 ? '' : 's'} now sign in through client ${clientId}`)
   },
   'workspace:restore': async () => {
     const [workspaceId] = options

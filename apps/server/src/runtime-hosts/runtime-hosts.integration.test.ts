@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { defaultHarness, runtimeHostId } from '@spyria/kernel'
-import { runtimeMutators } from '@spyria/runtime/server'
+import { defaultDeployment, defaultHarness, runtimeHostId } from '@spyria/kernel'
+import { hostUpdateCommandOf, runtimeMutators } from '@spyria/runtime/server'
 import { createApp } from '../app.ts'
 import {
   acme,
@@ -32,6 +32,11 @@ const gateway = createRuntimeHostGateway({
   runtimeKeySecret: testSecretsKey,
   databases: () => [database],
   pingIntervalMilliseconds: 100,
+  hostUpdateCommandOf: hostUpdateCommandOf({
+    deployment: defaultDeployment,
+    origin: testAuthSettings.appOrigin,
+    image: 'ghcr.io/camil-h/spyria-host:1.2.0',
+  }),
 })
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
@@ -107,9 +112,9 @@ const connectFakeHost = async ({ answersPings = true } = {}) => {
   const frameOrClose = async (type: string) => {
     const closure = closed.then((close) => ({ closed: close }))
     for (;;) {
+      const outcome = await Promise.race([closure, Bun.sleep(10).then(() => null)])
       const frame = frames.find((received) => received.type === type)
       if (frame) return { frame }
-      const outcome = await Promise.race([closure, Bun.sleep(10).then(() => null)])
       if (outcome) return outcome
     }
   }
@@ -125,13 +130,15 @@ const claim = async (code: string) => {
 const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) =>
   'closed' in outcome ? outcome.closed.reason : 'not refused'
 
+const hostVersions = { hostVersion: 'test', protocolVersion: 1 }
+
 const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean; relayVersion?: number }) => {
   const { id, code } = await addedHost(name)
   const { host: claimingHost, token } = await claim(code)
   if (!token) throw new Error('Claiming failed')
   claimingHost.socket.close()
   const host = await connectFakeHost(options)
-  host.send({ type: 'hello', token, system: hostSystem, relayVersion: options?.relayVersion })
+  host.send({ type: 'hello', token, system: hostSystem, relayVersion: options?.relayVersion, ...hostVersions })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   return { id, code, token, host }
 }
@@ -176,8 +183,13 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
   }
   const helloRefusal = async (hello: object) => {
     const host = await connectFakeHost()
-    host.send({ type: 'hello', system: hostSystem, ...hello })
-    return (await host.closed).reason
+    host.send({ type: 'hello', system: hostSystem, ...hostVersions, ...hello })
+    const outcome = await host.frameOrClose('refused')
+    const { reason: closeReason } = await host.closed
+    if (!('frame' in outcome)) throw new Error(`No refused frame before the close: ${closeReason}`)
+    const reason = String(outcome.frame.reason)
+    expect(closeReason).toBe(reason.slice(0, 123))
+    return reason
   }
   const refusals = {
     'unknown code': async () => refusalOf((await claim('ZZZZZZZZ')).outcome),
@@ -206,6 +218,22 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
       helloRefusal({ token: await tokenOf((await addMachine(bobInAcme)).body?.code) }),
     'workspace host hello with personal': async () =>
       helloRefusal({ token: await tokenOf((await addedHost('Workspace box')).code), personal: true }),
+    'hello without versions': async () => {
+      const { id, code } = await addedHost('Old box')
+      const reason = await helloRefusal({
+        token: await tokenOf(code),
+        hostVersion: undefined,
+        protocolVersion: undefined,
+      })
+      expect(await hostRow(id)).toMatchObject({ host_version: null, protocol_version: 0 })
+      return reason
+    },
+    'hello below the minimum protocol': async () => {
+      const { id, code } = await addedHost('Older box')
+      const reason = await helloRefusal({ token: await tokenOf(code), hostVersion: '0.9.0', protocolVersion: 0 })
+      expect(await hostRow(id)).toMatchObject({ host_version: '0.9.0', protocol_version: 0 })
+      return reason
+    },
   }
   const reasons: Record<string, string> = {}
   for (const [name, refused] of Object.entries(refusals)) reasons[name] = await refused()
@@ -219,6 +247,12 @@ test('a claim of an unknown, used, expired or removed code and a hello without a
     'machine hello without personal': 'This host was paired as your machine: restart spyria-host with --personal',
     'workspace host hello with personal':
       'This host was paired as a workspace host: restart spyria-host without --personal',
+    'hello without versions': expect.stringMatching(
+      /^This host is out of date: update it with docker rm -f spyria-host .* -v spyria-host:\/state ghcr\.io\/camil-h\/spyria-host:1\.2\.0 http:\/\/host\.docker\.internal:5190$/,
+    ),
+    'hello below the minimum protocol': expect.stringMatching(
+      /^This host is out of date: update it with docker rm -f spyria-host .* -v spyria-host:\/state ghcr\.io\/camil-h\/spyria-host:1\.2\.0 http:\/\/host\.docker\.internal:5190$/,
+    ),
   })
 })
 
@@ -231,11 +265,13 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(claimed.token_hash).toBe(sha256(token ?? ''))
   expect(JSON.stringify(claimed)).not.toContain(token)
   const host = await connectFakeHost()
-  host.send({ type: 'hello', token, system: hostSystem })
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   const online = await hostRow(id)
   expect(online.capacity).toEqual({ ...hostSystem, cap: 6 })
   expect(online.running_runtimes).toBe(0)
+  expect(online.host_version).toBe('test')
+  expect(online.protocol_version).toBe(1)
   expect(online.last_seen_at).toBeInstanceOf(Date)
 
   const expiring = await addedHost()
@@ -287,7 +323,7 @@ test('heartbeats update last_seen_at, the free memory and the running count', as
 test('a second connection of a host replaces the first, which is closed, and the host stays online', async () => {
   const { id, token, host: firstConnection } = await pairedHost()
   const secondConnection = await connectFakeHost()
-  secondConnection.send({ type: 'hello', token, system: hostSystem })
+  secondConnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   expect((await firstConnection.closed).reason).toBe('Replaced by a newer connection of this host')
   await Bun.sleep(200)
   expect(secondConnection.socket.readyState).toBe(WebSocket.OPEN)
@@ -393,7 +429,7 @@ test('removing a host closes its connection and refuses its token afterwards', a
   await host.closed
   expect((await hostRow(id)).removed_at).toBeInstanceOf(Date)
   const reconnection = await connectFakeHost()
-  reconnection.send({ type: 'hello', token, system: hostSystem })
+  reconnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
   expect((await reconnection.closed).reason).toBe('This host was removed')
 })
 
@@ -440,7 +476,7 @@ test('neither a claim code nor a host token is ever logged', async () => {
     await removeHost(aliceInAcme, acme, id)
     await host.closed
     const reconnection = await connectFakeHost()
-    reconnection.send({ type: 'hello', token, system: hostSystem })
+    reconnection.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
     await reconnection.closed
     for (const secret of [code, pairedCode, token]) expect(consoleCalls.logged()).not.toContain(secret)
   } finally {
@@ -455,7 +491,7 @@ const pairedMachine = async (member: Member) => {
   const { host: claimingHost, token } = await claim(body.code)
   claimingHost.socket.close()
   const host = await connectFakeHost()
-  host.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   await waitFor(async () => (await hostRow(body.id as string)).status === 'online')
   return { id: body.id, token, host }
 }
@@ -507,13 +543,13 @@ test('an offline machine gets a new command from its owner, which revokes its ol
   expect(renewed.status).toBe(200)
   expect(await hostRow(id)).toMatchObject({ status: 'waiting', token_hash: null })
   const oldToken = await connectFakeHost()
-  oldToken.send({ type: 'hello', token, system: hostSystem, personal: true, signedIn: [] })
+  oldToken.send({ type: 'hello', token, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   expect((await oldToken.closed).reason).toBe('This host is not registered')
   const { host: claimingHost, token: newToken } = await claim(renewed.body?.code ?? '')
   claimingHost.socket.close()
   expect(newToken).toBeDefined()
   const repaired = await connectFakeHost()
-  repaired.send({ type: 'hello', token: newToken, system: hostSystem, personal: true, signedIn: [] })
+  repaired.send({ type: 'hello', token: newToken, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
 

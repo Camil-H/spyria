@@ -1,0 +1,43 @@
+name: Docs site
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The release tag to publish the docs of
+        required: true
+        type: string
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: docs-site
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.event.release.tag_name || github.ref }}
+      - uses: ./.github/actions/setup
+      - run: bun scripts/docs-site.ts dist/site
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLISHED_REF: ${{ inputs.ref || github.event.release.tag_name || github.sha }}
+        working-directory: dist/site
+        run: |
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Publish the docs of $PUBLISHED_REF"
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

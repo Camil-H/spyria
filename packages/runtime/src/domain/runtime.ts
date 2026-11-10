@@ -34,6 +34,8 @@ export type Runtime = Readonly<{
   failure: RuntimeFailure | null
   hostOnline: boolean
   image: string
+  agentVersion: string | null
+  agentProtocolVersion: number | null
   lastActiveAt: number
   createdAt: number
   stateChangedAt: number

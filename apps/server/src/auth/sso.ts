@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import {
   type Actor,
@@ -12,6 +12,7 @@ import {
   systemActor,
   type WorkspacePermission,
 } from '@spyria/kernel'
+import { addInstallHost } from '@spyria/runtime/server'
 import {
   DomainClaimed,
   DomainFixed,
@@ -20,11 +21,13 @@ import {
   type InstanceApps,
   InvalidSsoSettings,
   instanceAppFor,
+  type JoinBy,
   MailNotConfigured,
   MailNotSent,
   Name,
   normalizedDomain,
   normalizedEmail,
+  SignInAppFixed,
   SsoDiscoveryFailed,
   type SsoDomainState,
   type SsoPreset,
@@ -41,6 +44,7 @@ import type { SecretBox } from './secret-box.ts'
 
 export type SsoProvider = {
   workspaceId: string
+  joinBy: JoinBy
   preset: SsoPreset
   issuer: string
   clientId: string
@@ -54,6 +58,7 @@ export type SsoDependencies = {
   instanceApps?: InstanceApps
   mailer?: Mailer
   appOrigin?: string
+  installHostToken?: string
 }
 export type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
 type Member = { workspaceId: string; userId: string }
@@ -64,20 +69,22 @@ const hashOf = (token: string) => createHash('sha256').update(token).digest('hex
 
 export const ssoProviderOf = async (
   database: Database,
-  { workspaceId, domain }: { workspaceId?: string; domain?: string },
+  { workspaceId, email, joinBy }: { workspaceId?: string; email?: string; joinBy?: JoinBy },
 ) =>
   (
     await database.$client<SsoProvider[]>`
-      select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
+      select workspace_id as "workspaceId", workspaces.join_by as "joinBy", preset, issuer, client_id as "clientId",
         encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp",
         updated_at as "updatedAt"
       from workspace_sso join workspaces using (workspace_id)
       where workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
+        and workspaces.join_by = coalesce(${joinBy ?? null}::text, workspaces.join_by)
         and workspaces.deleted_at is null
-        and (${domain ?? null}::text is null or exists(
-          select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
-            and sso_domains.domain = ${domain ?? ''}
-            and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1)))
+        and (${email ?? null}::text is null
+          or (workspaces.join_by = 'domain' and exists(
+            select 1 from sso_domains where sso_domains.workspace_id = workspace_sso.workspace_id
+              and sso_domains.domain = ${domainOfEmail(email ?? '')}
+              and (sso_domains.verified_at is not null or (select count(*) from workspaces where deleted_at is null) = 1))))
       order by workspaces.created_at limit 1`
   )[0]
 
@@ -103,9 +110,13 @@ export const recordWorkspaceEvent = (sql: Sql, workspaceId: string, type: string
       ${JSON.stringify(payload)}::jsonb, now())`
 }
 
-const checkedSettings = async (input: SsoSettingsInput, { microsoftLoginOrigin, instanceApps }: SsoDependencies) => {
+const checkedSettings = async (
+  input: SsoSettingsInput,
+  joinBy: JoinBy,
+  { microsoftLoginOrigin, instanceApps }: SsoDependencies,
+) => {
   const clientId = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset).clientId : input.clientId
-  const settings = ssoSettingsFrom({ ...input, clientId }, microsoftLoginOrigin)
+  const settings = ssoSettingsFrom({ ...input, clientId }, joinBy, microsoftLoginOrigin)
   await discoverIssuer(settings.issuer).catch((error: Error) => {
     throw new SsoDiscoveryFailed(settings.issuer, error.message)
   })
@@ -122,14 +133,19 @@ const assertNotVerifiedElsewhere = async (sql: Sql, workspaceId: string, issuer:
 }
 
 const settingsOf = (sql: Sql, workspaceId: string) =>
-  sql<(SsoSettings & { usesInstanceApp: boolean } & Omit<SsoDomainState, 'domain'>)[]>`
-    select preset, issuer, client_id as "clientId", uses_instance_app as "usesInstanceApp", domain,
+  sql<(SsoSettings & { joinBy: JoinBy; usesInstanceApp: boolean } & Omit<SsoDomainState, 'domain'>)[]>`
+    select preset, issuer, client_id as "clientId", uses_instance_app as "usesInstanceApp", workspaces.join_by as "joinBy",
+      sso_domains.domain,
       verified_at is not null as "isVerified",
       case when verified_at is null and verification_expires_at > now() then verification_email end as "sentTo",
       case when verified_at is null and verification_expires_at > now()
         then (extract(epoch from verification_expires_at) * 1000)::float8 end as "expiresAt"
-    from workspace_sso join sso_domains using (workspace_id)
-    where workspace_id = ${workspaceId} order by domain limit 1`
+    from workspace_sso join workspaces using (workspace_id) left join sso_domains using (workspace_id)
+    where workspace_id = ${workspaceId} order by sso_domains.domain limit 1`
+
+const joinByOfWorkspace = async (sql: Sql, workspaceId: string): Promise<JoinBy> =>
+  (await sql<{ joinBy: JoinBy }[]>`select join_by as "joinBy" from workspaces where workspace_id = ${workspaceId}`)[0]
+    ?.joinBy ?? 'domain'
 
 const storeSsoSettings = async (
   sql: Sql,
@@ -147,7 +163,7 @@ const storeSsoSettings = async (
     encryptedClientSecret: string | null
   },
 ) => {
-  await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domain)
+  if (settings.domain !== null) await assertNotVerifiedElsewhere(sql, workspaceId, settings.issuer, settings.domain)
   const [previous] = await settingsOf(sql, workspaceId)
   if (!usesInstanceApp && !encryptedClientSecret && (!previous || previous.usesInstanceApp))
     throw new InvalidSsoSettings('A client secret is required')
@@ -160,7 +176,8 @@ const storeSsoSettings = async (
       client_id = excluded.client_id, uses_instance_app = excluded.uses_instance_app, updated_at = excluded.updated_at,
       encrypted_client_secret = case when excluded.uses_instance_app then ''
         else coalesce(${encryptedClientSecret}::text, workspace_sso.encrypted_client_secret) end`
-  await sql`insert into sso_domains (workspace_id, domain) values (${workspaceId}, ${settings.domain}) on conflict do nothing`
+  if (settings.domain !== null)
+    await sql`insert into sso_domains (workspace_id, domain) values (${workspaceId}, ${settings.domain}) on conflict do nothing`
   if (previous && previous.issuer !== settings.issuer)
     await sql`
       update sso_domains set verified_at = null, verification_email = null, verification_token_hash = null,
@@ -188,7 +205,7 @@ const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsV
     ...settings,
     tenantId: settings.preset === 'microsoft' ? tenantIdOf(settings.issuer) : '',
     hasSecret: !settings.usesInstanceApp,
-    domainState: { domain: settings.domain, isVerified, sentTo, expiresAt },
+    domainState: settings.domain === null ? null : { domain: settings.domain, isVerified, sentTo, expiresAt },
   }
 }
 
@@ -202,8 +219,10 @@ export const saveSsoSettings = async (
   input: SsoSettingsInput,
 ) => {
   const current = await readSsoSettings(database, member)
-  if (current && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
-  const settings = await checkedSettings(input, dependencies)
+  if (current?.domain && normalizedDomain(input.domain) !== current.domain) throw new DomainFixed(current.domain)
+  const joinBy = current?.joinBy ?? (await database.$client.begin((sql) => joinByOfWorkspace(sql, member.workspaceId)))
+  if (joinBy === 'invited_address') throw new SignInAppFixed()
+  const settings = await checkedSettings(input, joinBy, dependencies)
   const usesInstanceApp = input.usesInstanceApp === true
   const clientSecret = usesInstanceApp ? '' : String(input.clientSecret ?? '').trim()
   if (clientSecret !== '' && !dependencies.secretBox)
@@ -231,14 +250,16 @@ const assertWorkspaceCreationOpen = async (sql: Sql | Database['$client']) => {
 
 export type FirstWorkspace = {
   workspaceName: string
-  domain: string
-  provider: Omit<SsoProvider, 'workspaceId' | 'updatedAt'>
+  joinBy: JoinBy
+  domain: string | null
+  provider: Omit<SsoProvider, 'workspaceId' | 'joinBy' | 'updatedAt'>
 }
 
 export const prepareFirstWorkspace = async (
   database: Database,
   dependencies: SsoDependencies,
   form: Record<string, unknown>,
+  joinBy: JoinBy,
 ): Promise<FirstWorkspace> => {
   await assertWorkspaceCreationOpen(database.$client)
   const field = (name: string) => (typeof form[name] === 'string' ? form[name] : '').trim().slice(0, 500)
@@ -256,22 +277,24 @@ export const prepareFirstWorkspace = async (
       usesInstanceApp,
       domain: field('domain'),
     },
+    joinBy,
     dependencies,
   )
   const { domain, ...provider } = settings
   const encryptedClientSecret = usesInstanceApp
     ? ''
     : ((await dependencies.secretBox?.seal(field('clientSecret'))) ?? '')
-  return { workspaceName, domain, provider: { ...provider, usesInstanceApp, encryptedClientSecret } }
+  return { workspaceName, joinBy, domain, provider: { ...provider, usesInstanceApp, encryptedClientSecret } }
 }
 
 export const createFirstWorkspace = async (
   database: Database,
-  { workspaceName, domain, provider }: FirstWorkspace,
+  { workspaceName, joinBy, domain, provider }: FirstWorkspace,
   identity: { email: string; name?: unknown; subject: string },
+  { installHostToken }: Pick<SsoDependencies, 'installHostToken'> = {},
 ) => {
   const email = normalizedEmail(identity.email)
-  if (domainOfEmail(email) !== domain)
+  if (domain !== null && domainOfEmail(email) !== domain)
     throw new InvalidSsoSettings(`${email} is not an address at ${domain}: no workspace was created`)
   const workspaceId = crypto.randomUUID()
   return database.$client.begin(async (sql) => {
@@ -282,8 +305,8 @@ export const createFirstWorkspace = async (
       on conflict (email) do update set email = excluded.email returning id`
     const userId = user?.id ?? ''
     await sql`
-      insert into workspaces (workspace_id, name, created_by, created_at)
-      values (${workspaceId}, ${workspaceName}, ${userId}, now())`
+      insert into workspaces (workspace_id, name, created_by, join_by, created_at)
+      values (${workspaceId}, ${workspaceName}, ${userId}, ${joinBy}, now())`
     for (const role of builtInWorkspaceRoles) {
       await sql`
         insert into workspace_roles (workspace_id, id, name, built_in) values (${workspaceId}, ${role.id}, ${role.name}, true)`
@@ -313,6 +336,7 @@ export const createFirstWorkspace = async (
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)
       values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
+    if (installHostToken) await addInstallHost(sql, { workspaceId, createdBy: userId, installHostToken })
     return { workspaceId, userId }
   })
 }
@@ -395,6 +419,57 @@ export const verifyDomainByToken = (database: Database, token: string) =>
 export const verifyDomainByOperator = (database: Database, workspaceId: string, domain: string) =>
   database.$client.begin((sql) => markDomainVerified(sql, { workspaceId, domain, actor: systemActor('operator') }))
 
+export const replaceSignInApp = async (
+  database: Database,
+  secretBox: SecretBox,
+  app: { clientId: string; clientSecret: string },
+) => {
+  const [clientId, clientSecret] = [app.clientId.trim(), app.clientSecret.trim()]
+  if (clientId === '' || clientSecret === '')
+    throw new InvalidSsoSettings('A client id and a client secret are required')
+  const encryptedClientSecret = await secretBox.seal(clientSecret)
+  return database.$client.begin(async (sql) => {
+    const changed = await sql<{ workspaceId: string; preset: string; issuer: string }[]>`
+      update workspace_sso set client_id = ${clientId}, encrypted_client_secret = ${encryptedClientSecret},
+        uses_instance_app = false, updated_at = now()
+      from workspaces
+      where workspaces.workspace_id = workspace_sso.workspace_id and workspaces.join_by = 'invited_address'
+      returning workspace_sso.workspace_id as "workspaceId", preset, issuer`
+    if (changed.length === 0)
+      throw new InvalidSsoSettings('No workspace joins by invited address: each workspace sets its app in Setup SSO')
+    for (const { workspaceId, preset, issuer } of changed) {
+      const operator = systemActor('operator')
+      await recordWorkspaceEvent(sql, workspaceId, 'sso.configured', operator, {
+        preset,
+        issuer,
+        clientId,
+        domain: null,
+      })
+      await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', operator, {})
+    }
+    return changed.length
+  })
+}
+
+export const applyConfiguredSignInApp = async (
+  database: Database,
+  secretBox: SecretBox,
+  app: { clientId: string; clientSecret: string },
+) => {
+  const stored = await database.$client<
+    { clientId: string; encryptedClientSecret: string; usesInstanceApp: boolean }[]
+  >`
+    select client_id as "clientId", encrypted_client_secret as "encryptedClientSecret",
+      uses_instance_app as "usesInstanceApp"
+    from workspace_sso join workspaces using (workspace_id) where workspaces.join_by = 'invited_address'`
+  const isStored = async ({ clientId, encryptedClientSecret, usesInstanceApp }: (typeof stored)[number]) =>
+    !usesInstanceApp &&
+    clientId === app.clientId.trim() &&
+    (await secretBox.open(encryptedClientSecret).catch(() => '')) === app.clientSecret.trim()
+  if ((await Promise.all(stored.map(isStored))).every(Boolean)) return 0
+  return replaceSignInApp(database, secretBox, app)
+}
+
 export const assertInstanceAppsConfigured = async (database: Database, instanceApps: InstanceApps) => {
   const missing = (
     await database.$client<{ preset: SsoPreset; count: number }[]>`
@@ -408,3 +483,8 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
         .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.`,
     )
 }
+
+const sha256Of = (value: string) => createHash('sha256').update(value).digest()
+
+export const isInstallHostToken = (installHostToken: string | undefined, code: string) =>
+  installHostToken !== undefined && timingSafeEqual(sha256Of(installHostToken), sha256Of(code))

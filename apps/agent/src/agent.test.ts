@@ -521,7 +521,10 @@ test('requests without the session key are refused, /ready is open, a socket tha
   const agent = startAgent({ apiKey, port: 0, authTimeoutMilliseconds: 100 })
   running.push(agent)
   const { call, create } = clientOf(agent.port)
-  expect((await call('GET', '/ready', undefined, '')).status).toBe(200)
+  expect(await call('GET', '/ready', undefined, '')).toEqual({
+    status: 200,
+    body: { status: 'ready', agentVersion: 'dev', protocolVersion: 1 },
+  })
   expect((await call('POST', '/api/conversations', launchOf(), 'wrong')).status).toBe(401)
   expect((await call('POST', '/api/conversations', launchOf(), apiKey.replace(/.$/, 'x'))).status).toBe(401)
   const silent = new WebSocket(`ws://localhost:${agent.port}/sockets/events/${await create(launchOf())}`)

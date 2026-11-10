@@ -19,14 +19,20 @@ const creationRefusalOf = (outcome: SignInOutcome) =>
 
 export const SignInScreen = ({
   isEmailFirst,
+  isBeingSetUp = false,
+  joinsByInvitedAddress = false,
   canCreateWorkspace,
+  setupToken,
   instanceApps = [],
   notice,
   signIn,
   createWorkspace,
 }: {
   isEmailFirst: boolean
+  isBeingSetUp?: boolean
+  joinsByInvitedAddress?: boolean
   canCreateWorkspace: boolean
+  setupToken?: string
   instanceApps?: readonly SsoPreset[]
   notice?: string
   signIn: (email?: string) => Promise<SignInOutcome>
@@ -52,17 +58,31 @@ export const SignInScreen = ({
     setIsSigningIn(true)
     settle(await createWorkspace(event.currentTarget), creationRefusalOf)
   }
+  if (isBeingSetUp && !canCreateWorkspace)
+    return (
+      <AuthScreen
+        title="This Spyria is being set up"
+        description="No workspace exists yet. The person installing it has a setup link that creates the first one."
+      />
+    )
   return canCreateWorkspace ? (
     <AuthScreen title="Create a workspace" description="No workspace exists on this Spyria yet.">
       <form aria-label="Create a workspace" onSubmit={create} className="flex flex-col gap-3">
+        <input type="hidden" name="setupToken" value={setupToken ?? ''} />
         <label className={labelClass}>
           Organization name
           <input name="name" required className={fieldClass} />
         </label>
-        <label className={labelClass}>
-          Email domain
-          <input name="domain" required placeholder="acme.com" className={fieldClass} />
-        </label>
+        {joinsByInvitedAddress ? (
+          <p className="text-sm text-muted">
+            Who can join: people you invite, at exactly the address you invite. You become its Admin.
+          </p>
+        ) : (
+          <label className={labelClass}>
+            Email domain
+            <input name="domain" required placeholder="acme.com" className={fieldClass} />
+          </label>
+        )}
         <ProviderFields
           provider={provider}
           edit={(field) => (event) => setProvider({ ...provider, [field]: event.target.value })}
@@ -85,7 +105,7 @@ export const SignInScreen = ({
       <form aria-label="Sign in" onSubmit={submit} className="flex flex-col gap-3">
         {isEmailFirst && (
           <label className={labelClass}>
-            Work email
+            {joinsByInvitedAddress ? 'Email' : 'Work email'}
             <input
               type="email"
               required

@@ -17,10 +17,12 @@ import {
   type WorkspacePermission,
 } from '@spyria/kernel'
 
+export type JoinBy = 'domain' | 'invited_address'
 type WorkspaceRow = {
   id: WorkspaceId
   name: string
   localSessions: boolean
+  joinBy: JoinBy
   aiProviderAllowList: AiProviderAllowList | null
   devLoop: DevLoopSettings | null
   setupCommands: readonly SetupCommand[]
@@ -61,6 +63,8 @@ export type RuntimeHostRow = {
   claimExpiresAt: number | null
   capacity: RuntimeHostCapacity | null
   runningRuntimes: number
+  hostVersion: string | null
+  protocolVersion: number
   ownerId: MemberId | null
 }
 export type MachineCountsRow = { workspaceId: WorkspaceId; machines: number; claudeCode: number; codex: number }

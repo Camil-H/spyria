@@ -28,6 +28,8 @@ export type RuntimeHost = Readonly<{
   claimExpiresAt: number | null
   capacity: HostCapacity | null
   runningRuntimes: number
+  hostVersion: string | null
+  protocolVersion: number
   lastSeenAt: number | null
   createdBy: MemberId
   ownerId: MemberId | null

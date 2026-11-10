@@ -45,6 +45,7 @@ const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,
   retryDelayMilliseconds: 300,
   sandboxProvider: gateway.sandboxProvider,
+  spyriaAgentImage: testSpyriaAgentImage,
 })
 const zeroDatabase = zeroDrizzle(schema, database)
 const runtimeJobs = createRuntimeJobs(gateway.sandboxProvider)
@@ -569,4 +570,41 @@ test('a Claude Code or Codex session is never placed on a workspace host: with o
     expect(failed).toMatchObject({ state: 'failed', failure: 'no_host', hostId: null })
   }
   expect(harnessCommands(workspaceHost)).toEqual([])
+})
+
+test('a runtime whose spyria-agent answers ready with a protocol below the minimum fails as outdated and is placed anew on the next prompt; an accepted one records its agent version', async () => {
+  const host = await fakeHost('Old agent host', { agentProtocolVersion: 0 })
+  const chat = await newRuntimeChat()
+  const outdated = await ensure(chat)
+  await runtimeIn(chat, 'failed')
+  expect(await runtimeOf(chat)).toMatchObject({ id: outdated.id, failure: 'outdated', agent_protocol_version: null })
+  await waitFor(() => host.containers.get(outdated.id)?.running === false)
+
+  const placed = await ensure(chat)
+  expect(placed.id).not.toBe(outdated.id)
+  await host.disconnect()
+
+  const current = await fakeHost('Current agent host')
+  const freshChat = await newRuntimeChat()
+  const running = await runningRuntime(freshChat)
+  expect(await runtimeOf(freshChat)).toMatchObject({ id: running.id, agent_version: 'test', agent_protocol_version: 1 })
+  expect(current.containers.get(running.id)?.running).toBe(true)
+})
+
+test('a stopped runtime left on an older image is recreated on the current image, with the same id, when it starts again', async () => {
+  const host = await fakeHost('Upgraded host')
+  const chat = await newRuntimeChat()
+  const runtime = await stoppedRuntime(chat)
+  const olderImage = `sha256:${'1'.repeat(64)}`
+  await database.$client`update runtimes set image = ${olderImage} where id = ${runtime.id}`
+  host.commands.length = 0
+
+  expect(await ensure(chat)).toMatchObject({ id: runtime.id, state: 'starting' })
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['recreate', 'start'])
+  expect(host.commands.find((command) => command.op === 'recreate')).toMatchObject({
+    runtimeId: runtime.id,
+    image: testSpyriaAgentImage,
+  })
+  expect((await runtimeOf(chat)).image).toBe(testSpyriaAgentImage)
 })

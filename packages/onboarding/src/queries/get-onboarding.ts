@@ -38,8 +38,10 @@ export const getOnboarding =
       skipped: tasksOf(memberRows.filter((row) => row.isSkipped)),
     }
     const permissions = workspacePermissionsIn(snapshot, workspaceId, memberId)
+    const ownsDomain =
+      snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.joinBy !== 'invited_address'
     return {
-      tasks: taskViewsOf(facts, records, { permissions, usesSingleSignOn }),
+      tasks: taskViewsOf(facts, records, { permissions, usesSingleSignOn: usesSingleSignOn && ownsDomain }),
       tasksToRecord: tasksToRecordOf(facts, records, permissions),
       domain: ssoDomains[0]?.domain,
     }

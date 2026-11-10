@@ -19,6 +19,11 @@ const gatewayProxy = Bun.serve({
     })
   },
 })
+const zeroCache = Bun.serve({
+  port: 0,
+  fetch: (request) =>
+    new URL(request.url).pathname === '/keepalive' ? new Response('OK') : new Response('Not found', { status: 404 }),
+})
 const freePort = () => {
   const probe = Bun.serve({ port: 0, fetch: () => new Response() })
   const probedPort = Number(probe.port)
@@ -35,12 +40,14 @@ const productionEnvironment = {
   SPYRIA_ENV: 'production',
   SPYRIA_AUTH_MODE: 'sso',
   SPYRIA_TOKEN_SECRET: 'production-test-token-secret-0123456789abcdef',
+  SPYRIA_SETUP_TOKEN: 'd'.repeat(48),
   SPYRIA_SECRETS_KEY: 'production-test-secrets-key-0123456789abcdef',
   SPYRIA_APP_ORIGIN: 'https://spyria.example',
   SPYRIA_OIDC_REDIRECT_URI: 'https://spyria.example/auth/callback',
   SPYRIA_SMTP_URL: 'smtp://127.0.0.1:9',
   SPYRIA_MAIL_FROM: 'Spyria <spyria@spyria.example>',
   SPYRIA_GATEWAY_URL: gatewayProxy.url.origin,
+  SPYRIA_ZERO_URL: zeroCache.url.origin,
   SPYRIA_GATEWAY_ADMIN_USER: testGatewayAdmin.user,
   SPYRIA_GATEWAY_ADMIN_PASSWORD: testGatewayAdmin.password,
 }
@@ -63,6 +70,7 @@ const healthOf = async () => {
 afterAll(async () => {
   for (const server of spawned) server.kill('SIGKILL')
   void gatewayProxy.stop(true)
+  void zeroCache.stop(true)
   await throwawayDatabase.drop()
 })
 
@@ -86,7 +94,7 @@ test('a broken production environment refuses to start and lists every problem',
     expect(printed).toContain(problem)
 })
 
-test('a correct production environment starts without fakes, reports its health and stops on SIGTERM', async () => {
+test('a correct production environment starts without fakes, reports its health with zero-cache and the gateway, stays live for the platform while they are down, and stops on SIGTERM', async () => {
   const server = startServer(productionEnvironment)
   for (let attempt = 1; !(await fetch(`${serverUrl}/health`).catch(() => undefined)); attempt++) {
     if (attempt === 300 || server.exitCode !== null) {
@@ -98,8 +106,12 @@ test('a correct production environment starts without fakes, reports its health 
   expect((await fetch(`${serverUrl}/fake-llm/v1/models`)).status).toBe(404)
   expect(gatewayRequests.filter((request) => request.startsWith('POST /api/providers'))).toEqual([])
   expect(await healthOf()).toEqual({ status: 200, body: { status: 'ok' } })
+  await zeroCache.stop(true)
+  expect(await healthOf()).toEqual({ status: 503, body: { status: 'degraded', failing: ['zero'] } })
   await gatewayProxy.stop(true)
-  expect(await healthOf()).toEqual({ status: 503, body: { status: 'degraded', failing: ['gateway'] } })
+  expect(await healthOf()).toEqual({ status: 503, body: { status: 'degraded', failing: ['gateway', 'zero'] } })
+  const live = await fetch(`${serverUrl}/health/live`)
+  expect({ status: live.status, body: await live.json() }).toEqual({ status: 200, body: { status: 'ok' } })
   const stoppingAt = performance.now()
   server.kill('SIGTERM')
   expect(await server.exited).toBe(0)

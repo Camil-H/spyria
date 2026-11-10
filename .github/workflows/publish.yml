@@ -1,0 +1,183 @@
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.names.outputs.version }}
+      stable: ${{ steps.names.outputs.stable }}
+      images: ${{ steps.names.outputs.images }}
+    steps:
+      - id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          [[ "${GITHUB_REF_NAME#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && stable=true || stable=false
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "images=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  agent:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            target: bun-linux-x64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-agent:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun build --compile --minify --target=${{ matrix.target }} src/main.ts --outfile dist/spyria-agent
+        working-directory: apps/agent
+      - run: docker build --pull --build-arg "SPYRIA_VERSION=$VERSION" -t spyria-agent:candidate apps/agent
+      - run: bun scripts/check-licenses.ts spyria-agent:candidate
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - run: docker tag spyria-agent:candidate "$IMAGE" && docker push "$IMAGE"
+
+  host:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-host:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - env:
+          IMAGES: ${{ needs.version.outputs.images }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: docker build --pull --build-arg "SPYRIA_IMAGES=$IMAGES" --build-arg "SPYRIA_VERSION=$VERSION" -t "$IMAGE" apps/host && docker push "$IMAGE"
+
+  agent-manifest:
+    needs: [version, agent]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-agent
+      version: ${{ needs.version.outputs.version }}
+
+  host-manifest:
+    needs: [version, host]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-host
+      version: ${{ needs.version.outputs.version }}
+
+  server:
+    needs: [version, agent-manifest]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.version.outputs.images }}/spyria-server:${{ needs.version.outputs.version }}-${{ matrix.arch }}
+      AGENT_IMAGE: ${{ needs.version.outputs.images }}/spyria-agent@${{ needs.agent-manifest.outputs.digest }}
+      IMAGES: ${{ needs.version.outputs.images }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - run: |
+          docker build --pull --build-arg "SPYRIA_AGENT_IMAGE=$AGENT_IMAGE" --build-arg "SPYRIA_VERSION=$VERSION" --build-arg "SPYRIA_IMAGES=$IMAGES" \
+            -f apps/server/Dockerfile -t "$IMAGE" . && docker push "$IMAGE"
+
+  server-manifest:
+    needs: [version, server]
+    uses: ./.github/workflows/publish-manifest.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      image: ${{ needs.version.outputs.images }}/spyria-server
+      version: ${{ needs.version.outputs.version }}
+
+  cli:
+    needs: [version, server-manifest, host-manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      STABLE: ${{ needs.version.outputs.stable }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: |
+          mkdir -p dist
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig --minify --target="bun-$target" --define "process.env.SPYRIA_CLI_VERSION=\"$VERSION\"" \
+              apps/cli/src/main.ts --outfile "dist/spyria-$target"
+          done
+          (cd dist && sha256sum spyria-* > spyria-checksums.txt)
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=$([ "$STABLE" = true ] || echo --prerelease)
+          gh release view "v$VERSION" >/dev/null 2>&1 ||
+            gh release create "v$VERSION" --verify-tag --generate-notes --title "Spyria $VERSION" $prerelease
+          gh release upload "v$VERSION" dist/* deploy/install.sh --clobber
+
+  docs-site:
+    needs: [version, cli]
+    if: needs.version.outputs.stable == 'true'
+    uses: ./.github/workflows/docs-site.yml
+    permissions:
+      contents: write
+    with:
+      ref: v${{ needs.version.outputs.version }}

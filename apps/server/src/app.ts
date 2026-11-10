@@ -61,6 +61,7 @@ import {
 } from '@spyria/profile/server'
 import {
   addRuntimeHostFromRequest,
+  hostUpdateCommandOf,
   renewClaimCodeFromRequest,
   runtimeHostsPath,
   runtimeMutators,
@@ -100,6 +101,7 @@ import {
   githubSettingsPath,
   githubWebhooksPath,
   type InstanceApps,
+  type JoinBy,
   type SsoSettingsInput,
   ssoSettingsPath,
   workspaceMutators,
@@ -114,7 +116,13 @@ import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import { readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
+import {
+  hasNoWorkspace,
+  isInstallHostToken,
+  readSsoSettings,
+  saveSsoSettings,
+  sendDomainVerification,
+} from './auth/sso.ts'
 import {
   disconnectGitHub,
   finishGitHubAppCreation,
@@ -146,6 +154,7 @@ import { contextOf, withSpan } from './telemetry.ts'
 import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
+import { createZeroForwarding, zeroPathPrefix } from './zero-forwarding.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -238,10 +247,18 @@ export const createApp = ({
   webDist,
   testDatabaseByName,
   llmGateway,
+  hostImage,
+  version = 'dev',
+  setupToken,
+  joinBy = 'domain',
+  installHostToken,
   runtimeHosts = createRuntimeHostGateway({
+    awaitsFirstWorkspace: async (claimCode) =>
+      isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
+    hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   }),
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
   spyriaAgentImage,
@@ -249,6 +266,7 @@ export const createApp = ({
   rateLimits = rateBudgets,
   rateLimiter: limit = createRateLimiter(rateLimits),
   trustedProxy,
+  zeroUrl,
 }: {
   database: Database
   tokenSecret: string
@@ -270,6 +288,12 @@ export const createApp = ({
   rateLimits?: RateBudgets
   rateLimiter?: RateLimiter
   trustedProxy?: TrustedProxy
+  zeroUrl?: string
+  hostImage?: string
+  version?: string
+  setupToken?: string
+  joinBy?: JoinBy
+  installHostToken?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
   const mutatorNamed = (name: string) =>
@@ -287,6 +311,7 @@ export const createApp = ({
     instanceApps: instanceSignInApps,
     mailer: mail && createSmtpMailer(mail),
     appOrigin,
+    installHostToken,
   }
   const githubDependencies = github ?? { api: createGitHubApi(githubDotCom), secretBox: sso.secretBox }
   const githubCallbackUrl = `${appOrigin}${githubCallbackPath}`
@@ -353,6 +378,11 @@ export const createApp = ({
       async (context) =>
         (webDist && (await webAppResponse(webDist, context.req.raw))) || context.text('404 Not Found', 404),
     )
+    .get('/health/live', async (context) =>
+      (await passesWithinTimeout(() => database.$client`select 1`.then(() => true)))
+        ? context.json({ status: 'ok' })
+        : context.json({ status: 'degraded', failing: ['database'] }, 503),
+    )
     .get('/health', async (context) => {
       const checks = Object.entries({
         database: () => database.$client`select 1`.then(() => true),
@@ -362,11 +392,18 @@ export const createApp = ({
               (response) => response.ok,
             ),
         }),
+        ...(zeroUrl && {
+          zero: () =>
+            fetch(new URL('/keepalive', zeroUrl), { signal: AbortSignal.timeout(healthCheckMilliseconds) }).then(
+              (response) => response.ok,
+            ),
+        }),
       })
       const passed = await Promise.all(checks.map(([, check]) => passesWithinTimeout(check)))
       const failing = checks.flatMap(([name], index) => (passed[index] ? [] : [name]))
       return failing.length === 0 ? context.json({ status: 'ok' }) : context.json({ status: 'degraded', failing }, 503)
     })
+    .all(`${zeroPathPrefix}/*`, zeroUrl ? createZeroForwarding(zeroUrl) : (context) => context.notFound())
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
@@ -427,6 +464,10 @@ export const createApp = ({
         tokenSecret,
         appOrigin,
         deployment,
+        version,
+        hostImage,
+        setupToken,
+        joinBy,
         database,
         authenticate,
         testDatabaseByName,

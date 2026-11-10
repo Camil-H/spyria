@@ -30,6 +30,8 @@ const runtime = (fields: Partial<Runtime> = {}) =>
     state: 'running',
     failure: null,
     image: 'image',
+    agentVersion: null,
+    agentProtocolVersion: null,
     lastActiveAt: now,
     createdAt: now,
     stateChangedAt: now,

@@ -1,36 +1,27 @@
-# Self-hosting
+# Manual install
 
-Spyria runs as one Docker Compose file on one machine: Postgres, the migrations, the server with the built web app, zero-cache, the model gateway and its database, and optionally a runtime host on the same machine. Any server works, at home or at any provider, as long as it runs Docker and can be reached over HTTPS. This guide lists what you need, the steps from an empty machine to a first workspace, and the mistakes that cost the most time. Day-to-day running (logs, traces, health, backups, disk) is in [operations](./operations.md); how the parts fit together is in the [architecture overview](../architecture/overview.md).
+Spyria runs as one Docker Compose file on one machine: Postgres, the migrations, the server with the built web app, zero-cache, the model gateway and its database, and optionally a runtime host on the same machine. Any server works, at home or at any provider, as long as it runs Docker and can be reached over HTTPS. This guide is the install by hand, and what [`spyria setup`](./install.md) does underneath: what you need, the settings, the steps from an empty machine to a first workspace. When something goes wrong, see [troubleshooting](./troubleshooting.md). Day-to-day running (logs, traces, health, backups, disk) is in [operations](./operations.md); how the parts fit together is in the [architecture overview](../architecture/overview.md).
 
 ## What you need
 
 | Requirement | Why |
 |---|---|
-| Docker with Compose | Every service runs in a container. |
-| Bun and a clone of the repository | `bun run agent:build` builds the runtime image on the machine; no image is published. |
+| Docker with Compose | Every service runs in a container, from images published on GHCR for `amd64` and `arm64` and signed with cosign (`spyria-server`, `spyria-host`, `spyria-agent`). |
 | An HTTPS origin, for example `https://spyria.example.com` | The server refuses to start in production without `https://` (secure cookies, OIDC redirects, GitHub callbacks). |
-| A reverse proxy or tunnel that terminates TLS and routes by path | For example Caddy, nginx, Traefik or a tunnel service. Zero's sync WebSocket and the server share the origin (see below). |
+| A reverse proxy or tunnel that terminates TLS | For example Caddy, nginx, Traefik or a tunnel service, routing the hostname to the server (see below). |
 | An OIDC provider for the first workspace | Google Workspace, Microsoft Entra, or any OIDC issuer. Production sign-in is per-workspace SSO only. |
-| Any SMTP service that sends from your domain | Domain verification links (invites send no email). |
+| Optionally, an SMTP service that sends from your domain | Domain verification links (invites send no email). Without mail, an operator verifies the domain from the command line (see below). |
 | A GitHub App (later, from the app) | Only for dev chats on repositories. |
 
 ### Path routing
 
-Everything is served from one origin:
+Everything is served from one origin by one target, `server:3000`: the web app, `/api`, `/auth`, `/h/<code>` (host claim links), the `/host` WebSocket, `/gateway-oauth`, `/api/github/webhooks`, `/health`, and `/zero/*`, which the server forwards to zero-cache (HTTP and the sync WebSocket, streamed both ways). Your proxy must:
 
-| Path | Goes to | What it is |
-|---|---|---|
-| `/zero/*` | `zero-cache:4848` | Zero's sync WebSocket; the web app syncs on `<origin>/zero`. |
-| everything else | `server:3000` | The web app, `/api`, `/auth`, `/h/<code>` (host claim links), the `/host` WebSocket, `/gateway-oauth`, `/api/github/webhooks`, `/health`. |
-
-Your proxy must:
-
-- terminate TLS for the origin and forward plain HTTP to both targets;
-- match `/zero/` before the catch-all route;
+- terminate TLS for the origin and forward plain HTTP to `server:3000`;
 - pass WebSocket upgrades (`/zero/`, `/host`, `/api/stream`) and keep long-lived connections open;
 - never route anything to the gateway (`gateway:8080`). Its admin API returns tool servers' header secrets in plain text, so it must stay reachable on the Compose network only. Compose publishes no gateway port, and the server forwards only the tool sign-in callback (`/gateway-oauth/api/oauth/callback`) to it.
 
-Both targets are reachable only on the Compose network `<deployment>-network`, so run the proxy or tunnel connector as a container attached to that network. The server also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}` on the machine itself, for health checks and a local proxy.
+The server is reachable only on the Compose network `<deployment>-network`, so run the proxy or tunnel connector as a container attached to that network. It also answers on `127.0.0.1:${SPYRIA_LOCAL_PORT:-3300}` on the machine itself, for health checks and a local proxy.
 
 Run one server instance. Agent streams, runtime host connections and rate limits are held in the server process.
 
@@ -43,7 +34,7 @@ Run one server instance. Agent streams, runtime host connections and rate limits
 | Compose containers | `spyria-prod-postgres`, `spyria-prod-migrate`, `spyria-prod-server`, `spyria-prod-zero-cache`, `spyria-prod-gateway-database`, `spyria-prod-gateway`, `spyria-prod-host` |
 | Volumes | `spyria-prod-postgres-data`, `spyria-prod-zero-data`, `spyria-prod-gateway-data`, `spyria-prod-host` |
 | Network | `spyria-prod-network` |
-| Images built by Compose | `spyria-prod-server` (server and migrations), `spyria-prod-host` |
+| Images built by Compose from a clone (`compose.build.yml`) | `spyria-prod-server` (server and migrations), `spyria-prod-host` |
 | Created on runtime hosts | runtimes `spyria-prod-rt-*`, harness sign-ins `spyria-prod-cred-*`, harness installs `spyria-prod-harnesses` |
 
 Two deployments can therefore share one Docker daemon without either host seeing the other's runtimes. Give production its own name: the default `spyria` is the development stack's.
@@ -55,12 +46,17 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | Key | Purpose |
 |---|---|
 | `SPYRIA_DEPLOYMENT` | Deployment name (lowercase letters, digits, dashes), see above. |
+| `SPYRIA_VERSION` | The version to run: a release tag without its `v`, for example `1.0.0`. Compose refuses to start without it. |
+| `SPYRIA_IMAGES` | Registry and namespace the images were published under, default `ghcr.io/camil-h`. Only for images published by a fork's own Publish workflow: its server and host images carry that namespace (the server names the runtime image under it, the host pulls from it alone), so a mirror of the originals cannot be used this way. |
 | `SPYRIA_APP_ORIGIN` | Public origin, `https://`. |
 | `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
+| `SPYRIA_SETUP_TOKEN` | One-time setup token, at least 32 characters: only the setup link carrying it can create the first workspace; spent once one exists. |
+| `SPYRIA_JOIN_BY` | Who can join the workspaces: `domain` (default; each workspace owns a verified email domain) or `invited-address` (no domain; only invited addresses, any Google or OIDC account the provider confirms). Chosen before the first workspace; see [admin](../features/admin.md#who-can-join). |
 | `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM, and derives the key the server uses to reach each runtime. At least 32 characters. Never change it: every stored secret would have to be entered again, and existing runtimes would stop answering the server. |
-| `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
-| `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`. |
+| `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare) (`cloudflare`), or behind a load balancer that appends the client to `X-Forwarded-For` and is the only way in (`x-forwarded-for:<hops from the end>`; the cloud modules set it). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
+| `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Optional mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`; the sender is required once SMTP is set. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
+| `SPYRIA_SIGN_IN_APP_CLIENT_ID`, `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` | Optional, together, when people join by invited address: the one sign-in app of every workspace, which the server applies when it starts if it differs from the stored one ([operations](./operations.md#sign-in-app-of-an-instance-joined-by-invited-address)). |
 | `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Admin login of the gateway. |
 | `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Encrypts members' API keys inside the gateway. Never change it without wiping the gateway's database. |
 | `SPYRIA_GATEWAY_SETUP_TOKEN` | Gateway setup token. |
@@ -85,39 +81,64 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 The server image sets `SPYRIA_ENV=production`. The server then checks its settings before anything else and refuses to start, printing `Spyria cannot start in production:` and one line per problem:
 
 - `SPYRIA_AUTH_MODE` is `sso`.
-- `SPYRIA_TOKEN_SECRET` and `SPYRIA_SECRETS_KEY` are set, at least 32 characters, and not a development default (`spyria` or `spyria-dev-…`).
+- `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY` and `SPYRIA_SETUP_TOKEN` are set, at least 32 characters, and not a development default (`spyria` or `spyria-dev-…`).
 - `SPYRIA_APP_ORIGIN` starts with `https://`, and `SPYRIA_OIDC_REDIRECT_URI` is on that origin.
-- `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM`, `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
-- `SPYRIA_TRUSTED_PROXY` is unset or `cloudflare`.
+- `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
+- `SPYRIA_MAIL_FROM` is set when `SPYRIA_SMTP_URL` is.
+- `SPYRIA_TRUSTED_PROXY` is unset, `cloudflare`, or `x-forwarded-for:1` to `3`.
 
-Read the list with `docker compose --env-file .env.prod -f deploy/compose.prod.yml logs server`.
+Read the list with `docker compose --env-file .env.prod -f compose.prod.yml logs server`.
 
 ## Install
 
+Three files from the release you run, in a folder of their own (`v1.0.0` below):
+
 ```sh
-git clone <repository> spyria && cd spyria
-cp .env.example .env.prod
-bun install && bun run agent:build
-docker compose --env-file .env.prod -f deploy/compose.prod.yml up -d --build
+mkdir spyria && cd spyria
+curl -fsSLO https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/deploy/compose.prod.yml
+curl -fsSLO https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/deploy/bifrost.json
+curl -fsSL https://raw.githubusercontent.com/Camil-H/spyria/v1.0.0/.env.example -o .env.prod
+# fill .env.prod, with SPYRIA_VERSION=1.0.0
+docker compose --env-file .env.prod -f compose.prod.yml pull
+docker compose --env-file .env.prod -f compose.prod.yml up -d
 ```
 
-`bun run agent:build` builds the runtime image (spyria-agent with Pi, node, git and ripgrep) and writes its content ID to `apps/agent/image-id`, which Compose mounts into the server. Runtime hosts never pull an image: they accept only a local content ID. Use a clone for production only: a development `agent:build` in the same checkout would change production's runtime image at its next restart.
+The images are signed with cosign (keyless, by the Publish workflow of the repository); to check one before running it:
 
-Compose starts Postgres, applies the migrations (`migrate`, one-shot), creates the gateway's role and database (`gateway-database`, one-shot), then the gateway, the server (after the migrations succeeded and the gateway is healthy) and zero-cache. `docker compose --env-file .env.prod -f deploy/compose.prod.yml ps` shows each service's healthcheck.
+```sh
+cosign verify ghcr.io/camil-h/spyria-server:1.0.0 \
+  --certificate-identity-regexp '^https://github.com/Camil-H/spyria/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The server image names the runtime image of its version by digest (`ghcr.io/camil-h/spyria-agent@sha256:…`, spyria-agent with Pi, node, git and ripgrep); each runtime host pulls it from that registry the first time it needs it, so the first runtime on a host waits for the pull. A host accepts no other image from the server than that one, or a local content ID.
+
+Compose starts Postgres, applies the migrations (`migrate`, one-shot), creates the gateway's role and database (`gateway-database`, one-shot), then the gateway, the server (after the migrations succeeded and the gateway is healthy) and zero-cache. `docker compose --env-file .env.prod -f compose.prod.yml ps` shows each service's healthcheck; the server's `/health` reports `zero` and `gateway` among what it checks.
+
+### From a clone
+
+To run images built on the machine instead (a build of your own, or `bun run smoke:prod`), add `deploy/compose.build.yml` after the production file: it builds the server and host images and mounts the runtime image's content ID, which `bun run agent:build` writes to `apps/agent/image-id` (Bun and a clone needed). Hosts then accept only that content ID, so every host must hold the same local build. `SPYRIA_VERSION` is still required; any value does.
+
+```sh
+bun install && bun run agent:build
+docker compose --env-file .env.prod -f deploy/compose.prod.yml -f deploy/compose.build.yml up -d --build
+```
 
 ## First workspace and sign-in
 
 Production signs in through each workspace's own OIDC provider. Identities are matched on the provider's issuer and subject; the email domain routes a person to the right provider. See [security](../architecture/security.md) for the model and [admin](../features/admin.md) for the settings.
 
 1. Register an OIDC client at your provider with the redirect URI `<origin>/auth/callback`, or set the deployment's own Google or Microsoft app once ([below](#one-click-google-and-microsoft)).
-2. Open the origin. On a fresh deployment the sign-in screen offers **Create a workspace**: the organization name, its email domain and the provider (Google Workspace, Microsoft Entra with its tenant id, or **Other OIDC** with an issuer). Spyria checks the provider's discovery document, encrypts the client secret and never shows it again.
+2. Open the setup link: the origin with the setup token, `<origin>/?setup=<SPYRIA_SETUP_TOKEN>`, which `spyria setup` prints, or `operator-cli.ts setup-link` from the server container (see [operations](./operations.md#first-workspace)). Without it, a fresh deployment only says that it is being set up, so nobody else can claim it between the start and your first sign-in. With it, the sign-in screen offers **Create a workspace**: the organization name, its email domain (not asked when people join by invited address) and the provider (Google Workspace, Microsoft Entra with its tenant id, or **Other OIDC** with an issuer). Spyria checks the provider's discovery document, encrypts the client secret and never shows it again.
 3. Submitting opens the provider's sign-in. The first person who completes it with an address at that domain becomes the Admin of the new workspace. From then on the screen no longer offers creating a workspace and the server refuses it; **New workspace** in the app reuses the member's verified domain and provider.
 4. Verify the domain right away: in **Workspace settings > Setup SSO**, send the single-use link (valid 24 hours) to any address at the domain and open it. Until the domain is verified, the workspace cannot invite, and only its existing members can sign in.
 
-Without working SMTP, an operator can verify a domain directly from the server container:
+When people join by invited address (`SPYRIA_JOIN_BY=invited-address`), step 3 accepts any address the provider confirms (a Gmail account through Google, for example), and step 4 does not apply: the workspace owns no domain and can invite at once.
+
+Without mail (`SPYRIA_SMTP_URL` unset), **Send verification link** answers that mail isn't set up; an operator verifies the domain directly from the server container instead:
 
 ```sh
-docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+docker compose --env-file .env.prod -f compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts sso:verify-domain --workspace <workspace id> --domain example.com
 ```
 
@@ -137,9 +158,9 @@ An Admin deletes a workspace from **Workspace settings** ([Administration](../fe
 During those seven days the operator can restore the workspace, or erase it now:
 
 ```sh
-docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+docker compose --env-file .env.prod -f compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts workspace:restore <workspace id>
-docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server \
+docker compose --env-file .env.prod -f compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts workspace:purge <workspace id> [--abandon-failed-cleanup]
 ```
 
@@ -149,22 +170,21 @@ A restore is refused once the erasing has started. When the last workspace of th
 
 Runtime chats run on runtime hosts: machines with Docker running the `spyria-host` program, which dials out to Spyria. See [machines](../features/machines.md) for what a host does and how members add their own machine.
 
+`spyria setup` pairs it by itself: it generates a one-time install code (`SPYRIA_INSTALL_HOST_TOKEN`), points the host at `http://server:3000/h/<code>` and adds the `host` profile; the host waits until the first workspace exists, then appears in **Workspace settings** as **This machine**, removable like any host. The code works once, and only for the first workspace: to turn the host on once a workspace exists, `spyria setup --host` asks for the command of **Add runtime host** and points the host at its code instead.
+
+By hand, set those two settings yourself, or once the workspace exists:
+
 To run the workspace host on the Compose machine:
 
 1. Signed in as an Admin, open **Workspace settings > Connect runtime > Add runtime host**, give it a name and copy the command.
 2. Take the claim URL at its end (`https://spyria.example.com/h/<code>`), replace its origin with `http://server:3000`, and put it in `SPYRIA_HOST_CLAIM_URL`: `http://server:3000/h/<code>`.
-3. Add `host` to `COMPOSE_PROFILES` (and set `SPYRIA_DOCKER_GROUP` on Linux), then run the same `up -d --build`.
+3. Add `host` to `COMPOSE_PROFILES` (and set `SPYRIA_DOCKER_GROUP` on Linux), then run the same `pull` and `up -d`.
 
 The host pairs once and keeps its token in the `<deployment>-host` volume; the claim URL is not used again. Do not also run the copied command on this machine: it would replace the Compose container, which has the same name.
 
 ### Other machines
 
-A host on another machine (a second workspace host, or a member's own machine) needs two images on its Docker daemon, because nothing is pulled:
-
-- the host image, named after the deployment: `docker build -t spyria-prod-host apps/host` from a clone of the same version;
-- the runtime image with the exact content ID in the server's `apps/agent/image-id`. Building it again elsewhere may give another ID; copying it keeps it, for example `docker save <image id> | ssh <machine> docker load` (same CPU architecture only).
-
-Then run the command the app shows. It adapts to rootless or rooted Docker by itself.
+A host on another machine (a second workspace host, or a member's own machine) runs the command the app shows: it names the published host image of the deployment's version (`ghcr.io/camil-h/spyria-host:1.0.0`), which Docker pulls, adapts to rootless or rooted Docker by itself, and the host pulls the runtime image by digest when the first runtime starts. A deployment built from a clone instead needs its own two images on every host: `docker build -t spyria-prod-host apps/host` from the same version, and the runtime image with the exact content ID in the server's `apps/agent/image-id` (building it again elsewhere may give another ID; `docker save <image id> | ssh <machine> docker load` keeps it, same CPU architecture only).
 
 ### Many runtimes on one host
 
@@ -204,7 +224,7 @@ Members connect tools (MCP servers) in **Profile > Tool connections**; their OAu
 - **GitHub:** create a GitHub OAuth App with the callback URL `<origin>/gateway-oauth/api/oauth/callback`, then run:
 
   ```sh
-  docker compose --env-file .env.prod -f deploy/compose.prod.yml exec \
+  docker compose --env-file .env.prod -f compose.prod.yml exec \
     -e GITHUB_MCP_CLIENT_ID=<client id> -e GITHUB_MCP_CLIENT_SECRET=<client secret> \
     server bun apps/server/src/operator-cli.ts tools-setup github
   ```
@@ -213,18 +233,19 @@ Members connect tools (MCP servers) in **Profile > Tool connections**; their OAu
 - **Notion:** nothing to register:
 
   ```sh
-  docker compose --env-file .env.prod -f deploy/compose.prod.yml exec server bun apps/server/src/operator-cli.ts tools-setup notion
+  docker compose --env-file .env.prod -f compose.prod.yml exec server bun apps/server/src/operator-cli.ts tools-setup notion
   ```
 
 ## Upgrading
 
+Set `SPYRIA_VERSION` in `.env.prod` to the new release, then:
+
 ```sh
-git pull
-bun run agent:build
-docker compose --env-file .env.prod -f deploy/compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f compose.prod.yml pull
+docker compose --env-file .env.prod -f compose.prod.yml up -d
 ```
 
-The `migrate` service applies new migrations, and the server starts only after it succeeded. A new runtime image applies to new runtimes; running ones keep theirs. Rebuild the host image on other host machines from the same version. More in [operations](./operations.md#upgrades-and-migrations).
+The `migrate` service applies new migrations, and the server starts only after it succeeded. Hosts pull the new runtime image when their next runtime starts, stopped runtimes are recreated on it, and running runtimes keep theirs until they stop. Hosts on other machines keep working and show **Update available** (or **Update needed**, refused, when the release raised the minimum protocol) with the command that updates them in place. More in [operations](./operations.md#upgrades-and-migrations).
 
 ## Checking the Compose file
 
@@ -233,15 +254,13 @@ bun run agent:build
 bun run smoke:prod
 ```
 
-`smoke:prod` starts the production Compose file under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, and that `/auth/mode` offers creating the first workspace. It then removes the containers, volumes, network and every image it built, even on failure. It does not start the optional profiles, and it takes a few minutes.
+`smoke:prod` starts the production Compose file with the build override (`compose.build.yml`, so the images come from this clone) under a throwaway name (`spyria-smoke-<random>`) with generated secrets, waits for every healthcheck, checks `/health`, the web app's `index.html` and a hashed asset with their cache headers, that `/auth/mode` says the deployment is being set up and offers creating the first workspace only with the setup token, and that `/zero` reaches zero-cache through the server (HTTP and WebSocket). It then removes the containers, volumes, network and every image it built, even on failure. It does not start the optional profiles, and it takes a few minutes.
 
 ## Example: Cloudflare
 
 One way to get an HTTPS origin, an OIDC provider, a mailbox and SMTP without opening a port, using Cloudflare Tunnel, Access and Email Routing with Resend for SMTP. Any equivalent works. The Compose file has an optional `cloudflare` profile that runs the tunnel connector (`<deployment>-cloudflared`) on the Compose network.
 
-1. **Tunnel.** Cloudflare Zero Trust > Networks > Tunnels > Create a tunnel (cloudflared). Copy its token to `CLOUDFLARE_TUNNEL_TOKEN` in `.env.prod`, add `cloudflare` to `COMPOSE_PROFILES` and start the stack: Cloudflare saves routes only once a connector runs. Then add the public hostnames in this order:
-   - `spyria.example.com` with path `^/zero/` to `http://zero-cache:4848`;
-   - `spyria.example.com` without a path to `http://server:3000`.
+1. **Tunnel.** Cloudflare Zero Trust > Networks > Tunnels > Create a tunnel (cloudflared). Copy its token to `CLOUDFLARE_TUNNEL_TOKEN` in `.env.prod`, add `cloudflare` to `COMPOSE_PROFILES` and start the stack: Cloudflare saves routes only once a connector runs. Then add one public hostname, `spyria.example.com` without a path, to `http://server:3000`.
 
    Set `SPYRIA_TRUSTED_PROXY=cloudflare` so rate limits key on Cloudflare's `CF-Connecting-IP` header. Only do this when the server is reachable through Cloudflare alone, or clients could choose their own address.
 2. **Mailbox.** Email > Email Routing on the domain: forward an address such as `admin@example.com` to your inbox. It receives the domain verification link and Access one-time PINs.
@@ -255,20 +274,7 @@ One way to get an HTTPS origin, an OIDC provider, a mailbox and SMTP without ope
 
 Pitfalls specific to this setup:
 
-- **`502` with a TLS error in cloudflared:** the tunnel routes use `https://`; use `http://server:3000` and `http://zero-cache:4848`.
+- **`502` with a TLS error in cloudflared:** the tunnel route uses `https://`; use `http://server:3000`.
 - **Access asks for a Cloudflare password:** One-time PIN (or your identity provider) is not selected on the Access application.
 - **Access says "The account does not have access":** an existing Cloudflare session in the browser; sign in from a private window.
 
-## Common pitfalls
-
-| Symptom | Cause and fix |
-|---|---|
-| The server keeps restarting | The production check failed; read `logs server` for the list. |
-| `502` from the proxy | The proxy forwards to `https://`. The services speak plain HTTP on the Compose network: use `http://server:3000` and `http://zero-cache:4848`. |
-| The app loads but never syncs | `/zero/*` is not routed to zero-cache, the catch-all route comes before the `/zero` one, or the proxy drops WebSocket upgrades. |
-| A prompt says "Spyria's runtime image is not built" or the host says the image is missing | Run `bun run agent:build` (on another machine, load the same image), then restart the server. |
-| The host profile cannot reach Docker | `SPYRIA_DOCKER_GROUP` is not the group of `/var/run/docker.sock` (Linux), or Docker runs rootless. |
-| Invites are refused, or invited people are told no workspace invited them | The domain is not verified yet; send and open the link from **Workspace settings > Setup SSO**, or use `sso:verify-domain`. |
-| SSO client secrets or GitHub App keys stop working | `SPYRIA_SECRETS_KEY` changed. Restore it; otherwise enter every secret again. |
-| Members' API keys stop working | `SPYRIA_GATEWAY_ENCRYPTION_KEY` changed. Restore it; otherwise wipe the gateway's database and have members add their keys again. |
-| Runtimes stop starting after many chats | The host ran out of Docker address pools; see [Many runtimes on one host](#many-runtimes-on-one-host). |

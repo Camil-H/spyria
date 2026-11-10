@@ -1,0 +1,82 @@
+mock_provider "aws" {
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
+  mock_data "aws_region" {
+    defaults = { region = "eu-west-1" }
+  }
+  mock_data "aws_subnet" {
+    defaults = { vpc_id = "vpc-1" }
+  }
+  mock_data "aws_ami" {
+    defaults = { id = "ami-1" }
+  }
+}
+
+variables {
+  claim_url  = "https://spyria.example.com/h/ABCDEFGHJKMNPQRS"
+  host_image = "ghcr.io/camil-h/spyria-host:1.2.0"
+  subnet_id  = "subnet-1"
+}
+
+run "the_host_dials_out_with_its_claim_and_keeps_runtimes_off_the_metadata_endpoint" {
+  command = apply
+  assert {
+    condition     = length(aws_security_group.host.ingress) == 0 && aws_security_group.host.name == "spyria-runtime-host"
+    error_message = "Nothing reaches a runtime host"
+  }
+  assert {
+    condition     = aws_instance.host.metadata_options[0].http_tokens == "required" && aws_instance.host.metadata_options[0].http_put_response_hop_limit == 1
+    error_message = "Containers cannot read the instance's credentials through the metadata endpoint"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "ghcr.io/camil-h/spyria-host:1.2.0 https://spyria.example.com/h/ABCDEFGHJKMNPQRS")
+    error_message = "cloud-init starts the published host with its claim URL"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "-d \"$range\" -j DROP") && strcontains(base64decode(aws_instance.host.user_data_base64), "169.254.0.0/16")
+    error_message = "Runtimes are kept off the metadata endpoint and private ranges"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "--cap-drop ALL --security-opt no-new-privileges --read-only")
+    error_message = "The host container runs hardened, like the command of Workspace settings"
+  }
+  assert {
+    condition     = !aws_instance.host.user_data_replace_on_change
+    error_message = "A new version or AMI never replaces the host: it keeps its pairing and runtimes, and updates in place"
+  }
+  assert {
+    condition     = strcontains(base64decode(aws_instance.host.user_data_base64), "until apt-get update") && strcontains(base64decode(aws_instance.host.user_data_base64), "until docker pull ghcr.io/camil-h/spyria-host:1.2.0")
+    error_message = "The first boot retries the install and the image pull until the network answers, since cloud-init runs it once"
+  }
+  assert {
+    condition     = aws_instance.host.iam_instance_profile == aws_iam_instance_profile.host.name && aws_iam_role_policy_attachment.session_manager.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" && output.host_access_command == "aws ssm start-session --region eu-west-1 --target ${aws_instance.host.id}"
+    error_message = "An operator reaches the host through Session Manager alone, to run its update command"
+  }
+}
+
+run "a_second_host_takes_its_own_name" {
+  command = apply
+  variables {
+    host_name = "build-box"
+  }
+  assert {
+    condition     = aws_security_group.host.name == "spyria-build-box" && aws_instance.host.tags.Name == "spyria-build-box"
+    error_message = "Each runtime host has its own resources"
+  }
+}
+
+run "with_the_default_name_a_host_name_of_58_characters_overflows_the_iam_role_name" {
+  command = plan
+  variables {
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+  }
+  expect_failures = [var.host_name]
+}
+
+run "with_the_default_name_a_host_name_of_57_characters_fits_the_iam_role_name" {
+  command = plan
+  variables {
+    host_name = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+  }
+}

@@ -2,6 +2,7 @@ import { CodeAlreadyUsed, CodeExpired, HostRemoved } from './errors.ts'
 
 export const claimCodeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const claimLifetimeMilliseconds = 15 * 60_000
+export const installHostClaimLifetimeMilliseconds = 24 * 60 * 60_000
 const claimCodeLength = 8
 const unbiasedByteLimit = 256 - (256 % claimCodeAlphabet.length)
 

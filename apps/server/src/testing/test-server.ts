@@ -4,11 +4,12 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId, workspaceId } from '@spyria/kernel'
+import { chatId, defaultDeployment, workspaceId } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import {
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  hostUpdateCommandOf,
   type SandboxProvider,
   stopChatRuntime,
 } from '@spyria/runtime/server'
@@ -156,6 +157,7 @@ const placement = { spyriaAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
   runtimeKeySecret: testSecretsKey,
   ...placement,
+  hostUpdateCommandOf: hostUpdateCommandOf({ deployment: defaultDeployment, origin: testAuthSettings.appOrigin }),
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
   afterHello: (database, host) => agentBridge.forDatabase(database).resumeHost(host),
   relayModelCall: createModelCallRelay({
@@ -193,6 +195,7 @@ startTelemetry()
 const app = createApp({
   database: createDatabase(databaseUrlOf('postgres')),
   ...testAuthSettings,
+  version: 'e2e',
   testDatabaseByName: databaseByName,
   rateLimiter: (name, requester) => {
     if (name === 'messages' && databasesRefusingNextMessage.delete(requester.databaseName ?? ''))

@@ -1,4 +1,5 @@
 import { openPageAs, type WorkerStack } from '../stack'
+import { e2eSetupToken } from '../stack-ports'
 import {
   expect,
   invite,
@@ -175,6 +176,11 @@ test.describe('SSO', () => {
   }, async ({ page, browser, workerStack }) => {
     await workerStack.database.$client`truncate workspaces cascade`
     await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
+    await expect(page.getByRole('form', { name: 'Create a workspace' })).toHaveCount(0)
+    await page.goto('/?setup=not-the-token')
+    await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
+    await page.goto(`/?setup=${e2eSetupToken}`)
     await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
     await fillCreationForm(page, 'http://localhost:9/nothing')
     await creationFormOf(page).getByRole('button', { name: 'Create and sign in' }).click()
@@ -301,5 +307,38 @@ test.describe('SSO', () => {
         expect(stored?.issuer).toBe(ssoProviderIssuer)
       })
     })
+  })
+})
+
+test.describe('SSO of a workspace joined by invited address', () => {
+  test.use({ baseURL: ssoViteUrl, signedInAs: 'member-alice', runtimeHost: false, warmRuntimes: false })
+
+  test('As an Admin of a workspace joined by invited address, I see the sign-in app of this Spyria with nothing to change', {
+    tag: ['@spec-53'],
+  }, async ({ page }) => {
+    const invitedOnly = {
+      joinBy: 'invited_address',
+      preset: 'oidc',
+      issuer: 'https://idp.garage.example',
+      clientId: 'garage-sign-in-app',
+      domain: null,
+      tenantId: '',
+      hasSecret: true,
+      usesInstanceApp: false,
+      domainState: null,
+    }
+    await page.route('**/api/sso-settings', (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ json: { settings: invitedOnly } }) : route.abort(),
+    )
+    await page.goto('/')
+    await openSettings(page, 'Setup SSO')
+    const app = signInSectionOf(page).getByRole('definition')
+    await expect(app).toHaveText(['Other OIDC', 'https://idp.garage.example', 'garage-sign-in-app'])
+    await expect(signInSectionOf(page)).toContainText(
+      'Every workspace on this Spyria signs in through this app. Only the person who runs this Spyria can change it, for every workspace at once.',
+    )
+    await expect(signInSectionOf(page).getByRole('textbox')).toHaveCount(0)
+    await expect(signInSectionOf(page).getByRole('combobox')).toHaveCount(0)
+    await expect(signInSectionOf(page).getByRole('button', { name: 'Save' })).toHaveCount(0)
   })
 })

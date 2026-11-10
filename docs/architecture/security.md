@@ -12,12 +12,13 @@ This page describes who can do what in Spyria and where each credential lives. I
 
 Production sign-in is single sign-on only, one OpenID Connect provider per workspace (Google Workspace, Microsoft Entra or any OIDC issuer). The sign-in screen asks for a work email; its domain picks the workspace's provider. A member's identity is matched on the provider's issuer and subject, not on the email alone.
 
-- **The first workspace** is created from the sign-in page of an empty deployment: organization name, email domain and provider. The first person who completes sign-in at that provider with an address at that domain becomes its Admin. Once a workspace exists, the page no longer offers this and the server refuses it.
+- **The first workspace** is created from the sign-in page of an empty deployment, opened with the setup link (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`; without it the page only says the deployment is being set up, so nobody can claim a fresh install before its owner): organization name, email domain and provider. The first person who completes sign-in at that provider with an address at that domain becomes its Admin. Once a workspace exists, the page no longer offers this and the server refuses it.
 - **Domain verification.** A workspace stays unverified until an Admin proves control of its domain by opening a single-use link (valid 24 hours) sent to any address at that domain. Until then nobody can be invited and the domain routes sign-in only for existing members. A workspace has exactly one domain, set at creation.
 - **Invites** are an allow-list kept by admins: an email, a role and an expiry of 7 days. The invitee signs in through the workspace's provider; no invite email is sent.
+- **Who can join.** An instance either joins people by email domain (above) or by invited address: then a workspace owns no domain, only exactly invited addresses join, and Google consumer accounts are allowed ([decision 0027](../decisions/0027-join-by-invited-address.md)). In both, a Google or generic OIDC address counts only when the provider confirms it (`email_verified`); Entra is accepted only through a tenant-specific issuer, so Microsoft consumer accounts never sign in.
 - **Sessions.** After sign-in the server keeps a session row (7 days) and sets an `HttpOnly`, `SameSite=Lax` cookie per workspace, scoped to `/auth` and `Secure` everywhere but `localhost`. The web app trades it for a short-lived signed token (15 minutes) that it sends on every API call, Zero sync and agent stream, and renews it in the background. A removed member's sessions stop working at the next check, and their open agent streams are closed. An agent stream is also closed when its session signs out, and when its token expires without the renewed token reaching it, so a session that ends any other way keeps its stream for 15 minutes at most.
 
-Development and tests sign in through a local Dex instead (`SPYRIA_AUTH_MODE=dex`); production refuses that mode. See [self-hosting](../guides/self-hosting.md) for the setup and [decisions](../decisions/) for why.
+Development and tests sign in through a local Dex instead (`SPYRIA_AUTH_MODE=dex`); production refuses that mode. See [manual install](../guides/self-hosting.md) for the setup and [decisions](../decisions/) for why.
 
 ## Permissions and roles
 
@@ -73,9 +74,10 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 ## Runtimes and hosts
 
 - A runtime host **dials out** to the server and accepts a fixed set of commands, each validated field by field. Spyria never opens a port on a host and never gets general access to its Docker.
-- Each runtime container runs as an unprivileged user with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, and limits on memory (2 GiB), CPU (2) and processes (512). It runs only an image identified by its local content ID; hosts never pull.
+- Each runtime container runs as an unprivileged user with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, and limits on memory (2 GiB), CPU (2) and processes (512). It runs only the image the server names, and a host accepts just two forms of it: the published `spyria-agent` of the namespace its own image came from, by digest (pulled when missing; a tag, another name or another registry is refused), or a local content ID.
+- A host and spyria-agent declare a protocol version; the server refuses a host below its minimum ("This host is out of date") and fails a runtime whose agent is below it, so a security fix in the host or the agent is enforced by raising the minimum: an old host, with its old command validation, token redaction and harness pins, cannot stay connected ([machines](../features/machines.md#versions-and-updates)).
 - Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux). The name `host.docker.internal` resolves to the host machine in every runtime, as on Docker Desktop, so a host run outside a container can give its runtimes its model relay address; the machine was already reachable through the network's gateway.
-- Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [self-hosting](../guides/self-hosting.md).
+- Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [manual install](../guides/self-hosting.md).
 
 ## In the browser
 
@@ -97,7 +99,7 @@ Budgets are a hard stop, enforced by the relay before each model call: when the 
 - The gateway's encryption key seals members' provider keys in the gateway's database. It cannot change without wiping that database.
 - `SPYRIA_TOKEN_SECRET` signs session tokens; changing it signs everyone out.
 
-In production the server refuses to start while any of these is missing, shorter than 32 characters or still a development default ([self-hosting](../guides/self-hosting.md) lists every check).
+In production the server refuses to start while any of these is missing, shorter than 32 characters or still a development default ([manual install](../guides/self-hosting.md) lists every check).
 
 ## What is logged, and what never is
 
