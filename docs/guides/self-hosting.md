@@ -84,7 +84,9 @@ The server image sets `SPYRIA_ENV=production`. The server then checks its settin
 - `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY` and `SPYRIA_SETUP_TOKEN` are set, at least 32 characters, and not a development default (`spyria` or `spyria-dev-…`).
 - `SPYRIA_APP_ORIGIN` starts with `https://`, and `SPYRIA_OIDC_REDIRECT_URI` is on that origin.
 - `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
+- `SPYRIA_INSTALL_HOST_TOKEN`, when set, is 16 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`.
 - `SPYRIA_MAIL_FROM` is set when `SPYRIA_SMTP_URL` is.
+- `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` are set together or not at all.
 - `SPYRIA_TRUSTED_PROXY` is unset, `cloudflare`, or `x-forwarded-for:1` to `3`.
 
 Read the list with `docker compose --env-file .env.prod -f compose.prod.yml logs server`.
@@ -172,7 +174,7 @@ Runtime chats run on runtime hosts: machines with Docker running the `spyria-hos
 
 `spyria setup` pairs it by itself: it generates a one-time install code (`SPYRIA_INSTALL_HOST_TOKEN`), points the host at `http://server:3000/h/<code>` and adds the `host` profile; the host waits until the first workspace exists, then appears in **Workspace settings** as **This machine**, removable like any host. The code works once, and only for the first workspace: to turn the host on once a workspace exists, `spyria setup --host` asks for the command of **Add runtime host** and points the host at its code instead.
 
-By hand, set those two settings yourself, or once the workspace exists:
+By hand, before the first workspace exists, set those two settings yourself: `SPYRIA_INSTALL_HOST_TOKEN` to 16 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, and `SPYRIA_HOST_CLAIM_URL` to `http://server:3000/h/<that code>`. Once a workspace exists, take the command of **Add runtime host** instead.
 
 To run the workspace host on the Compose machine:
 
