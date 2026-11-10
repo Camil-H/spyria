@@ -308,21 +308,24 @@ export const startAgent = ({
   }
 
   const requestWithin = (conversation: Conversation, method: string, params: Json) => {
+    const { connection } = conversation
     const expired = Promise.withResolvers<never>()
-    const timer = setTimeout(() => {
-      const errorOutput = errorOutputOf(conversation, conversation.connection)
+    const timer = setTimeout(async () => {
+      timedOutConnections.add(connection)
+      connection.close()
+      await Promise.race([connection.closed, Bun.sleep(adapterCloseWaitMilliseconds)])
+      const errorOutput = errorOutputOf(conversation, connection)
       const error = new AcpError(
         withSummary(`The agent did not respond within ${durationOf(requestTimeoutMilliseconds)}`, errorOutput),
       )
       reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
       fail(conversation, error)
-      timedOutConnections.add(conversation.connection)
-      conversation.connection.close()
       expired.reject(error)
     }, requestTimeoutMilliseconds)
-    return Promise.race([conversation.connection.request(method, params), expired.promise]).finally(() =>
-      clearTimeout(timer),
-    )
+    const answered = connection
+      .request(method, params)
+      .catch((error) => (timedOutConnections.has(connection) ? expired.promise : Promise.reject(error)))
+    return Promise.race([answered, expired.promise]).finally(() => clearTimeout(timer))
   }
 
   const answer = (conversation: Conversation, pending: PendingQuestion, body: Answer) => {
