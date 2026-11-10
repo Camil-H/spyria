@@ -5,6 +5,7 @@ import { createZeroForwarding } from './zero-forwarding.ts'
 
 type UpstreamSocketData = { protocol: string }
 const upstreamRequests: { method: string; path: string; headers: Record<string, string>; body: string }[] = []
+const upstreamUpgrades: string[] = []
 const largeMessage = 'z'.repeat(20 * 1024 * 1024)
 
 const upstream = Bun.serve<UpstreamSocketData>({
@@ -12,8 +13,10 @@ const upstream = Bun.serve<UpstreamSocketData>({
   async fetch(request, server) {
     const { pathname, search } = new URL(request.url)
     if (request.headers.get('upgrade') === 'websocket') {
+      upstreamUpgrades.push(pathname)
       const protocol = request.headers.get('sec-websocket-protocol')?.split(',')[0]?.trim() ?? ''
       if (pathname === '/sync/refused') return new Response('no sync here', { status: 403 })
+      if (pathname === '/sync/slow') await Bun.sleep(200)
       server.upgrade(request, {
         headers: protocol ? { 'sec-websocket-protocol': protocol } : {},
         data: { protocol },
@@ -133,19 +136,41 @@ test('forwards a WebSocket under /zero with its subprotocol, relays messages bot
   expect(closeEvent.reason).toBe('as asked')
 })
 
-test('closing the browser side closes the zero-cache side, and a refused upgrade upstream answers 502 to the browser', async () => {
+test('closing the browser side closes the zero-cache side, and a refused upgrade upstream closes the browser socket as unreachable', async () => {
   const { socket, closed } = await openSocket('/zero/sync/v51/connect')
   socket.close(1000, 'bye')
   expect((await closed).code).toBe(1000)
-  const refused = await fetch(`${serverUrl}/zero/sync/refused`, {
-    headers: {
-      upgrade: 'websocket',
-      connection: 'upgrade',
-      'sec-websocket-key': 'x3JJHMbDL1EzLkh9GBhXDw==',
-      'sec-websocket-version': '13',
-    },
+  const refused = await openSocket('/zero/sync/refused')
+  const refusedClose = await refused.closed
+  expect(refusedClose.code).toBe(1011)
+  expect(refusedClose.reason).toBe('The sync service is unreachable')
+})
+
+test('opens no zero-cache socket for an upgrade the server does not accept', async () => {
+  upstreamUpgrades.length = 0
+  const notAccepted = await fetch(`${serverUrl}/zero/sync/v51/connect`, {
+    headers: { upgrade: 'websocket', connection: 'upgrade', 'sec-websocket-version': '13' },
   })
-  expect(refused.status).toBe(502)
+  expect(notAccepted.status).toBe(400)
+  await Bun.sleep(50)
+  expect(upstreamUpgrades).toEqual([])
+})
+
+test('holds what the browser sends while zero-cache is still opening, then relays it in order', async () => {
+  const { socket, messages } = await openSocket('/zero/sync/slow', ['zero.v1.init'])
+  socket.send('first')
+  socket.send('second')
+  await waitFor(() => messages.length === 3)
+  expect(messages).toEqual(['welcome zero.v1.init', 'echo first', 'echo second'])
+  socket.close()
+})
+
+test('closes the browser socket when it sends more than 1 MiB before zero-cache opens', async () => {
+  const { socket, closed } = await openSocket('/zero/sync/slow', ['zero.v1.init'])
+  socket.send('x'.repeat(1024 * 1024 + 1))
+  const closeEvent = await closed
+  expect(closeEvent.code).toBe(1009)
+  expect(closeEvent.reason).toBe('Too much was sent before the sync service answered')
 })
 
 test('answers 502 when zero-cache is unreachable', async () => {

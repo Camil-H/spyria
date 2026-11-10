@@ -15,6 +15,7 @@ const releaseWith = (binary: string, listedChecksum?: string) => {
   writeFileSync(join(release, `latest/download/spyria-${platform}`), binary)
   const checksum = listedChecksum ?? createHash('sha256').update(binary).digest('hex')
   writeFileSync(join(release, 'latest/download/spyria-checksums.txt'), `${checksum}  spyria-${platform}\n`)
+  writeFileSync(join(release, 'latest/download/spyria-checksums.txt.sigstore.json'), '{"bundle":"of the release"}')
   return release
 }
 const fakeTools = mkdtempSync(join(work, 'bin-'))
@@ -27,16 +28,32 @@ fake(
   'url=""; out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; -*) ;; *) url="$1" ;; esac; shift; done; cp "$(echo "$url" | sed "s|^file://||")" "$out"',
 )
 fake('docker', 'exit 0')
+const cosignCalls = join(work, 'cosign-calls')
+const cosignOf = (exitCode: number, reason = '') => {
+  const tools = mkdtempSync(join(work, 'cosign-'))
+  writeFileSync(
+    join(tools, 'cosign'),
+    `#!/bin/sh\nfor argument in "$@"; do case "$argument" in /*) basename "$argument" ;; *) echo "$argument" ;; esac; done > "${cosignCalls}"\ncat "$4" >> "${cosignCalls}"\necho "${reason}" >&2\nexit ${exitCode}\n`,
+  )
+  chmodSync(join(tools, 'cosign'), 0o755)
+  return tools
+}
+const verifyingCosign = cosignOf(0)
+const refusingCosign = cosignOf(1, 'Error: none of the expected identities matched what was in the certificate')
 
-const install = (release: string) => {
+const install = (
+  release: string,
+  { cosign, environment = {} }: { cosign?: string; environment?: Record<string, string> } = {},
+) => {
   const installDir = mkdtempSync(join(work, 'install-'))
   const result = Bun.spawnSync(['sh', installScript], {
     env: {
-      PATH: `${fakeTools}:/usr/bin:/bin`,
+      PATH: [fakeTools, ...(cosign ? [cosign] : []), '/usr/bin', '/bin'].join(':'),
       HOME: work,
       SPYRIA_DOWNLOAD_BASE: `file://${release}`,
       SPYRIA_INSTALL_DIR: installDir,
       SPYRIA_SKIP_SETUP: '1',
+      ...environment,
     },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -50,6 +67,56 @@ test('install.sh downloads the binary of this platform, checks its checksum and 
   expect(exitCode).toBe(0)
   expect(readFileSync(join(installDir, 'spyria'), 'utf8')).toBe('#!/bin/sh\necho spyria\n')
   expect(statSync(join(installDir, 'spyria')).mode & 0o777).toBe(0o755)
+})
+
+test('install.sh checks with cosign that the checksums were signed by the Publish workflow of the repository, then installs', () => {
+  rmSync(cosignCalls, { force: true })
+  const { installDir, exitCode, output } = install(releaseWith('#!/bin/sh\necho spyria\n'), { cosign: verifyingCosign })
+  expect(exitCode).toBe(0)
+  expect(output).toContain(`Installed spyria in ${installDir}`)
+  expect(output).not.toContain('cosign is missing')
+  expect(readFileSync(cosignCalls, 'utf8').split('\n')).toEqual([
+    'verify-blob',
+    'checksums.txt',
+    '--bundle',
+    'checksums.sigstore.json',
+    '--certificate-identity-regexp',
+    '^https://github.com/Camil-H/spyria/\\.github/workflows/publish\\.yml@refs/tags/v',
+    '--certificate-oidc-issuer',
+    'https://token.actions.githubusercontent.com',
+    '{"bundle":"of the release"}',
+  ])
+})
+
+test('install.sh refuses checksums whose signature cosign does not verify, and installs nothing', () => {
+  const { installDir, exitCode, output } = install(releaseWith('#!/bin/sh\necho spyria\n'), { cosign: refusingCosign })
+  expect(exitCode).toBe(1)
+  expect(output).toContain('Error: none of the expected identities matched what was in the certificate')
+  expect(output).toContain(
+    'cosign could not verify that the Publish workflow of Camil-H/spyria signed the checksums of this release',
+  )
+  expect(() => statSync(join(installDir, 'spyria'))).toThrow()
+})
+
+test('with cosign, install.sh refuses a release that publishes no signature of its checksums', () => {
+  const release = releaseWith('#!/bin/sh\necho spyria\n')
+  rmSync(join(release, 'latest/download/spyria-checksums.txt.sigstore.json'))
+  const { installDir, exitCode, output } = install(release, { cosign: verifyingCosign })
+  expect(exitCode).toBe(1)
+  expect(output).toContain('the release publishes no signature of its checksums')
+  expect(() => statSync(join(installDir, 'spyria'))).toThrow()
+})
+
+test('without cosign, install.sh says the signature is not checked, and refuses to install when SPYRIA_REQUIRE_SIGNATURE=1', () => {
+  const unchecked = install(releaseWith('#!/bin/sh\necho spyria\n'))
+  expect(unchecked.exitCode).toBe(0)
+  expect(unchecked.output).toContain("cosign is missing, so the release's signature is not checked")
+  const required = install(releaseWith('#!/bin/sh\necho spyria\n'), { environment: { SPYRIA_REQUIRE_SIGNATURE: '1' } })
+  expect(required.exitCode).toBe(1)
+  expect(required.output).toContain(
+    'cosign is missing, and SPYRIA_REQUIRE_SIGNATURE=1 asks for the signature to be checked',
+  )
+  expect(() => statSync(join(required.installDir, 'spyria'))).toThrow()
 })
 
 test('install.sh refuses a binary that does not match the published checksum, and installs nothing', () => {

@@ -6,7 +6,7 @@ Installing Spyria meant a clone, Bun, building the runtime image on the machine 
 
 ## Decision
 
-- Every version tag (`v1.2.3`) publishes `spyria-server`, `spyria-host` and `spyria-agent` to GHCR for `linux/amd64` and `linux/arm64`, tagged with the version and, unless it is a patch of an older release line, `latest`; signed with cosign (keyless, from the Publish workflow). The runtime image's licenses are checked before anything is pushed.
+- Every version tag (`v1.2.3`) publishes `spyria-server`, `spyria-host` and `spyria-agent` to GHCR for `linux/amd64` and `linux/arm64`, tagged with the version and, unless it is a patch of an older release line, `latest`; signed with cosign (keyless, from the Publish workflow). The same tag releases the `spyria` tool with its checksums, signed the same way (`spyria-checksums.txt.sigstore.json`), which `install.sh` checks when cosign is installed. The runtime image's licenses are checked before anything is pushed.
 - The server image carries the runtime image of its own version by digest (`SPYRIA_AGENT_IMAGE`), so a deployment runs the runtime image that was tested with it. A host pulls that image from the deployment's registry when it is missing, and accepts nothing else from the server: only `<registry>/spyria-agent@sha256:<digest>` of the namespace its own image came from (`SPYRIA_IMAGES`), or a local content ID for builds from a clone.
 - The server forwards `/zero/*` to zero-cache, HTTP and WebSocket alike, streamed both ways. The way in routes the one hostname to `server:3000`, and `/health` reports zero-cache like the gateway.
 - `deploy/compose.prod.yml` runs the published images of `SPYRIA_VERSION`; `deploy/compose.build.yml` is the override that builds from a clone, for development and `smoke:prod`.
