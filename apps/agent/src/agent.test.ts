@@ -511,6 +511,68 @@ test.each([
   },
 )
 
+const silentOn = (method: string, launch: ReturnType<typeof launchOf>, ...extra: string[]) => {
+  launch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...extra, ...(launch.agent.acp_command as string[])]
+  return launch
+}
+
+test.each([
+  ['an ACP adapter', 'session/set_config_option', 'stub-large', () => launchOf()],
+  ['Pi', 'set_model', 'stub/stub-large', () => piLaunchOf()],
+])(
+  'with %s, a model switch it never answers during a turn ends that turn with the timeout as its only error',
+  async (_, method, model, launch) => {
+    const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
+    const id = await create(silentOn(method, launch()))
+    const socket = open(id)
+    await prompt(id, 'stub:linger first')
+    await call('POST', `/api/conversations/${id}/switch_acp_model`, { model })
+    await socket.until(kindOf('turn_end'))
+    expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toStrictEqual([
+      `The agent did not respond within 0.3 seconds. It reported: Waiting on ${method}`,
+    ])
+    expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('error')
+  },
+)
+
+test('a restart while a timed-out adapter is still stopping brings the conversation back to a working session', async () => {
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
+  const silentOnce = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(
+    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=1500'),
+  )
+  const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+  await Bun.sleep(700)
+  const restarted = await call('POST', `/api/conversations/${id}/restart`)
+  await switching
+  expect(restarted.body).toMatchObject({ execution_status: 'idle' })
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('end_turn')
+})
+
+test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const { call, create } = started({ requestTimeoutMilliseconds: 1_000 })
+    const id = await create(silentOn('session/set_config_option', launchOf()))
+    const first = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+    await Bun.sleep(900)
+    const secondSentAt = performance.now()
+    const second = await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
+    expect(performance.now() - secondSentAt).toBeLessThan(700)
+    expect(second.status).toBe((await first).status)
+    await Bun.sleep(1_200)
+    const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
+    expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
+  } finally {
+    await telemetry.shutdown()
+  }
+})
+
 test.each([
   [
     'an ACP adapter',
