@@ -57,3 +57,15 @@ test("a refused Okta token fails with Okta's reason", async () => {
     ),
   ).toBe('Okta refused POST /api/v1/apps: Invalid token provided')
 })
+
+test('an Okta address over http is refused before the token is sent', async () => {
+  const sentBefore = requests.length
+  expect(
+    await registerOktaApp({
+      orgUrl: 'http://acme.okta.com',
+      apiToken: 'okta-token',
+      origin: 'https://spyria.example.com',
+    }).catch((error: Error) => error.message),
+  ).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+  expect(requests.length).toBe(sentBefore)
+})
