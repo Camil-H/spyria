@@ -136,7 +136,7 @@ Only runtime chats can be forked.
 
 ## Starting a runtime from a channel thread
 
-In a channel, every message's actions include **Start runtime from this message**. It creates a runtime chat owned by the member who chose it, named from the message, and seeded with the whole thread (the root and its replies) as quoted context. The other authors of the thread who can read the channel join the new chat as Readers. The channel message shows a link to the runtime chat it started, and the runtime chat links back with "Started from".
+In a channel, every message's actions include **Start runtime from this message**. It creates a runtime chat owned by the member who chose it, named from the message, and seeded with the whole thread (the root and its replies) as quoted context. The other authors of the thread who can read the channel join the new chat as Readers. The channel message shows a link to the runtime chat it started, and the runtime chat links back with "Started from #channel".
 
 This lets members discuss freely in a channel and bring an agent in only when there is work to do, without moving the conversation by hand.
 
