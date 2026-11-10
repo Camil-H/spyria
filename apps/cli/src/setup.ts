@@ -5,6 +5,7 @@ import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
   assertNoOtherProjectIn,
+  assertPostgresRuns,
   backup,
   installFolderOf,
   readEnvironment,
@@ -230,6 +231,7 @@ export const setup = async (
       : await releaseFilesOf(version)
   if (existing.SPYRIA_VERSION !== undefined && existing.SPYRIA_VERSION !== version) {
     console.log(`Backing up before changing from ${existing.SPYRIA_VERSION} to ${version}`)
+    assertPostgresRuns(folder, 'run setup again')
     await backup(folder, flags)
   }
   writeReleaseFiles(folder, releaseFiles)
