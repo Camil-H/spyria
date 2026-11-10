@@ -32,24 +32,36 @@ const claimWith = (code: string) =>
     socket.onclose = (event) => resolve({ closeCode: event.code, reason: reason ?? event.reason })
   })
 
-const workspaceExists = async () => {
-  const operator = Bun.spawn(
-    [process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, 'has-workspace'],
-    {
-      stderr: 'pipe',
-      env: { ...process.env, DATABASE_URL: databaseUrlOf(instance.name) },
+const setupToken = 's'.repeat(48)
+const runOperator = async (command: string) => {
+  const operator = Bun.spawn([process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, command], {
+    stderr: 'pipe',
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrlOf(instance.name),
+      SPYRIA_APP_ORIGIN: 'https://spyria.example',
+      SPYRIA_SETUP_TOKEN: setupToken,
     },
-  )
-  return { exitCode: await operator.exited, output: (await new Response(operator.stdout).text()).trim() }
+  })
+  return {
+    exitCode: await operator.exited,
+    stdout: await new Response(operator.stdout).text(),
+    stderr: await new Response(operator.stderr).text(),
+  }
 }
 
-test('the machine host waits with the install token until the first workspace exists, then pairs with it once as a workspace host, and the operator tells setup whether a workspace exists', async () => {
+test('the machine host waits with the install token until the first workspace exists, then pairs with it once as a workspace host, while the operator says whether a workspace exists and prints the setup link only until one does', async () => {
   expect(await claimWith(installHostToken)).toEqual({
     closeCode: 1013,
     reason: 'Waiting for the first workspace of this Spyria',
   })
   expect(await claimWith('ZZZZZZZZZZZZZZZZ')).toMatchObject({ closeCode: 4001, reason: 'This code is not valid' })
-  expect(await workspaceExists()).toEqual({ exitCode: 0, output: 'no' })
+  expect(await runOperator('has-workspace')).toEqual({ exitCode: 0, stdout: 'no\n', stderr: '' })
+  expect(await runOperator('setup-link')).toEqual({
+    exitCode: 0,
+    stdout: `https://spyria.example/?setup=${setupToken}\n`,
+    stderr: '',
+  })
 
   const { workspaceId } = await createFirstWorkspace(
     database,
@@ -68,7 +80,12 @@ test('the machine host waits with the install token until the first workspace ex
     { email: 'owner@gmail.com', subject: 'owner-subject' },
     { installHostToken },
   )
-  expect(await workspaceExists()).toEqual({ exitCode: 0, output: 'yes' })
+  expect(await runOperator('has-workspace')).toEqual({ exitCode: 0, stdout: 'yes\n', stderr: '' })
+  expect(await runOperator('setup-link')).toEqual({
+    exitCode: 1,
+    stdout: '',
+    stderr: 'A workspace already exists: the setup link is spent\n',
+  })
   const paired = await claimWith(installHostToken)
   expect(paired.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
   expect([

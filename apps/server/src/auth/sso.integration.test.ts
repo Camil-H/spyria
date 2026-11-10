@@ -193,6 +193,23 @@ const identitiesOf = async (subject: string) => [
     select workspace_id, issuer, user_id from identities where subject = ${subject} order by workspace_id`),
 ]
 
+test('the operator sends a test message through the configured SMTP server, and asks for an address without one', async () => {
+  const mailSettings = { SPYRIA_SMTP_URL: smtp.url, SPYRIA_MAIL_FROM: 'Spyria <spyria@test.local>' }
+  expect(await runOperator(['mail:test', '--to', 'ops@example.com'], mailSettings)).toEqual({
+    exitCode: 0,
+    stdout: 'Sent a test message to ops@example.com\n',
+    stderr: '',
+  })
+  expect(smtp.mails.findLast((mail) => mail.to.includes('ops@example.com'))?.text).toContain(
+    'This test message shows that Spyria can send mail.',
+  )
+  expect(await runOperator(['mail:test'], mailSettings)).toEqual({
+    exitCode: 1,
+    stdout: '',
+    stderr: 'Usage: bun run operator mail:test --to <address>\n',
+  })
+})
+
 test('the server tells its auth mode and whether a workspace can be created', async () => {
   expect(await (await app.request('/auth/mode')).json()).toEqual({
     authMode: 'sso',
