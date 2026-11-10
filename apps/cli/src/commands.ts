@@ -11,7 +11,7 @@ import {
   spawnCompose,
 } from './compose.ts'
 import { type Environment, parseEnvironment, serializeEnvironment } from './environment.ts'
-import { askerOf, type Flags } from './flags.ts'
+import { askerOf, type Flags, hiddenAnswerTo } from './flags.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
@@ -353,7 +353,7 @@ export const verifyDomain = (folder: string, flags: Flags) => {
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])
 
 const typedOrPipedSecret = async () =>
-  process.stdin.isTTY ? (prompt('Client secret of the new sign-in app') ?? '') : await Bun.stdin.text()
+  process.stdin.isTTY ? hiddenAnswerTo('Client secret of the new sign-in app') : await Bun.stdin.text()
 
 export const changeSignInApp = async (
   folder: string,
