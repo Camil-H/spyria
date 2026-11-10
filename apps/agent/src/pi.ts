@@ -8,6 +8,7 @@ import {
   methodNotFound,
   spawnJsonLines,
 } from './acp.ts'
+import { outputTailOf } from './output-tail.ts'
 
 type PiModel = { provider: string; id: string; name?: string }
 type PiEdit = { oldText?: string; newText?: string }
@@ -154,7 +155,9 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         sessionUpdate: 'tool_call_update',
         toolCallId,
         status: 'in_progress',
-        rawOutput: { formatted_output: textOf((record.partialResult ?? {}) as Json).slice(-liveOutputCharacters) },
+        rawOutput: {
+          formatted_output: outputTailOf(textOf((record.partialResult ?? {}) as Json), liveOutputCharacters),
+        },
       })
     if (type === 'tool_execution_end') {
       const input = toolInputs.get(toolCallId) ?? {}

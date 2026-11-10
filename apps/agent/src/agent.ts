@@ -12,6 +12,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
+import { outputTailOf } from './output-tail.ts'
 import { connectPi } from './pi.ts'
 import { agentProtocolVersion, agentVersion } from './protocol.ts'
 import { redacted } from './redaction.ts'
@@ -71,12 +72,18 @@ type Conversation = {
   events: BufferedEvent[]
   bufferedBytes: number
   lastSeq: number
-  toolCalls: Map<string, Json>
+  toolCalls: Map<string, ToolCallState>
   turnEnds: Map<string, Json | undefined>
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
   isSettingUp: boolean
   stopWaitingToStart?: () => void
+}
+type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
+type TerminalMeta = {
+  terminal_output?: { data?: unknown }
+  terminal_output_delta?: { data?: unknown }
+  terminal_exit?: { exit_code?: unknown }
 }
 type ModelChoice = { model?: string; thoughtLevel?: string }
 type Launch = {
@@ -103,6 +110,7 @@ export const formShapes: Record<'claude-code' | 'codex', FormShape> = {
 }
 const subAnswerText = 'No member is available; decide yourself and state your assumption.'
 const terminalToolStatuses = ['completed', 'failed']
+const keptCommandOutputCharacters = 1_000_000
 const conversationRoute =
   /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
@@ -192,6 +200,32 @@ const isLive = (update: Json) =>
 
 const definedFieldsOf = (update: Json) =>
   Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined && value !== null))
+
+const hasNoInput = (call: Json) =>
+  typeof call.rawInput === 'object' && call.rawInput !== null && Object.keys(call.rawInput).length === 0
+const isAwaitingInput = (call: Json) => call.status === 'pending' && hasNoInput(call)
+
+const terminalMetaOf = (update: Json) => (update._meta ?? {}) as TerminalMeta
+const outputChunkOf = (update: Json) => {
+  const { terminal_output_delta, terminal_output } = terminalMetaOf(update)
+  const data = (terminal_output_delta ?? terminal_output)?.data
+  return typeof data === 'string' ? data : ''
+}
+const withTerminalOutput = (call: Json, output: string, exitCode: unknown) => {
+  const hasExitCode = typeof exitCode === 'number'
+  const canCarryOutput =
+    call.rawOutput === undefined ||
+    (typeof call.rawOutput === 'object' && call.rawOutput !== null && !Array.isArray(call.rawOutput))
+  if ((output === '' && !hasExitCode) || !canCarryOutput) return call
+  return {
+    ...call,
+    rawOutput: {
+      ...(hasExitCode && { exit_code: exitCode }),
+      ...(call.rawOutput as Json | undefined),
+      ...(output !== '' && { formatted_output: output }),
+    },
+  }
+}
 
 const formOf = (params: Json) => {
   const properties = ((params.requestedSchema as Json | undefined)?.properties ?? {}) as Record<string, FormField>
@@ -379,16 +413,36 @@ export const startAgent = ({
     if (conversation.isReloading) return
     if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions))
       conversation.configOptions = update.configOptions
-    if (update.sessionUpdate === 'tool_call') conversation.toolCalls.set(String(update.toolCallId), update)
-    if (update.sessionUpdate !== 'tool_call_update') return emit(conversation, update)
-    const previous = conversation.toolCalls.get(String(update.toolCallId))
-    const merged = { ...previous, ...definedFieldsOf(update) }
-    if (!terminalToolStatuses.includes(String(update.status))) {
-      conversation.toolCalls.set(String(update.toolCallId), merged)
-      return emit(conversation, update)
+    const toolCallId = String(update.toolCallId)
+    if (update.sessionUpdate === 'tool_call') {
+      const isAnnounced = !isAwaitingInput(update)
+      conversation.toolCalls.set(toolCallId, { call: update, isAnnounced, output: '' })
+      return isAnnounced ? emit(conversation, update) : undefined
     }
-    conversation.toolCalls.delete(String(update.toolCallId))
-    emit(conversation, { ...merged, sessionUpdate: 'tool_call_update' }, true)
+    if (update.sessionUpdate !== 'tool_call_update') return emit(conversation, update)
+    const previous = conversation.toolCalls.get(toolCallId)
+    const merged = { ...previous?.call, ...definedFieldsOf(update), sessionUpdate: 'tool_call_update' }
+    const output = outputTailOf((previous?.output ?? '') + outputChunkOf(update), keptCommandOutputCharacters)
+    const isFinished = terminalToolStatuses.includes(String(update.status))
+    const wasAnnounced = previous?.isAnnounced ?? true
+    const isAnnounced = wasAnnounced || isFinished || update.status === 'in_progress' || !hasNoInput(merged)
+    if (!wasAnnounced && isAnnounced) emit(conversation, { ...merged, sessionUpdate: 'tool_call' })
+    if (!isFinished) {
+      conversation.toolCalls.set(toolCallId, { call: merged, isAnnounced, output })
+      if (!isAnnounced) return
+      const liveOutput = outputTailOf(output, liveOutputCharacters)
+      return emit(conversation, output === '' ? update : { ...update, rawOutput: { formatted_output: liveOutput } })
+    }
+    conversation.toolCalls.delete(toolCallId)
+    emit(conversation, withTerminalOutput(merged, output, terminalMetaOf(update).terminal_exit?.exit_code), true)
+  }
+
+  const announceHeldToolCalls = (conversation: Conversation) => {
+    for (const [toolCallId, held] of conversation.toolCalls) {
+      if (held.isAnnounced) continue
+      conversation.toolCalls.set(toolCallId, { ...held, isAnnounced: true })
+      emit(conversation, { ...held.call, sessionUpdate: 'tool_call' })
+    }
   }
 
   const setConfigOption = async (conversation: Conversation, key: string, value: string) => {
@@ -478,7 +532,7 @@ export const startAgent = ({
           sessionUpdate: 'tool_call_update',
           toolCallId: setupToolCallId,
           status: 'in_progress',
-          rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
+          rawOutput: { formatted_output: outputTailOf(soFar, liveOutputCharacters) },
         }),
     )
   }
@@ -616,6 +670,7 @@ export const startAgent = ({
     )
     previous.close()
     closeQuestions(conversation, 'stopped')
+    announceHeldToolCalls(conversation)
     conversation.toolCalls.clear()
     conversation.status = 'starting'
     conversation.failure = undefined
@@ -731,6 +786,7 @@ export const startAgent = ({
     const endTurn = (stopReason: unknown) => {
       const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
       if (promptId) conversation.turnEnds.set(promptId, update)
+      announceHeldToolCalls(conversation)
       emit(conversation, update)
     }
     const ended = (result: Json) => {
