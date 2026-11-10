@@ -25,6 +25,7 @@ export const rateBudgets = {
   emailRouting: { count: 10, perMilliseconds: minute, per: 'address' },
   signInCallback: { count: 30, perMilliseconds: minute, per: 'address' },
   firstWorkspace: { count: 5, perMilliseconds: hour, per: 'address' },
+  setupToken: { count: 10, perMilliseconds: hour, per: 'address' },
   verificationLink: { count: 20, perMilliseconds: minute, per: 'address' },
   hostConnection: { count: 10, perMilliseconds: minute, per: 'address' },
   githubWebhooks: { count: 600, perMilliseconds: minute, per: 'address' },

@@ -85,7 +85,7 @@ The server sends the web app with a Content Security Policy (`apps/server/src/we
 
 ## Rate limits and retries
 
-The server limits sign-in, host connections, webhooks, invites, prompts, messages and new chats with in-memory token buckets, keyed by client address, workspace or member, and answers `429` with `Retry-After`. The budgets are defined in `apps/server/src/rate-limits.ts`. Behind a proxy, the client address is the socket address unless `SPYRIA_TRUSTED_PROXY=cloudflare` makes the server read Cloudflare's `CF-Connecting-IP` header; set it only when the server is reachable through Cloudflare alone.
+The server limits sign-in, setup link checks, host connections, webhooks, invites, prompts, messages and new chats with in-memory token buckets, keyed by client address, workspace or member, and answers `429` with `Retry-After`. The budgets are defined in `apps/server/src/rate-limits.ts`. Behind a proxy, the client address is the socket address unless `SPYRIA_TRUSTED_PROXY=cloudflare` makes the server read Cloudflare's `CF-Connecting-IP` header; set it only when the server is reachable through Cloudflare alone.
 
 Outbound calls have timeouts; calls that are safe to repeat are retried a few times with backoff, only on network errors and temporary HTTP failures (`packages/kernel/src/retries.ts`).
 
