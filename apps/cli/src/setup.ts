@@ -5,6 +5,8 @@ import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
   assertNoOtherProjectIn,
+  assertPostgresRuns,
+  backup,
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
@@ -23,6 +25,12 @@ import { type Asker, firstWorkspaceProviderOf, mailOf, removal } from './setup-s
 const googleClientIdPattern = /^[\w-]+\.apps\.googleusercontent\.com$/
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const hostnamePattern = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
+
+const localPortOf = (given: string) => {
+  const port = Number(given)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port takes a port number from 1 to 65535')
+  return port
+}
 
 const hostnameOf = (origin = '') => URL.parse(origin)?.hostname ?? ''
 const dockerGroupOf = () => {
@@ -140,6 +148,7 @@ export const setup = async (
   if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its secrets are kept.`)
   const deployment = asker.ask('name', 'Deployment name', existing.SPYRIA_DEPLOYMENT ?? 'spyria')
   if (!isDeploymentName(deployment)) throw new Error('The deployment name takes lowercase letters, digits and dashes')
+  const localPort = localPortOf(flags.values.port ?? existing.SPYRIA_LOCAL_PORT ?? '3300')
 
   const hostname = asker
     .require(
@@ -213,15 +222,19 @@ export const setup = async (
     dockerGroup: dockerGroupOf(),
     smtp,
     instanceApps: { google, microsoft },
-    localPort: Number(flags.values.port ?? existing.SPYRIA_LOCAL_PORT ?? 3300),
+    localPort,
   }
   const environment = environmentOf(answers, existing)
-  writeReleaseFiles(
-    folder,
+  const releaseFiles =
     version === cliVersion || cliVersion === 'dev'
       ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n` }
-      : await releaseFilesOf(version),
-  )
+      : await releaseFilesOf(version)
+  if (existing.SPYRIA_VERSION !== undefined && existing.SPYRIA_VERSION !== version) {
+    console.log(`Backing up before changing from ${existing.SPYRIA_VERSION} to ${version}`)
+    assertPostgresRuns(folder, 'run setup again')
+    await backup(folder, flags)
+  }
+  writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) return
