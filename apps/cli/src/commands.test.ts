@@ -34,7 +34,9 @@ case "$*" in
     printf 'dump' ;;
   *sso:sign-in-app*) cat > "$FAKE_DOCKER/stdin" ;;
   *has-workspace*) cat "$FAKE_DOCKER/has-workspace" 2>/dev/null ;;
-  *pg_database*) cat "$FAKE_DOCKER/database-exists" 2>/dev/null ;;
+  *pg_database*)
+    [ "$(cat "$FAKE_DOCKER/database-exists" 2>/dev/null)" = unknown ] && exit 2
+    cat "$FAKE_DOCKER/database-exists" 2>/dev/null ;;
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
@@ -170,6 +172,19 @@ test('spyria restore replaces a database only once confirmed, and backs it up as
   await restoreAnswering(false, ['--yes'])
   expect(questions).toHaveLength(2)
   expect(indexOfCall('dropdb')).toBeGreaterThan(indexOfCall('pg_dump'))
+})
+
+test('spyria restore changes nothing when Postgres does not say whether the database exists, rather than skip its backup', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  mkdirSync(join(install, 'backups'), { recursive: true })
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  writeFileSync(join(fakeDocker, 'database-exists'), 'unknown')
+  const refusal = await restore(
+    install,
+    parseFlags(['restore', `backups/${restored}`, '--yes', '--folder', install]),
+  ).catch((error: Error) => error.message)
+  expect(refusal).toBe('Postgres did not say whether the spyria database exists: nothing was changed')
+  expect(calls().filter((call) => /pg_dump|stop|dropdb|createdb/.test(call))).toEqual([])
 })
 
 test('spyria restore brings back a database that no longer exists, with nothing to back up first', async () => {
