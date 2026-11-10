@@ -28,6 +28,7 @@ export const rateBudgets = {
   setupToken: { count: 10, perMilliseconds: hour, per: 'address' },
   verificationLink: { count: 20, perMilliseconds: minute, per: 'address' },
   hostConnection: { count: 10, perMilliseconds: minute, per: 'address' },
+  zeroConnections: { count: 120, perMilliseconds: minute, per: 'address' },
   githubWebhooks: { count: 600, perMilliseconds: minute, per: 'address' },
   verificationEmails: { count: 3, perMilliseconds: hour, per: 'workspace' },
   invites: { count: 50, perMilliseconds: hour, per: 'workspace' },
