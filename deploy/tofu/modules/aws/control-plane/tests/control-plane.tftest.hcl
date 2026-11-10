@@ -238,3 +238,14 @@ run "the_same_secret_values_give_the_same_digest" {
     error_message = "The digest depends on the secret values alone, so an apply that changes no secret restarts nothing"
   }
 }
+
+run "a_larger_size_gives_the_server_and_zero_cache_more_cpu_and_memory" {
+  command = plan
+  variables {
+    size = "large"
+  }
+  assert {
+    condition     = aws_ecs_task_definition.server.cpu == "4096" && aws_ecs_task_definition.server.memory == "8192" && aws_ecs_task_definition.zero.cpu == "4096" && aws_ecs_task_definition.zero.memory == "8192"
+    error_message = "size sets the CPU and memory of the server and zero-cache"
+  }
+}

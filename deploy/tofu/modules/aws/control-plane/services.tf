@@ -134,8 +134,8 @@ resource "aws_ecs_task_definition" "zero" {
   family                   = "${var.name}-zero-cache"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 1024
-  memory                   = 2048
+  cpu                      = local.size.zero_cpu
+  memory                   = local.size.zero_memory
   execution_role_arn       = aws_iam_role.execution.arn
   ephemeral_storage {
     size_in_gib = 40
