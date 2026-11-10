@@ -2,22 +2,26 @@ import { expect, test } from 'bun:test'
 import { outputTailOf } from './output-tail.ts'
 
 const token = 'sk-ant-oat01-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789'
+const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
 
 test('an output within the limit is kept whole', () => {
   expect(outputTailOf(`key ${token}\nok\n`, 1_000)).toBe(`key ${token}\nok\n`)
 })
 
-test('a tail starts after a whitespace, so it never begins inside a token the host would no longer recognise', () => {
-  const output = `${token}\nrunning tests\n`
+test.each([token, jwt])('a tail never begins inside a token the host would no longer recognise: %s', (secret) => {
+  const output = `{"token":"${secret}","items":[1,2,3]}\nrunning tests\n`
   for (let maximumCharacters = 1; maximumCharacters < output.length; maximumCharacters++) {
     const tail = outputTailOf(output, maximumCharacters)
     expect(output.endsWith(tail)).toBe(true)
     expect(tail.length).toBeLessThanOrEqual(maximumCharacters)
-    expect(tail.includes(token.slice(-4)) ? tail.includes(token) : true).toBe(true)
+    expect(tail.includes(secret.slice(-4)) ? tail.includes(secret) : true).toBe(true)
   }
-  expect(outputTailOf(output, output.length - 1)).toBe('running tests\n')
 })
 
-test('a tail with no whitespace in it is dropped', () => {
-  expect(outputTailOf(`start ${token}`, 20)).toBe('')
+test('a long output without whitespace keeps its tail from the first character a token cannot hold', () => {
+  const compactJson = `[${Array.from({ length: 2_000 }, (_, index) => `{"id":${index}}`).join(',')}]`
+  const tail = outputTailOf(compactJson, 4_000)
+  expect(tail.length).toBeGreaterThan(3_990)
+  expect(compactJson.endsWith(tail)).toBe(true)
+  expect(tail).toMatch(/^[^\w.-]/)
 })
