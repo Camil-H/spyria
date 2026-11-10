@@ -10,6 +10,7 @@ export type GitHubPullRequest = {
   merged?: boolean
   merged_at?: string | null
   head: { sha: string }
+  mergeable?: boolean | null
   commits?: number
 }
 type Check = { id: number; head_sha: string; conclusion: string | null; pull_requests?: { number: number }[] }

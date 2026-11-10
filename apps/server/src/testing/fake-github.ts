@@ -233,6 +233,12 @@ export const startFakeGitHub = () => {
     branchHeadOf(repository, branch)
       ? git(bareOf(repository), 'log', '--format=%s', `${base}..refs/heads/${branch}`).split('\n').filter(Boolean)
       : []
+  const isMergeable = (repository: string, branch: string, base: string) =>
+    Bun.spawnSync(['git', 'merge-tree', '--write-tree', `refs/heads/${base}`, `refs/heads/${branch}`], {
+      cwd: bareOf(repository),
+      stdout: 'ignore',
+      stderr: 'ignore',
+    }).exitCode === 0
   const pullRequestJsonOf = (origin: string, { repository, number, title, head, base }: FakePullRequest) => ({
     number,
     html_url: `${origin}/${repository}/pull/${number}`,
@@ -241,6 +247,7 @@ export const startFakeGitHub = () => {
     draft: false,
     merged: false,
     head: { sha: branchHeadOf(repository, head), ref: head },
+    mergeable: isMergeable(repository, head, base),
     commits: commitSubjectsOf(repository, head, base).length,
   })
   const fakeCommentJsonOf = ({ author, body }: FakeComment) => ({ user: { login: author }, body })

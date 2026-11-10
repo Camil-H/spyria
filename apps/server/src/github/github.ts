@@ -610,7 +610,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
     checkRunsOf: async (chat, number) => {
       const { repository, token, tokenOf } = await readingOf(chat, { pull_requests: 'read', checks: 'read' }, 'Checks')
       return githubCall(chat.workspaceId, async () => {
-        const { head } = await api.pullRequest(token, repository, number).catch((error: unknown) => {
+        const { head, mergeable } = await api.pullRequest(token, repository, number).catch((error: unknown) => {
           if (error instanceof GitHubRequestFailed && error.status === 404)
             throw new GitHubRefused(`${repository} has no pull request #${number}`)
           throw error
@@ -646,6 +646,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         )
         return {
           headSha: head.sha,
+          isConflicting: mergeable === false,
           runs,
           logsRefusal: failingJobs.length > 0 && !actionsToken ? new GitHubPermissionMissing('Actions').message : null,
         }
