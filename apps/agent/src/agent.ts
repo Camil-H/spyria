@@ -12,6 +12,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
+import { outputTailOf } from './output-tail.ts'
 import { connectPi } from './pi.ts'
 import { agentProtocolVersion, agentVersion } from './protocol.ts'
 import { redacted } from './redaction.ts'
@@ -421,7 +422,7 @@ export const startAgent = ({
     if (update.sessionUpdate !== 'tool_call_update') return emit(conversation, update)
     const previous = conversation.toolCalls.get(toolCallId)
     const merged = { ...previous?.call, ...definedFieldsOf(update), sessionUpdate: 'tool_call_update' }
-    const output = ((previous?.output ?? '') + outputChunkOf(update)).slice(-keptCommandOutputCharacters)
+    const output = outputTailOf((previous?.output ?? '') + outputChunkOf(update), keptCommandOutputCharacters)
     const isFinished = terminalToolStatuses.includes(String(update.status))
     const wasAnnounced = previous?.isAnnounced ?? true
     const isAnnounced = wasAnnounced || isFinished || !hasNoInput(merged)
@@ -429,7 +430,7 @@ export const startAgent = ({
     if (!isFinished) {
       conversation.toolCalls.set(toolCallId, { call: merged, isAnnounced, output })
       if (!isAnnounced) return
-      const liveOutput = output.slice(-liveOutputCharacters)
+      const liveOutput = outputTailOf(output, liveOutputCharacters)
       return emit(conversation, output === '' ? update : { ...update, rawOutput: { formatted_output: liveOutput } })
     }
     conversation.toolCalls.delete(toolCallId)
@@ -523,7 +524,7 @@ export const startAgent = ({
           sessionUpdate: 'tool_call_update',
           toolCallId: setupToolCallId,
           status: 'in_progress',
-          rawOutput: { formatted_output: soFar.slice(-liveOutputCharacters) },
+          rawOutput: { formatted_output: outputTailOf(soFar, liveOutputCharacters) },
         }),
     )
   }
