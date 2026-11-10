@@ -192,7 +192,6 @@ test.describe('Spend', () => {
   })
 
   test.describe(() => {
-    const currentMonth = new Date().toISOString().slice(0, 7)
     const earlierMonth = (() => {
       const date = new Date()
       date.setUTCDate(1)
@@ -204,7 +203,6 @@ test.describe('Spend', () => {
     const memberTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { name: 'Usage by member' })
     const projectTableOf = (page: Page) => usageSectionOf(page).getByRole('table', { name: 'Usage by project' })
     const rowOf = (table: Locator, name: string) => table.getByRole('row', { name: new RegExp(`^${name}\\b`) })
-    const monthPickerOf = (scope: Locator) => scope.getByRole('combobox', { name: 'Month' })
     const periodPickerOf = (page: Page) => usageSectionOf(page).getByRole('combobox', { name: 'Period' })
 
     const cellsOf = async (row: Locator) => {
@@ -298,7 +296,7 @@ test.describe('Spend', () => {
       expect(workspaceTotal.calls).toBe(research.calls)
     })
 
-    test('As a member who can view costs, I see an earlier month’s usage only when I pick that month, in both views', {
+    test('As a member who can view costs, I see every month’s usage in a chat’s Usage tab, and an earlier month’s in settings only when I pick that period', {
       tag: ['@spec-13'],
     }, async ({ page, workerStack }) => {
       await workerStack.database.$client`
@@ -313,9 +311,6 @@ test.describe('Spend', () => {
 
       await openUsageTab(page, 'Research')
       const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
-      await expect(monthPickerOf(tabPanelOf(page))).toHaveValue(currentMonth)
-      await expect(rowOf(usageTable, 'Total')).not.toContainText('4,321')
-      await monthPickerOf(tabPanelOf(page)).selectOption(earlierMonth)
       await expect(rowOf(usageTable, 'Alice')).toContainText('4,321')
       await expect(rowOf(usageTable, 'Alice')).toContainText('$0.07')
       await expect(rowOf(usageTable, 'Alice').getByRole('cell').nth(2)).toHaveText('3')
