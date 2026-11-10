@@ -222,3 +222,29 @@ test('setup refuses a --port that is not a port number before it creates a tunne
     rmSync(empty, { recursive: true, force: true })
   }
 })
+
+test('setup refuses an answer .env cannot hold before it rewrites compose.yml and bifrost.json', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const keptCompose = `name: \${SPYRIA_DEPLOYMENT}\n# kept\n`
+  try {
+    const setupIn = (extra: string[], processEnvironment = {}) =>
+      setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', ...extra]), {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment,
+        workspaceExistsIn: () => false,
+      })
+    await setupIn(['--hostname', 'spyria.example.com'], { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' })
+    writeFileSync(join(install, 'compose.yml'), keptCompose)
+    writeFileSync(join(install, 'bifrost.json'), 'kept gateway config')
+    const environmentBefore = readFileSync(join(install, '.env'), 'utf8')
+    const refusal = await setupIn(['--mail', 'smtp', '--mail-from', "O'Brien <spyria@example.com>"], {
+      SPYRIA_SETUP_SMTP_URL: 'smtps://user:secret@smtp.example.com:465',
+    }).catch((error: Error) => error.message)
+    expect(refusal).toBe('SPYRIA_MAIL_FROM cannot hold a quote or span lines')
+    expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(keptCompose)
+    expect(readFileSync(join(install, 'bifrost.json'), 'utf8')).toBe('kept gateway config')
+    expect(readFileSync(join(install, '.env'), 'utf8')).toBe(environmentBefore)
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
