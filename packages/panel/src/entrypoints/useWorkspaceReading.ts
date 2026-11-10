@@ -1,30 +1,34 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { useEffect, useState } from 'react'
-import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
+import { useEffect, useSyncExternalStore } from 'react'
+import type { WorkspaceRead } from '../domain/workspace.ts'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
-import { usePanelCommands } from './providers.tsx'
+import { usePanelCommands, useWorkspaceReadings } from './providers.tsx'
 
 export const useWorkspaceReading = (workspaceId: WorkspaceId, chatId: ChatId, read: WorkspaceRead, path = '') => {
   const { refreshKey } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { readWorkspace } = usePanelCommands()
-  const [refreshCount, setRefreshCount] = useState(0)
-  const [reading, setReading] = useState<{ version: string; value: WorkspaceReading }>()
+  const readings = useWorkspaceReadings()
+  const key = JSON.stringify([workspaceId, chatId, read, path])
+  const kept = useSyncExternalStore(readings.subscribe, () => readings.keptOf(key))
+  const refreshCount = useSyncExternalStore(readings.subscribe, () => readings.refreshCountOf(key))
   const version = `${refreshKey}|${refreshCount}`
+  const isCurrent = kept?.version === version
   useEffect(() => {
-    let isCurrent = true
+    if (isCurrent) return
+    let isWanted = true
     void readWorkspace({ workspaceId, chatId, read, path }).then(
-      (value) => isCurrent && setReading({ version, value }),
-      () => isCurrent && setReading({ version, value: { isLive: false } }),
+      (value) => isWanted && readings.keep(key, { version, value }),
+      () => isWanted && readings.keep(key, { version, value: { isLive: false } }),
     )
     return () => {
-      isCurrent = false
+      isWanted = false
     }
-  }, [readWorkspace, workspaceId, chatId, read, path, version])
+  }, [readWorkspace, readings, key, workspaceId, chatId, read, path, version, isCurrent])
   return {
-    reading: reading?.value,
-    readingVersion: reading?.version,
-    isLoading: reading?.version !== version,
-    refresh: () => setRefreshCount(refreshCount + 1),
+    reading: kept?.value,
+    readingVersion: kept?.version,
+    isLoading: !isCurrent,
+    refresh: () => readings.refresh(key),
   }
 }
