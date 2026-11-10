@@ -36,6 +36,7 @@ export type FakePullRequest = {
   head: string
   base: string
   authorToken: string
+  isConflicting?: boolean
 }
 type FakeComment = { author: string; body: string }
 export type FakeIssue = {
@@ -247,7 +248,10 @@ export const startFakeGitHub = () => {
       stdout: 'ignore',
       stderr: 'ignore',
     }).exitCode === 0
-  const pullRequestJsonOf = (origin: string, { repository, number, title, head, base }: FakePullRequest) => ({
+  const pullRequestJsonOf = (
+    origin: string,
+    { repository, number, title, head, base, isConflicting }: FakePullRequest,
+  ) => ({
     number,
     html_url: `${origin}/${repository}/pull/${number}`,
     title,
@@ -255,7 +259,7 @@ export const startFakeGitHub = () => {
     draft: false,
     merged: false,
     head: { sha: branchHeadOf(repository, head), ref: head },
-    mergeable: isMergeable(repository, head, base),
+    mergeable: isConflicting === undefined ? isMergeable(repository, head, base) : !isConflicting,
     commits: commitSubjectsOf(repository, head, base).length,
   })
   const fakeCommentJsonOf = ({ author, body }: FakeComment) => ({ user: { login: author }, body })
