@@ -71,7 +71,7 @@ It prints what it selected and why. It runs a whole suite when it cannot decide:
 - `apps/server/src/testing/integration-setup.ts` runs every integration test;
 - app code outside the table (`kernel`, `db`, `ui`, `session`, `workspace`, `apps/web/src`, the rest of `apps/server/src`), a web asset such as a stylesheet, or an e2e harness file (the test servers, `testing.ts`, the fake LLM, `playwright.config.ts`, `global-setup.ts`, `stack-ports.ts`, `platform-gate.ts`) runs the whole e2e suite.
 
-Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts, and the backup code of `spyria` with `deploy/compose.prod.yml`) and `check:bundle` (the web app and the packages).
+Markdown, `scripts/`, `.github/`, `.agents/`, `biome.json` and `.dependency-cruiser.cjs` select no test. It also says whether the change needs `check:docker` (the host, the agent, `infra`, the runtime hosts and agent bridge, the agent image and harness scripts, and the `spyria` code its docker tests import, with `deploy/compose.prod.yml`) and `check:bundle` (the web app and the packages).
 
 With `--plan <file>`, it runs nothing but the module graph and writes the selection as JSON for CI: `unit`, `integration` and `e2e` are `"all"` or a list of paths (empty runs nothing; e2e paths are relative to `apps/web`), `e2eRepeat` lists the changed specs, `docker` and `bundle` are booleans.
 

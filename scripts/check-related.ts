@@ -81,7 +81,7 @@ const isInWebBundle = (file: string) =>
     file,
   ) && !isTestCode(file)
 const isDockerArea = (file: string) =>
-  /^(apps\/(host|agent)\/|apps\/cli\/src\/(commands|compose|backup)|deploy\/compose\.prod\.yml$|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
+  /^(apps\/(host|agent)\/|deploy\/compose\.prod\.yml$|infra\/|apps\/server\/src\/(runtime-hosts|agent-bridge)\/|apps\/server\/src\/(spyria-agent-image|testing\/harnesses)\.ts$|scripts\/(agent-image|build-cache)\.ts$)/.test(
     file,
   )
 const e2eSegmentsByArea: [RegExp, string[]][] = [
@@ -142,8 +142,11 @@ const dependentsOf = (file: string) => {
   return reached
 }
 
+const reachesCliDockerTest = (file: string) =>
+  [...dependentsOf(file)].some((dependent) => /^apps\/cli\/.+\.docker\.test\.ts$/.test(dependent))
+
 for (const changed of changedFiles) {
-  if (isDockerArea(changed)) dockerReasons.push(changed)
+  if (isDockerArea(changed) || reachesCliDockerTest(changed)) dockerReasons.push(changed)
   if (changed.startsWith('deploy/tofu/') || changed === 'deploy/bifrost.json' || changed === 'scripts/check-tofu.ts')
     tofuReasons.push(changed)
   const isModule = /\.(ts|tsx)$/.test(changed) && /^(apps|packages)\//.test(changed)
