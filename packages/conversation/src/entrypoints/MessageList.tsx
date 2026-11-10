@@ -73,7 +73,7 @@ export const MessageList = ({
   })
   useEffect(() => {
     const scroller = scrollerRef.current
-    if (scroller && scroller.scrollHeight <= scroller.clientHeight) onLoadEarlier?.()
+    if (scroller && scroller.clientHeight > 0 && scroller.scrollHeight <= scroller.clientHeight) onLoadEarlier?.()
   })
   const renderedItems = useDeferredValue(items)
   const shownItems =

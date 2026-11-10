@@ -185,15 +185,17 @@ export const queries = defineQueries({
           .limit(1),
     ),
   ),
-  chatMessages: defineQuery(z.object({ chatId: id, limit: z.number(), since: z.number() }), ({ ctx, args }) =>
-    messagesOf(ctx, args.chatId)
-      .where('createdAt', '>=', args.since)
-      .where('threadRootId', 'IS', null)
-      .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
-      .orderBy('seq', 'desc')
-      .limit(args.limit)
-      .related('replies')
-      .related('threadReplies'),
+  chatMessages: defineQuery(
+    z.object({ chatId: id, limit: z.number(), since: z.int().check(z.nonnegative()) }),
+    ({ ctx, args }) =>
+      messagesOf(ctx, args.chatId)
+        .where('createdAt', '>=', args.since)
+        .where('threadRootId', 'IS', null)
+        .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
+        .orderBy('seq', 'desc')
+        .limit(args.limit)
+        .related('replies')
+        .related('threadReplies'),
   ),
   searchMessages: defineQuery(z.object({ text: searchText }), ({ ctx, args }) =>
     zql.messages
