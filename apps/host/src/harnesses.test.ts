@@ -68,7 +68,7 @@ test("a failed install keeps npm's error lines without the log path, and falls b
     'npm error 404 Not Found - GET http://registry.test/@openai%2fcodex - Not found',
     'npm error 404',
     'npm error 404  The requested resource could not be found.',
-    'npm error A complete log of this run can be found in: /home/openhands/.npm/_logs/debug-0.log',
+    'npm error A complete log of this run can be found in: /home/spyria/.npm/_logs/debug-0.log',
   ].join('\r\n')
   expect(installFailureOf(output)).toBe(
     'code E404\n404 Not Found - GET http://registry.test/@openai%2fcodex - Not found\n404  The requested resource could not be found.',

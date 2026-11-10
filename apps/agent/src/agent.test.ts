@@ -216,11 +216,21 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
   expect((await prompt(id, 'after the crash')).status).toBe(409)
 
-  const failing = await call('POST', '/api/conversations', {
-    ...launchOf(),
-    agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
-  })
-  expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const failing = await call('POST', '/api/conversations', {
+      ...launchOf(),
+      agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
+    })
+    expect(failing.body).toMatchObject({ execution_status: 'error', error: 'Authentication required' })
+    const adapterFailures = () => lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
+    for (const deadline = Date.now() + 5_000; adapterFailures().length === 0 && Date.now() < deadline; )
+      await Bun.sleep(10)
+    expect(adapterFailures()).toHaveLength(1)
+  } finally {
+    await telemetry.shutdown()
+  }
 
   const missing = await create({ ...launchOf(), agent: { acp_command: ['spyria-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
@@ -521,23 +531,97 @@ test.each([
   ['an ACP adapter', 'session/new', () => launchOf()],
   ['Pi', 'get_state', () => piLaunchOf()],
 ])(
-  '%s that never answers %s is stopped after the request timeout and its conversation fails',
+  '%s that never answers %s is stopped after the request timeout and its conversation fails with what it last reported',
   async (_, method, launch) => {
-    const { call } = started({ requestTimeoutMilliseconds: 300 })
-    const silentLaunch = launch()
-    silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
-    const { status, body } = await call('POST', '/api/conversations', silentLaunch)
-    expect(status).toBe(201)
-    const timedOut = method === 'get_state' ? 'session/new' : method
-    expect(body).toMatchObject({
-      execution_status: 'error',
-      error: `The adapter did not answer ${timedOut} within 300 ms`,
-    })
-    const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
-    for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
-    expect(isAlive(pid)).toBe(false)
+    const lines: Record<string, unknown>[] = []
+    const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+    try {
+      const { call } = started({ requestTimeoutMilliseconds: 300 })
+      const silentLaunch = launch()
+      silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
+      const { status, body } = await call('POST', '/api/conversations', silentLaunch)
+      expect(status).toBe(201)
+      expect(body).toMatchObject({
+        execution_status: 'error',
+        error: `The agent did not respond within 0.3 seconds. It reported: Waiting on ${method}`,
+      })
+      const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
+      for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
+      expect(isAlive(pid)).toBe(false)
+      await Bun.sleep(200)
+      const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
+      expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/new'])
+    } finally {
+      await telemetry.shutdown()
+    }
   },
 )
+
+const silentOn = (method: string, launch: ReturnType<typeof launchOf>, ...extra: string[]) => {
+  launch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...extra, ...(launch.agent.acp_command as string[])]
+  return launch
+}
+
+test.each([
+  ['an ACP adapter', 'session/set_config_option', 'stub-large', () => launchOf()],
+  ['Pi', 'set_model', 'stub/stub-large', () => piLaunchOf()],
+])(
+  'with %s, a model switch it never answers during a turn ends that turn with the timeout as its only error',
+  async (_, method, model, launch) => {
+    const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
+    const id = await create(silentOn(method, launch()))
+    const socket = open(id)
+    await prompt(id, 'stub:linger first')
+    await call('POST', `/api/conversations/${id}/switch_acp_model`, { model })
+    await socket.until(kindOf('turn_end'))
+    expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toStrictEqual([
+      `The agent did not respond within 0.3 seconds. It reported: Waiting on ${method}`,
+    ])
+    expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('error')
+  },
+)
+
+test('a restart while a timed-out adapter is still stopping brings the conversation back to a working session', async () => {
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
+  const silentOnce = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(
+    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=1500'),
+  )
+  const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+  await Bun.sleep(700)
+  const restarted = await call('POST', `/api/conversations/${id}/restart`)
+  await switching
+  expect(restarted.body).toMatchObject({ execution_status: 'idle' })
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'idle' })
+  const socket = open(id)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('end_turn')
+})
+
+test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const { call, create } = started({ requestTimeoutMilliseconds: 1_000 })
+    const id = await create(silentOn('session/set_config_option', launchOf()))
+    const first = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+    await Bun.sleep(900)
+    const secondSentAt = performance.now()
+    const second = await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
+    expect(performance.now() - secondSentAt).toBeLessThan(700)
+    const timedOut = {
+      error: 'The agent did not respond within 1 second. It reported: Waiting on session/set_config_option',
+    }
+    expect((await first).body).toStrictEqual(timedOut)
+    expect(second.body).toStrictEqual(timedOut)
+    await Bun.sleep(1_200)
+    const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
+    expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
+  } finally {
+    await telemetry.shutdown()
+  }
+})
 
 test.each([
   [

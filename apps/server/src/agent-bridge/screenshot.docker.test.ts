@@ -9,7 +9,7 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 
 const container = `spyria-test-screenshot-${crypto.randomUUID().slice(0, 8)}`
-const volumes = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
+const volumes = { ws: '/workspace', home: '/home/spyria', tmp: '/tmp' }
 const apiKey = crypto.randomUUID()
 afterAll(() => {
   docker('rm', '-fv', container)

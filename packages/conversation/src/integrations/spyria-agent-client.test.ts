@@ -32,7 +32,7 @@ const createdBodyOf = async (harness: HarnessId, adapterModel?: string) => {
 test('a subscription session launches Claude Code without the relay, a model, or secrets, and keeps Spyria tools', async () => {
   const created = await createdBodyOf('claude-code')
   const command: string[] = created.agent.acp_command
-  expect(command.at(-1)).toBe('claude-agent-acp')
+  expect(command.at(-1)).toEndWith('exec claude-agent-acp')
   expect(command).toEqual(
     expect.arrayContaining(['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1', 'CLAUDE_CODE_MAX_RETRIES=0']),
   )

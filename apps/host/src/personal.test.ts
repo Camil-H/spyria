@@ -104,9 +104,9 @@ test('login runs the documented command in a one-off TTY container of the pinned
       ReadonlyRootfs: true,
       NetworkMode: 'bridge',
       AutoRemove: true,
-      Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
+      Tmpfs: { '/home/spyria': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
       Mounts: [
-        { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' },
+        { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/spyria/.claude' },
         { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
       ],
     },
@@ -116,12 +116,12 @@ test('login runs the documented command in a one-off TTY container of the pinned
 test('logout deletes the credentials file without a network or a terminal', () => {
   expect(credentialsContainerBodyOf('spyria-', image, 'claude-code', 'logout')).toMatchObject({
     User: '10001:10001',
-    Entrypoint: ['rm', '-f', '/home/openhands/.claude/.credentials.json'],
+    Entrypoint: ['rm', '-f', '/home/spyria/.claude/.credentials.json'],
     Tty: false,
     OpenStdin: false,
     HostConfig: {
       NetworkMode: 'none',
-      Mounts: [{ Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' }],
+      Mounts: [{ Source: 'spyria-cred-claude-code', Target: '/home/spyria/.claude' }],
     },
   })
 })
@@ -188,9 +188,9 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
       ReadonlyRootfs: true,
       NetworkMode: 'bridge',
       AutoRemove: true,
-      Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
+      Tmpfs: { '/home/spyria': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
       Mounts: [
-        { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
+        { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/spyria/.codex' },
         { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
       ],
     },
@@ -200,10 +200,10 @@ test('login codex runs the device sign-in in a one-off TTY container on the Code
 test('logout codex deletes auth.json without a network or a terminal', () => {
   expect(credentialsContainerBodyOf('spyria-', image, 'codex', 'logout')).toMatchObject({
     User: '10001:10001',
-    Entrypoint: ['rm', '-f', '/home/openhands/.codex/auth.json'],
+    Entrypoint: ['rm', '-f', '/home/spyria/.codex/auth.json'],
     Tty: false,
     OpenStdin: false,
-    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' }] },
+    HostConfig: { NetworkMode: 'none', Mounts: [{ Source: 'spyria-cred-codex', Target: '/home/spyria/.codex' }] },
   })
 })
 
