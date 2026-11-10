@@ -114,7 +114,7 @@ const personalRelay = () => {
 
 test.each([
   ['POST', '/api/bash/execute_bash_command'],
-  ['GET', '/api/file/download?path=/home/openhands/.claude/.credentials.json'],
+  ['GET', '/api/file/download?path=/home/spyria/.claude/.credentials.json'],
   ['GET', `/api/conversations/${conversationId}/workspace/x`],
   ['GET', '/api/conversations/search'],
   ['POST', `/api/conversations/${conversationId}/../../bash/execute_bash_command`],

@@ -178,6 +178,9 @@ const withSummary = (message: string, errorOutput: string[]) => {
   return summary ? `${message}. It reported: ${summary}` : message
 }
 
+const durationOf = (milliseconds: number) =>
+  new Intl.NumberFormat('en', { style: 'unit', unit: 'second', unitDisplay: 'long' }).format(milliseconds / 1000)
+
 const currentValueOf = (configOptions: Json[], category: string) =>
   configOptions.find((option) => option.category === category)?.currentValue as string | undefined
 
@@ -270,7 +273,7 @@ export const startAgent = ({
   setupTimeoutMilliseconds = 45 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
-  homeDirectory = process.env.HOME ?? '/home/openhands',
+  homeDirectory = process.env.HOME ?? '/home/spyria',
   packageCacheDirectory = '/var/cache/spyria',
 }: {
   apiKey: string
@@ -297,6 +300,7 @@ export const startAgent = ({
     checks: async (_directory: string, body: unknown) => checksRunner.start(body),
   }
   const conversations = new Map<string, Conversation>()
+  const timedOutConnections = new WeakMap<AdapterConnection, Promise<AcpError>>()
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
   const runningSetups = new Map<string, string>()
@@ -337,17 +341,30 @@ export const startAgent = ({
     emit(conversation, update)
   }
 
+  const timeOut = async (conversation: Conversation, connection: AdapterConnection, method: string) => {
+    connection.close()
+    await Promise.race([connection.closed, Bun.sleep(adapterCloseWaitMilliseconds)])
+    const errorOutput = errorOutputOf(conversation, connection)
+    const error = new AcpError(
+      withSummary(`The agent did not respond within ${durationOf(requestTimeoutMilliseconds)}`, errorOutput),
+    )
+    reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
+    if (conversation.connection === connection) fail(conversation, error)
+    return error
+  }
+
   const requestWithin = (conversation: Conversation, method: string, params: Json) => {
+    const { connection } = conversation
     const expired = Promise.withResolvers<never>()
     const timer = setTimeout(() => {
-      const error = new AcpError(`The adapter did not answer ${method} within ${requestTimeoutMilliseconds} ms`)
-      fail(conversation, error)
-      conversation.connection.close()
-      expired.reject(error)
+      if (!timedOutConnections.has(connection))
+        timedOutConnections.set(connection, timeOut(conversation, connection, method))
+      void timedOutConnections.get(connection)?.then(expired.reject)
     }, requestTimeoutMilliseconds)
-    return Promise.race([conversation.connection.request(method, params), expired.promise]).finally(() =>
-      clearTimeout(timer),
-    )
+    const answered = connection.request(method, params).catch(async (error) => {
+      throw (await timedOutConnections.get(connection)) ?? error
+    })
+    return Promise.race([answered, expired.promise]).finally(() => clearTimeout(timer))
   }
 
   const answer = (conversation: Conversation, pending: PendingQuestion, body: Answer) => {
@@ -618,11 +635,16 @@ export const startAgent = ({
     return checkout.finally(() => checkouts.delete(id))
   }
 
-  const reportAdapterFailure = (conversation: Conversation, errorOutput: string[], error: unknown) =>
+  const reportAdapterFailure = (
+    conversation: Conversation,
+    errorOutput: string[],
+    error: unknown,
+    attributes: Record<string, string> = {},
+  ) =>
     log.warn({
       event: 'agent.adapter_failed',
       body: 'The agent adapter failed',
-      attributes: { 'conversation.id': conversation.id, 'adapter.error_output': errorOutput.join('\n') },
+      attributes: { 'conversation.id': conversation.id, 'adapter.error_output': errorOutput.join('\n'), ...attributes },
       error,
     })
 
@@ -638,7 +660,7 @@ export const startAgent = ({
         onCancelRequest: (requestId) => closeQuestions(conversation(), 'cancelled', requestId),
         onExit: (code) => {
           const exited = conversation()
-          if (conversations.get(exited.id) !== exited || !isCurrent()) return
+          if (conversations.get(exited.id) !== exited || !isCurrent() || timedOutConnections.has(connection)) return
           const errorOutput = errorOutputOf(exited, connection)
           const error = new AcpError(withSummary(`The adapter exited with code ${code}`, errorOutput))
           reportAdapterFailure(exited, errorOutput, error)
@@ -823,7 +845,8 @@ export const startAgent = ({
       const promptSeq = conversation.lastSeq
       try {
         ended(await connection.request('session/prompt', promptParams()))
-      } catch (error) {
+      } catch (rejection) {
+        const error = (await timedOutConnections.get(connection)) ?? rejection
         if (conversation.connection !== connection) return endedByRestart()
         if (!isDeadSession(error) || conversation.launch.agent?.adapter === 'pi-rpc') return failed(error)
         const hasStreamed = conversation.lastSeq !== promptSeq

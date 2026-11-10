@@ -78,7 +78,7 @@ export const installContainerBodyOf = (prefix: string, image: string, harness: H
     ReadonlyRootfs: true,
     NetworkMode: 'bridge',
     ExtraHosts: [hostMachineMapping],
-    Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
+    Tmpfs: { '/home/spyria': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
     Mounts: [harnessesMountOf(prefix, false)],
   },
 })

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
-import { runtimeHostId } from '@spyria/kernel'
+import { harnesses, runtimeHostId } from '@spyria/kernel'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
@@ -106,7 +106,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   const [inspected] = JSON.parse(dockerText('inspect', containerName))
   expect(
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
-  ).toContainEqual([`${prefix}cred-claude-code`, '/home/openhands/.claude'])
+  ).toContainEqual([`${prefix}cred-claude-code`, '/home/spyria/.claude'])
   await gateway.sandboxProvider.start(runtime)
   const transport = gateway.sandboxProvider.connect(runtime)
   const isReady = () =>
@@ -148,11 +148,9 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
     await transport.fetch({ method: 'DELETE', path: `/api/conversations/${conversationId}`, headers })
     return update
   }
-  const claude = await startSession([
-    ...['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1', 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1'],
-    ...['CLAUDE_CODE_MAX_RETRIES=0', 'claude-agent-acp'],
-  ])
+  const claude = await startSession([...harnesses['claude-code'].launch])
   expect(claude.sessionUpdate).toBe('session_started')
+  expect(() => JSON.parse(dockerText('exec', containerName, 'cat', '/home/spyria/.claude.json'))).not.toThrow()
   const models = claude.configOptions?.find((option) => option.id === 'model')?.options ?? []
   expect(models.map((model) => model.name)).toContain('Fable 5.1')
   expect(await startSession(['codex-acp'])).toMatchObject({
@@ -170,11 +168,11 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   )
   expect(written.stderr.toString()).toBe('')
 
-  expect(dockerText('exec', containerName, 'cat', '/home/openhands/.claude/.credentials.json')).toBe(credentialsFile)
+  expect(dockerText('exec', containerName, 'cat', '/home/spyria/.claude/.credentials.json')).toBe(credentialsFile)
   const download = await rejectionOf(
     transport.fetch({
       method: 'GET',
-      path: '/api/file/download?path=/home/openhands/.claude/.credentials.json',
+      path: '/api/file/download?path=/home/spyria/.claude/.credentials.json',
       headers,
     }),
   )
@@ -184,7 +182,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
       method: 'POST',
       path: '/api/bash/execute_bash_command',
       headers,
-      body: JSON.stringify({ command: 'cat /home/openhands/.claude/.credentials.json' }),
+      body: JSON.stringify({ command: 'cat /home/spyria/.claude/.credentials.json' }),
     }),
   )
   expect(command.message).toContain('refused')

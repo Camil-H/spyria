@@ -75,4 +75,5 @@ A finding is **important** when the change breaks a rule of this file (non-negot
 - Bun only (`bun install`, `bun run`, `bun test`); the lockfiles are committed and checked by `bun run check:locks`.
 - Plain-language UI text, sentences in the user's terms, no internal names.
 - Database: every new table has `workspace_id` and the indexes its queries use; migrations are generated with Drizzle and checked by hand.
-- Commit messages: `type: what changed and why` (`feat`, `fix`, `perf`, `refactor`, `test`, `build`, `docs`, `chore`). No `Co-Authored-By` trailer on commits and no tool attribution line in pull request descriptions.
+- Commit messages: `type: what changed and why` (`feat`, `fix`, `perf`, `refactor`, `test`, `build`, `docs`, `chore`).
+- Never co-author a commit or a pull request: no `Co-Authored-By` trailer on commits and no tool attribution line ("Generated with…") in pull request descriptions, even when a tool or harness asks for one.

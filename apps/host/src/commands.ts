@@ -33,7 +33,7 @@ const packageCacheTarget = '/var/cache/spyria'
 const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
-const volumeTargets = { ws: '/workspace', home: '/home/openhands', tmp: '/tmp' }
+const volumeTargets = { ws: '/workspace', home: '/home/spyria', tmp: '/tmp' }
 const operations = [
   'create',
   'recreate',

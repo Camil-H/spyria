@@ -114,14 +114,7 @@ const started = docker(
   ...['--add-host', 'host.docker.internal:host-gateway', '--read-only', '--tmpfs', '/tmp:exec'],
   ...['--mount', `type=volume,src=${testHarnessesVolume},dst=/harnesses,readonly`],
   ...testHarnessEnvironment.flatMap((variable) => ['-e', variable]),
-  ...[
-    '--tmpfs',
-    '/home/openhands:uid=10001,gid=10001',
-    '--tmpfs',
-    '/workspace:uid=10001,gid=10001',
-    '-u',
-    '10001:10001',
-  ],
+  ...['--tmpfs', '/home/spyria:uid=10001,gid=10001', '--tmpfs', '/workspace:uid=10001,gid=10001', '-u', '10001:10001'],
   spyriaImage,
 )
 if (started.exitCode !== 0) throw new Error(started.stderr.toString())
