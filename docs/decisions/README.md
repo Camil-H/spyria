@@ -31,3 +31,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0025](0025-dev-loop.md) | Quality gates: server-run steps between the agent's turns |
 | [0026](0026-published-images-one-entry-point.md) | Published, signed images per version; the server is the one entry point and forwards `/zero` |
 | [0027](0027-join-by-invited-address.md) | Who can join: by email domain or by invited address, with confirmed addresses required |
+| [0028](0028-generic-oidc-must-confirm-addresses.md) | A generic OIDC provider must confirm the address it returns, with no per-workspace exception |
