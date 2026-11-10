@@ -120,7 +120,7 @@ const withReplyTargets = (messages: readonly MessageRow[]) => {
   })
 }
 
-const chatsCreatedFrom = Date.parse('2026-01-01T00:00:00Z')
+export const seedCreationEpoch = Date.parse('2026-01-01T00:00:00Z')
 const createChats = (): ChatRow[] =>
   [
     chat('chat-welcome', acme, onboarding, 'Welcome', alice),
@@ -146,7 +146,7 @@ const createChats = (): ChatRow[] =>
       gitBranch: null,
     }),
     chat('chat-general', globex, null, 'General', alice),
-  ].map((row, index) => ({ ...row, createdAt: new Date(chatsCreatedFrom + index * 1000).toISOString() }))
+  ].map((row, index) => ({ ...row, createdAt: new Date(seedCreationEpoch + index * 1000).toISOString() }))
 
 export const createMockSnapshot = (): Snapshot => {
   const chats = createChats()

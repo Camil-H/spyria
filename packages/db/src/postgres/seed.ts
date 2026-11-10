@@ -1,6 +1,6 @@
 import { getTableName, is, sql } from 'drizzle-orm'
 import { PgTable } from 'drizzle-orm/pg-core'
-import { createMockSnapshot, seededChatCreatedSeq } from '../mock-data.ts'
+import { createMockSnapshot, seedCreationEpoch, seededChatCreatedSeq } from '../mock-data.ts'
 import type { Snapshot } from '../schema.ts'
 import { createDatabase, type Database } from './client.ts'
 import * as tables from './tables.ts'
@@ -9,7 +9,6 @@ type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
 export const allTables = Object.values(tables).filter((value) => is(value, PgTable))
 
-const seedCreationEpoch = Date.parse('2026-01-01T00:00:00Z')
 const createdInOrder = <Row>(row: Row, index: number) => ({
   ...row,
   createdAt: new Date(seedCreationEpoch + index * 1000),

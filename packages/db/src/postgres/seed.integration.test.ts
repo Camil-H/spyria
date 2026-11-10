@@ -55,7 +55,6 @@ const readSnapshot = async () => {
         ownerKind,
         ownerServiceIdentityId,
         mode,
-        createdAt,
         agentTurnPrompterId,
         agentTurnFailure,
         agentModel,
@@ -64,6 +63,7 @@ const readSnapshot = async () => {
       }) => ({
         ...chat,
         ownerId: ownerUserId,
+        createdAt: chat.createdAt.toISOString(),
       }),
     ),
     messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
