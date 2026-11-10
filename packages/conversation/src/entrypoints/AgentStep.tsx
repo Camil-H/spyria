@@ -55,7 +55,11 @@ const CommandStep = ({ id, step, isRunning }: { id: string; step: StepOf<'comman
         )
       }
     >
-      <pre className={outputClassName}>{fullOutput ?? step.output}</pre>
+      {isRunning && step.exitCode === null && step.output === '' ? (
+        <p className="mt-1 text-xs text-muted">No output yet</p>
+      ) : (
+        <pre className={outputClassName}>{fullOutput ?? step.output}</pre>
+      )}
       {step.truncatedLines > 0 && fullOutput === undefined && (
         <button
           type="button"

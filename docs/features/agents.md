@@ -80,7 +80,7 @@ Each delegation appears as one step, "Delegated to *model* · N steps · duratio
 
 ## Steps
 
-Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
+Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. A command shows its command line as soon as the agent has written it, and its output live while it runs on Pi or Codex; Claude Code reports a command's output only when it ends, so until then its step says **No output yet**. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
 
 Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
 
