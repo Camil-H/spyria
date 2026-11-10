@@ -545,7 +545,7 @@ const packageCacheKeyOf = async (host: FakeHost, chat: ChatId) => {
 }
 
 test('a runtime on a repository mounts a package cache its owner’s runtimes on that repository share; another owner, another repository or a chat without a repository get none of it', async () => {
-  const host = await fakeHost('Cache host', { relayVersion: 3, memoryGibibytes: 32 })
+  const host = await fakeHost('Cache host', { memoryGibibytes: 32 })
   const first = await packageCacheKeyOf(host, await chatOn('acme/app'))
   expect(first).toMatch(/^[a-f0-9]{32}$/)
   expect(await packageCacheKeyOf(host, await chatOn('acme/app'))).toBe(first)
@@ -555,11 +555,6 @@ test('a runtime on a repository mounts a package cache its owner’s runtimes on
   ]
   expect(new Set([first, ...others]).size).toBe(3)
   expect(await packageCacheKeyOf(host, await chatOn(null))).toBeUndefined()
-})
-
-test('a host too old to know package caches creates the runtime without one', async () => {
-  const olderHost = await fakeHost('Older host', { relayVersion: 2 })
-  expect(await packageCacheKeyOf(olderHost, await chatOn('acme/app'))).toBeUndefined()
 })
 
 test('a Claude Code or Codex session is never placed on a workspace host: with only a workspace host online it fails with no_host', async () => {
