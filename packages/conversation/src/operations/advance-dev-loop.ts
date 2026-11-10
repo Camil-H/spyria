@@ -25,6 +25,7 @@ import {
   pausedOutcome,
   readyOutcomeOf,
   reconsiderPromptOf,
+  refusedPushOutcomeOf,
   restarted,
   reviewFixPromptOf,
   reviewRequestOf,
@@ -33,10 +34,11 @@ import {
   stopOutcomeOf,
   stopped,
   turnedOffOutcome,
+  unreadHeadOutcomeOf,
+  updateFailureOf,
   withFinishedChecks,
   withOutcomes,
 } from '../domain/dev-loop.ts'
-import type { GitActionOutcome } from '../domain/git-actions.ts'
 import { checkRunsTextOf } from '../domain/github-tools.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -229,28 +231,29 @@ const isOpenPullRequestConflicting = async ({ transactor, checkouts }: Dependenc
   return checks?.isConflicting === true
 }
 
-const resolveConflict = async (
-  dependencies: Dependencies,
-  job: LoopJob,
-  loop: Loop,
-  { state, pushRefusal }: { state: DevLoopStep['state']; pushRefusal?: string },
-) => {
-  const updated: GitActionOutcome = await runGitAction(dependencies, {
-    chat: chatOf(loop),
-    memberId: loop.ownerId,
-    action: 'update',
-    message: '',
-  }).catch(() => ({ isRefused: true, text: 'The runtime did not answer' }))
-  const head =
-    updated.isRefused || pushRefusal !== undefined
-      ? null
-      : await headOf(dependencies, loop, await endpointOfLoop(dependencies, loop))
-  return withLoop(dependencies, job, [state], async (unitOfWork, current) => {
+const updateFromBase = (dependencies: Dependencies, loop: Loop, isLastAttempt: boolean) =>
+  runGitAction(dependencies, { chat: chatOf(loop), memberId: loop.ownerId, action: 'update', message: '' }).catch(
+    (error: unknown) => updateFailureOf(error, isLastAttempt),
+  )
+
+const resolveConflict = async (dependencies: Dependencies, job: LoopJob, loop: Loop, isLastAttempt: boolean) => {
+  const isStillWaiting = await withLoop(
+    dependencies,
+    job,
+    ['waiting_for_ci'],
+    async (_, current) => current.step.pushedHead === loop.step.pushedHead,
+  )
+  if (!isStillWaiting) return undefined
+  const updated = await updateFromBase(dependencies, loop, isLastAttempt)
+  const head = updated.isRefused ? null : await headOf(dependencies, loop, await endpointOfLoop(dependencies, loop))
+  return withLoop(dependencies, job, ['waiting_for_ci'], async (unitOfWork, current) => {
+    if (current.step.pushedHead !== loop.step.pushedHead) return undefined
     const baseBranch = (await unitOfWork.chats.get(current.card.chatId)).baseBranch ?? ''
     const { conflicts } = updated
     if (!conflicts) {
-      if (pushRefusal !== undefined) return endLoop(unitOfWork, current, stopped(current.step, pushRefusal))
-      if (head !== null && head !== current.step.pushedHead)
+      if (!updated.isRefused && head === null)
+        return endLoop(unitOfWork, current, stopped(current.step, unreadHeadOutcomeOf(updated.text)))
+      if (!updated.isRefused && head !== current.step.pushedHead)
         return moveOn(unitOfWork, current, restarted(current.step), 0)
       return endLoop(unitOfWork, current, stopped(current.step, notUpdatedOutcomeOf(baseBranch, updated.text)))
     }
@@ -276,9 +279,12 @@ const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => 
     action: 'pull_request',
     draft: loop.step.summary,
   })
-  if (published.isRefused && (await isOpenPullRequestConflicting(dependencies, loop)))
-    return resolveConflict(dependencies, job, loop, { state: 'running', pushRefusal: published.text })
+  const isConflicting = published.isRefused && (await isOpenPullRequestConflicting(dependencies, loop))
   return withLoop(dependencies, job, ['running'], async (unitOfWork, current) => {
+    if (isConflicting) {
+      const baseBranch = (await unitOfWork.chats.get(current.card.chatId)).baseBranch ?? ''
+      return endLoop(unitOfWork, current, stopped(current.step, refusedPushOutcomeOf(baseBranch, published.text)))
+    }
     if (published.isRefused) return endLoop(unitOfWork, current, stopped(current.step, published.text))
     const card = await unitOfWork.messages.pullRequestCard(current.card.chatId)
     const pullRequest = card?.step?.type === 'pull_request' ? card.step : undefined
@@ -396,12 +402,12 @@ export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) =
   return undefined
 }
 
-export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob) => {
+export const judgeLoopCi = async (dependencies: Dependencies, job: LoopJob, isLastAttempt: boolean) => {
   const loop = await loopIn(dependencies, job)
   if (loop?.step.state !== 'waiting_for_ci') return undefined
   const checks = await ciRunsOf(dependencies, loop).catch(() => undefined)
   const isCurrent = checks !== undefined && checks.headSha === loop.step.pushedHead
-  if (isCurrent && checks.isConflicting) return resolveConflict(dependencies, job, loop, { state: 'waiting_for_ci' })
+  if (isCurrent && checks.isConflicting) return resolveConflict(dependencies, job, loop, isLastAttempt)
   const verdict = isCurrent ? ciVerdictOf(checks.runs) : 'pending'
   const isQuiet = verdict === 'none' && Date.now() - (loop.step.publishedAt ?? 0) >= ciQuietMilliseconds
   const text = checks && checkRunsTextOf(loop.step.pullRequestNumber ?? 0, checks)

@@ -1,4 +1,11 @@
-import type { DevLoopRules, DevLoopStepConfig, DevLoopStepKind, MessageId } from '@spyria/kernel'
+import {
+  type DevLoopRules,
+  type DevLoopStepConfig,
+  type DevLoopStepKind,
+  DomainError,
+  type MessageId,
+} from '@spyria/kernel'
+import type { GitActionOutcome } from './git-actions.ts'
 import type { CheckRun } from './github-tools.ts'
 import { type CheckState, checkStateOf } from './pull-requests.ts'
 
@@ -262,6 +269,15 @@ export const conflictOutcomeOf = (baseBranch: string, conflicts: readonly string
   `The branch conflicts with ${baseBranch} in ${listOf([...conflicts])}: over to you`
 export const notUpdatedOutcomeOf = (baseBranch: string, reason: string) =>
   `The branch conflicts with ${baseBranch} and could not be updated from it (${reason}): over to you`
+export const updateFailureOf = (error: unknown, isLastAttempt: boolean): GitActionOutcome => {
+  if (error instanceof DomainError) return { isRefused: true, text: error.message }
+  if (!isLastAttempt) throw error
+  return { isRefused: true, text: 'the update failed' }
+}
+export const unreadHeadOutcomeOf = (updated: string) =>
+  `${updated} to resolve a conflict, but the runtime's branch could not be read: over to you`
+export const refusedPushOutcomeOf = (baseBranch: string, refusal: string) =>
+  `The pull request conflicts with ${baseBranch} and the push was refused: over to you\n${refusal}`
 
 const attemptsOf = (limit: number) => `${limit} ${limit === 1 ? 'attempt' : 'attempts'}`
 

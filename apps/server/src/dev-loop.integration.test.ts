@@ -508,9 +508,10 @@ test('As a chat owner whose base moved under the branch, the quality gates send 
   expect(fakeGitHub.commitSubjectsOf('acme/app', 'main', branch)).toEqual([])
 })
 
-test('As a chat owner, a conflict with the base hands over at once when CI may not be fixed, and when a refused push leaves the open pull request conflicting', async () => {
+test('As a chat owner, a conflict with the base hands over at once when CI may not be fixed, and when GitHub refuses a push while the open pull request conflicts, without changing the branch', async () => {
   expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 0 }]))).toEqual(succeeded)
-  await stack.agentHost('Strict conflicts host', { routesModelCalls: true })
+  const { relay } = await stack.agentHost('Strict conflicts host', { routesModelCalls: true })
+  const mergesOf = () => relay.requests.filter(({ path }) => path === '/api/workspace/merge').length
   await connectGitHub(alice)
   const strict = await newDevChat()
   await readyChat(strict.id)
@@ -536,12 +537,19 @@ test('As a chat owner, a conflict with the base hands over at once when CI may n
     steps: [committing('export const total = 9', 'Change the totals again'), finish],
     text: 'Done.',
   })
+  const mergesBefore = mergesOf()
   await stack.prompt(refused.id, 'Change the totals again')
   await waitFor(async () => {
     const step = (await loopOf(refused.id))?.step
     return step?.startPromptId !== firstLoop && step?.state === 'stopped'
   }, 60_000)
-  expect((await loopOf(refused.id))?.step.outcome).toBe('The branch conflicts with main in src/app.ts: over to you')
+  const outcome = String((await loopOf(refused.id))?.step.outcome)
+  expect(outcome).toStartWith(
+    'The pull request conflicts with main and the push was refused: over to you\nThe branch could not be pushed: ',
+  )
+  expect(outcome).toContain('[remote rejected]')
+  expect(outcome).toContain('pre-receive hook declined')
+  expect(mergesOf()).toBe(mergesBefore)
 })
 
 test('As a chat owner whose pull request GitHub still says conflicts, the gates run again once after a clean update from the base, then hand over; an update the runtime refuses hands over at once', async () => {

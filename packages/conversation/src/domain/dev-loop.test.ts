@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { type DevLoopRules, type DevLoopStepConfig, defaultDevLoopRules, messageId } from '@spyria/kernel'
+import { type DevLoopRules, type DevLoopStepConfig, DomainError, defaultDevLoopRules, messageId } from '@spyria/kernel'
 import {
   checksFixPromptOf,
   ciVerdictOf,
@@ -16,6 +16,7 @@ import {
   type ReviewFinding,
   readyOutcomeOf,
   reconsiderPromptOf,
+  refusedPushOutcomeOf,
   restarted,
   restartLabelOf,
   reviewFindingsOf,
@@ -23,7 +24,9 @@ import {
   reviewRequestOf,
   reviewVerdictOf,
   stopped,
+  unreadHeadOutcomeOf,
   unresolvedIdsOf,
+  updateFailureOf,
   withFinishedChecks,
   withOutcomes,
 } from './dev-loop.ts'
@@ -319,4 +322,21 @@ test('each start of the gates is a new round, from the latest prompt; after the 
   expect(restartLabelOf({ ...second, state: 'running', position: 1 })).toBeUndefined()
   expect(restartLabelOf({ ...second, state: 'working' })).toBeUndefined()
   expect(restartLabelOf(stopped(second, 'Lint failed: over to you'))).toBeUndefined()
+})
+
+test('an update from base that throws hands over with a typed error’s own reason, and with any other error only on the job’s last attempt', () => {
+  const refusal = new DomainError('forbidden', 'Only Alice can commit or update the branch in this chat')
+  expect(updateFailureOf(refusal, false)).toEqual({ isRefused: true, text: refusal.message })
+  const unexpected = new Error('connection terminated')
+  expect(() => updateFailureOf(unexpected, false)).toThrow('connection terminated')
+  expect(updateFailureOf(unexpected, true)).toEqual({ isRefused: true, text: 'the update failed' })
+})
+
+test('handing over after a conflict says what the update did and why the gates stop', () => {
+  expect(unreadHeadOutcomeOf('Merged main')).toBe(
+    "Merged main to resolve a conflict, but the runtime's branch could not be read: over to you",
+  )
+  expect(refusedPushOutcomeOf('main', 'The branch could not be pushed: [remote rejected]')).toBe(
+    'The pull request conflicts with main and the push was refused: over to you\nThe branch could not be pushed: [remote rejected]',
+  )
 })
