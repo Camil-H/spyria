@@ -71,6 +71,10 @@ export const MessageList = ({
     isFollowingNewest.current = false
     linked.scrollIntoView({ block: 'center' })
   })
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (scroller && scroller.scrollHeight <= scroller.clientHeight) onLoadEarlier?.()
+  })
   const renderedItems = useDeferredValue(items)
   const shownItems =
     renderedItems === items || renderedItems.length === 0
@@ -106,7 +110,7 @@ export const MessageList = ({
           </button>
         )}
         {shownItems.length === 0 ? (
-          isComplete && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
+          isComplete && !onLoadEarlier && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
         ) : (
           <ol aria-label="Messages" className="flex flex-col gap-1">
             {shownItems.map((item, index) => {

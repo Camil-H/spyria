@@ -86,7 +86,7 @@ const rowsOf = async (ast: AST) => {
 const tokenOf = (workspace: string, user: string) => sessionTokenOf(testDatabase.database, workspace, user)
 
 const perChatReads: Record<string, (chatId: string) => readonly [string, object]> = {
-  messages: (chatId) => ['chatMessages', { chatId, limit: 1000 }],
+  messages: (chatId) => ['chatMessages', { chatId, limit: 1000, since: 0 }],
   usageEntries: (chatId) => ['chatUsage', { chatId }],
   browserPages: (chatId) => ['chatBrowserPages', { chatId }],
 }
@@ -216,7 +216,7 @@ test.each(readers)(
         ?.map((row) => row.id),
     )
     const month = new Date().toISOString().slice(0, 7)
-    const roots = await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1 }])
+    const roots = await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1, since: 0 }])
     const pinned = await readPerChat(token, (chatId) => ['chatPinnedSteps', { chatId }])
     const { astByTable } = await transformOf(token, [{ id: 'month', name: 'monthUsage', args: [{ month }] }])
     const monthUsage = await rowsOf(astByTable.get('month') as AST)
@@ -227,6 +227,23 @@ test.each(readers)(
     )
   },
 )
+
+test('a chat window opens on the roots written since the time it asks from, the older ones left to scroll up to', async () => {
+  const token = await tokenOf(acme, alice)
+  const isRoot = (row: Row) => row.thread_root_id === null && (row.reply_to_id === null || row.kind === 'member')
+  const [{ newest = 0 } = {}] = await testDatabase.database.$client<{ newest: number }[]>`
+    select floor(extract(epoch from max(created_at)) * 1000)::float8 as newest from messages
+    where workspace_id = ${acme} and chat_id = 'chat-welcome' and thread_root_id is null`
+  const rootsSince = async (since: number) =>
+    (await readPerChat(token, (chatId) => ['chatMessages', { chatId, limit: 1000, since }])).filter(
+      (row) => row.chat_id === 'chat-welcome' && isRoot(row),
+    )
+  const all = await rootsSince(0)
+  const recent = await rootsSince(newest)
+  expect(recent.length).toBeGreaterThan(0)
+  expect(recent.length).toBeLessThan(all.length)
+  expect(recent.map(({ id }) => id)).toEqual(all.map(({ id }) => id).slice(0, recent.length))
+})
 
 test.each(readers.flatMap((reader) => tenantTables.map((table) => [reader.name, table, reader] as const)))(
   '%s reads only the rows of %s it may read in its own workspace',

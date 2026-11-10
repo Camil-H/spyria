@@ -53,7 +53,7 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     })),
   )
   await transaction.insert(tables.projects).values(snapshot.projects.map(createdInOrder))
-  const chats = snapshot.chats.map(createdInOrder)
+  const chats = snapshot.chats.map((chat) => ({ ...chat, createdAt: new Date(chat.createdAt) }))
   await transaction.insert(tables.chats).values(
     chats.map(({ ownerId, ...chat }) => ({
       ...chat,
