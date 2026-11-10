@@ -71,15 +71,17 @@ export const MessageList = ({
     isFollowingNewest.current = false
     linked.scrollIntoView({ block: 'center' })
   })
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (scroller && scroller.clientHeight > 0 && scroller.scrollHeight <= scroller.clientHeight) onLoadEarlier?.()
-  })
   const renderedItems = useDeferredValue(items)
   const shownItems =
     renderedItems === items || renderedItems.length === 0
       ? items
       : items.slice(-(renderedItems.length + newItemsPaintedFirst))
+  const isEveryItemShown = shownItems === items
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    const isScreenUnfilled = scroller && scroller.clientHeight > 0 && scroller.scrollHeight <= scroller.clientHeight
+    if (isEveryItemShown && isScreenUnfilled) onLoadEarlier?.()
+  })
   const followNewest = (element: HTMLElement | null) => {
     if (isFollowingNewest.current) scrollIntoView(element)
   }
