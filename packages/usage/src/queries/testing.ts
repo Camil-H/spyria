@@ -1,8 +1,8 @@
 import { acme, alice, bob, createMockSnapshot, globex, type Snapshot } from '@spyria/db'
 import { chatId } from '@spyria/kernel'
 
-export const month = '2026-10'
-export const earlier = '2026-08'
+const month = '2026-10'
+const earlier = '2026-08'
 export const sonnet = 'anthropic/claude-sonnet-5-5'
 export const haiku = 'anthropic/claude-haiku-5-5'
 const entry = (

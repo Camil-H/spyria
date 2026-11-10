@@ -245,6 +245,26 @@ test.describe('Messaging', () => {
     })
   })
 
+  test('As a member, I bring back my last sent message with the Up arrow in an empty composer', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    await sendMessage(page, 'Standup moved to 11')
+    await expect(messageContaining(page, 'Standup moved to 11')).toBeVisible()
+    await expect(composerOf(page)).toHaveValue('')
+
+    await test.step('fills the composer with it, ready to change and send again', async () => {
+      await composerOf(page).press('ArrowUp')
+      await expect(composerOf(page)).toHaveValue('Standup moved to 11')
+      await composerOf(page).pressSequentially(':30')
+      await expect(composerOf(page)).toHaveValue('Standup moved to 11:30')
+    })
+
+    await test.step('leaves what I am typing as it is', async () => {
+      await composerOf(page).fill('Lunch at noon')
+      await composerOf(page).press('ArrowUp')
+      await expect(composerOf(page)).toHaveValue('Lunch at noon')
+    })
+  })
+
   test('As a member, I edit then delete my own message', async ({ page }) => {
     await openChat(page, 'Welcome')
 

@@ -1,11 +1,9 @@
 import type { ChatId, MemberId } from '@spyria/kernel'
 
-export type UsageMonth = string
 export type UsageTotals = { tokens: number; costMicros: number; calls: number }
 type MemberUsage = UsageTotals & { memberId: MemberId; name: string }
 type ModelUsage = UsageTotals & { model: string; name: string }
 export type ChatUsage = {
-  months: readonly UsageMonth[]
   rows: readonly MemberUsage[]
   models: readonly ModelUsage[]
   total: UsageTotals
@@ -54,9 +52,6 @@ export const sumUsage = (rows: readonly UsageTotals[]): UsageTotals =>
     }),
     noUsage,
   )
-
-export const monthsNewestFirst = (rows: readonly { month: UsageMonth }[]) =>
-  [...new Set(rows.map((row) => row.month))].sort().reverse()
 
 export const logsPageCursor = (pageFrom: Date, lastOfFullPage: Date | undefined) =>
   !lastOfFullPage

@@ -209,7 +209,9 @@ export const ChatView = ({
               to={`/w/${workspaceId}/chats/${conversation.origin.chatId}`}
               className="mt-1 inline-block text-sm text-muted underline"
             >
-              {conversation.origin.type === 'runtime' ? 'Forked from' : 'Started from'} {conversation.origin.name}
+              {conversation.origin.type === 'runtime'
+                ? `Forked from ${conversation.origin.name}`
+                : `Started from #${conversation.origin.name}`}
             </Link>
           )}
         </header>
