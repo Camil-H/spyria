@@ -2,3 +2,4 @@
 e8a642181a953b764bb24e6d25cf6cfd5676154d:apps/server/src/auth/invited-address.integration.test.ts:generic-api-key:51
 f0e31f0444ec9a36ad1be674b045a2ef102b3639:apps/server/src/auth/invited-address.integration.test.ts:generic-api-key:51
 66c7590aafdda9b84f75632a6d7ba7852860f31b:apps/server/src/zero-forwarding.test.ts:generic-api-key:144
+ba77b074b7a570ef7c593a9d5138a74d1c330ff0:apps/agent/src/output-tail.test.ts:jwt:5
