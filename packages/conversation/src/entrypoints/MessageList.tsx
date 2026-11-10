@@ -76,12 +76,6 @@ export const MessageList = ({
     renderedItems === items || renderedItems.length === 0
       ? items
       : items.slice(-(renderedItems.length + newItemsPaintedFirst))
-  const isEveryItemShown = shownItems === items
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    const isScreenUnfilled = scroller && scroller.clientHeight > 0 && scroller.scrollHeight <= scroller.clientHeight
-    if (isEveryItemShown && isScreenUnfilled) onLoadEarlier?.()
-  })
   const followNewest = (element: HTMLElement | null) => {
     if (isFollowingNewest.current) scrollIntoView(element)
   }
@@ -112,7 +106,7 @@ export const MessageList = ({
           </button>
         )}
         {shownItems.length === 0 ? (
-          isComplete && !onLoadEarlier && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
+          isComplete && <p className="px-3 py-2 text-sm text-muted">No messages yet</p>
         ) : (
           <ol aria-label="Messages" className="flex flex-col gap-1">
             {shownItems.map((item, index) => {
