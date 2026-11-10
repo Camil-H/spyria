@@ -15,6 +15,7 @@ const isPi = process.env.STUB_FLAVOUR === 'pi'
 const isSilentOn = (method) => {
   if (method !== process.env.STUB_SILENT) return false
   writeFileSync(`${stateDirectory}/silent.pid`, String(process.pid))
+  process.stderr.write(`Waiting on ${method}\n`)
   return true
 }
 const models =

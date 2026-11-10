@@ -170,6 +170,9 @@ const withSummary = (message: string, errorOutput: string[]) => {
   return summary ? `${message}. It reported: ${summary}` : message
 }
 
+const durationOf = (milliseconds: number) =>
+  new Intl.NumberFormat('en', { style: 'unit', unit: 'second', unitDisplay: 'long' }).format(milliseconds / 1000)
+
 const currentValueOf = (configOptions: Json[], category: string) =>
   configOptions.find((option) => option.category === category)?.currentValue as string | undefined
 
@@ -306,7 +309,11 @@ export const startAgent = ({
   const requestWithin = (conversation: Conversation, method: string, params: Json) => {
     const expired = Promise.withResolvers<never>()
     const timer = setTimeout(() => {
-      const error = new AcpError(`The adapter did not answer ${method} within ${requestTimeoutMilliseconds} ms`)
+      const errorOutput = errorOutputOf(conversation, conversation.connection)
+      const error = new AcpError(
+        withSummary(`The agent did not respond within ${durationOf(requestTimeoutMilliseconds)}`, errorOutput),
+      )
+      reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
       fail(conversation, error)
       conversation.connection.close()
       expired.reject(error)
@@ -564,11 +571,16 @@ export const startAgent = ({
     return checkout.finally(() => checkouts.delete(id))
   }
 
-  const reportAdapterFailure = (conversation: Conversation, errorOutput: string[], error: unknown) =>
+  const reportAdapterFailure = (
+    conversation: Conversation,
+    errorOutput: string[],
+    error: unknown,
+    attributes: Record<string, string> = {},
+  ) =>
     log.warn({
       event: 'agent.adapter_failed',
       body: 'The agent adapter failed',
-      attributes: { 'conversation.id': conversation.id, 'adapter.error_output': errorOutput.join('\n') },
+      attributes: { 'conversation.id': conversation.id, 'adapter.error_output': errorOutput.join('\n'), ...attributes },
       error,
     })
 

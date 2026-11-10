@@ -475,17 +475,16 @@ test.each([
   ['an ACP adapter', 'session/new', () => launchOf()],
   ['Pi', 'get_state', () => piLaunchOf()],
 ])(
-  '%s that never answers %s is stopped after the request timeout and its conversation fails',
+  '%s that never answers %s is stopped after the request timeout and its conversation fails with what it last reported',
   async (_, method, launch) => {
     const { call } = started({ requestTimeoutMilliseconds: 300 })
     const silentLaunch = launch()
     silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
     const { status, body } = await call('POST', '/api/conversations', silentLaunch)
     expect(status).toBe(201)
-    const timedOut = method === 'get_state' ? 'session/new' : method
     expect(body).toMatchObject({
       execution_status: 'error',
-      error: `The adapter did not answer ${timedOut} within 300 ms`,
+      error: `The agent did not respond within 0.3 seconds. It reported: Waiting on ${method}`,
     })
     const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
     for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
