@@ -564,7 +564,11 @@ test('a request in flight when another one times out fails at once with the same
     const secondSentAt = performance.now()
     const second = await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
     expect(performance.now() - secondSentAt).toBeLessThan(700)
-    expect(second.status).toBe((await first).status)
+    const timedOut = {
+      error: 'The agent did not respond within 1 second. It reported: Waiting on session/set_config_option',
+    }
+    expect((await first).body).toStrictEqual(timedOut)
+    expect(second.body).toStrictEqual(timedOut)
     await Bun.sleep(1_200)
     const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
     expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
