@@ -21,7 +21,7 @@ const hardening = { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], Readon
 type SignIn = { signedIn: boolean; secrets: unknown[] }
 const credentialStores = {
   'claude-code': {
-    target: '/home/openhands/.claude',
+    target: '/home/spyria/.claude',
     file: '.credentials.json',
     login: ['claude-agent-acp', '--cli', 'auth', 'login', '--claudeai'],
     signInOf: (content: string): SignIn => ({
@@ -30,7 +30,7 @@ const credentialStores = {
     }),
   },
   codex: {
-    target: '/home/openhands/.codex',
+    target: '/home/spyria/.codex',
     file: 'auth.json',
     login: ['codex-acp', 'cli', 'login', '--device-auth'],
     signInOf: (content: string): SignIn => {
@@ -116,7 +116,7 @@ export const credentialsContainerBodyOf = (
       ...hardening,
       NetworkMode: isLogin ? 'bridge' : 'none',
       AutoRemove: isLogin,
-      Tmpfs: { '/home/openhands': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
+      Tmpfs: { '/home/spyria': 'uid=10001,gid=10001,mode=0700', '/tmp': '' },
       Mounts: [credentialsMountOf(prefix, tool), ...(isLogin ? [harnessesMountOf(prefix)] : [])],
     },
   }

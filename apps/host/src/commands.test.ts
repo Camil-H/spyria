@@ -163,7 +163,7 @@ test('creates the container with exactly the hardening flags, three named volume
       RestartPolicy: { Name: 'no' },
       Mounts: [
         { Type: 'volume', Source: 'spyria-rt-runtime-1-ws', Target: '/workspace' },
-        { Type: 'volume', Source: 'spyria-rt-runtime-1-home', Target: '/home/openhands' },
+        { Type: 'volume', Source: 'spyria-rt-runtime-1-home', Target: '/home/spyria' },
         { Type: 'volume', Source: 'spyria-rt-runtime-1-tmp', Target: '/tmp' },
       ],
     },
@@ -195,8 +195,8 @@ const recordingDocker = () => {
 test('a personal create mounts both credentials volumes and the harnesses read-only, a workspace create does not', () => {
   const personalMounts = containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).HostConfig.Mounts
   expect(personalMounts.slice(-3)).toEqual([
-    { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/openhands/.claude' },
-    { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/openhands/.codex' },
+    { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/spyria/.claude' },
+    { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/spyria/.codex' },
     { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
   ])
   expect(personalMounts.slice(0, -3)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
@@ -215,9 +215,9 @@ test('a personal host creates the runtime with both credentials volumes after pr
   ])
   expect(JSON.stringify(created[1]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/workspace/project"')
   expect(JSON.stringify(created[2]?.body)).toContain(
-    '"Source":"spyria-cred-claude-code","Target":"/home/openhands/.claude"',
+    '"Source":"spyria-cred-claude-code","Target":"/home/spyria/.claude"',
   )
-  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/home/openhands/.codex"')
+  expect(JSON.stringify(created[2]?.body)).toContain('"Source":"spyria-cred-codex","Target":"/home/spyria/.codex"')
 })
 
 test('removing a runtime never deletes the credentials volumes', async () => {

@@ -239,7 +239,7 @@ export const startAgent = ({
   setupTimeoutMilliseconds = 45 * 60_000,
   workspaceDirectory = '/workspace/project',
   browserDirectory = '/usr/local/lib/spyria/browser',
-  homeDirectory = process.env.HOME ?? '/home/openhands',
+  homeDirectory = process.env.HOME ?? '/home/spyria',
   packageCacheDirectory = '/var/cache/spyria',
 }: {
   apiKey: string
