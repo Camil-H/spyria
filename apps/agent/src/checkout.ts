@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { outputTailOf } from './output-tail.ts'
 import { gitIdentityOf } from './workspace.ts'
 
 export type Repository = {
@@ -120,7 +121,7 @@ export const runCommand = async (
   const reading = (async () => {
     for await (const chunk of child.stdout) {
       if (isOver) continue
-      output = (output + decoder.decode(chunk, { stream: true })).slice(-keptOutputCharacters)
+      output = outputTailOf(output + decoder.decode(chunk, { stream: true }), keptOutputCharacters)
       if (pendingShow) continue
       const wait = shownAt + shownOutputIntervalMilliseconds - performance.now()
       if (wait <= 0) show()

@@ -194,6 +194,10 @@ test('the final tool call update carries the merged call; turn ends and adapter 
     },
   ])
   expect(socket.events.filter(kindOf('tool_call')).every((event) => !event.completed)).toBe(true)
+  expect(socket.events.filter(kindOf('tool_call')).map(({ update }) => update.title)).toEqual([
+    'Edit app.ts',
+    'npm test',
+  ])
   expect(textOf(socket.events)).toContain('permission:allow-always')
 
   await prompt(id, 'stub:fail')
@@ -223,6 +227,48 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   const failedStart = open(missing)
   await failedStart.until(kindOf('error'))
   expect(failedStart.events.map(({ update }) => update.sessionUpdate)).toEqual(['error'])
+})
+
+test("a command's terminal output streams as its output so far and ends in the final update with its exit code", async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:terminal')
+  await socket.until(kindOf('turn_end'))
+  const updates = socket.events.filter(kindOf('tool_call_update'))
+  expect(updates.map(({ update, completed }) => ({ rawOutput: update.rawOutput, completed }))).toEqual([
+    { rawOutput: { formatted_output: 'one\n' }, completed: false },
+    { rawOutput: { formatted_output: 'one\ntwo\n' }, completed: false },
+    { rawOutput: { exit_code: 2, formatted_output: 'one\ntwo\nfailed' }, completed: true },
+  ])
+})
+
+test('a call without input shows once it runs, and one still waiting for its input shows before its turn ends', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const reportsOf = (toolCallId: string) =>
+    socket.events
+      .filter((event) => event.update.toolCallId === toolCallId || kindOf('turn_end')(event))
+      .map(({ update }) => [update.sessionUpdate, update.status])
+  await prompt(id, 'stub:no-input')
+  await socket.until(kindOf('turn_end'))
+  expect(reportsOf('no-input-1')).toEqual([
+    ['tool_call', 'in_progress'],
+    ['tool_call_update', 'in_progress'],
+    ['tool_call_update', 'completed'],
+    ['turn_end', undefined],
+  ])
+
+  await prompt(id, 'stub:stalled')
+  await socket.until((event) => textOf([event]) === 'waiting ', 2)
+  expect(socket.events.filter((event) => event.update.toolCallId === 'stalled-2')).toEqual([])
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(reportsOf('stalled-2').slice(-2)).toEqual([
+    ['tool_call', 'pending'],
+    ['turn_end', undefined],
+  ])
 })
 
 test('a create with a known id returns that conversation without a second adapter, a new id starts its own, a malformed id is refused', async () => {

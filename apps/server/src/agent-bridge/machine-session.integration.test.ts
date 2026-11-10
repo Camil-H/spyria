@@ -308,6 +308,42 @@ test('a start that fails closes the turn at once with the adapter message and do
   expect(await repliesTo(question)).toHaveLength(1)
 })
 
+test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
+  'a $harness command on the machine shows its command and output to viewers while it runs, and keeps the whole output with its exit code',
+  async ({ harness }) => {
+    await machine({ signedIn: [harness] })
+    const chat = await newRuntimeChat({ harness })
+    const frames = await stack.subscribedFrames(chat)
+    const replies = await finished(await prompt(chat, 'stub:tools stub:terminal'), chat)
+
+    const liveOutputs = frames.map((frame) => JSON.parse(frame).commandOutput).filter(Boolean)
+    expect(liveOutputs.map(({ output }) => output)).toEqual(['one\n', 'one\ntwo\n'])
+    expect(liveOutputs.every(({ stepId }) => stepId.endsWith(':terminal-1'))).toBe(true)
+    const commands = replies.filter((reply) => reply.step?.type === 'command').map((reply) => reply.step)
+    expect(commands).toMatchObject([
+      { command: 'npm test', exitCode: 1, output: 'exit code 1' },
+      { command: 'npm test', exitCode: 2, output: 'one\ntwo\nfailed' },
+    ])
+    const toolCalls = (await storedAgentEventsOf(chat))
+      .map((event) => (event.payload as { event?: { update?: Record<string, unknown> } }).event?.update)
+      .filter((update) => update?.sessionUpdate === 'tool_call')
+    expect(toolCalls.map((update) => update?.title)).toEqual(['Edit app.ts', 'npm test', 'npm test'])
+  },
+)
+
+test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
+  'a $harness session on the machine keeps how full its context is from what the adapter reports',
+  async ({ harness }) => {
+    await machine({ signedIn: [harness] })
+    const chat = await newRuntimeChat({ harness })
+    await finished(await prompt(chat, 'stub:usage'), chat)
+    expect((await database.$client`select context_tokens, context_window from chats where id = ${chat}`)[0]).toEqual({
+      context_tokens: 53_000,
+      context_window: 200_000,
+    })
+  },
+)
+
 test('a Task call with its inner calls shows as one subagent group', async () => {
   await machine()
   const chat = await newMachineChat()

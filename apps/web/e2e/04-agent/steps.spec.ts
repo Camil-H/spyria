@@ -253,12 +253,15 @@ test.describe('Steps', () => {
     test('As a prompter, I see a running command’s output live in its step, then its exit code', {
       tag: ['@spec-40'],
     }, async ({ page, agentScript, heldCommand, release }) => {
-      const command = `printf 'running 3 tests\\n' && ${heldCommand('tests')} && printf '3 passed\\n'`
+      const command = `${heldCommand('start')} && printf 'running 3 tests\\n' && ${heldCommand('tests')} && printf '3 passed\\n'`
       await agentScript(research, { steps: [{ command }], text: 'The tests pass.' })
       await sendMessage(page, 'Run the tests')
       const step = await openCommandStep(page, command)
+      await expect(step).toContainText('No output yet')
+      await release('start')
       const output = step.locator('pre')
       await expect(output).toContainText('running 3 tests')
+      await expect(step).not.toContainText('No output yet')
       await expect(step.getByRole('img', { name: 'Running' })).toBeVisible()
       await expect(output).not.toContainText(/running 3 tests\s+3 passed/)
       await release('tests')
