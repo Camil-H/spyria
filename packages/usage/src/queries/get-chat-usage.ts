@@ -1,6 +1,6 @@
 import { chatIn, inChat, memberNamesIn, type Snapshot } from '@spyria/db'
 import { type ChatId, can, type MemberId, modelNameOf, type WorkspaceId } from '@spyria/kernel'
-import { type ChatUsage, monthsNewestFirst, showsChatUsage, sumUsage, type UsageMonth } from '../domain/usage.ts'
+import { type ChatUsage, showsChatUsage, sumUsage } from '../domain/usage.ts'
 
 const usageChatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) => {
   const chat = chatIn(snapshot, workspaceId, chatId)
@@ -8,11 +8,10 @@ const usageChatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatI
 }
 
 export const getChatUsage =
-  (workspaceId: WorkspaceId, chatId: ChatId, month: UsageMonth) =>
+  (workspaceId: WorkspaceId, chatId: ChatId) =>
   (snapshot: Snapshot): ChatUsage => {
     const chat = usageChatIn(snapshot, workspaceId, chatId)
     const entries = snapshot.usageEntries.filter(inChat(workspaceId, chatId))
-    const entriesOfMonth = entries.filter((entry) => entry.month === month)
     const nameOf = memberNamesIn(snapshot, workspaceId)
     const postingRoleIds = new Set(
       snapshot.chatRoles
@@ -24,21 +23,21 @@ export const getChatUsage =
       ...snapshot.chatMembers
         .filter((member) => inChat(workspaceId, chatId)(member) && postingRoleIds.has(member.roleId))
         .map((member) => member.memberId),
-      ...entriesOfMonth.map((entry) => entry.memberId),
+      ...entries.map((entry) => entry.memberId),
     ])
     const rows = [...memberIds].map((memberId) => ({
       memberId,
       name: nameOf(memberId),
-      ...sumUsage(entriesOfMonth.filter((entry) => entry.memberId === memberId)),
+      ...sumUsage(entries.filter((entry) => entry.memberId === memberId)),
     }))
-    const models = [...new Set(entriesOfMonth.map((entry) => entry.model))]
+    const models = [...new Set(entries.map((entry) => entry.model))]
       .map((model) => ({
         model,
         name: modelNameOf(model),
-        ...sumUsage(entriesOfMonth.filter((entry) => entry.model === model)),
+        ...sumUsage(entries.filter((entry) => entry.model === model)),
       }))
       .toSorted((first, second) => second.costMicros - first.costMicros || first.name.localeCompare(second.name))
-    return { months: monthsNewestFirst(entries), rows, models, total: sumUsage(rows) }
+    return { rows, models, total: sumUsage(rows) }
   }
 
 export const isLocalSession = (workspaceId: WorkspaceId, chatId: ChatId) => (snapshot: Snapshot) =>
