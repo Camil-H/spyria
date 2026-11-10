@@ -223,7 +223,6 @@ test('the final tool call update carries the merged call; turn ends and adapter 
     const adapterFailures = () => lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
     for (const deadline = Date.now() + 5_000; adapterFailures().length === 0 && Date.now() < deadline; )
       await Bun.sleep(10)
-    await Bun.sleep(200)
     expect(adapterFailures()).toHaveLength(1)
   } finally {
     await telemetry.shutdown()
