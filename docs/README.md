@@ -2,7 +2,7 @@
 
 Start with the architecture overview, then the page for what you are doing. The project rules for contributors are in [AGENTS.md](../AGENTS.md).
 
-The guides for installing and running Spyria are also published at [spyria.dev](https://spyria.dev), built from this folder by `scripts/docs-site.ts` (the pages it lists), which also serves `install.sh` at `https://spyria.dev/install`. Each published release publishes the site from its tag (or a manual run of the Docs site workflow), so `/install` and the guides match the release the script downloads. It goes to the `gh-pages` branch; GitHub Pages serves that branch with the custom domain `spyria.dev`, set and verified once in the repository and account settings.
+The install guides (install, cloud, who can join, operations, troubleshooting, manual install, machines and administration) are also published at [spyria.dev/docs/install](https://spyria.dev/docs/install), and `deploy/install.sh` at `https://spyria.dev/install`. The site lives in its own repository, [spyria-landing](https://github.com/Camil-H/spyria-landing), which renders these pages from this folder at the commit in its `product.ref`; moving that commit to each stable release keeps the guides and `/install` matching the release the script downloads.
 
 ## Architecture
 
