@@ -59,6 +59,7 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
+const oldCompose = `name: \${SPYRIA_DEPLOYMENT}\n# release 1.2.0\n`
 const installed = {
   SPYRIA_DEPLOYMENT: 'spyria',
   SPYRIA_VERSION: '1.2.0',
@@ -68,7 +69,7 @@ const installed = {
   COMPOSE_PROFILES: 'host,cloudflare',
 }
 beforeEach(() => {
-  writeFileSync(join(install, 'compose.yml'), 'old compose')
+  writeFileSync(join(install, 'compose.yml'), oldCompose)
   writeFileSync(join(install, 'bifrost.json'), '{"release":"1.2.0"}')
   writeFileSync(join(install, '.env'), serializeEnvironment(installed), { mode: 0o600 })
   rmSync(join(fakeDocker, 'calls'), { force: true })
@@ -84,7 +85,7 @@ const environment = () => parseEnvironment(readFileSync(join(install, '.env'), '
 
 test('spyria upgrade backs up both databases while the old release is still in place, then writes the new release and starts it', async () => {
   await upgrade(install, parseFlags(['upgrade', '1.3.0', '--folder', install]), { fileUrlOf })
-  expect(readFileSync(join(fakeDocker, 'compose-at-backup'), 'utf8')).toBe('old compose')
+  expect(readFileSync(join(fakeDocker, 'compose-at-backup'), 'utf8')).toBe(oldCompose)
   expect(parseEnvironment(readFileSync(join(fakeDocker, 'env-at-backup'), 'utf8')).SPYRIA_VERSION).toBe('1.2.0')
   expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe('new compose')
   expect(readFileSync(join(install, 'bifrost.json'), 'utf8')).toBe('{"release":"1.3.0"}')
@@ -101,7 +102,7 @@ test('spyria upgrade to a version without release files changes nothing and back
   )
   expect(refusal).toBe('Version 9.9.9 has no deploy/compose.prod.yml (404)')
   expect(calls()).toEqual([])
-  expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe('old compose')
+  expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
   expect(environment()).toEqual(installed)
 })
 

@@ -27,15 +27,37 @@ const databaseOwners: Record<(typeof backupDatabases)[number], string> = { spyri
 const defaultBackupsKept = 7
 const healthWaitMilliseconds = 180_000
 
+const isSpyriaEnvironmentFile = (folder: string) =>
+  Boolean(parseEnvironment(readFileSync(environmentFileOf(folder), 'utf8')).SPYRIA_DEPLOYMENT)
+const isSpyriaComposeFile = (folder: string) =>
+  readFileSync(composeFileOf(folder), 'utf8').includes('SPYRIA_DEPLOYMENT}')
+
+export const isSpyriaInstall = (folder: string) =>
+  existsSync(environmentFileOf(folder)) &&
+  existsSync(composeFileOf(folder)) &&
+  isSpyriaEnvironmentFile(folder) &&
+  isSpyriaComposeFile(folder)
+
+export const assertNoOtherProjectIn = (folder: string) => {
+  const others = [
+    ...(existsSync(environmentFileOf(folder)) && !isSpyriaEnvironmentFile(folder) ? ['.env'] : []),
+    ...(existsSync(composeFileOf(folder)) && !isSpyriaComposeFile(folder) ? ['compose.yml'] : []),
+  ]
+  if (others.length > 0)
+    throw new Error(
+      `The ${others.join(' and ')} in ${folder} ${others.length === 1 ? 'is' : 'are'} not Spyria's: choose another folder with --folder`,
+    )
+}
+
 export const installFolderOf = (flags: Flags) => {
   const given = flags.values.folder
   if (given) return resolve(given.replace(/^~(?=$|\/)/, homedir()))
-  if (existsSync(join(process.cwd(), 'compose.yml')) && existsSync(join(process.cwd(), '.env'))) return process.cwd()
+  if (isSpyriaInstall(process.cwd())) return process.cwd()
   return join(homedir(), 'spyria')
 }
 
 export const readEnvironment = (folder: string): Environment => {
-  if (!existsSync(environmentFileOf(folder)))
+  if (!existsSync(environmentFileOf(folder)) || !isSpyriaEnvironmentFile(folder))
     throw new Error(`No Spyria install in ${folder}: run spyria setup, or pass --folder`)
   return parseEnvironment(readFileSync(environmentFileOf(folder), 'utf8'))
 }
