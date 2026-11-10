@@ -36,6 +36,7 @@ import {
   withFinishedChecks,
   withOutcomes,
 } from '../domain/dev-loop.ts'
+import type { GitActionOutcome } from '../domain/git-actions.ts'
 import { checkRunsTextOf } from '../domain/github-tools.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -234,18 +235,23 @@ const resolveConflict = async (
   loop: Loop,
   { state, pushRefusal }: { state: DevLoopStep['state']; pushRefusal?: string },
 ) => {
-  const updated = await runGitAction(dependencies, {
+  const updated: GitActionOutcome = await runGitAction(dependencies, {
     chat: chatOf(loop),
     memberId: loop.ownerId,
     action: 'update',
     message: '',
-  })
+  }).catch(() => ({ isRefused: true, text: 'The runtime did not answer' }))
+  const head =
+    updated.isRefused || pushRefusal !== undefined
+      ? null
+      : await headOf(dependencies, loop, await endpointOfLoop(dependencies, loop))
   return withLoop(dependencies, job, [state], async (unitOfWork, current) => {
     const baseBranch = (await unitOfWork.chats.get(current.card.chatId)).baseBranch ?? ''
     const { conflicts } = updated
     if (!conflicts) {
       if (pushRefusal !== undefined) return endLoop(unitOfWork, current, stopped(current.step, pushRefusal))
-      if (!updated.isRefused) return moveOn(unitOfWork, current, restarted(current.step), 0)
+      if (head !== null && head !== current.step.pushedHead)
+        return moveOn(unitOfWork, current, restarted(current.step), 0)
       return endLoop(unitOfWork, current, stopped(current.step, notUpdatedOutcomeOf(baseBranch, updated.text)))
     }
     const ci = current.step.pipeline.findIndex((config) => config.kind === 'ci')
