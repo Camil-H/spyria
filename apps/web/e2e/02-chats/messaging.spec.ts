@@ -140,7 +140,7 @@ test.describe('Messaging', () => {
 
     await test.step('opens on the last week of messages and loads the older ones when scrolling up', async () => {
       await workerStack.database.$client`
-        update messages set created_at = created_at - interval '30 days'
+        update messages set created_at = timestamptz '2026-09-01T00:00:00Z'
         where workspace_id = 'workspace-acme' and id in ('message-welcome-1', 'message-welcome-2')`
       await openChat(page, 'Standup')
       await openChat(page, 'Welcome')
