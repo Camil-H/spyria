@@ -773,6 +773,7 @@ const turn = async (id, { sessionId, prompt }) => {
     }
     if (has('linger')) await lingerAs('linger')
     if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
+    if (has('usage')) update({ sessionUpdate: 'usage_update', used: 53_000, size: 200_000 })
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     finish('end_turn')
   } catch (error) {

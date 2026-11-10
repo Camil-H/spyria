@@ -239,6 +239,15 @@ export const isAuthRequiredError = (event: AgentEvent) => {
   return update?.sessionUpdate === 'error' && update.code === authRequiredCode
 }
 
+export const contextUsageOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  if (event.kind !== 'ACPUpdate' || update?.sessionUpdate !== 'usage_update') return undefined
+  const { used, size } = update
+  return typeof used === 'number' && used > 0
+    ? { tokens: used, window: typeof size === 'number' && size > 0 ? size : null }
+    : undefined
+}
+
 export const turnEndPromptIdOf = (event: AgentEvent) => {
   const update = event.update as Fields
   return update?.sessionUpdate === 'turn_end' && typeof update.promptId === 'string' ? update.promptId : undefined
