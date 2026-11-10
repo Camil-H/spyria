@@ -1,19 +1,6 @@
-import { type Cloud, clouds, setupCloud } from './cloud.ts'
-import {
-  backup,
-  changeSignInApp,
-  doctor,
-  installFolderOf,
-  installIn,
-  printSetupLink,
-  restore,
-  upgrade,
-  verifyDomain,
-} from './commands.ts'
-import { runCompose } from './compose.ts'
-import { composeArgumentsOf, parseFlags } from './flags.ts'
+import { commandsOf } from './command-table.ts'
+import { parseFlags } from './flags.ts'
 import { cliVersion } from './release.ts'
-import { setup } from './setup.ts'
 
 const usage = `spyria ${cliVersion}: install and run Spyria on this machine
 
@@ -54,29 +41,7 @@ Every command takes --folder <path> (default ~/spyria, or the current folder whe
 
 const flags = parseFlags(process.argv.slice(2))
 const [command] = flags.positionals
-const folder = installFolderOf(flags)
-const commands: Record<string, () => unknown> = {
-  setup: () => {
-    const cloud = flags.values.cloud
-    if (cloud === undefined) return setup(flags)
-    if (!clouds.includes(cloud as Cloud)) throw new Error('--cloud is aws, azure or gcp')
-    return setupCloud(flags, cloud as Cloud)
-  },
-  upgrade: () => upgrade(installIn(folder), flags),
-  backup: () => backup(installIn(folder), flags),
-  restore: () => restore(installIn(folder), flags),
-  doctor: () => {
-    if (!doctor(installIn(folder))) process.exitCode = 1
-  },
-  'setup-link': () => printSetupLink(installIn(folder)),
-  'verify-domain': () => verifyDomain(installIn(folder), flags),
-  'sign-in-app': () => changeSignInApp(installIn(folder), flags),
-  version: () => console.log(cliVersion),
-  compose: () => {
-    process.exitCode =
-      runCompose(installIn(folder), composeArgumentsOf(process.argv.slice(process.argv.indexOf('compose') + 1))) ?? 1
-  },
-}
+const commands = commandsOf(flags, process.argv)
 const run = command ? commands[command] : undefined
 if (!run || flags.switches.has('help')) {
   console.log(usage)

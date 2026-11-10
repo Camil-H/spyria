@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { commandsOf } from './command-table.ts'
 import { installFolderOf, readEnvironment } from './commands.ts'
 import { parseEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
@@ -155,16 +156,19 @@ test("setup refuses a folder holding another project's compose.yml or .env and l
   }
 })
 
-test('every command of an install refuses a folder that is not one and writes nothing there, while one with an unreadable .env still runs spyria version', async () => {
+test('every command of an install refuses a folder that is not one and writes nothing there, and an unreadable .env in the current folder is no install rather than a crash', async () => {
   const project = mkdtempSync(join(tmpdir(), 'other-project-'))
   writeFileSync(join(project, 'compose.yml'), 'services:\n  web:\n    image: nginx\n')
   writeFileSync(join(project, '.env'), 'POSTGRES_PASSWORD=theirs\n')
-  const spyria = (...commandArguments: string[]) =>
-    Bun.spawnSync([process.execPath, new URL('./main.ts', import.meta.url).pathname, ...commandArguments], {
-      cwd: project,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+  const refusalOf = async (command: string) => {
+    const commandLine = ['bun', 'main.ts', command, '--folder', project]
+    const run = commandsOf(parseFlags(commandLine.slice(2)), commandLine)[command]
+    return (async () => run?.())().then(
+      () => 'ran',
+      (error: Error) => error.message,
+    )
+  }
+  const originalDirectory = process.cwd()
   try {
     for (const command of [
       'upgrade',
@@ -175,19 +179,18 @@ test('every command of an install refuses a folder that is not one and writes no
       'verify-domain',
       'sign-in-app',
       'compose',
-    ]) {
-      const result = spyria(command, '--folder', project)
-      expect({ command, exitCode: result.exitCode, refusal: result.stderr.toString() }).toEqual({
+    ])
+      expect({ command, refusal: await refusalOf(command) }).toEqual({
         command,
-        exitCode: 1,
-        refusal: `No Spyria install in ${project}: run spyria setup, or pass --folder\n`,
+        refusal: `No Spyria install in ${project}: run spyria setup, or pass --folder`,
       })
-    }
     expect(readdirSync(project).sort()).toEqual(['.env', 'compose.yml'])
     rmSync(join(project, '.env'))
     mkdirSync(join(project, '.env'))
-    expect(spyria('version').exitCode).toBe(0)
+    process.chdir(project)
+    expect(installFolderOf(parseFlags(['version']))).toBe(join(homedir(), 'spyria'))
   } finally {
+    process.chdir(originalDirectory)
     rmSync(project, { recursive: true, force: true })
   }
 })
