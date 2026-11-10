@@ -148,6 +148,42 @@ test(
 )
 
 test(
+  'a host started without arguments takes its claim URL from SPYRIA_HOST_CLAIM_URL, so the code stays off its command line',
+  async () => {
+    rmSync(join(directory, 'token'), { force: true })
+    const frames: { type: string; code?: string }[] = []
+    const listeningSpyria = Bun.serve({
+      port: 0,
+      fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+      websocket: { message: (_, message) => void frames.push(JSON.parse(String(message))) },
+    })
+    const host = spawnHost(['bun', new URL('./main.ts', import.meta.url).pathname], {
+      env: {
+        ...process.env,
+        DOCKER_SOCKET: dockerSocket,
+        SPYRIA_DEPLOYMENT: 'spyria',
+        SPYRIA_HOST_STATE_DIR: directory,
+        SPYRIA_HOST_GATEWAY_PORT: '0',
+        SPYRIA_HOST_CLAIM_URL: `ws://127.0.0.1:${listeningSpyria.port}/h/ENVCODE`,
+        OTEL_EXPORTER_OTLP_ENDPOINT: '',
+      },
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
+    try {
+      for (const deadline = Date.now() + startupMilliseconds; frames.length === 0; await Bun.sleep(20))
+        if (Date.now() > deadline) throw new Error('The host did not claim')
+      expect(frames[0]).toEqual({ type: 'claim', code: 'ENVCODE' })
+    } finally {
+      host.kill()
+      await host.exited
+      void listeningSpyria.stop(true)
+    }
+  },
+  testMilliseconds,
+)
+
+test(
   'a host given HTTP_PROXY dials Spyria through that proxy',
   async () => {
     writeFileSync(join(directory, 'token'), 'host-token')

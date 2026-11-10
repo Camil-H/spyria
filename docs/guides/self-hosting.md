@@ -65,7 +65,7 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_ZERO_ADMIN_PASSWORD` | Admin password of zero-cache. |
 | `SPYRIA_LOCAL_PORT` | Loopback port of the server, default `3300`. |
 | `COMPOSE_PROFILES` | Optional services, comma-separated: `host` (see below). |
-| `SPYRIA_HOST_CLAIM_URL` | Profile `host`: the claim URL (see [Runtime host on this machine](#runtime-host-on-this-machine)). |
+| `SPYRIA_HOST_CLAIM_URL` | Profile `host`: the claim URL (see [Runtime host on this machine](#runtime-host-on-this-machine)), handed to the host in its environment rather than its command, so other users of the machine cannot read the pairing code in `ps`. |
 | `SPYRIA_DOCKER_GROUP` | Profile `host`: group owning the Docker socket, `0` on macOS, `stat -c %g /var/run/docker.sock` on Linux. Default `0`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | Optional OTLP export of traces and logs, see [operations](./operations.md#traces). |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | Trace sampling, default 10% of new traces. |
