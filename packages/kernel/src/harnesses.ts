@@ -30,7 +30,7 @@ export const harnesses = {
       ...claudeCodeSettings,
       'sh',
       '-c',
-      '[ -e "$HOME/.claude.json" ] || printf {} > "$HOME/.claude.json"; exec claude-agent-acp',
+      'set -C; printf {} 2>/dev/null > "$HOME/.claude.json"; exec claude-agent-acp',
     ],
   },
   codex: {
