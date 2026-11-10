@@ -155,6 +155,7 @@ test('checks read failing first with their annotations, then pending, then passi
   expect(
     checkRunsTextOf(7, {
       headSha: 'abcdef0123456789',
+      isConflicting: false,
       logsRefusal: null,
       runs: [
         { ...run, name: 'lint', url: 'https://github.com/acme/app/runs/1' },
@@ -193,11 +194,15 @@ test('checks read failing first with their annotations, then pending, then passi
       '- lint: success https://github.com/acme/app/runs/1',
     ].join('\n'),
   )
-  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', runs: [], logsRefusal: null })).toBe(
+  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', isConflicting: false, runs: [], logsRefusal: null })).toBe(
     'Pull request #7 at abcdef0: no check has run',
+  )
+  expect(checkRunsTextOf(7, { headSha: 'abcdef0123456789', isConflicting: true, runs: [], logsRefusal: null })).toBe(
+    'Pull request #7 at abcdef0: no check has run\nIt conflicts with its base branch, so CI may not run until the conflicts are resolved',
   )
   const long = checkRunsTextOf(7, {
     headSha: 'abcdef0123456789',
+    isConflicting: false,
     logsRefusal: null,
     runs: [
       {
@@ -224,7 +229,7 @@ test('failing jobs name their failed step and show their log once, the same log 
     failedStep,
     logExcerpt,
   })
-  const checks = { headSha: 'abcdef0123456789', logsRefusal: null }
+  const checks = { headSha: 'abcdef0123456789', isConflicting: false, logsRefusal: null }
   expect(
     checkRunsTextOf(7, {
       ...checks,
