@@ -12,8 +12,13 @@ const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method:
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
 const piSend = (record) => process.stdout.write(`${JSON.stringify(record)}\n`)
 const isPi = process.env.STUB_FLAVOUR === 'pi'
+if (process.env.STUB_EXIT_DELAY_MS)
+  process.on('SIGTERM', () => setTimeout(() => process.exit(143), Number(process.env.STUB_EXIT_DELAY_MS)))
 const isSilentOn = (method) => {
   if (method !== process.env.STUB_SILENT) return false
+  const silentOnceMarker = process.env.STUB_SILENT_ONCE
+  if (silentOnceMarker && existsSync(silentOnceMarker)) return false
+  if (silentOnceMarker) writeFileSync(silentOnceMarker, '')
   writeFileSync(`${stateDirectory}/silent.pid`, String(process.pid))
   process.stderr.write(`Waiting on ${method}\n`)
   return true
