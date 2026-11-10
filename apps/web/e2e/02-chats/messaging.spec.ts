@@ -139,6 +139,12 @@ test.describe('Messaging', () => {
     })
 
     await test.step('opens on the last week of messages and loads the older ones when scrolling up', async () => {
+      await workerStack.database.$client`
+        update messages set created_at = created_at - interval '30 days'
+        where workspace_id = 'workspace-acme' and id in ('message-welcome-1', 'message-welcome-2')`
+      await openChat(page, 'Standup')
+      await openChat(page, 'Welcome')
+      await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
       await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
       await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
       await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
