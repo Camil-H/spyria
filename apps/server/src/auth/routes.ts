@@ -284,6 +284,7 @@ export const createAuthRoutes = ({
       const liveSessions = await findLiveSessions(scope.database, sessionIdByWorkspace)
       const userId = liveSessions.toSorted((first, second) => +second.createdAt - +first.createdAt)[0]?.userId
       const sessions = await Promise.all(liveSessions.filter((session) => session.userId === userId).map(scope.issue))
+      if (!userId) return context.json({ sessions: [] })
       return context.json({ userId, sessions, deployment, version, hostImage })
     })
     .post('/renew', async (context) => {

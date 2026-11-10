@@ -53,9 +53,11 @@ const sessionMissing = {
 } as const
 
 const openApp = async () => {
-  const { userId, sessions, ...instance } = await loadSessions()
+  const loaded = await loadSessions()
+  if (!loaded.userId) return 'signed_out'
+  const { userId, sessions, ...instance } = loaded
   const [defaultSession] = sessions
-  if (!userId || !defaultSession) return 'signed_out'
+  if (!defaultSession) return 'signed_out'
   const [{ createApp }, { App }] = await (earlyAppModules ?? appModules())
   rememberSignedIn()
   const slowLoadTimer = setTimeout(() => root.render(<WorkspaceLoadingScreen />), slowWorkspaceLoadMilliseconds)
