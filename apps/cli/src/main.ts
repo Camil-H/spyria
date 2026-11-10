@@ -9,7 +9,8 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
                                    write an OpenTofu configuration of the managed services and apply it
   spyria upgrade [version]         back up, then run the given or latest release
   spyria backup [--keep 7]         dump both databases into backups/, keeping the newest
-  spyria restore <file>            restore a dump from backups/
+  spyria restore <file> [--yes]    back up the database it replaces, then restore a dump from backups/ (asks first
+                                   unless --yes)
   spyria doctor                    check Docker, the services, the server's start check and the disk
   spyria setup-link                print the link that creates the first workspace
   spyria sign-in-app --client-id <id>

@@ -1,8 +1,17 @@
 import { afterAll, beforeEach, expect, spyOn, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { changeSignInApp, doctor, upgrade } from './commands.ts'
+import { changeSignInApp, doctor, restore, upgrade } from './commands.ts'
 import { parseEnvironment, serializeEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
@@ -124,6 +133,41 @@ test('spyria setup --version backs up both databases while the old release is st
     workspaceExistsIn: () => false,
   })
   expect(calls().filter((call) => call.includes('pg_dump'))).toEqual([])
+})
+
+test('spyria restore replaces a database only once confirmed, and backs it up as it is first', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  rmSync(join(install, 'backups'), { recursive: true, force: true })
+  mkdirSync(join(install, 'backups'))
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  const questions: string[] = []
+  const restoreAnswering = (answer: boolean, extra: string[] = []) =>
+    restore(install, parseFlags(['restore', `backups/${restored}`, '--folder', install, ...extra]), {
+      confirms: (question) => {
+        questions.push(question)
+        return answer
+      },
+    })
+
+  const refusal = await restoreAnswering(false).catch((error: Error) => error.message)
+  expect(refusal).toBe('Nothing was restored: answer y, or pass --yes to restore without the question')
+  expect(questions).toEqual([
+    `Replace the spyria database with backups/${restored}? What changed since that backup is lost`,
+  ])
+  expect(calls().filter((call) => /pg_dump|stop|dropdb|createdb/.test(call))).toEqual([])
+  expect(readdirSync(join(install, 'backups'))).toEqual([restored])
+
+  await restoreAnswering(true)
+  const safetyCopies = readdirSync(join(install, 'backups')).filter((file) => file !== restored)
+  expect(safetyCopies).toHaveLength(1)
+  expect(safetyCopies[0]).toStartWith('spyria-')
+  expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(1)
+  expect(indexOfCall('pg_dump')).toBeLessThan(indexOfCall('dropdb'))
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await restoreAnswering(false, ['--yes'])
+  expect(questions).toHaveLength(2)
+  expect(indexOfCall('dropdb')).toBeGreaterThan(indexOfCall('pg_dump'))
 })
 
 test('spyria sign-in-app hands the trimmed secret to the operator command on standard input, never as an argument, and refuses an empty one', async () => {

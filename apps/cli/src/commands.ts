@@ -145,28 +145,31 @@ export const keptBackupsOf = (flags: Flags) => {
   return keep
 }
 
-export const backup = async (folder: string, flags: Flags) => {
-  const keep = keptBackupsOf(flags)
+const dumpDatabase = async (folder: string, database: (typeof backupDatabases)[number], now: Date) => {
   const backupsFolder = join(folder, 'backups')
   mkdirSync(backupsFolder, { recursive: true, mode: 0o700 })
   chmodSync(backupsFolder, 0o700)
+  const path = join(backupsFolder, backupNameOf(database, now))
+  writeFileSync(path, '', { mode: 0o600 })
+  const exitCode = await spawnCompose(
+    folder,
+    ['exec', '-T', 'postgres', 'pg_dump', '-U', 'spyria', '-d', database, '-Fc'],
+    { stdout: Bun.file(path) },
+  )
+  chmodSync(path, 0o600)
+  if (exitCode !== 0) {
+    rmSync(path, { force: true })
+    throw new Error(`Backing up the ${database} database failed`)
+  }
+  return path
+}
+
+export const backup = async (folder: string, flags: Flags) => {
+  const keep = keptBackupsOf(flags)
   const now = new Date()
   const written: string[] = []
-  for (const database of backupDatabases) {
-    const path = join(backupsFolder, backupNameOf(database, now))
-    writeFileSync(path, '', { mode: 0o600 })
-    const exitCode = await spawnCompose(
-      folder,
-      ['exec', '-T', 'postgres', 'pg_dump', '-U', 'spyria', '-d', database, '-Fc'],
-      { stdout: Bun.file(path) },
-    )
-    chmodSync(path, 0o600)
-    if (exitCode !== 0) {
-      rmSync(path, { force: true })
-      throw new Error(`Backing up the ${database} database failed`)
-    }
-    written.push(path)
-  }
+  for (const database of backupDatabases) written.push(await dumpDatabase(folder, database, now))
+  const backupsFolder = join(folder, 'backups')
   for (const file of backupsToRemoveOf(readdirSync(backupsFolder), keep)) rmSync(join(backupsFolder, file))
   for (const path of written) step(`Backed up to ${path}`)
   return written
@@ -187,7 +190,14 @@ const psqlCommandOf = (sql: string) => [
   sql,
 ]
 
-export const restore = async (folder: string, flags: Flags) => {
+const confirmsInTerminal = (question: string) =>
+  process.stdin.isTTY === true && /^y(es)?$/i.test(prompt(`${question} [y/N]`)?.trim() ?? '')
+
+export const restore = async (
+  folder: string,
+  flags: Flags,
+  { confirms = confirmsInTerminal }: { confirms?: (question: string) => boolean } = {},
+) => {
   const [, file] = flags.positionals
   if (!file) throw new Error('Usage: spyria restore <backups/spyria-….dump>')
   const path = resolve(folder, file)
@@ -202,6 +212,13 @@ export const restore = async (folder: string, flags: Flags) => {
     stdin: Bun.file(path),
   })
   if (readable !== 0) throw new Error(`${file} is not a complete backup made by spyria backup: nothing was changed`)
+  if (
+    !flags.switches.has('yes') &&
+    !confirms(`Replace the ${database} database with ${file}? What changed since that backup is lost`)
+  )
+    throw new Error('Nothing was restored: answer y, or pass --yes to restore without the question')
+  step(`Backing up the ${database} database as it is now`)
+  step(`Backed up to ${await dumpDatabase(folder, database, new Date())}`)
   step('Stopping the server, zero-cache, the gateway and the host')
   mustSucceed(
     runCompose(folder, ['stop', 'server', 'zero-cache', 'gateway', ...(profiles.includes('host') ? ['host'] : [])]),
@@ -238,7 +255,7 @@ export const restore = async (folder: string, flags: Flags) => {
     step("Dropping zero-cache's replica, which it rebuilds from the restored database")
     mustSucceed(runCompose(folder, ['rm', '-f', 'zero-cache']), 'Removing zero-cache')
     const volume = `${environment.SPYRIA_DEPLOYMENT}-zero-data`
-    const removed = Bun.spawnSync(['docker', 'volume', 'rm', volume], { stdout: 'ignore', stderr: 'pipe' })
+    const removed = Bun.spawnSync([dockerOf(), 'volume', 'rm', volume], { stdout: 'ignore', stderr: 'pipe' })
     if (removed.exitCode !== 0 && !removed.stderr.toString().includes('no such volume'))
       throw new Error(`Removing ${volume} failed: ${removed.stderr.toString().trim()}`)
   }
