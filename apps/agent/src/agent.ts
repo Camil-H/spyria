@@ -596,7 +596,7 @@ export const startAgent = ({
         onCancelRequest: (requestId) => closeQuestions(conversation(), 'cancelled', requestId),
         onExit: (code) => {
           const exited = conversation()
-          if (conversations.get(exited.id) !== exited || !isCurrent()) return
+          if (conversations.get(exited.id) !== exited || !isCurrent() || exited.status === 'error') return
           const errorOutput = errorOutputOf(exited, connection)
           const error = new AcpError(withSummary(`The adapter exited with code ${code}`, errorOutput))
           reportAdapterFailure(exited, errorOutput, error)
