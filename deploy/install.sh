@@ -65,6 +65,8 @@ fi
 
 mkdir -p "$install_dir"
 install -m 755 "$work/$binary" "$install_dir/spyria"
+rm -rf "$work"
+trap - EXIT
 echo "Installed spyria in $install_dir"
 case ":$PATH:" in
   *":$install_dir:"*) ;;

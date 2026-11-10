@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -57,4 +57,28 @@ test('install.sh refuses a binary that does not match the published checksum, an
   expect(exitCode).toBe(1)
   expect(output).toContain(`the download of spyria-${platform} does not match its checksum`)
   expect(() => statSync(join(installDir, 'spyria'))).toThrow()
+})
+
+test('install.sh removes its download folder before it hands the terminal over to spyria setup', () => {
+  const temporary = mkdtempSync(join(work, 'tmp-'))
+  const installDir = mkdtempSync(join(work, 'install-'))
+  const command = ['sh', installScript]
+  const inTerminal =
+    process.platform === 'darwin'
+      ? ['script', '-q', '/dev/null', ...command]
+      : ['script', '-qec', command.join(' '), '/dev/null']
+  const result = Bun.spawnSync(inTerminal, {
+    env: {
+      PATH: `${fakeTools}:/usr/bin:/bin`,
+      HOME: work,
+      TMPDIR: temporary,
+      SPYRIA_DOWNLOAD_BASE: `file://${releaseWith('#!/bin/sh\necho "setup ran with $*"\n')}`,
+      SPYRIA_INSTALL_DIR: installDir,
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  expect(result.stdout.toString()).toContain('setup ran with setup')
+  expect(result.exitCode).toBe(0)
+  expect(readdirSync(temporary)).toEqual([])
 })
