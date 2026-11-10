@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { logsPageCursor, monthsNewestFirst, nextLogsSince, usageSync } from './usage.ts'
+import { logsPageCursor, nextLogsSince, usageSync } from './usage.ts'
 
 const at = (iso: string) => new Date(iso)
 const { overlapMilliseconds, pendingHoldMilliseconds } = usageSync
@@ -35,10 +35,4 @@ test('a full page moves the page cursor to the millisecond of its last log, or p
     nextPageFrom: at('2026-10-06T12:00:00.001Z'),
     readWholeMillisecond: true,
   })
-})
-
-test('months are listed once, newest first', () => {
-  expect(
-    monthsNewestFirst([{ month: '2026-08' }, { month: '2026-10' }, { month: '2026-08' }, { month: '2025-12' }]),
-  ).toEqual(['2026-10', '2026-08', '2025-12'])
 })

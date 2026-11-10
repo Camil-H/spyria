@@ -79,7 +79,7 @@ test.describe('Runtime from a thread', () => {
       ),
       { useInnerText: true },
     )
-    await expect(mainOf(page).getByRole('link', { name: 'Started from Welcome' })).toBeVisible()
+    await expect(mainOf(page).getByRole('link', { name: 'Started from #Welcome' })).toBeVisible()
     await bobPage.context().close()
   })
 
@@ -203,7 +203,7 @@ test.describe('Runtime from a thread', () => {
         .toBe(1)
       expect(await agentPromptJobs(workerStack)).toEqual([])
       await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
-      await mainOf(page).getByRole('link', { name: 'Started from Welcome' }).click()
+      await mainOf(page).getByRole('link', { name: 'Started from #Welcome' }).click()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
       await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
       await expect(mainOf(page)).not.toContainText('Channel view')
@@ -211,11 +211,11 @@ test.describe('Runtime from a thread', () => {
 
     await test.step('shows the new name in the started-from link of a runtime chat', async () => {
       await openChat(page, 'Thanks, glad to be here.')
-      await expect(mainOf(page).getByRole('link', { name: 'Started from Welcome' })).toBeVisible()
+      await expect(mainOf(page).getByRole('link', { name: 'Started from #Welcome' })).toBeVisible()
       await chatAction(page, 'Welcome', 'Rename chat')
       await page.getByRole('textbox', { name: 'Chat name' }).fill('Greetings')
       await page.getByRole('button', { name: 'Confirm' }).click()
-      await expect(mainOf(page).getByRole('link', { name: 'Started from Greetings' })).toBeVisible()
+      await expect(mainOf(page).getByRole('link', { name: 'Started from #Greetings' })).toBeVisible()
     })
 
     await test.step('creates a loose runtime chat from a message of a loose channel', async () => {
