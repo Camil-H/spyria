@@ -1,6 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { createContext, type ReactNode, use, useEffect, useState, useSyncExternalStore } from 'react'
-import { chatIn, type DraftRow, type Snapshot } from './schema.ts'
+import type { DraftRow, Snapshot } from './schema.ts'
 import type { ScopedQueryName, Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -90,11 +90,6 @@ export const openingSinceOf = (now: number) =>
 const oldestSeqOf = (roots: readonly object[]) => Math.min(...roots.map((root) => (root as { seq: number }).seq))
 
 export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
-  const store = useStore()
-  const chatCreatedAt = useSyncExternalStore(
-    store.subscribe,
-    () => chatIn(store.read(), workspaceId, chatId)?.createdAt,
-  )
   const [shown, setShown] = useState(() => ({
     chatId,
     limit: chatPageSize,
@@ -105,10 +100,11 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const limit = isShownChat ? shown.limit : chatPageSize
   const since = isShownChat ? shown.since : openingSinceOf(Date.now())
   const roots = useScoped(workspaceId, 'chatMessages', { chatId, limit, since })
+  const earlierRoot = useScoped(workspaceId, 'chatEarlierRoot', since === unbounded ? null : { chatId, before: since })
   useScoped(workspaceId, 'chatPinnedSteps', { chatId })
   const rowCount = roots?.rows.length ?? 0
-  const isOpenedBeforeSince = since !== unbounded && chatCreatedAt !== undefined && Date.parse(chatCreatedAt) < since
-  const hasEarlier = rowCount === limit || isOpenedBeforeSince
+  const hasEarlier = rowCount === limit || (since !== unbounded && (earlierRoot?.rows.length ?? 0) > 0)
+  const isComplete = roots?.isComplete === true && (since === unbounded || earlierRoot?.isComplete === true)
   const oldestSeq = roots?.isComplete && rowCount > 0 ? oldestSeqOf(roots.rows) : undefined
   const hasWindow = roots?.isComplete === true || (isShownChat && shown.oldestSeq !== Number.POSITIVE_INFINITY)
   const loadEarlier = () => setShown({ ...shown, chatId, since: unbounded, limit: rowCount + chatPageSize })
@@ -120,7 +116,7 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
         : { ...shown, oldestSeq },
     )
   return {
-    isComplete: roots?.isComplete === true,
+    isComplete,
     hasWindow,
     hasEarlier,
     loadEarlier,

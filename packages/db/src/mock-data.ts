@@ -37,7 +37,7 @@ const chat = (
   name: string,
   ownerId: MemberId,
   runtime?: { model: string | null; reasoningEffort: string | null; gitBranch: string | null },
-): Omit<ChatRow, 'createdAt'> => ({
+): ChatRow => ({
   id: chatId(id),
   workspaceId: workspace,
   projectId: project,
@@ -120,33 +120,31 @@ const withReplyTargets = (messages: readonly MessageRow[]) => {
   })
 }
 
-export const seedCreationEpoch = Date.parse('2026-01-01T00:00:00Z')
-const createChats = (): ChatRow[] =>
-  [
-    chat('chat-welcome', acme, onboarding, 'Welcome', alice),
-    chat('chat-setup-helper', acme, onboarding, 'Setup helper', bob, {
-      model: 'openai/gpt-5',
-      reasoningEffort: 'medium',
-      gitBranch: 'main',
-    }),
-    chat('chat-invoice-bug', acme, billing, 'Invoice bug', alice, {
-      model: 'anthropic/claude-sonnet-5-5',
-      reasoningEffort: 'high',
-      gitBranch: 'fix/invoice-tax',
-    }),
-    chat('chat-standup', acme, null, 'Standup', bob),
-    chat('chat-research', acme, null, 'Research', alice, {
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-    }),
-    chat('chat-launch-plan', globex, launch, 'Launch plan', alice, {
-      model: null,
-      reasoningEffort: null,
-      gitBranch: null,
-    }),
-    chat('chat-general', globex, null, 'General', alice),
-  ].map((row, index) => ({ ...row, createdAt: new Date(seedCreationEpoch + index * 1000).toISOString() }))
+const createChats = () => [
+  chat('chat-welcome', acme, onboarding, 'Welcome', alice),
+  chat('chat-setup-helper', acme, onboarding, 'Setup helper', bob, {
+    model: 'openai/gpt-5',
+    reasoningEffort: 'medium',
+    gitBranch: 'main',
+  }),
+  chat('chat-invoice-bug', acme, billing, 'Invoice bug', alice, {
+    model: 'anthropic/claude-sonnet-5-5',
+    reasoningEffort: 'high',
+    gitBranch: 'fix/invoice-tax',
+  }),
+  chat('chat-standup', acme, null, 'Standup', bob),
+  chat('chat-research', acme, null, 'Research', alice, {
+    model: null,
+    reasoningEffort: null,
+    gitBranch: null,
+  }),
+  chat('chat-launch-plan', globex, launch, 'Launch plan', alice, {
+    model: null,
+    reasoningEffort: null,
+    gitBranch: null,
+  }),
+  chat('chat-general', globex, null, 'General', alice),
+]
 
 export const createMockSnapshot = (): Snapshot => {
   const chats = createChats()
