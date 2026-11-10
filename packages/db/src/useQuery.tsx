@@ -109,6 +109,7 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const hasWindow = roots?.isComplete === true || (isShownChat && shown.oldestSeq !== Number.POSITIVE_INFINITY)
   const loadEarlier = () => setShown({ ...shown, chatId, since: unbounded, limit: rowCount + chatPageSize })
   if (!isShownChat) setShown({ chatId, limit, since, oldestSeq: Number.POSITIVE_INFINITY })
+  else if (isComplete && rowCount === 0 && hasEarlier) loadEarlier()
   else if (oldestSeq !== undefined && oldestSeq !== shown.oldestSeq)
     setShown(
       rowCount === limit && oldestSeq > shown.oldestSeq
