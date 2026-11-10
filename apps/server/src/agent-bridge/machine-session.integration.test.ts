@@ -331,6 +331,19 @@ test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
   },
 )
 
+test.each([{ harness: 'claude-code' }, { harness: 'codex' }])(
+  'a $harness session on the machine keeps how full its context is from what the adapter reports',
+  async ({ harness }) => {
+    await machine({ signedIn: [harness] })
+    const chat = await newRuntimeChat({ harness })
+    await finished(await prompt(chat, 'stub:usage'), chat)
+    expect((await database.$client`select context_tokens, context_window from chats where id = ${chat}`)[0]).toEqual({
+      context_tokens: 53_000,
+      context_window: 200_000,
+    })
+  },
+)
+
 test('a Task call with its inner calls shows as one subagent group', async () => {
   await machine()
   const chat = await newMachineChat()

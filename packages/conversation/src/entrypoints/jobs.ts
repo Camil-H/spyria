@@ -10,7 +10,13 @@ import type {
   RepositoryCheckouts,
   SessionClassifier,
 } from '../contracts/agent.ts'
-import { type AgentEvent, agentJobTypes, isStoredAgentEvent, type TurnOutcome } from '../domain/agent-events.ts'
+import {
+  type AgentEvent,
+  agentJobTypes,
+  contextUsageOf,
+  isStoredAgentEvent,
+  type TurnOutcome,
+} from '../domain/agent-events.ts'
 import { devLoopJobTypes } from '../domain/dev-loop.ts'
 import type { WorkspaceRead } from '../domain/workspace-reads.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
@@ -145,6 +151,9 @@ export const createAgentHandlers = ({
         listener,
       ),
     recordEvent: async (chat: AgentChat, event: AgentEvent, turnPromptId?: MessageId) => {
+      const contextUsage = contextUsageOf(event)
+      if (contextUsage)
+        await recordContextSize(dependenciesOf(chat.workspaceId), { chat, model: undefined, ...contextUsage })
       if (!isStoredAgentEvent(event)) return undefined
       const recorded = await recordAgentEvent(
         { transactor: transactorOf(chat.workspaceId) },

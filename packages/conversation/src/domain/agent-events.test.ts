@@ -4,6 +4,7 @@ import {
   type AgentEvent,
   agentNotices,
   agentProjectionOf,
+  contextUsageOf,
   executionStatusOf,
   expiredPromptNotice,
   hasOutlivedWait,
@@ -404,6 +405,16 @@ test('spyria-agent chunks stream and are never stored, while completed items and
   expect(isStored({ sessionUpdate: 'tool_call_update' }, true)).toBe(true)
   expect(isStored({ sessionUpdate: 'turn_end' }, true)).toBe(true)
   expect(isStored({ sessionUpdate: 'plan' }, true)).toBe(false)
+})
+
+test('a usage update gives the context size and window an ACP adapter reported, and is never stored', () => {
+  const usage = (fields: Record<string, unknown>) => acpUpdate(6, { sessionUpdate: 'usage_update', ...fields })
+  expect(contextUsageOf(usage({ used: 53_000, size: 200_000 }))).toEqual({ tokens: 53_000, window: 200_000 })
+  expect(contextUsageOf(usage({ used: 53_000, size: 0 }))).toEqual({ tokens: 53_000, window: null })
+  expect(contextUsageOf(usage({ used: 53_000 }))).toEqual({ tokens: 53_000, window: null })
+  expect(contextUsageOf(usage({ used: 0, size: 200_000 }))).toBeUndefined()
+  expect(contextUsageOf(acpUpdate(7, { sessionUpdate: 'turn_end', used: 53_000 }))).toBeUndefined()
+  expect(isStoredAgentEvent(usage({ used: 53_000, size: 200_000 }))).toBe(false)
 })
 
 test('answered and closed questions are stored as one question step each, live questions are not', () => {
