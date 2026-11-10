@@ -24,6 +24,12 @@ const googleClientIdPattern = /^[\w-]+\.apps\.googleusercontent\.com$/
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const hostnamePattern = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
 
+const localPortOf = (given: string) => {
+  const port = Number(given)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port takes a port number from 1 to 65535')
+  return port
+}
+
 const hostnameOf = (origin = '') => URL.parse(origin)?.hostname ?? ''
 const dockerGroupOf = () => {
   if (process.platform === 'darwin') return '0'
@@ -140,6 +146,7 @@ export const setup = async (
   if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its secrets are kept.`)
   const deployment = asker.ask('name', 'Deployment name', existing.SPYRIA_DEPLOYMENT ?? 'spyria')
   if (!isDeploymentName(deployment)) throw new Error('The deployment name takes lowercase letters, digits and dashes')
+  const localPort = localPortOf(flags.values.port ?? existing.SPYRIA_LOCAL_PORT ?? '3300')
 
   const hostname = asker
     .require(
@@ -213,7 +220,7 @@ export const setup = async (
     dockerGroup: dockerGroupOf(),
     smtp,
     instanceApps: { google, microsoft },
-    localPort: Number(flags.values.port ?? existing.SPYRIA_LOCAL_PORT ?? 3300),
+    localPort,
   }
   const environment = environmentOf(answers, existing)
   writeReleaseFiles(
