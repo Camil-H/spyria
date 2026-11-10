@@ -128,6 +128,7 @@ export const containerBodyOf = ({
     ],
     Labels: { 'spyria.managed': '1', 'spyria.runtime': runtimeId },
     HostConfig: {
+      Init: true,
       NetworkMode: networkNameOf(prefix, runtimeId),
       ExtraHosts: [hostMachineMapping],
       CapDrop: ['ALL'],
