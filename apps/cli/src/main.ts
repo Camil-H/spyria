@@ -4,6 +4,7 @@ import {
   changeSignInApp,
   doctor,
   installFolderOf,
+  installIn,
   printSetupLink,
   restore,
   upgrade,
@@ -61,19 +62,19 @@ const commands: Record<string, () => unknown> = {
     if (!clouds.includes(cloud as Cloud)) throw new Error('--cloud is aws, azure or gcp')
     return setupCloud(flags, cloud as Cloud)
   },
-  upgrade: () => upgrade(folder, flags),
-  backup: () => backup(folder, flags),
-  restore: () => restore(folder, flags),
+  upgrade: () => upgrade(installIn(folder), flags),
+  backup: () => backup(installIn(folder), flags),
+  restore: () => restore(installIn(folder), flags),
   doctor: () => {
-    if (!doctor(folder)) process.exitCode = 1
+    if (!doctor(installIn(folder))) process.exitCode = 1
   },
-  'setup-link': () => printSetupLink(folder),
-  'verify-domain': () => verifyDomain(folder, flags),
-  'sign-in-app': () => changeSignInApp(folder, flags),
+  'setup-link': () => printSetupLink(installIn(folder)),
+  'verify-domain': () => verifyDomain(installIn(folder), flags),
+  'sign-in-app': () => changeSignInApp(installIn(folder), flags),
   version: () => console.log(cliVersion),
   compose: () => {
     process.exitCode =
-      runCompose(folder, composeArgumentsOf(process.argv.slice(process.argv.indexOf('compose') + 1))) ?? 1
+      runCompose(installIn(folder), composeArgumentsOf(process.argv.slice(process.argv.indexOf('compose') + 1))) ?? 1
   },
 }
 const run = command ? commands[command] : undefined

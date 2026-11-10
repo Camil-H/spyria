@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { installFolderOf, readEnvironment } from './commands.ts'
@@ -151,6 +151,43 @@ test("setup refuses a folder holding another project's compose.yml or .env and l
     expect(installFolderOf(parseFlags(['setup']))).toBe(join(homedir(), 'spyria'))
   } finally {
     process.chdir(originalDirectory)
+    rmSync(project, { recursive: true, force: true })
+  }
+})
+
+test('every command of an install refuses a folder that is not one and writes nothing there, while one with an unreadable .env still runs spyria version', async () => {
+  const project = mkdtempSync(join(tmpdir(), 'other-project-'))
+  writeFileSync(join(project, 'compose.yml'), 'services:\n  web:\n    image: nginx\n')
+  writeFileSync(join(project, '.env'), 'POSTGRES_PASSWORD=theirs\n')
+  const spyria = (...commandArguments: string[]) =>
+    Bun.spawnSync([process.execPath, new URL('./main.ts', import.meta.url).pathname, ...commandArguments], {
+      cwd: project,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+  try {
+    for (const command of [
+      'upgrade',
+      'backup',
+      'restore',
+      'doctor',
+      'setup-link',
+      'verify-domain',
+      'sign-in-app',
+      'compose',
+    ]) {
+      const result = spyria(command, '--folder', project)
+      expect({ command, exitCode: result.exitCode, refusal: result.stderr.toString() }).toEqual({
+        command,
+        exitCode: 1,
+        refusal: `No Spyria install in ${project}: run spyria setup, or pass --folder\n`,
+      })
+    }
+    expect(readdirSync(project).sort()).toEqual(['.env', 'compose.yml'])
+    rmSync(join(project, '.env'))
+    mkdirSync(join(project, '.env'))
+    expect(spyria('version').exitCode).toBe(0)
+  } finally {
     rmSync(project, { recursive: true, force: true })
   }
 })
