@@ -27,16 +27,27 @@ const databaseOwners: Record<(typeof backupDatabases)[number], string> = { spyri
 const defaultBackupsKept = 7
 const healthWaitMilliseconds = 180_000
 
+const readableTextOf = (path: string) => {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return ''
+  }
+}
 const isSpyriaEnvironmentFile = (folder: string) =>
-  Boolean(parseEnvironment(readFileSync(environmentFileOf(folder), 'utf8')).SPYRIA_DEPLOYMENT)
-const isSpyriaComposeFile = (folder: string) =>
-  readFileSync(composeFileOf(folder), 'utf8').includes('SPYRIA_DEPLOYMENT}')
+  Boolean(parseEnvironment(readableTextOf(environmentFileOf(folder))).SPYRIA_DEPLOYMENT)
+const isSpyriaComposeFile = (folder: string) => readableTextOf(composeFileOf(folder)).includes('SPYRIA_DEPLOYMENT}')
 
 export const isSpyriaInstall = (folder: string) =>
   existsSync(environmentFileOf(folder)) &&
   existsSync(composeFileOf(folder)) &&
   isSpyriaEnvironmentFile(folder) &&
   isSpyriaComposeFile(folder)
+
+export const installIn = (folder: string) => {
+  if (!isSpyriaInstall(folder)) throw new Error(`No Spyria install in ${folder}: run spyria setup, or pass --folder`)
+  return folder
+}
 
 export const assertNoOtherProjectIn = (folder: string) => {
   const others = [
