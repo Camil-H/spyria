@@ -25,7 +25,13 @@ apps = false
 export const harnesses = {
   'claude-code': {
     name: 'Claude Code',
-    launch: ['env', ...claudeCodeSettings, 'claude-agent-acp'],
+    launch: [
+      'env',
+      ...claudeCodeSettings,
+      'sh',
+      '-c',
+      '[ -e "$HOME/.claude.json" ] || printf {} > "$HOME/.claude.json"; exec claude-agent-acp',
+    ],
   },
   codex: {
     name: 'Codex',
