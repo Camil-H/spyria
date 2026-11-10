@@ -11,6 +11,10 @@ on:
         description: The version whose amd64 and arm64 tags are joined into one manifest
         required: true
         type: string
+      latest:
+        description: Whether the manifest is tagged latest too, which a patch of an older release line is not
+        required: true
+        type: boolean
     outputs:
       digest:
         description: The digest of the multi-architecture manifest
@@ -31,6 +35,7 @@ jobs:
     env:
       IMAGE: ${{ inputs.image }}
       VERSION: ${{ inputs.version }}
+      LATEST: ${{ inputs.latest }}
     steps:
       - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - env:
@@ -38,7 +43,7 @@ jobs:
         run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - id: manifest
         run: |
-          latest=$([[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "-t $IMAGE:latest" || true)
+          latest=$([ "$LATEST" = true ] && echo "-t $IMAGE:latest" || true)
           docker buildx imagetools create -t "$IMAGE:$VERSION" $latest "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
           digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"

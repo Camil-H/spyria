@@ -127,7 +127,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 
 ## Backups
 
-`spyria backup` dumps both databases (Spyria's and the gateway's) into `backups/` of the install folder, keeping the newest 7 of each (`--keep <n>`); `spyria upgrade` takes one first. Run it on a schedule, for example from cron, and copy `backups/` and `.env` off the machine. `spyria restore backups/spyria-<time>.dump` stops the server, zero-cache, the gateway and the host, restores that database, drops zero-cache's replica so it is rebuilt, and starts everything again. What holds state:
+`spyria backup` dumps both databases (Spyria's and the gateway's) into `backups/` of the install folder, keeping the newest 7 of each (`--keep <n>`); `spyria upgrade`, and `spyria setup --version` when it changes the version, take one first. Run it on a schedule, for example from cron, and copy `backups/` and `.env` off the machine. `spyria restore backups/spyria-<time>.dump` asks before it replaces anything (`--yes` skips the question), backs up the database it replaces into `backups/`, stops the server, zero-cache, the gateway and the host, restores that database, drops zero-cache's replica so it is rebuilt, and starts everything again. What holds state:
 
 | Volume | Holds | Back up |
 |---|---|---|

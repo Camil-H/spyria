@@ -42,13 +42,16 @@ export const parseEnvironment = (text: string): Environment =>
       .map((line) => [line.slice(0, line.indexOf('=')), unquoted(line.slice(line.indexOf('=') + 1))]),
   )
 
+const storable = (environment: Environment) => {
+  for (const [name, value] of Object.entries(environment))
+    if (/[\n\r']/.test(value)) throw new Error(`${name} cannot hold a quote or span lines`)
+  return environment
+}
+
 export const serializeEnvironment = (environment: Environment) =>
-  Object.entries(environment)
+  Object.entries(storable(environment))
     .filter(([, value]) => value !== '')
-    .map(([name, value]) => {
-      if (/[\n\r']/.test(value)) throw new Error(`${name} cannot hold a quote or span lines`)
-      return `${name}='${value}'\n`
-    })
+    .map(([name, value]) => `${name}='${value}'\n`)
     .join('')
 
 export const withSecrets = (existing: Environment): Environment => ({
@@ -104,7 +107,7 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
   if (!answers.origin.startsWith('https://')) throw new Error('The address of Spyria must start with https://')
   const secrets = withSecrets(existing)
   const profiles = [...(answers.runsHost ? ['host'] : []), ...(answers.tunnelToken ? ['cloudflare'] : [])]
-  return {
+  return storable({
     ...existing,
     SPYRIA_DEPLOYMENT: answers.deployment,
     SPYRIA_VERSION: answers.version,
@@ -124,7 +127,7 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_GOOGLE_CLIENT_SECRET: answers.instanceApps.google?.clientSecret ?? '',
     SPYRIA_MICROSOFT_CLIENT_ID: answers.instanceApps.microsoft?.clientId ?? '',
     SPYRIA_MICROSOFT_CLIENT_SECRET: answers.instanceApps.microsoft?.clientSecret ?? '',
-  }
+  })
 }
 
 export const setupLinkOf = (environment: Environment) =>

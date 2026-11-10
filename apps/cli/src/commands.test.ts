@@ -1,8 +1,17 @@
 import { afterAll, beforeEach, expect, spyOn, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { changeSignInApp, doctor, upgrade } from './commands.ts'
+import { changeSignInApp, doctor, restore, upgrade } from './commands.ts'
 import { parseEnvironment, serializeEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
@@ -25,6 +34,9 @@ case "$*" in
     printf 'dump' ;;
   *sso:sign-in-app*) cat > "$FAKE_DOCKER/stdin" ;;
   *has-workspace*) cat "$FAKE_DOCKER/has-workspace" 2>/dev/null ;;
+  *pg_database*)
+    [ "$(cat "$FAKE_DOCKER/database-exists" 2>/dev/null)" = unknown ] && exit 2
+    cat "$FAKE_DOCKER/database-exists" 2>/dev/null ;;
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
@@ -74,9 +86,12 @@ beforeEach(() => {
   writeFileSync(join(install, '.env'), serializeEnvironment(installed), { mode: 0o600 })
   rmSync(join(fakeDocker, 'calls'), { force: true })
   rmSync(join(fakeDocker, 'stdin'), { force: true })
+  rmSync(join(fakeDocker, 'compose-at-backup'), { force: true })
+  rmSync(join(fakeDocker, 'env-at-backup'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
+  writeFileSync(join(fakeDocker, 'database-exists'), '1\n')
 })
 const calls = () =>
   existsSync(join(fakeDocker, 'calls')) ? readFileSync(join(fakeDocker, 'calls'), 'utf8').trim().split('\n') : []
@@ -104,6 +119,83 @@ test('spyria upgrade to a version without release files changes nothing and back
   expect(calls()).toEqual([])
   expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
   expect(environment()).toEqual(installed)
+})
+
+test('spyria setup --version backs up both databases while the old release is still in place, and a setup that keeps the version backs nothing up', async () => {
+  await setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0']), {
+    processEnvironment: {},
+    workspaceExistsIn: () => false,
+  })
+  expect(readFileSync(join(fakeDocker, 'compose-at-backup'), 'utf8')).toBe(oldCompose)
+  expect(parseEnvironment(readFileSync(join(fakeDocker, 'env-at-backup'), 'utf8')).SPYRIA_VERSION).toBe('1.2.0')
+  expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(2)
+  expect(environment().SPYRIA_VERSION).toBe('1.3.0')
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0']), {
+    processEnvironment: {},
+    workspaceExistsIn: () => false,
+  })
+  expect(calls().filter((call) => call.includes('pg_dump'))).toEqual([])
+})
+
+test('spyria restore replaces a database only once confirmed, and backs it up as it is first', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  rmSync(join(install, 'backups'), { recursive: true, force: true })
+  mkdirSync(join(install, 'backups'))
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  const questions: string[] = []
+  const restoreAnswering = (answer: boolean, extra: string[] = []) =>
+    restore(install, parseFlags(['restore', `backups/${restored}`, '--folder', install, ...extra]), {
+      confirms: (question) => {
+        questions.push(question)
+        return answer
+      },
+    })
+
+  const refusal = await restoreAnswering(false).catch((error: Error) => error.message)
+  expect(refusal).toBe('Nothing was restored: answer y, or pass --yes to restore without the question')
+  expect(questions).toEqual([
+    `Replace the spyria database with backups/${restored}? What changed since that backup is lost`,
+  ])
+  expect(calls().filter((call) => /pg_dump|stop|dropdb|createdb/.test(call))).toEqual([])
+  expect(readdirSync(join(install, 'backups'))).toEqual([restored])
+
+  await restoreAnswering(true)
+  const safetyCopies = readdirSync(join(install, 'backups')).filter((file) => file !== restored)
+  expect(safetyCopies).toHaveLength(1)
+  expect(safetyCopies[0]).toStartWith('spyria-')
+  expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(1)
+  expect(indexOfCall('pg_dump')).toBeLessThan(indexOfCall('dropdb'))
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await restoreAnswering(false, ['--yes'])
+  expect(questions).toHaveLength(2)
+  expect(indexOfCall('dropdb')).toBeGreaterThan(indexOfCall('pg_dump'))
+})
+
+test('spyria restore changes nothing when Postgres does not say whether the database exists, rather than skip its backup', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  mkdirSync(join(install, 'backups'), { recursive: true })
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  writeFileSync(join(fakeDocker, 'database-exists'), 'unknown')
+  const refusal = await restore(
+    install,
+    parseFlags(['restore', `backups/${restored}`, '--yes', '--folder', install]),
+  ).catch((error: Error) => error.message)
+  expect(refusal).toBe('Postgres did not say whether the spyria database exists: nothing was changed')
+  expect(calls().filter((call) => /pg_dump|stop|dropdb|createdb/.test(call))).toEqual([])
+})
+
+test('spyria restore brings back a database that no longer exists, with nothing to back up first', async () => {
+  const restored = 'spyria-20260101T000000Z.dump'
+  mkdirSync(join(install, 'backups'), { recursive: true })
+  writeFileSync(join(install, 'backups', restored), 'dump')
+  rmSync(join(fakeDocker, 'database-exists'))
+  await restore(install, parseFlags(['restore', `backups/${restored}`, '--yes', '--folder', install]))
+  expect(calls().filter((call) => call.includes('pg_dump'))).toEqual([])
+  expect(indexOfCall('createdb')).toBeGreaterThan(-1)
+  expect(indexOfCall('pg_restore -U spyria -d spyria')).toBeGreaterThan(indexOfCall('createdb'))
 })
 
 test('spyria sign-in-app hands the trimmed secret to the operator command on standard input, never as an argument, and refuses an empty one', async () => {

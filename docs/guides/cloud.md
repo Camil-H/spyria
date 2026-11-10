@@ -16,7 +16,7 @@ Running it again takes the answers in the folder's `terraform.tfvars` as the def
 
 ## By hand
 
-Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples), replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/…?ref=v<version>`, set the variables, then `tofu init` and `tofu apply`. `tofu output -raw setup_link` prints the setup link.
+Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples), replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/…?ref=v<version>`, set the variables, then `tofu init` and `tofu apply`. `tofu output -raw setup_link` prints the setup link. The table lists the inputs of the control-plane module; the examples declare each of them except `images` and the Google and Microsoft sign-in apps, which you add to the `control_plane` module block yourself.
 
 | Input | Meaning |
 |---|---|
