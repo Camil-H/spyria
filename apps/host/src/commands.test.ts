@@ -141,7 +141,7 @@ test('refuses extra arguments on start, stop, remove and status', () => {
     expect(() => parseCommand(op, { runtimeId: 'runtime-1', force: true })).toThrow('refused')
 })
 
-test('creates the container with exactly the hardening flags, three named volumes and the host machine reachable by name', () => {
+test('creates the container with exactly the hardening flags, an init that reaps orphaned processes, three named volumes and the host machine reachable by name', () => {
   expect(containerBodyOf({ prefix: 'spyria-', runtimeId: 'runtime-1', image, apiKey })).toEqual({
     Image: image,
     Hostname: 'spyria-rt-runtime-1',
@@ -149,6 +149,7 @@ test('creates the container with exactly the hardening flags, three named volume
     Env: [`OH_SESSION_API_KEYS_0=${apiKey}`],
     Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' },
     HostConfig: {
+      Init: true,
       NetworkMode: 'spyria-rt-runtime-1-net',
       ExtraHosts: ['host.docker.internal:host-gateway'],
       CapDrop: ['ALL'],

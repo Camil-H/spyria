@@ -3,6 +3,7 @@ import { expect, setDefaultTimeout, test } from 'bun:test'
 import { type ChatId, chatId, type DevLoopSettings, type DevLoopStepConfig } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createGitHubApi } from './github/github-api.ts'
+import { maximumJobAttempts } from './job-worker.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
 import {
   acme,
@@ -439,4 +440,233 @@ test('As a chat owner, the quality gates card shows each command of a group pass
     outcomes: ['passed', 'failed', 'passed'],
     outcome: 'Broken failed: over to you',
   })
+})
+
+const moveMainTotals = (total: number) =>
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: 'main',
+    files: { 'src/app.ts': `export const total = ${total}\nexport const total = ${total + 1}\n` },
+    message: `Move the totals to ${total}`,
+  })
+const markConflicting = (branch: string) => {
+  const pullRequest = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)
+  expect(pullRequest).toBeDefined()
+  if (pullRequest) pullRequest.isConflicting = true
+}
+const loopPromptBodiesOf = async (id: ChatId) =>
+  (
+    await database.$client`select body from messages where chat_id = ${id} and step->>'type' = 'dev_loop_prompt' order by seq`
+  ).map(({ body }) => String(body))
+
+test('As a chat owner whose base moved under the branch, the quality gates send the conflicting files to the agent instead of waiting for CI, then run again once it merges the base', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]))).toEqual(succeeded)
+  await stack.agentHost('Conflicting branch host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id, branch } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({
+    steps: [committing('export const total = 3', 'Change the totals'), finish],
+    text: 'Done.',
+    whenPrompted: [
+      {
+        includes: 'The branch conflicts with main',
+        script: {
+          steps: [
+            { tool: 'fetch_branch', arguments: { branch: 'main' } },
+            {
+              command: "git -c user.name=Pi -c user.email=pi@example.com merge -q -X ours origin/main -m 'Merge main'",
+            },
+            finish,
+          ],
+          text: 'Merged main.',
+        },
+      },
+    ],
+  })
+
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'waiting_for_ci')
+  const firstHead = String((await loopOf(id))?.step.pushedHead)
+  const movedMain = moveMainTotals(2)
+  await waitFor(async () => (await loopPromptsOf(id)).some(({ phase }) => phase === 'ci'), 60_000)
+  const [conflictPrompt] = await loopPromptBodiesOf(id)
+  expect(conflictPrompt).toStartWith(
+    'The branch conflicts with main, so CI cannot run on the pull request (attempt 1 of 1). Call fetch_branch for main, merge origin/main into the branch (do not rebase), resolve the conflicts, commit, then call finish_work again.',
+  )
+  expect(conflictPrompt).toEndWith('```\nsrc/app.ts\n```')
+
+  await waitFor(async () => {
+    const step = (await loopOf(id))?.step
+    return step?.state === 'waiting_for_ci' && step.pushedHead !== firstHead
+  }, 60_000)
+  const mergedHead = fakeGitHub.branchHeadOf('acme/app', branch)
+  expect((await loopOf(id))?.step.pushedHead).toBe(mergedHead)
+  pushCheckRun(mergedHead, 'unit', 'success')
+  await loopStateIs(id, 'done')
+  const number = fakeGitHub.pullRequests.at(-1)?.number
+  expect((await loopOf(id))?.step).toMatchObject({
+    rounds: [0, 1],
+    outcome: `Ready for your review on pull request #${number}: CI passed`,
+  })
+  expect((await loopPromptsOf(id)).map(({ phase }) => phase)).toEqual(['ci'])
+  expect(fakeGitHub.branchHeadOf('acme/app', 'main')).toBe(movedMain)
+  expect(fakeGitHub.commitSubjectsOf('acme/app', 'main', branch)).toEqual([])
+})
+
+test('As a chat owner, a conflict with the base hands over at once when CI may not be fixed, and when GitHub refuses a push while the open pull request conflicts, without changing the branch', async () => {
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 0 }]))).toEqual(succeeded)
+  const { relay } = await stack.agentHost('Strict conflicts host', { routesModelCalls: true })
+  const mergesOf = () => relay.requests.filter(({ path }) => path === '/api/workspace/merge').length
+  await connectGitHub(alice)
+  const strict = await newDevChat()
+  await readyChat(strict.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 7', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(strict.id, 'Fix the totals')
+  await loopStateIs(strict.id, 'waiting_for_ci')
+  moveMainTotals(4)
+  await loopStateIs(strict.id, 'stopped')
+  expect((await loopOf(strict.id))?.step.outcome).toBe('The branch conflicts with main in src/app.ts: over to you')
+  expect(await loopPromptsOf(strict.id)).toEqual([])
+  expect(await noticesOf(strict.id)).toContain('The branch conflicts with main in src/app.ts: over to you')
+
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }]))).toEqual(succeeded)
+  const refused = await newDevChat()
+  await readyChat(refused.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 8', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(refused.id, 'Fix the totals')
+  await loopStateIs(refused.id, 'done')
+  const firstLoop = (await loopOf(refused.id))?.step.startPromptId
+  moveMainTotals(6)
+  fakeGitHub.refusePushesTo('acme/app', refused.branch)
+  stack.setFakeLlmScript({
+    steps: [committing('export const total = 9', 'Change the totals again'), finish],
+    text: 'Done.',
+  })
+  const mergesBefore = mergesOf()
+  await stack.prompt(refused.id, 'Change the totals again')
+  await waitFor(async () => {
+    const step = (await loopOf(refused.id))?.step
+    return step?.startPromptId !== firstLoop && step?.state === 'stopped'
+  }, 60_000)
+  const outcome = String((await loopOf(refused.id))?.step.outcome)
+  expect(outcome).toStartWith(
+    'The pull request conflicts with main and the push was refused: over to you\nThe branch could not be pushed: ',
+  )
+  expect(outcome).toContain('[remote rejected]')
+  expect(outcome).toContain('pre-receive hook declined')
+  expect(mergesOf()).toBe(mergesBefore)
+})
+
+test('As a chat owner whose pull request GitHub still says conflicts, the gates run again once after a clean update from the base, then hand over; an update the runtime refuses hands over at once', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]))).toEqual(succeeded)
+  await stack.agentHost('Stale conflict host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const stale = await newDevChat()
+  await readyChat(stale.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 10', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(stale.id, 'Fix the totals')
+  await loopStateIs(stale.id, 'waiting_for_ci')
+  const firstHead = String((await loopOf(stale.id))?.step.pushedHead)
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: 'main',
+    files: { 'docs/totals.md': 'How totals add up\n' },
+    message: 'Document the totals',
+  })
+  markConflicting(stale.branch)
+  await loopStateIs(stale.id, 'stopped')
+  const pushedHead = (await loopOf(stale.id))?.step.pushedHead
+  expect(pushedHead).not.toBe(firstHead)
+  expect(pushedHead).toBe(fakeGitHub.branchHeadOf('acme/app', stale.branch))
+  expect(fakeGitHub.commitSubjectsOf('acme/app', 'main', stale.branch)).toEqual([])
+  expect((await loopOf(stale.id))?.step).toMatchObject({
+    rounds: [0, 0],
+    outcome:
+      'The branch conflicts with main and could not be updated from it (Already up to date with main): over to you',
+  })
+  expect(await loopPromptsOf(stale.id)).toEqual([])
+
+  expect(await setSetupCommands(alice, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
+    succeeded,
+  )
+  const dirty = await newDevChat()
+  await readyChat(dirty.id)
+  stack.setFakeLlmScript({ steps: [committing('export const total = 11', 'Change the totals'), finish], text: 'Done.' })
+  await stack.prompt(dirty.id, 'Fix the totals')
+  await loopStateIs(dirty.id, 'waiting_for_ci')
+  markConflicting(dirty.branch)
+  await loopStateIs(dirty.id, 'stopped')
+  expect((await loopOf(dirty.id))?.step.outcome).toBe(
+    'The branch conflicts with main and could not be updated from it (Commit the uncommitted changes before updating from base): over to you',
+  )
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+})
+
+test('As a chat owner, the gates check they still run before updating a conflicting branch, say when the merged branch cannot be read, and hand over on the last attempt of an update that keeps failing', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  const steps: Step[] = [{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]
+  expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+  await connectGitHub(alice)
+  const waitingChatOn = async (hostName: string, total: number) => {
+    const { relay, launches } = await stack.agentHost(hostName, { routesModelCalls: true })
+    const chat = await newDevChat()
+    await readyChat(chat.id)
+    expect(launches().length).toBeGreaterThan(0)
+    stack.setFakeLlmScript({
+      steps: [committing(`export const total = ${total}`, 'Change the totals'), finish],
+      text: 'Done.',
+    })
+    await stack.prompt(chat.id, 'Fix the totals')
+    await loopStateIs(chat.id, 'waiting_for_ci')
+    const [card] = await database.$client`
+      select id from messages where chat_id = ${chat.id} and step->>'type' = 'dev_loop' order by seq desc limit 1`
+    const mergesSent = () => relay.requests.filter(({ path }) => path === '/api/workspace/merge').length
+    return { ...chat, relay, loopId: String(card?.id), mergesSent }
+  }
+  const outcomeOf = async (id: ChatId) => (await loopOf(id))?.step.outcome
+
+  const held = await waitingChatOn('Held conflict host', 12)
+  await waitFor(
+    async () =>
+      (
+        await database.$client`
+          update jobs set run_at = now() + interval '1 hour'
+          where type = 'dev_loop.ci' and state = 'queued' and payload->>'loopId' = ${held.loopId} returning id`
+      ).length > 0,
+  )
+  markConflicting(held.branch)
+  expect(await setDevLoop(alice, settingsWith(steps, false))).toEqual(succeeded)
+  await database.$client`
+    update jobs set run_at = now() where type = 'dev_loop.ci' and state = 'queued' and payload->>'loopId' = ${held.loopId}`
+  await loopStateIs(held.id, 'stopped')
+  expect(await outcomeOf(held.id)).toBe('Stopped: quality gates were turned off for this repository')
+  expect(held.mergesSent()).toBe(0)
+  expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+
+  const unread = await waitingChatOn('Unread head host', 13)
+  fakeGitHub.commitToBranch('acme/app', {
+    branch: 'main',
+    files: { 'docs/unread.md': 'A note on the totals\n' },
+    message: 'Add a note on the totals',
+  })
+  unread.relay.failRequests('/api/workspace/status', '/api/workspace/merge')
+  markConflicting(unread.branch)
+  await loopStateIs(unread.id, 'stopped')
+  expect(await outcomeOf(unread.id)).toBe(
+    "Merged main to resolve a conflict, but the runtime's branch could not be read: over to you",
+  )
+  expect(unread.mergesSent()).toBe(1)
+
+  const failing = await waitingChatOn('Failing update host', 14)
+  failing.relay.failRequests('/api/workspace/status')
+  markConflicting(failing.branch)
+  await loopStateIs(failing.id, 'stopped')
+  expect(await outcomeOf(failing.id)).toBe(
+    'The branch conflicts with main and could not be updated from it (the update failed): over to you',
+  )
+  expect(failing.mergesSent()).toBe(0)
+  const [ciJob] = await database.$client`
+    select attempts, state from jobs where type = 'dev_loop.ci' and payload->>'loopId' = ${failing.loopId}`
+  expect(ciJob).toMatchObject({ attempts: maximumJobAttempts, state: 'done' })
 })

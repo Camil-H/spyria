@@ -38,7 +38,12 @@ export type CheckRun = {
   failedStep: string | null
   logExcerpt: string | null
 }
-export type PullRequestChecks = { headSha: string; runs: CheckRun[]; logsRefusal: string | null }
+export type PullRequestChecks = {
+  headSha: string
+  isConflicting: boolean
+  runs: CheckRun[]
+  logsRefusal: string | null
+}
 export type GitHubToolCall =
   | { tool: 'publish'; action: PublishAction; draft: PullRequestDraft }
   | { tool: 'update_pull_request'; change: PullRequestChange }
@@ -249,9 +254,12 @@ const checkRunLinesOf = (run: CheckRun, shown: Map<string, string>, budget: { le
   ...logLinesOf(run, shown, budget),
 ]
 
-export const checkRunsTextOf = (number: number, { headSha, runs, logsRefusal }: PullRequestChecks) => {
+const conflictNote = 'It conflicts with its base branch, so CI may not run until the conflicts are resolved'
+
+export const checkRunsTextOf = (number: number, { headSha, isConflicting, runs, logsRefusal }: PullRequestChecks) => {
   const heading = `Pull request #${number} at ${headSha.slice(0, 7)}`
-  if (runs.length === 0) return `${heading}: no check has run`
+  const conflict = isConflicting ? [conflictNote] : []
+  if (runs.length === 0) return [`${heading}: no check has run`, ...conflict].join('\n')
   const counts = checkStateOrder
     .map((state) => [state, runs.filter((run) => runStateOf(run) === state).length] as const)
     .filter(([, count]) => count > 0)
@@ -264,6 +272,7 @@ export const checkRunsTextOf = (number: number, { headSha, runs, logsRefusal }: 
   return shortened(
     [
       `${heading}: ${runs.length} checks, ${counts.join(', ')}`,
+      ...conflict,
       ...(logsRefusal === null ? [] : [`Logs not read: ${logsRefusal}`]),
       ...sorted.flatMap((run) => checkRunLinesOf(run, shown, budget)),
     ].join('\n'),

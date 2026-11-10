@@ -133,8 +133,8 @@ export const createAgentHandlers = ({
         runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
         pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
-      [devLoopJobTypes.ci]: ({ workspaceId, payload }: AgentJob) =>
-        judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+      [devLoopJobTypes.ci]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
+        judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }, isLastAttempt),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>
         interruptOwnedTurns(dependenciesOf(workspaceId), { workspaceId, ...memberRemovedPayload.parse(payload) }),
     },

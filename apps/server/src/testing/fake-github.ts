@@ -1,5 +1,5 @@
 import { type createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -36,6 +36,7 @@ export type FakePullRequest = {
   head: string
   base: string
   authorToken: string
+  isConflicting?: boolean
 }
 type FakeComment = { author: string; body: string }
 export type FakeIssue = {
@@ -229,11 +230,28 @@ export const startFakeGitHub = () => {
       rmSync(source, { recursive: true, force: true })
     }
   }
+  const refusePushesTo = (repository: string, branch: string) => {
+    const hook = join(bareOf(repository), 'hooks', 'pre-receive')
+    writeFileSync(
+      hook,
+      `#!/bin/sh\nwhile read old new ref; do [ "$ref" = "refs/heads/${branch}" ] && exit 1; done\nexit 0\n`,
+    )
+    chmodSync(hook, 0o755)
+  }
   const commitSubjectsOf = (repository: string, branch: string, base = 'main') =>
     branchHeadOf(repository, branch)
       ? git(bareOf(repository), 'log', '--format=%s', `${base}..refs/heads/${branch}`).split('\n').filter(Boolean)
       : []
-  const pullRequestJsonOf = (origin: string, { repository, number, title, head, base }: FakePullRequest) => ({
+  const isMergeable = (repository: string, branch: string, base: string) =>
+    Bun.spawnSync(['git', 'merge-tree', '--write-tree', `refs/heads/${base}`, `refs/heads/${branch}`], {
+      cwd: bareOf(repository),
+      stdout: 'ignore',
+      stderr: 'ignore',
+    }).exitCode === 0
+  const pullRequestJsonOf = (
+    origin: string,
+    { repository, number, title, head, base, isConflicting }: FakePullRequest,
+  ) => ({
     number,
     html_url: `${origin}/${repository}/pull/${number}`,
     title,
@@ -241,6 +259,7 @@ export const startFakeGitHub = () => {
     draft: false,
     merged: false,
     head: { sha: branchHeadOf(repository, head), ref: head },
+    mergeable: isConflicting === undefined ? isMergeable(repository, head, base) : !isConflicting,
     commits: commitSubjectsOf(repository, head, base).length,
   })
   const fakeCommentJsonOf = ({ author, body }: FakeComment) => ({ user: { login: author }, body })
@@ -617,6 +636,7 @@ export const startFakeGitHub = () => {
     branchHeadOf,
     commitSubjectsOf,
     commitToBranch,
+    refusePushesTo,
     userTokens: () => [...userTokens.keys()],
     expireUserTokens: () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
