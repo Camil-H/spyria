@@ -74,6 +74,8 @@ beforeEach(() => {
   writeFileSync(join(install, '.env'), serializeEnvironment(installed), { mode: 0o600 })
   rmSync(join(fakeDocker, 'calls'), { force: true })
   rmSync(join(fakeDocker, 'stdin'), { force: true })
+  rmSync(join(fakeDocker, 'compose-at-backup'), { force: true })
+  rmSync(join(fakeDocker, 'env-at-backup'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
@@ -104,6 +106,24 @@ test('spyria upgrade to a version without release files changes nothing and back
   expect(calls()).toEqual([])
   expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
   expect(environment()).toEqual(installed)
+})
+
+test('spyria setup --version backs up both databases while the old release is still in place, and a setup that keeps the version backs nothing up', async () => {
+  await setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0']), {
+    processEnvironment: {},
+    workspaceExistsIn: () => false,
+  })
+  expect(readFileSync(join(fakeDocker, 'compose-at-backup'), 'utf8')).toBe(oldCompose)
+  expect(parseEnvironment(readFileSync(join(fakeDocker, 'env-at-backup'), 'utf8')).SPYRIA_VERSION).toBe('1.2.0')
+  expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(2)
+  expect(environment().SPYRIA_VERSION).toBe('1.3.0')
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0']), {
+    processEnvironment: {},
+    workspaceExistsIn: () => false,
+  })
+  expect(calls().filter((call) => call.includes('pg_dump'))).toEqual([])
 })
 
 test('spyria sign-in-app hands the trimmed secret to the operator command on standard input, never as an argument, and refuses an empty one', async () => {

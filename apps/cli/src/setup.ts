@@ -5,6 +5,7 @@ import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
   assertNoOtherProjectIn,
+  backup,
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
@@ -223,12 +224,15 @@ export const setup = async (
     localPort,
   }
   const environment = environmentOf(answers, existing)
-  writeReleaseFiles(
-    folder,
+  const releaseFiles =
     version === cliVersion || cliVersion === 'dev'
       ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n` }
-      : await releaseFilesOf(version),
-  )
+      : await releaseFilesOf(version)
+  if (existing.SPYRIA_VERSION !== undefined && existing.SPYRIA_VERSION !== version) {
+    console.log(`Backing up before changing from ${existing.SPYRIA_VERSION} to ${version}`)
+    await backup(folder, flags)
+  }
+  writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) return

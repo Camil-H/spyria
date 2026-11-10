@@ -60,9 +60,8 @@ test('an unattended setup creates the tunnel and writes the Compose file, the ga
 
 test('setting up again without a Cloudflare token keeps the tunnel and every secret', async () => {
   const before = environment()
-  await runSetup(['--version', '1.3.0'])
-  const after = environment()
-  expect(after).toEqual({ ...before, SPYRIA_VERSION: '1.3.0' })
+  await runSetup([])
+  expect(environment()).toEqual(before)
   expect(tunnelNames).toHaveLength(1)
 })
 
