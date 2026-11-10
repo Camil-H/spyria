@@ -138,6 +138,13 @@ test.describe('Messaging', () => {
       expect(welcomeCounts).toHaveLength(1)
     })
 
+    await test.step('opens on the last week of messages and loads the older ones when scrolling up', async () => {
+      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
+      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
+      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
+      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
+    })
+
     await test.step('offers Go to last message while reading earlier messages, and goes back to the newest', async () => {
       const goToLastMessage = mainOf(page).getByRole('button', { name: 'Go to last message' })
       await expect(goToLastMessage).toHaveCount(0)

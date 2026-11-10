@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { chatId, workspaceId } from '@spyria/kernel'
 import { alice, createMockSnapshot } from './mock-data.ts'
 import type { DraftRow, Snapshot } from './schema.ts'
-import { createQueryCache } from './useQuery.tsx'
+import { createQueryCache, openingSinceOf } from './useQuery.tsx'
 
 const runs: string[] = []
 const chatNamesIn = (workspaceId: string) => (snapshot: Snapshot) => {
@@ -42,4 +42,10 @@ test('a draft query that builds a new object on each run keeps its result while 
   expect(readQuery([{ ...draft, text: 'Hello' }], draftTextsOf, ['chat-research'])).toEqual({
     texts: ['Hello'],
   })
+})
+
+test('a chat opens on the week before now, from the start of that hour so the window stays the same while switching chats', () => {
+  const now = Date.parse('2026-11-10T20:42:17.123Z')
+  expect(new Date(openingSinceOf(now)).toISOString()).toBe('2026-11-03T20:00:00.000Z')
+  expect(openingSinceOf(Date.parse('2026-11-10T20:59:59.999Z'))).toBe(openingSinceOf(now))
 })

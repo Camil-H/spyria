@@ -260,6 +260,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       contextTokens: chat.contextTokens ?? null,
       contextWindow: chat.contextWindow ?? null,
       ownerId: ownerUserId ?? '',
+      createdAt: isoOf(createdAt),
     }),
   )
   const readMarkersOf = mappedRows(withMemberId<ZeroRows['readMarkers'][number]>)

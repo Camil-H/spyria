@@ -118,6 +118,7 @@ export type ChatRow = {
   agentTurnMessageId: MessageId | null
   contextTokens: number | null
   contextWindow: number | null
+  createdAt: string
 }
 export type MessageRow = {
   id: MessageId
