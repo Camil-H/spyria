@@ -1,4 +1,5 @@
 import { runCommand } from './checkout.ts'
+import { outputTailOf } from './output-tail.ts'
 
 export type CheckResult = { name: string; command: string; exitCode?: number; output: string }
 export type ChecksRun = { state: 'idle' | 'running' | 'finished'; id: string | null; results: CheckResult[] }
@@ -28,7 +29,7 @@ export const checksOf = (body: unknown): Check[] | { failure: string } => {
 }
 
 const shownOutputOf = (output: string) =>
-  output.trimEnd().split('\n').slice(-shownOutputLines).join('\n').slice(-shownOutputCharacters)
+  outputTailOf(output.trimEnd().split('\n').slice(-shownOutputLines).join('\n'), shownOutputCharacters)
 
 export const createChecksRunner = ({
   cwd,
