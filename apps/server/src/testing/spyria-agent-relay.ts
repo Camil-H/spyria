@@ -131,6 +131,10 @@ export const createSpyriaAgentRelay = ({
   const thoughtLevels: (string | undefined)[] = []
   const interrupts: string[] = []
   const socketPaths: string[] = []
+  const failures: { path: string; after: string | undefined }[] = []
+  const answered = new Set<string>()
+  const isFailing = (path: string) =>
+    failures.some((failure) => path.startsWith(failure.path) && (!failure.after || answered.has(failure.after)))
 
   const agentOutput: string[] = []
   let isStopped = false
@@ -185,6 +189,7 @@ export const createSpyriaAgentRelay = ({
       const launch = method === 'POST' && path === '/api/conversations' ? sent : undefined
       if (launch) created.push(structuredClone(launch))
       requests.push({ method, path, body })
+      if (isFailing(path)) return { status: 500, body: '{"error":"Failed on purpose"}' }
       if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
       if (path.endsWith('/interrupt')) interrupts.push(path.split('/')[3] ?? '')
       if (path.endsWith('/switch_acp_model')) {
@@ -196,6 +201,7 @@ export const createSpyriaAgentRelay = ({
         headers: { ...headers, ...(traceparent && { traceparent }) },
         body: launch ? JSON.stringify({ ...launch, workspace: { working_dir: workspaceOf(container.apiKey) } }) : body,
       })
+      answered.add(path)
       return { status: response.status, body: await response.text() }
     },
     connect: ({ path, container, send, close }) => {
@@ -238,6 +244,7 @@ export const createSpyriaAgentRelay = ({
     containerAgent,
     created,
     requests,
+    failRequests: (path: string, after?: string) => failures.push({ path, after }),
     prompts,
     modelSwitches,
     thoughtLevels,
