@@ -9,7 +9,8 @@ export type DiffLine = {
 export type DiffRow = { left: DiffLine | null; right: DiffLine | null }
 export type DiffLayout = 'unified' | 'split'
 export type FileStatus = 'Added' | 'Modified' | 'Deleted'
-export type FileChange = { path: string; status: FileStatus; additions: number; deletions: number; lines: DiffLine[] }
+export type ChangedFile = { path: string; status: FileStatus }
+export type FileChange = ChangedFile & { additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }
 export type Commit = { sha: string; subject: string; author: string; committedAt: string; body: string }
 export type ChangeGroup = { sha?: string; title: string; commit?: Commit; changes: FileChange[]; isCut: boolean }
@@ -22,6 +23,7 @@ export type BranchStatus = {
   pushedAt?: string
 }
 
+const fileStatuses: Record<string, FileStatus> = { A: 'Added', D: 'Deleted' }
 const lineKinds: Record<string, DiffLine['kind']> = { '+': 'added', '-': 'removed', ' ': 'context', '@': 'hunk' }
 const hunkPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)/
 const collapsedAboveLines = 400
@@ -136,26 +138,28 @@ const commitGroupsOf = (commits: WorkspaceReading): ChangeGroup[] => {
   return groups
 }
 
+export const changedFilesOf = (files: unknown): ChangedFile[] => {
+  const fields = typeof files === 'string' ? files.split('\0') : []
+  return Array.from({ length: Math.floor(fields.length / 2) }, (_, index) => ({
+    status: fileStatuses[fields[index * 2] ?? ''] ?? 'Modified',
+    path: fields[index * 2 + 1] ?? '',
+  })).filter(({ path }) => path)
+}
+
 export const changeGroupsOf = (changes: WorkspaceReading | undefined, commits: WorkspaceReading | undefined) => {
-  const groups: ChangeGroup[] =
-    typeof changes?.unstaged === 'string' && typeof commits?.commitPatches === 'string'
-      ? [
-          { title: 'Not staged', changes: fileChangesOf(changes.unstaged), isCut: isPartCut(changes, 'unstaged') },
-          {
-            title: 'Staged, not committed',
-            changes: fileChangesOf(changes.staged),
-            isCut: isPartCut(changes, 'staged'),
-          },
-          ...commitGroupsOf(commits),
-        ]
-      : [{ title: '', changes: fileChangesOf(changes?.patch), isCut: isPartCut(changes, 'patch') }]
+  if (typeof changes?.unstaged !== 'string' || typeof commits?.commitPatches !== 'string') return []
+  const groups: ChangeGroup[] = [
+    { title: 'Not staged', changes: fileChangesOf(changes.unstaged), isCut: isPartCut(changes, 'unstaged') },
+    { title: 'Staged, not committed', changes: fileChangesOf(changes.staged), isCut: isPartCut(changes, 'staged') },
+    ...commitGroupsOf(commits),
+  ]
   return groups.filter((group) => group.sha || group.changes.length > 0)
 }
 
 export const treeEntriesOf = (reading: WorkspaceReading | undefined) =>
   Array.isArray(reading?.entries) ? (reading.entries as TreeEntry[]) : []
 
-export const changeMarkOf = (entry: TreeEntry, changes: readonly FileChange[]) => {
+export const changeMarkOf = (entry: TreeEntry, changes: readonly ChangedFile[]) => {
   if (!entry.isFolder) return changes.find((change) => change.path === entry.path)?.status
   return changes.some((change) => change.path.startsWith(`${entry.path}/`)) ? 'Contains changes' : undefined
 }

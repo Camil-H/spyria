@@ -121,8 +121,8 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect((await read(alice, id, 'file', '../../etc/hosts')).body).toEqual({ isLive: false })
   const changes = (await read(alice, id, 'changes')).body
   expect(changes.isLive).toBe(true)
-  expect(changes.patch).toContain('-export const total = 1\n+export const total = 2')
-  expect(changes.patch).toContain('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
+  expect(changes.files).toContain('M\0src/app.ts\0')
+  expect(changes.files).toContain('A\0src/new.ts\0')
   expect(changes.unstaged).toContain('diff --git a/src/new.ts b/src/new.ts')
   const commits = (await read(alice, id, 'commits')).body
   expect(commits).toMatchObject({ isLive: true, hasMoreCommits: false, truncated: false })
@@ -144,7 +144,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
   const many = (await read(alice, id, 'tree', 'many')).body
   expect([many.entries.length, many.truncated]).toEqual([500, true])
   expect((await read(alice, id, 'file', 'large.txt')).body).toMatchObject({ truncated: true })
-  expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['patch', 'unstaged'] })
+  expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['unstaged'] })
 })
 
 test('a file the agent made is shown inline through the server, only to readers, only as allowed media from inside the workspace', async () => {
@@ -207,7 +207,7 @@ test('an asleep runtime serves the snapshot of the last turn end, a read never w
   ])
   expect((await read(alice, id, 'changes')).body).toMatchObject({
     isLive: false,
-    patch: expect.stringContaining('+export const total = 3'),
+    files: expect.stringContaining('M\0src/app.ts\0'),
   })
   expect((await read(alice, id, 'commits')).body).toMatchObject({
     isLive: false,

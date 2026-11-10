@@ -112,13 +112,7 @@ test('changes are the diff against the base branch, and apart the files not stag
   rmSync(join(changes, 'notes.txt'))
   const { call } = started({ workspaceDirectory: changes })
   const { body } = await call('GET', '/api/workspace/changes?base=main')
-  const patch = String(body.patch)
-  expect(patch).toContain('diff --git a/README.md b/README.md')
-  expect(patch).toContain('+Fixed twice.')
-  expect(patch).toContain('-export const total = 1\n+export const total = 2')
-  expect(patch).toContain('diff --git a/src/new.ts b/src/new.ts\nnew file mode 100644')
-  expect(patch).not.toContain('node_modules')
-  expect(patch).not.toContain('notes.txt')
+  expect(body.files).toBe('M\0README.md\0M\0src/app.ts\0A\0src/new.ts\0')
   const pathsOf = (text: unknown) => [...String(text).matchAll(/^diff --git a\/(\S+)/gm)].map(([, path]) => path)
   expect(pathsOf(body.unstaged)).toEqual(['README.md', 'notes.txt', 'src/new.ts'])
   expect(String(body.unstaged)).toContain('-Fixed.\n+Fixed twice.')
@@ -131,7 +125,7 @@ test('changes are the diff against the base branch, and apart the files not stag
   expect(status).toContain(' D notes.txt')
   for (const base of ['missing', '--output=x', ''])
     expect((await call('GET', `/api/workspace/changes?base=${encodeURIComponent(base)}`)).body).toEqual({
-      patch: '',
+      files: '',
       unstaged: '',
       staged: '',
       truncated: false,
@@ -186,9 +180,9 @@ test('a diff longer than 400,000 characters is cut there, naming the parts cut',
   write(large, { 'big.txt': 'line\n'.repeat(100_000) })
   const { call } = started({ workspaceDirectory: large })
   const { body } = await call('GET', '/api/workspace/changes?base=main')
-  expect(String(body.patch).length).toBe(400_000)
+  expect(body.files).toBe('A\0big.txt\0')
   expect(String(body.unstaged).length).toBe(400_000)
-  expect(body).toMatchObject({ staged: '', truncated: true, cut: ['patch', 'unstaged'] })
+  expect(body).toMatchObject({ staged: '', truncated: true, cut: ['unstaged'] })
 })
 
 test('a bundle carries the working branch from a prerequisite the remote has, or whole when none; it holds no credential and refuses bad requests', async () => {
@@ -360,7 +354,7 @@ test('an update fetches the base from a thin bundle into refs/spyria/base only a
     aheadOfBase: 2,
     behindBase: 0,
   })
-  expect(String((await call('GET', '/api/workspace/changes?base=main')).body.patch)).not.toContain('docs/base.md')
+  expect(String((await call('GET', '/api/workspace/changes?base=main')).body.files)).not.toContain('docs/base.md')
   expect((await call('POST', '/api/workspace/merge', { base: 'main', head, bundle: '', author })).body).toEqual({
     isUpToDate: true,
   })
