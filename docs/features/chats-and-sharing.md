@@ -21,7 +21,7 @@ The member who creates a chat owns it, and stays its owner. Ownership matters be
 
 From a chat's menu in the sidebar, a member with the right permission can **Move to** another project (or **No project**), rename, **Make private** / **Make public**, **Archive chat**, or leave (**Leave channel**, **Leave chat**). Archiving a chat also removes its runtime. A project's menu offers **New chat**, which opens the new chat dialog with that project already chosen, **Rename project** and **Archive project**. **Archive project** offers two choices: **Archive with its chats**, or **Archive, keep chats**, which moves them to Loose chats.
 
-Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends.
+Every chat keeps one unsent draft per member; a pencil icon in the sidebar marks a chat with a draft. In the composer, Ctrl+Enter (Cmd+Enter on a Mac) sends, and the Up arrow in an empty composer brings back your last message of the chat or thread, to send again or change.
 
 A chat opens on its newest message and follows new ones as they arrive. A member who scrolls up to read earlier messages stays where they are when new ones come in, and a **Go to last message** button at the bottom of the chat takes them back down; sending a message also goes back to the newest.
 

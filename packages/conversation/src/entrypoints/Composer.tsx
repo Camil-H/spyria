@@ -17,6 +17,7 @@ import {
 import { type Attachment, fileSizeOf, maximumAttachmentsPerMessage, maximumMediaBytes } from '../domain/attachments.ts'
 import { mentionCandidatesOf, mentionQueryAt, mentionTextOf } from '../domain/mentions.ts'
 import { getDraft } from '../queries/get-draft.ts'
+import { getLastSentText } from '../queries/get-last-sent-text.ts'
 import { getMentionableNames } from '../queries/get-mentionable-names.ts'
 import { continuedList, formattedText, formattingOfKey, linkedPaste, type TextEdit } from './composer-formatting.ts'
 import { type ComposerQuote, useConversationCommands } from './providers.tsx'
@@ -180,6 +181,7 @@ export const Composer = ({
   const sending = useGuardedAction()
   const mentionListId = useId()
   const mentionNames = useQuery(getMentionableNames, workspaceId)
+  const lastSentText = useQuery(getLastSentText, workspaceId, chatId, memberId, threadRootId ?? null)
   const [caret, setCaret] = useState<number>()
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
   const [highlightedMention, setHighlightedMention] = useState(0)
@@ -294,6 +296,17 @@ export const Composer = ({
     if (mentionCandidates.length > 0 && isPlainKey && handleMentionKey(event)) return
     if (event.key === 'Escape' && isPlainKey) {
       textarea.blur()
+      return
+    }
+    if (event.key === 'ArrowUp' && isPlainKey && !event.shiftKey && isBlank(textarea.value) && lastSentText) {
+      event.preventDefault()
+      edit(textarea, {
+        start: 0,
+        end: textarea.value.length,
+        insert: lastSentText,
+        selectStart: lastSentText.length,
+        selectEnd: lastSentText.length,
+      })
       return
     }
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
