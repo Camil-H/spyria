@@ -145,6 +145,15 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect([many.entries.length, many.truncated]).toEqual([500, true])
   expect((await read(alice, id, 'file', 'large.txt')).body).toMatchObject({ truncated: true })
   expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['unstaged'] })
+  const compressed = await app.request(`/api/chats/${id}/workspace/changes`, {
+    headers: {
+      authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}`,
+      'accept-encoding': 'gzip',
+    },
+  })
+  expect(compressed.headers.get('content-encoding')).toBe('gzip')
+  const unzipped = JSON.parse(new TextDecoder().decode(Bun.gunzipSync(await compressed.bytes())))
+  expect(unzipped).toMatchObject({ isLive: true, truncated: true, cut: ['unstaged'] })
 })
 
 test('a file the agent made is shown inline through the server, only to readers, only as allowed media from inside the workspace', async () => {
