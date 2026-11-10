@@ -194,6 +194,10 @@ test('the final tool call update carries the merged call; turn ends and adapter 
     },
   ])
   expect(socket.events.filter(kindOf('tool_call')).every((event) => !event.completed)).toBe(true)
+  expect(socket.events.filter(kindOf('tool_call')).map(({ update }) => update.title)).toEqual([
+    'Edit app.ts',
+    'npm test',
+  ])
   expect(textOf(socket.events)).toContain('permission:allow-always')
 
   await prompt(id, 'stub:fail')
@@ -223,6 +227,20 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   const failedStart = open(missing)
   await failedStart.until(kindOf('error'))
   expect(failedStart.events.map(({ update }) => update.sessionUpdate)).toEqual(['error'])
+})
+
+test("a command's terminal output streams as its output so far and ends in the final update with its exit code", async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:terminal')
+  await socket.until(kindOf('turn_end'))
+  const updates = socket.events.filter(kindOf('tool_call_update'))
+  expect(updates.map(({ update, completed }) => ({ rawOutput: update.rawOutput, completed }))).toEqual([
+    { rawOutput: { formatted_output: 'one\n' }, completed: false },
+    { rawOutput: { formatted_output: 'one\ntwo\n' }, completed: false },
+    { rawOutput: { exit_code: 2, formatted_output: 'one\ntwo\nfailed' }, completed: true },
+  ])
 })
 
 test('a create with a known id returns that conversation without a second adapter, a new id starts its own, a malformed id is refused', async () => {
