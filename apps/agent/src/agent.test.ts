@@ -484,6 +484,17 @@ test("an ACP harness whose Claude process dies mid-turn is restarted: the turn e
   }
 })
 
+test('a restart notice leaves out a command the agent asked to run, which a member cannot, and asks to restart the session instead', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:die-asking-command')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toEqual([
+    'The agent restarted; send your message again. If it happens again, restart the session',
+  ])
+})
+
 test('a session found dead before any output is restarted and the prompt is sent once more', async () => {
   const { open, create, prompt } = started()
   const id = await create(launchOf())
