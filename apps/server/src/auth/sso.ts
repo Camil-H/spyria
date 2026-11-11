@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import type { Database } from '@spyria/db/postgres'
+import { type Database, transactWithin } from '@spyria/db/postgres'
 import {
   type Actor,
   adminRoleId,
@@ -8,11 +8,12 @@ import {
   MissingWorkspacePermission,
   memberActor,
   memberId,
+  workspaceId as spyriaWorkspaceId,
   storedActorOf,
   systemActor,
   type WorkspacePermission,
 } from '@spyria/kernel'
-import { addInstallHost } from '@spyria/runtime/server'
+import { addInstallHostIn } from '@spyria/runtime/server'
 import {
   DomainClaimed,
   DomainFixed,
@@ -336,7 +337,14 @@ export const createFirstWorkspace = async (
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)
       values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
-    if (installHostToken) await addInstallHost(sql, { workspaceId, createdBy: userId, installHostToken })
+    if (installHostToken)
+      await transactWithin(sql)((tx) =>
+        addInstallHostIn(tx, {
+          workspaceId: spyriaWorkspaceId(workspaceId),
+          memberId: memberId(userId),
+          installHostToken,
+        }),
+      )
     return { workspaceId, userId }
   })
 }

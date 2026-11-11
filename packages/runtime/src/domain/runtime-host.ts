@@ -37,6 +37,19 @@ export type RuntimeHost = Readonly<{
   removedAt: number | null
 }>
 
+export const waitingHostOf = (
+  host: Pick<RuntimeHost, 'workspaceId' | 'id' | 'name' | 'claimExpiresAt' | 'createdBy' | 'ownerId' | 'createdAt'>,
+): RuntimeHost => ({
+  ...host,
+  status: 'waiting',
+  capacity: null,
+  runningRuntimes: 0,
+  hostVersion: null,
+  protocolVersion: 0,
+  lastSeenAt: null,
+  removedAt: null,
+})
+
 const gibibyte = 1024 ** 3
 const reservedMemoryBytes = 2 * gibibyte
 
