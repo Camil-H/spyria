@@ -466,8 +466,10 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   const apiKey = gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: id })
   await database.$client.begin(async (sql) => {
     await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage}, now(), now(), now())`
+      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key_id, last_active_at, created_at,
+        state_changed_at)
+      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage},
+        ${gateway.sandboxProvider.currentApiKeyId}, now(), now(), now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${`job-${id}`}, 'runtime.create', ${JSON.stringify({ runtimeId: id })}::jsonb, now() + interval '1 second', 0, 'running')`
