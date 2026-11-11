@@ -11,10 +11,6 @@ variable "region" {
 }
 variable "hostname" { type = string }
 variable "spyria_version" { type = string }
-variable "join_by" {
-  type    = string
-  default = "domain"
-}
 variable "route53_zone_id" {
   type    = string
   default = ""
@@ -23,20 +19,15 @@ variable "certificate_arn" {
   type    = string
   default = ""
 }
-variable "smtp_url" {
-  type      = string
-  default   = ""
-  sensitive = true
-}
-variable "mail_from" {
+variable "oidc_issuer" {
   type    = string
   default = ""
 }
-variable "sign_in_app_client_id" {
+variable "oidc_client_id" {
   type    = string
   default = ""
 }
-variable "sign_in_app_client_secret" {
+variable "oidc_client_secret" {
   type      = string
   default   = ""
   sensitive = true
@@ -51,17 +42,15 @@ provider "aws" {
 }
 
 module "control_plane" {
-  source                    = "../../modules/aws/control-plane"
-  hostname                  = var.hostname
-  spyria_version            = var.spyria_version
-  join_by                   = var.join_by
-  route53_zone_id           = var.route53_zone_id
-  certificate_arn           = var.certificate_arn
-  smtp_url                  = var.smtp_url
-  mail_from                 = var.mail_from
-  sign_in_app_client_id     = var.sign_in_app_client_id
-  sign_in_app_client_secret = var.sign_in_app_client_secret
-  size                      = var.size
+  source             = "../../modules/aws/control-plane"
+  hostname           = var.hostname
+  spyria_version     = var.spyria_version
+  route53_zone_id    = var.route53_zone_id
+  certificate_arn    = var.certificate_arn
+  oidc_issuer        = var.oidc_issuer
+  oidc_client_id     = var.oidc_client_id
+  oidc_client_secret = var.oidc_client_secret
+  size               = var.size
 }
 
 module "runtime_host" {

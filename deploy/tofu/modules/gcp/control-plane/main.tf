@@ -34,21 +34,19 @@ module "secrets" {
 }
 
 module "settings" {
-  source                    = "../../shared/settings"
-  name                      = var.name
-  hostname                  = var.hostname
-  spyria_version            = var.spyria_version
-  images                    = var.images
-  join_by                   = var.join_by
-  smtp_url                  = var.smtp_url
-  mail_from                 = var.mail_from
-  google_client_id          = var.google_client_id
-  google_client_secret      = var.google_client_secret
-  microsoft_client_id       = var.microsoft_client_id
-  microsoft_client_secret   = var.microsoft_client_secret
-  sign_in_app_client_id     = var.sign_in_app_client_id
-  sign_in_app_client_secret = var.sign_in_app_client_secret
-  secrets                   = module.secrets.values
+  source                  = "../../shared/settings"
+  name                    = var.name
+  hostname                = var.hostname
+  spyria_version          = var.spyria_version
+  images                  = var.images
+  google_client_id        = var.google_client_id
+  google_client_secret    = var.google_client_secret
+  microsoft_client_id     = var.microsoft_client_id
+  microsoft_client_secret = var.microsoft_client_secret
+  oidc_issuer             = var.oidc_issuer
+  oidc_client_id          = var.oidc_client_id
+  oidc_client_secret      = var.oidc_client_secret
+  secrets                 = module.secrets.values
   database = {
     host              = google_sql_database_instance.postgres.private_ip_address
     port              = 5432

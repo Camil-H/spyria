@@ -126,13 +126,13 @@ run "without_a_zone_or_a_certificate_it_refuses" {
   expect_failures = [aws_lb_listener.https]
 }
 
-run "it_refuses_an_unknown_join_setting_and_a_bad_name" {
+run "it_refuses_an_oidc_app_without_its_client_and_a_bad_name" {
   command = plan
   variables {
-    join_by = "anyone"
-    name    = "Spyria Prod"
+    oidc_issuer = "https://login.example.com"
+    name        = "Spyria Prod"
   }
-  expect_failures = [var.join_by, var.name]
+  expect_failures = [var.oidc_client_secret, var.name]
 }
 
 run "the_digest_before_a_change" {
@@ -141,8 +141,8 @@ run "the_digest_before_a_change" {
     source = "./"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret
@@ -176,8 +176,8 @@ run "every_task_carries_a_digest_of_its_secret_values_so_a_changed_secret_restar
     values = { result = "ABCDEFGHJKMNPQRS" }
   }
   variables {
-    smtp_url  = "smtps://user:rotated@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "rotated-secret"
   }
   assert {
     condition = alltrue([for definition in [aws_ecs_task_definition.server, aws_ecs_task_definition.zero, aws_ecs_task_definition.gateway] :
@@ -207,8 +207,8 @@ run "the_same_values_applied_again" {
     source = "../../aws/control-plane"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret
