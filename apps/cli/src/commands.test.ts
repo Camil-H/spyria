@@ -235,7 +235,7 @@ test('spyria doctor is satisfied when every expected service runs and names the 
   expect(printed).toContain('✗ zero-cache is exited')
 })
 
-test('setting up again without a runtime host removes the host container this machine runs and stops its runtimes, and touches nothing when there was none', async () => {
+test('setting up again without a runtime host removes the host container this machine runs and stops its runtimes, touches nothing when there was none, and turning the host back on forgets the pairing a leftover host kept', async () => {
   writeFileSync(join(fakeDocker, 'host-container'), 'host-container-id\n')
   writeFileSync(join(fakeDocker, 'runtimes'), 'runtime-a\nruntime-b\n')
   const printed: string[] = []
@@ -268,7 +268,16 @@ test('setting up again without a runtime host removes the host container this ma
     processEnvironment: {},
   })
   expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
+  expect(indexOfCall('rm --stop --force host')).toBeGreaterThan(-1)
+  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(indexOfCall('rm --stop --force host'))
+  expect(indexOfCall('volume rm spyria-host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await setup(parseFlags(['setup', '--unattended', '--host', '--folder', install, '--version', '1.2.0']), {
+    processEnvironment: {},
+  })
   expect(indexOfCall('rm --stop --force host')).toBe(-1)
+  expect(indexOfCall('volume rm')).toBe(-1)
 })
 
 test("turning this machine's host on once a workspace exists takes the command of Add runtime host and refuses to go on without it or when Spyria does not answer, while before the first workspace the install code still serves", async () => {
@@ -297,6 +306,15 @@ test("turning this machine's host on once a workspace exists takes the command o
     SPYRIA_HOST_CLAIM_URL: 'http://server:3000/h/ABCD2345',
   })
   expect(environment().SPYRIA_INSTALL_HOST_TOKEN).toBeUndefined()
+  expect(indexOfCall('volume rm spyria-host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(-1)
+
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/ABCD2345' })
+  expect(indexOfCall('volume rm')).toBe(-1)
+  await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/WXYZ6789' })
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/WXYZ6789')
+  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(-1)
 
   writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, COMPOSE_PROFILES: 'cloudflare' }), {
     mode: 0o600,
