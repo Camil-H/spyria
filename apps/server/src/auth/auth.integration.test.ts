@@ -86,7 +86,9 @@ const signInWith = async (idTokenOf: IdTokenOf, loginPath?: string) => {
   const response = await callback(login.state, login.cookie)
   return { status: response.status, page: await response.text(), cookie: cookieHeaderOf(response) }
 }
-const verifiedEmail = (email: string) => (nonce: string) => signIdToken({ nonce, email, email_verified: true })
+const subjectOf = (email: string) => `subject-of-${email.toLowerCase()}`
+const verifiedEmail = (email: string) => (nonce: string) =>
+  signIdToken({ nonce, sub: subjectOf(email), email, email_verified: true })
 const signInAs = (email: string, loginPath?: string) => signInWith(verifiedEmail(email), loginPath)
 
 const sessionsOf = async (cookie: string, server = app) =>
@@ -139,12 +141,13 @@ test('a login for one workspace opens only that session', async () => {
   expect((await sessionsOf(signIn.cookie)).sessions.map((session) => session.workspaceId)).toEqual([globex])
 })
 
-test('an email without any membership is not invited and opens nothing', async () => {
+test('an email without any membership gets an account that opens no workspace and may create one', async () => {
   const signIn = await signInAs('nina@example.com')
-  expect(signIn.status).toBe(403)
-  expect(signIn.page).toContain('"status":"not_invited"')
-  expect(signIn.page).toContain('nina@example.com')
+  expect(signIn.status).toBe(200)
+  expect(signIn.page).toContain('"status":"no_workspace"')
   expect(signIn.cookie).not.toContain('spyria_s_')
+  expect(signIn.cookie).toContain('spyria_account=')
+  expect(await database.$client`select 1 from users where email = 'nina@example.com'`).toHaveLength(1)
 })
 
 test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
@@ -370,7 +373,9 @@ const invite = (
     values (${workspaceId}, ${crypto.randomUUID()}, ${email}, ${role}, ${alice}, now(), now() + ${expiresIn}::interval,
       case when ${isRevoked} then now() end)`
 const signInNamed = (email: string, name?: string) =>
-  signInWith((nonce) => signIdToken({ nonce, email, email_verified: true, ...(name && { name }) }))
+  signInWith((nonce) =>
+    signIdToken({ nonce, sub: subjectOf(email), email, email_verified: true, ...(name && { name }) }),
+  )
 
 test('a first verified sign-in creates the user named by the name claim and joins every workspace inviting the email, whatever its case', async () => {
   await invite(acme, 'pat@example.com', { role: 'admin' })
@@ -400,13 +405,16 @@ test('a first verified sign-in creates the user named by the name claim and join
   expect(await userIdOf('pat@example.com')).toEqual([String(userId)])
 })
 
-test('an expired or revoked invite is not accepted and creates no user; without a name claim the email names the member', async () => {
+test('an expired or revoked invite is not accepted and opens no workspace; without a name claim the email names the member', async () => {
   await invite(acme, 'quinn@example.com', { expiresIn: '-1 second' })
   await invite(globex, 'quinn@example.com', { isRevoked: true })
   const refused = await signInNamed('quinn@example.com', 'Quinn')
-  expect(refused.status).toBe(403)
-  expect(refused.page).toContain('"status":"not_invited","email":"quinn@example.com"')
-  expect(await userIdOf('quinn@example.com')).toEqual([])
+  expect(refused.page).toContain('"status":"no_workspace"')
+  expect(refused.cookie).not.toContain('spyria_s_')
+  expect(await membershipsOf('quinn@example.com')).toEqual([])
+  expect(
+    await database.$client`select 1 from invitations where email = 'quinn@example.com' and accepted_at is not null`,
+  ).toHaveLength(0)
   await invite(acme, 'rae.lee@example.com')
   expect((await signInNamed('Rae.Lee@example.com')).page).toContain('"status":"signed_in"')
   expect(await membershipsOf('rae.lee@example.com')).toEqual([
@@ -417,7 +425,7 @@ test('an expired or revoked invite is not accepted and creates no user; without 
 test('a removed member signs in to nothing, and a new invite reactivates the same membership with its role and name', async () => {
   await database.$client`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${bob}`
   const refused = await signInAs('bob@example.com')
-  expect(refused.page).toContain('"status":"not_invited"')
+  expect(refused.page).toContain('"status":"no_workspace"')
   expect(refused.cookie).not.toContain('spyria_s_')
   await invite(acme, 'bob@example.com', { role: 'admin' })
   expect((await signInNamed('bob@example.com', 'Samuel')).page).toContain('"status":"signed_in"')
