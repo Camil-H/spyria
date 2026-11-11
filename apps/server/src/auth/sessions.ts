@@ -17,8 +17,9 @@ export const openSessions = (
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
-      insert into sessions (workspace_id, id, user_id, created_at, expires_at)
-      select workspace_id, gen_random_uuid()::text, user_id, now(), now() + interval '7 days'
+      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, created_at, expires_at)
+      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, now(),
+        now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
         and exists(select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id)
@@ -43,6 +44,8 @@ export const findLiveSessions = async (database: Database, sessionIdByWorkspace:
         select * from unnest(${sessionIdByWorkspace.map(([workspaceId]) => workspaceId)}::text[],
           ${sessionIdByWorkspace.map(([, sessionId]) => sessionId)}::text[]))
       and sessions.expires_at > now()
+      and sessions.opened_through_workspace_sso = exists(select 1 from workspace_sso
+        where workspace_sso.workspace_id = sessions.workspace_id)
     order by workspaces.created_at`
 
 export const deleteSession = (database: Database, workspaceId: string, sessionId: string) =>
@@ -54,13 +57,15 @@ export const findMemberIn =
     const database = databaseOf(databaseName)
     if (!database) return undefined
     const [member] = await database.$client<{ hasLiveSession: boolean; signedInThroughWorkspaceSso: boolean }[]>`
-      select removed_at is null and exists(
-        select 1 from sessions where sessions.workspace_id = memberships.workspace_id
+      select removed_at is null and coalesce(session.opened_through_workspace_sso = exists(
+          select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id), false)
+          as "hasLiveSession",
+        coalesce(session.opened_through_workspace_sso, false) as "signedInThroughWorkspaceSso"
+      from memberships left join lateral (
+        select opened_through_workspace_sso from sessions where sessions.workspace_id = memberships.workspace_id
           and sessions.user_id = memberships.user_id and sessions.id = ${sessionId} and sessions.expires_at > now()
-      ) as "hasLiveSession",
-        exists(select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id)
-          as "signedInThroughWorkspaceSso"
-      from memberships where workspace_id = ${workspaceId} and user_id = ${userId}
+      ) as session on true
+      where workspace_id = ${workspaceId} and user_id = ${userId}
         and exists(select 1 from workspaces where workspaces.workspace_id = memberships.workspace_id
           and workspaces.deleted_at is null)`
     return member

@@ -254,6 +254,7 @@ export const sessions = table(
     ...tenant,
     id: text().notNull(),
     userId: text().notNull(),
+    openedThroughWorkspaceSso: boolean().notNull().default(false),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
   },
