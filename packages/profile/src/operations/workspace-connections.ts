@@ -15,6 +15,7 @@ import {
   editedInputOf,
   gatewayNameOf,
   knownToolsOf,
+  memberToolsOf,
   type SecretHeader,
 } from '../domain/workspace-connection.ts'
 import { grantMemberTools, grantWorkspaceTools } from './grant-tools.ts'
@@ -47,6 +48,29 @@ const registeredTools = async (
   throw new ConnectionUnreachable(server.url)
 }
 
+const releaseLostSignIns = async (
+  { transactor, gateway }: Dependencies,
+  { workspaceId, connectionId }: ConnectionTarget,
+) => {
+  const { connection, restrictions, virtualKeys } = await transactor.run(
+    async ({ workspaceConnections, memberGatewayKeys }) => ({
+      connection: await workspaceConnections.get(workspaceId, connectionId),
+      restrictions: await workspaceConnections.restrictionsOf(workspaceId),
+      virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
+    }),
+  )
+  if (connection.signIn !== connectionSignIns.member) return
+  const server = (await gateway.toolServers()).find(({ name }) => name === connection.gatewayName)
+  for (const { memberId, virtualKeyId } of virtualKeys) {
+    if (memberToolsOf(connection, restrictions, memberId).length > 0) continue
+    for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
+      await gateway.removeToolSession(session.id)
+    await transactor.run(({ workspaceConnections }) =>
+      workspaceConnections.removeSignIn(workspaceId, connectionId, memberId),
+    )
+  }
+}
+
 export const addWorkspaceConnection = async (dependencies: Dependencies, input: InWorkspace & ConnectionInput) => {
   const { workspaceId } = input
   const { name, url, signIn, secretHeader } = connectionInputOf(input)
@@ -56,7 +80,12 @@ export const addWorkspaceConnection = async (dependencies: Dependencies, input: 
   )
   const gatewayName = gatewayNameOf(name)
   const setup =
-    signIn === connectionSignIns.member ? await gateway.startMemberToolServer({ name: gatewayName, url }) : undefined
+    signIn === connectionSignIns.member
+      ? await gateway.startMemberToolServer({ name: gatewayName, url }).catch(async (error: unknown) => {
+          await gateway.removeToolServer(gatewayName)
+          throw error
+        })
+      : undefined
   const tools = setup ? [] : await registeredTools(gateway, { name: gatewayName, url, secretHeader })
   const connection = {
     workspaceId,
@@ -103,7 +132,10 @@ export const finishWorkspaceConnection = async (dependencies: Dependencies, inpu
   if (connection.setupId === null) return
   const tools = await dependencies.gateway
     .finishMemberToolServer(connection.gatewayName, connection.setupId)
-    .catch(() => [])
+    .catch(async (error: unknown) => {
+      await removeWorkspaceConnection(dependencies, input)
+      throw error
+    })
   if (tools.length === 0) {
     await removeWorkspaceConnection(dependencies, input)
     throw new ConnectionSetupFailed(connection.name)
@@ -185,6 +217,7 @@ export const allowConnectionTools = async (
     })
   })
   await grantWorkspaceTools(dependencies, workspaceId)
+  await releaseLostSignIns(dependencies, input)
 }
 
 export const restrictConnectionMember = async (
@@ -205,4 +238,5 @@ export const restrictConnectionMember = async (
     })
   })
   await grantMemberTools(dependencies, { workspaceId, memberId })
+  await releaseLostSignIns(dependencies, input)
 }
