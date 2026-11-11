@@ -44,8 +44,6 @@ const productionEnvironment = {
   SPYRIA_SECRETS_KEY: 'production-test-secrets-key-0123456789abcdef',
   SPYRIA_APP_ORIGIN: 'https://spyria.example',
   SPYRIA_OIDC_REDIRECT_URI: 'https://spyria.example/auth/callback',
-  SPYRIA_SMTP_URL: 'smtp://127.0.0.1:9',
-  SPYRIA_MAIL_FROM: 'Spyria <spyria@spyria.example>',
   SPYRIA_GATEWAY_URL: gatewayProxy.url.origin,
   SPYRIA_ZERO_URL: zeroCache.url.origin,
   SPYRIA_GATEWAY_ADMIN_USER: testGatewayAdmin.user,

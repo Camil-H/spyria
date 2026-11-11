@@ -4,13 +4,12 @@ import { deploymentOf, log } from '@spyria/kernel'
 import { createLlmGateway } from '@spyria/profile/server'
 import { hostUpdateCommandOf } from '@spyria/runtime/server'
 import { createBifrostUsageLogs } from '@spyria/usage/server'
-import { joinByOf } from '@spyria/workspace/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import { applyConfiguredSignInApp, assertInstanceAppsConfigured, hasNoWorkspace } from './auth/sso.ts'
+import { assertInstanceAppsConfigured, hasNoWorkspace } from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -81,24 +80,19 @@ const agentBridge = createAgentBridge({
   repositoryCheckoutsOf: (checkoutDatabase) => createGitHubCheckouts(checkoutDatabase, github),
   deployment,
 })
+const accountOidcIssuer = authMode === 'sso' ? process.env.SPYRIA_OIDC_ISSUER : undefined
 const instanceSignInApps = {
   ...instanceSignInAppOf('google', 'SPYRIA_GOOGLE_CLIENT_ID', 'SPYRIA_GOOGLE_CLIENT_SECRET'),
   ...instanceSignInAppOf('microsoft', 'SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'),
+  ...(accountOidcIssuer && {
+    oidc: {
+      issuer: accountOidcIssuer,
+      clientId: requiredEnvironment('SPYRIA_OIDC_CLIENT_ID'),
+      clientSecret: requiredEnvironment('SPYRIA_OIDC_CLIENT_SECRET'),
+    },
+  }),
 }
 await assertInstanceAppsConfigured(database, instanceSignInApps)
-const configuredSignInApp = {
-  clientId: process.env.SPYRIA_SIGN_IN_APP_CLIENT_ID?.trim() ?? '',
-  clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET?.trim() ?? '',
-}
-if (configuredSignInApp.clientId && configuredSignInApp.clientSecret) {
-  const changedWorkspaces = await applyConfiguredSignInApp(database, createSecretBox(secretsKey), configuredSignInApp)
-  if (changedWorkspaces > 0)
-    log.info({
-      event: 'sso.sign_in_app_applied',
-      body: 'The sign-in app of the settings now signs in every workspace joined by invited address',
-      attributes: { 'spyria.workspace_count': changedWorkspaces },
-    })
-}
 const app = createApp({
   database,
   tokenSecret,
@@ -111,9 +105,6 @@ const app = createApp({
   secretsKey,
   instanceSignInApps,
   github,
-  mail: process.env.SPYRIA_SMTP_URL
-    ? { smtpUrl: process.env.SPYRIA_SMTP_URL, from: requiredEnvironment('SPYRIA_MAIL_FROM') }
-    : undefined,
   appOrigin,
   deployment,
   webDist: process.env.SPYRIA_WEB_DIST || undefined,
@@ -126,7 +117,6 @@ const app = createApp({
   version,
   hostImage,
   setupToken: process.env.SPYRIA_SETUP_TOKEN || undefined,
-  joinBy: joinByOf(process.env.SPYRIA_JOIN_BY),
   installHostToken,
 })
 setModelDirectory(llmGateway.listedModels)
