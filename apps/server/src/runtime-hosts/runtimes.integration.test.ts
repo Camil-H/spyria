@@ -265,7 +265,7 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
   ])
 })
 
-test('the sweep removes runtimes stopped for 30 days with their container and volumes, keeping the chat history', async () => {
+test('the sweep removes runtimes stopped for 7 days with their container and volumes, keeping the chat history', async () => {
   const host = await fakeHost('Removing host')
   const oldChat = chatId('chat-invoice-bug')
   const recentChat = await newRuntimeChat()
@@ -278,8 +278,8 @@ test('the sweep removes runtimes stopped for 30 days with their container and vo
   const history = await historyOf()
   expect(history.messages).toBeGreaterThan(0)
 
-  await idleFor(oldChat, '31 days')
-  await idleFor(recentChat, '29 days')
+  await idleFor(oldChat, '8 days')
+  await idleFor(recentChat, '6 days')
   await sweep()
   await runtimeIn(oldChat, 'removed')
   expect((await runtimeOf(recentChat)).state).toBe('stopped')
@@ -498,7 +498,7 @@ test("a failed install fails the runtime at once with npm's reason, and a retry 
   expect(machine.installedHarnesses).toEqual(new Set(['codex']))
 })
 
-test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 30 days are removed by the sweep', async () => {
+test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 7 days are removed by the sweep', async () => {
   const machine = await newMachine()
   const [retriedChat, abandonedChat] = [
     await newRuntimeChat('Retried chat', undefined, 'codex'),
@@ -524,10 +524,10 @@ test('a failed bring-up stops its container to release its network; a retry remo
   expect(opsOf(failed.id).at(-1)).toBe('remove')
   expect((await runtimeOf(retriedChat)).id).not.toBe(failed.id)
 
-  await idleFor(abandonedChat, '29 days')
+  await idleFor(abandonedChat, '6 days')
   await sweep()
   expect((await runtimeOf(abandonedChat)).state).toBe('failed')
-  await idleFor(abandonedChat, '31 days')
+  await idleFor(abandonedChat, '8 days')
   await sweep()
   await runtimeIn(abandonedChat, 'removed')
   expect(machine.containers.has(abandoned.id)).toBe(false)
