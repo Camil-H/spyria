@@ -4,7 +4,7 @@ import { createTunnel } from './cloudflare.ts'
 type Call = { method: string; path: string; body?: unknown }
 const calls: Call[] = []
 const tunnels: { id: string; name: string }[] = []
-const records: { id: string; name: string; content: string }[] = []
+const records: { id: string; type?: string; name: string; content: string }[] = []
 const ok = (result: unknown) => Response.json({ success: true, errors: [], result })
 const fake = Bun.serve({
   port: 0,
@@ -89,6 +89,25 @@ test('setting up again reuses the tunnel and updates the DNS record instead of a
   expect(tunnels).toHaveLength(1)
   expect(records).toHaveLength(1)
   expect(calls.some(({ method, path }) => method === 'PUT' && path === '/zones/zone-1/dns_records/record-1')).toBe(true)
+})
+
+test('a hostname already holding other DNS records is refused with their types, before any tunnel or record changes', async () => {
+  records.push(
+    { id: 'record-a', type: 'A', name: 'www.example.com', content: '203.0.113.7' },
+    { id: 'record-aaaa', type: 'AAAA', name: 'www.example.com', content: '2001:db8::7' },
+  )
+  calls.length = 0
+  const refusal = await createTunnel({
+    apiToken: 'good-token',
+    hostname: 'www.example.com',
+    tunnelName: 'www',
+    api,
+  }).catch((error: Error) => error.message)
+  expect(refusal).toBe(
+    'www.example.com already has DNS records (A, AAAA): delete them in Cloudflare, or choose another hostname',
+  )
+  expect(calls.filter(({ method }) => method !== 'GET')).toEqual([])
+  expect(tunnels).toHaveLength(1)
 })
 
 test("a hostname outside the token's zones and a refused token fail with Cloudflare's reason", async () => {
