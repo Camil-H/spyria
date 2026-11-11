@@ -1,15 +1,17 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
+  dangerButtonClass,
   ErrorMessage,
   fieldClass,
   focusRing,
+  ghostButtonClass,
   LabelledSection,
   labelClass,
   useGuardedAction,
 } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
-import type { SsoDomainState, SsoPreset, SsoSettingsView } from '../domain/sso.ts'
+import type { SsoPreset, SsoSettingsView } from '../domain/sso.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 
 const presetLabels: Record<SsoPreset, string> = {
@@ -111,86 +113,10 @@ export const ProviderFields = ({
   )
 }
 
-const statusOf = ({ isVerified, sentTo, expiresAt }: SsoDomainState) => {
-  if (isVerified) return 'Verified'
-  if (sentTo) return `Pending: sent to ${sentTo}, expires ${new Date(expiresAt ?? 0).toLocaleString()}`
-  return 'Not verified'
-}
-
-const EmailDomain = ({
-  workspaceId,
-  state,
-  onSent,
-}: {
-  workspaceId: WorkspaceId
-  state: SsoDomainState
-  onSent: (settings: SsoSettingsView | null) => void
-}) => {
-  const commands = useWorkspaceCommands()
-  const [email, setEmail] = useState('')
-  const { errorMessage, isPending, run } = useGuardedAction()
-  const send = async (event: SubmitEvent) => {
-    event.preventDefault()
-    await run(async () => onSent(await commands.sendDomainVerification({ workspaceId, domain: state.domain, email })))
-  }
-  return (
-    <section aria-label="Email domain" className="flex flex-col gap-1 text-sm">
-      <div className="flex flex-wrap items-center gap-x-3">
-        <span className="font-medium">{state.domain}</span>
-        <span className="text-muted">{statusOf(state)}</span>
-      </div>
-      {!state.isVerified && (
-        <form onSubmit={send} className="flex flex-wrap items-end gap-2">
-          <input
-            type="email"
-            aria-label={`Address at ${state.domain}`}
-            placeholder={`it@${state.domain}`}
-            className={`${fieldClass} min-w-56 flex-1`}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <button type="submit" className={buttonClass} disabled={isPending || email.trim() === ''}>
-            {state.sentTo ? 'Resend' : 'Send link'}
-          </button>
-          <div className="basis-full">
-            <ErrorMessage message={errorMessage} />
-          </div>
-        </form>
-      )}
-    </section>
-  )
-}
-
-const SignInAppOfThisSpyria = ({ settings }: { settings: SsoSettingsView }) => {
-  const rows = [
-    ['Provider', presetLabels[settings.preset]],
-    ...(settings.preset === 'microsoft' ? [['Tenant id', settings.tenantId]] : []),
-    ...(settings.preset === 'oidc' ? [['Issuer', settings.issuer]] : []),
-    [
-      'Client id',
-      settings.usesInstanceApp ? `The ${instanceAppNames[settings.preset]} app of this Spyria` : settings.clientId,
-    ],
-  ]
-  return (
-    <LabelledSection title="Sign-in">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-        {rows.map(([term, value]) => (
-          <div key={term} className="contents">
-            <dt className="text-muted">{term}</dt>
-            <dd className="break-all">{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="text-sm text-muted">
-        Every workspace on this Spyria signs in through this app. Only the person who runs this Spyria can change it,
-        for every workspace at once.
-      </p>
-      <p className="text-sm text-muted">
-        Who can join: people you invite. Each person signs in with this provider at exactly the address you invited; the
-        provider must confirm that address.
-      </p>
-    </LabelledSection>
-  )
+const confirmationRefusalOf = (outcome: { status: string; message?: string }) => {
+  if (outcome.status === 'refused') return outcome.message
+  if (outcome.status === 'failed' || outcome.status === 'not_invited')
+    return 'Sign-in through the provider did not complete: nothing was changed'
 }
 
 export const SignInSection = ({
@@ -218,69 +144,96 @@ const SsoSettingsForm = ({
   instanceApps: readonly SsoPreset[]
 }) => {
   const commands = useWorkspaceCommands()
-  const [form, setForm] = useState<SsoSettingsView | null>()
+  const [stored, setStored] = useState<SsoSettingsView | null>()
+  const [form, setForm] = useState(emptyProvider)
+  const [usesInstanceApp, setUsesInstanceApp] = useState(true)
   const [clientSecret, setClientSecret] = useState('')
-  const [isSaved, setIsSaved] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [refusal, setRefusal] = useState<string>()
+  const [isStopAsked, setIsStopAsked] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readSsoSettings({ workspaceId }).then(setForm)
+    commands.readSsoSettings({ workspaceId }).then((settings) => {
+      setStored(settings)
+      if (settings) {
+        setForm({ ...emptyProvider, ...settings })
+        setUsesInstanceApp(settings.usesInstanceApp)
+      }
+    })
   }, [commands, workspaceId])
-  if (!form)
+  if (stored === undefined)
     return (
       <LabelledSection title="Sign-in">
-        <p className="text-sm text-muted">{form === null ? 'This workspace has no SSO settings.' : 'Loading…'}</p>
+        <p className="text-sm text-muted">Loading…</p>
       </LabelledSection>
     )
-  if (form.joinBy === 'invited_address') return <SignInAppOfThisSpyria settings={form} />
-  const edit = (field: ProviderField) => (event: { target: { value: string } }) => {
+  const edit = (field: ProviderField) => (event: { target: { value: string } }) =>
     setForm({ ...form, [field]: event.target.value })
-    setIsSaved(false)
-  }
-  const submit = async (event: SubmitEvent) => {
+  const confirm = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const saved = await run(async () =>
-      setForm(await commands.saveSsoSettings({ workspaceId, ...form, domain: form.domain ?? undefined, clientSecret })),
-    )
-    if (saved) setClientSecret('')
-    setIsSaved(saved)
+    setIsConfirming(true)
+    const outcome = await commands.confirmSsoSettings({ workspaceId, form: event.currentTarget })
+    setIsConfirming(false)
+    setRefusal(confirmationRefusalOf(outcome))
+    if (outcome.status !== 'signed_in') return
+    setClientSecret('')
+    setStored(await commands.readSsoSettings({ workspaceId }))
   }
+  const stop = () => run(() => commands.stopSso({ workspaceId }))
   return (
     <LabelledSection title="Sign-in">
-      <form onSubmit={submit} className="flex flex-col gap-3">
+      <p className="text-sm text-muted">
+        {stored
+          ? "This workspace enforces SSO: only your organization's provider opens it, for everyone, Admins included."
+          : "Members sign in with their own account, through the sign-in of this Spyria. Enforce SSO to make your organization's provider the only way into this workspace."}
+      </p>
+      <form aria-label="SSO provider" onSubmit={confirm} className="flex flex-col gap-3">
+        <input type="hidden" name="workspaceId" value={workspaceId} />
         <ProviderFields
           provider={form}
           edit={edit}
           clientSecret={clientSecret}
           onClientSecretChange={setClientSecret}
-          hasSecret={form.hasSecret}
+          hasSecret={stored?.hasSecret}
           instanceApps={instanceApps}
-          usesInstanceApp={form.usesInstanceApp}
-          onUsesInstanceAppChange={(usesInstanceApp) => {
-            setForm({ ...form, usesInstanceApp })
-            setIsSaved(false)
-          }}
+          usesInstanceApp={usesInstanceApp}
+          onUsesInstanceAppChange={setUsesInstanceApp}
         />
-        {!isInstanceAppIn(instanceApps, form.preset, form.usesInstanceApp) && (
-          <p className="text-sm text-muted">{form.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
+        {stored && !isInstanceAppIn(instanceApps, form.preset, usesInstanceApp) && (
+          <p className="text-sm text-muted">{stored.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
         )}
-        <ErrorMessage message={errorMessage} />
-        <div className="flex items-center gap-3">
-          <button type="submit" className={buttonClass} disabled={isPending}>
-            Save
+        <p className="text-sm text-muted">
+          You confirm by signing in through the provider with your own address. A new provider signs everyone out of
+          this workspace: members sign in again through it, matched by the address they were invited at.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className={buttonClass} disabled={isConfirming}>
+            {stored ? 'Save and sign in again' : 'Enforce SSO'}
           </button>
-          {isSaved && <span className="text-sm text-muted">Saved</span>}
+          {stored && !isStopAsked && (
+            <button type="button" className={ghostButtonClass} onClick={() => setIsStopAsked(true)}>
+              Stop enforcing SSO
+            </button>
+          )}
         </div>
+        {isStopAsked && (
+          <fieldset aria-label="Stop enforcing SSO" className="flex flex-col gap-2">
+            <p className="text-sm">
+              Everyone is signed out of this workspace, you included, and signs in again with their own account.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" className={dangerButtonClass} disabled={isPending} onClick={stop}>
+                Stop enforcing
+              </button>
+              <button type="button" className={ghostButtonClass} onClick={() => setIsStopAsked(false)}>
+                Cancel
+              </button>
+            </div>
+          </fieldset>
+        )}
+        {refusal && <p className="text-sm text-muted">{refusal}</p>}
+        <ErrorMessage message={errorMessage} />
       </form>
-      {form.domainState && (
-        <>
-          <p className="text-sm text-muted">
-            The email domain is set when the workspace is created. It routes sign-in once verified: send a link to any
-            address at that domain. Changing the provider, the Microsoft tenant or the issuer unverifies it, and members
-            cannot sign in until it is verified again.
-          </p>
-          <EmailDomain workspaceId={workspaceId} state={form.domainState} onSent={setForm} />
-        </>
-      )}
     </LabelledSection>
   )
 }
