@@ -17,6 +17,7 @@ import { addInstallHostIn } from '@spyria/runtime/server'
 import {
   type AccountProvider,
   displayNameFrom,
+  EmailNotConfirmed,
   type InstanceApps,
   InstanceBeingSetUp,
   InvalidSsoSettings,
@@ -36,7 +37,7 @@ import {
 } from '@spyria/workspace/server'
 import { discoverIssuer } from './oidc.ts'
 import type { SecretBox } from './secret-box.ts'
-import type { Sql, VerifiedIdentity } from './sessions.ts'
+import { bindAccountByEmail, type Sql, type VerifiedIdentity } from './sessions.ts'
 
 export type SsoProvider = {
   workspaceId: string
@@ -318,6 +319,21 @@ export const prepareFirstWorkspace = async (
   return { workspaceName, provider: await ownProviderFrom(form, dependencies) }
 }
 
+const upsertUserByEmail = async (sql: Sql, email: string) => {
+  const [user] = await sql<{ id: string }[]>`
+    insert into users (id, email) values (${crypto.randomUUID()}, ${email})
+    on conflict (email) do update set email = excluded.email returning id`
+  return user?.id ?? ''
+}
+
+const accountUserOf = async (sql: Sql, identity: VerifiedIdentity, email: string) => {
+  const [bound] = await sql<{ id: string }[]>`
+    select user_id as id from account_identities where issuer = ${identity.issuer} and subject = ${identity.subject}`
+  if (bound) return bound.id
+  if (!identity.canBindByEmail) throw new EmailNotConfirmed()
+  return (await bindAccountByEmail(sql, identity, email)) ?? ''
+}
+
 export const createFirstWorkspace = async (
   database: Database,
   { workspaceName, provider }: FirstWorkspace,
@@ -328,26 +344,14 @@ export const createFirstWorkspace = async (
   return database.$client.begin(async (sql) => {
     await sql`lock table workspaces in share row exclusive mode`
     await assertWorkspaceCreationOpen(sql)
-    const [account] = provider
-      ? []
-      : await sql<{ id: string }[]>`
-          select user_id as id from account_identities where issuer = ${identity.issuer} and subject = ${identity.subject}`
-    const [user] = account
-      ? [account]
-      : await sql<{ id: string }[]>`
-          insert into users (id, email) values (${crypto.randomUUID()}, ${email})
-          on conflict (email) do update set email = excluded.email returning id`
-    const userId = user?.id ?? ''
+    const userId = provider ? await upsertUserByEmail(sql, email) : await accountUserOf(sql, identity, email)
     const workspaceId = await insertWorkspace(sql, { userId, workspaceName, identity: { ...identity, email } })
     if (provider) {
       await storeSsoSettings(sql, workspaceId, memberActor(memberId(userId)), provider)
       await sql`
         insert into identities (workspace_id, issuer, subject, user_id)
         values (${workspaceId}, ${provider.issuer}, ${identity.subject}, ${userId})`
-    } else
-      await sql`
-        insert into account_identities (issuer, subject, user_id) values (${identity.issuer}, ${identity.subject}, ${userId})
-        on conflict do nothing`
+    }
     if (installHostToken)
       await transactWithin(sql)((tx) =>
         addInstallHostIn(tx, {

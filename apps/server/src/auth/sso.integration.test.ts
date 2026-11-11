@@ -1044,6 +1044,27 @@ test('the first person completing sign-in becomes the Admin of a workspace with 
   expect(await countsOf()).toEqual({ workspaces: 1, users: 1 })
 })
 
+test('the first workspace is refused to a later account carrying the address of a person who kept their account', async () => {
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  await emptyInstance.database.$client`insert into users (id, email) values ('member-owner', 'owner@gmail.com')`
+  await emptyInstance.database.$client`
+    insert into account_identities (issuer, subject, user_id) values ('https://accounts.google.com', 'owner-google', 'member-owner')`
+  const refused = await callbackAfter(
+    accountIdp,
+    await startCreation({ name: 'Garage', accountProvider: 'oidc' }),
+    { sub: 'stranger-account', email: 'owner@gmail.com' },
+    emptyInstanceApp,
+  )
+  expect(refused.status).toBe(403)
+  expect(refused.page).toContain('owner@gmail.com already signs in with another account: sign in with that one')
+  expect(await countsOf()).toEqual({ workspaces: 0, users: 1 })
+  expect(
+    (await emptyInstance.database.$client<{ subject: string }[]>`select subject from account_identities`).map(
+      ({ subject }) => subject,
+    ),
+  ).toEqual(['owner-google'])
+})
+
 test('the first workspace created with an account provider has no SSO of its own: its Admin signs in with that account', async () => {
   await emptyInstance.database.$client`truncate workspaces, users cascade`
   const started = await startCreation({ name: 'Garage', accountProvider: 'oidc' })

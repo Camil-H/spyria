@@ -109,7 +109,7 @@ const joinInvitedWorkspaces = async (
   }
 }
 
-const bindAccountByEmail = async (sql: Sql, { issuer, subject }: VerifiedIdentity, email: string) => {
+export const bindAccountByEmail = async (sql: Sql, { issuer, subject }: VerifiedIdentity, email: string) => {
   const [user] = await sql<{ id: string }[]>`
     insert into users (id, email) values (${crypto.randomUUID()}, ${email})
     on conflict (email) do update set email = excluded.email returning id`
