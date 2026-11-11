@@ -26,7 +26,7 @@ pageUrl.searchParams.delete('domainVerification')
 history.replaceState(history.state, '', pageUrl)
 const domainVerificationToast = (ssoSettingsPath?: string) =>
   domainVerification && (
-    <Toast>
+    <Toast tone={domainVerification !== 'invalid' ? 'success' : 'info'}>
       {domainVerification !== 'invalid' ? (
         `Domain ${domainVerification} verified`
       ) : (
