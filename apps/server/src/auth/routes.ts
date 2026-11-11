@@ -214,11 +214,17 @@ export const createAuthRoutes = ({
     if (opened.length > 0) return popup(context, { status: 'signed_in' })
     if (userId === undefined || through !== 'account' || workspaceId !== undefined)
       return popup(context, { status: 'not_invited', email }, 403)
-    await setSignedCookie(context, accountCookie, JSON.stringify({ userId }), tokenSecret, {
-      ...sessionCookieOptions(appOrigin),
-      path: '/auth/workspaces',
-      maxAge: accountCookieSeconds,
-    })
+    await setSignedCookie(
+      context,
+      accountCookie,
+      JSON.stringify({ userId, expiresAt: Date.now() + accountCookieSeconds * 1000 }),
+      tokenSecret,
+      {
+        ...sessionCookieOptions(appOrigin),
+        path: '/auth/workspaces',
+        maxAge: accountCookieSeconds,
+      },
+    )
     return popup(context, { status: 'no_workspace' })
   }
   const signInProvidersFor = async (scopedDatabase: Database, email: string): Promise<SignInProvider[]> => [
@@ -338,7 +344,8 @@ export const createAuthRoutes = ({
     .post('/workspaces', rateLimited('workspaceCreation'), async (context) => {
       const scope = scopeOf(context)
       const signedAccount = await getSignedCookie(context, tokenSecret, accountCookie)
-      const { userId } = signedAccount ? (JSON.parse(signedAccount) as { userId: string }) : { userId: undefined }
+      const account = signedAccount ? (JSON.parse(signedAccount) as { userId?: string; expiresAt?: number }) : {}
+      const userId = (account.expiresAt ?? 0) > Date.now() ? account.userId : undefined
       if (!userId) return context.json({ error: 'unauthorized' }, 401)
       const body = await context.req.json().catch(() => null)
       const created = await createWorkspaceOfAccount(scope.database, userId, body?.name).catch(domainErrorOnly)
