@@ -96,9 +96,9 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         Page: AiProvidersSection,
       },
       {
-        path: 'mcp-tools',
-        title: 'MCP tools',
-        description: 'Tool servers shared with the workspace',
+        path: 'tools',
+        title: 'Tools',
+        description: 'The tool servers members may use, and how they sign in',
         permissions: ['tools.manage'],
         Page: WorkspaceConnectionsSection,
       },
@@ -170,7 +170,7 @@ const cardStatusesOf =
         inWorkspace(snapshot.runtimeHosts).filter((host) => host.ownerId === null).length,
         'runtime host',
       ),
-      'mcp-tools': countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'shared connection'),
+      tools: countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'server'),
       'ai-providers': aiProvidersStatusOf(snapshot.workspaces.find((workspace) => workspace.id === workspaceId)),
       'quality-gates': isAnyRuleOn(
         snapshot.workspaces.find((workspace) => workspace.id === workspaceId)?.devLoop ?? null,

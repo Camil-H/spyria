@@ -11,11 +11,16 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
-import type { ConnectionInput } from '../domain/workspace-connection.ts'
+import { type ConnectionInput, type ConnectionSignIn, connectionSignIns } from '../domain/workspace-connection.ts'
 import { type ListedWorkspaceConnection, listWorkspaceConnections } from '../queries/list-workspace-connections.ts'
 import { useProfileCommands } from './providers.tsx'
 
-type Editing = Pick<ListedWorkspaceConnection, 'name' | 'url' | 'headerName'>
+type Editing = Pick<ListedWorkspaceConnection, 'name' | 'url' | 'headerName' | 'signIn'>
+
+const signInLabels: Record<ConnectionSignIn, string> = {
+  member: 'Each member signs in',
+  shared: 'One shared login',
+}
 
 const toggled = (tools: readonly string[], tool: string) =>
   tools.includes(tool) ? tools.filter((name) => name !== tool) : [...tools, tool]
@@ -33,17 +38,16 @@ const ConnectionForm = ({
 }) => {
   const [name, setName] = useState(connection?.name ?? '')
   const [url, setUrl] = useState(connection?.url ?? '')
+  const [signIn, setSignIn] = useState<ConnectionSignIn>(connection?.signIn ?? connectionSignIns.member)
   const [headerName, setHeaderName] = useState(connection?.headerName ?? '')
   const [headerValue, setHeaderValue] = useState('')
+  const isShared = signIn === connectionSignIns.shared
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
     const isHeaderRemoved = connection?.headerName && headerName.trim() === ''
-    const secretHeader = headerValue
-      ? { name: headerName.trim(), value: headerValue }
-      : isHeaderRemoved
-        ? null
-        : undefined
-    if ((await onSubmit({ name, url, secretHeader })) && !connection) {
+    const secretHeader =
+      isShared && headerValue ? { name: headerName.trim(), value: headerValue } : isHeaderRemoved ? null : undefined
+    if ((await onSubmit({ name, url, signIn, secretHeader })) && !connection) {
       setName('')
       setUrl('')
       setHeaderName('')
@@ -57,31 +61,58 @@ const ConnectionForm = ({
         <input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label className={`${labelClass} min-w-56 flex-[2]`}>
-        MCP URL
-        <input type="url" className={fieldClass} value={url} onChange={(event) => setUrl(event.target.value)} />
-      </label>
-      <label className={`${labelClass} min-w-32 flex-1`}>
-        Secret header
+        Address
         <input
+          type="url"
           className={fieldClass}
-          placeholder="x-api-key"
-          value={headerName}
-          onChange={(event) => setHeaderName(event.target.value)}
+          placeholder="https://tools.example.com/mcp"
+          disabled={connection?.signIn === connectionSignIns.member}
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
         />
       </label>
-      <label className={`${labelClass} min-w-32 flex-1`}>
-        Secret value
-        <input
-          type="password"
-          autoComplete="off"
-          className={fieldClass}
-          placeholder={connection?.headerName ? 'Set (leave blank to keep)' : ''}
-          value={headerValue}
-          onChange={(event) => setHeaderValue(event.target.value)}
-        />
-      </label>
+      {!connection && (
+        <fieldset className="flex basis-full flex-wrap gap-x-4 gap-y-1 text-sm">
+          <legend className={labelClass}>Sign-in</legend>
+          {Object.values(connectionSignIns).map((mode) => (
+            <label key={mode} className="flex items-center gap-1.5">
+              <input type="radio" name="sign-in" checked={signIn === mode} onChange={() => setSignIn(mode)} />
+              {signInLabels[mode]}
+            </label>
+          ))}
+          <p className="basis-full text-xs text-muted">
+            {isShared
+              ? 'Every member uses the login you enter here: only for servers without their own sign-in, such as API-key or internal servers.'
+              : 'Members connect their own account in their profile. You sign in once now so Spyria can list the tools.'}
+          </p>
+        </fieldset>
+      )}
+      {isShared && (
+        <>
+          <label className={`${labelClass} min-w-32 flex-1`}>
+            Secret header
+            <input
+              className={fieldClass}
+              placeholder="x-api-key"
+              value={headerName}
+              onChange={(event) => setHeaderName(event.target.value)}
+            />
+          </label>
+          <label className={`${labelClass} min-w-32 flex-1`}>
+            Secret value
+            <input
+              type="password"
+              autoComplete="off"
+              className={fieldClass}
+              placeholder={connection?.headerName ? 'Set (leave blank to keep)' : ''}
+              value={headerValue}
+              onChange={(event) => setHeaderValue(event.target.value)}
+            />
+          </label>
+        </>
+      )}
       <button type="submit" className={buttonClass} disabled={name.trim() === '' || url.trim() === ''}>
-        {connection ? 'Save' : 'Add connection'}
+        {connection ? 'Save' : 'Add server'}
       </button>
       {onCancel && (
         <button type="button" className={ghostButtonClass} onClick={onCancel}>
@@ -90,12 +121,19 @@ const ConnectionForm = ({
       )}
       {connection && (
         <p className="basis-full text-xs text-muted">
-          A new URL registers the server again in the gateway: enter the secret value again.
+          {isShared
+            ? 'A new address registers the server again in the gateway: enter the secret value again.'
+            : 'Members sign in at this address: remove the server and add it again to change it.'}
         </p>
       )}
     </form>
   )
 }
+
+const signInSummaryOf = ({ signIn, headerName }: Editing) =>
+  signIn === connectionSignIns.member
+    ? signInLabels.member
+    : `${signInLabels.shared}${headerName ? `, ${headerName}: set` : ''}`
 
 const ConnectionCard = ({
   workspaceId,
@@ -135,9 +173,7 @@ const ConnectionCard = ({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-medium">{connection.name}</span>
           <span className="truncate text-muted">{connection.url}</span>
-          <span className="text-muted">
-            {connection.headerName ? `${connection.headerName}: set` : 'No secret header'}
-          </span>
+          <span className="text-muted">{signInSummaryOf(connection)}</span>
           <span className="ml-auto flex gap-2">
             <button type="button" className={ghostButtonClass} onClick={() => setIsEditing(true)}>
               Edit
@@ -148,54 +184,60 @@ const ConnectionCard = ({
           </span>
         </div>
       )}
-      <fieldset aria-label={`Tools of ${connection.name}`} className="flex flex-wrap gap-x-4 gap-y-1">
-        <legend className="mb-1 text-xs font-semibold uppercase text-muted">Allowed tools</legend>
-        {connection.tools.map((tool) => (
-          <label key={tool.name} className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              disabled={isPending}
-              checked={connection.allowedTools.includes(tool.name)}
-              onChange={() => allowTools(toggled(connection.allowedTools, tool.name))}
-            />
-            {tool.name}
-            <span className="text-xs text-muted">{tool.readOnly ? 'read-only' : 'writes'}</span>
-          </label>
-        ))}
-      </fieldset>
-      <table aria-label={`Member access to ${connection.name}`} className="text-left">
-        <thead className="text-xs text-muted">
-          <tr>
-            <th className="py-1 font-semibold uppercase">Member access</th>
-            {connection.allowedTools.map((tool) => (
-              <th key={tool} className="px-2 py-1 font-normal">
-                {tool}
-              </th>
+      {connection.setupId === null ? (
+        <>
+          <fieldset aria-label={`Tools of ${connection.name}`} className="flex flex-wrap gap-x-4 gap-y-1">
+            <legend className="mb-1 text-xs font-semibold uppercase text-muted">Allowed tools</legend>
+            {connection.tools.map((tool) => (
+              <label key={tool.name} className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  disabled={isPending}
+                  checked={connection.allowedTools.includes(tool.name)}
+                  onChange={() => allowTools(toggled(connection.allowedTools, tool.name))}
+                />
+                {tool.name}
+                <span className="text-xs text-muted">{tool.readOnly ? 'read-only' : 'writes'}</span>
+              </label>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {connection.members.map((member) => (
-            <tr key={member.id}>
-              <td className="py-1">{member.name}</td>
-              {connection.allowedTools.map((tool) => (
-                <td key={tool} className="px-2 py-1">
-                  <input
-                    type="checkbox"
-                    aria-label={`${tool} for ${member.name}`}
-                    disabled={isPending}
-                    checked={member.tools.includes(tool)}
-                    onChange={() => restrict(member.id, toggled(member.tools, tool))}
-                  />
-                </td>
+          </fieldset>
+          <table aria-label={`Member access to ${connection.name}`} className="text-left">
+            <thead className="text-xs text-muted">
+              <tr>
+                <th className="py-1 font-semibold uppercase">Member access</th>
+                {connection.allowedTools.map((tool) => (
+                  <th key={tool} className="px-2 py-1 font-normal">
+                    {tool}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {connection.members.map((member) => (
+                <tr key={member.id}>
+                  <td className="py-1">{member.name}</td>
+                  {connection.allowedTools.map((tool) => (
+                    <td key={tool} className="px-2 py-1">
+                      <input
+                        type="checkbox"
+                        aria-label={`${tool} for ${member.name}`}
+                        disabled={isPending}
+                        checked={member.tools.includes(tool)}
+                        onChange={() => restrict(member.id, toggled(member.tools, tool))}
+                      />
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <p className="text-muted">The sign-in that lists its tools was not finished: remove it and add it again.</p>
+      )}
       {!isRemoving && <ErrorMessage message={errorMessage} />}
       {isRemoving && (
-        <Dialog label="Remove connection" subject={connection.name} onClose={() => setIsRemoving(false)}>
+        <Dialog label="Remove server" subject={connection.name} onClose={() => setIsRemoving(false)}>
           <p className="text-sm text-muted">Agents lose its tools at once, in every chat of this workspace.</p>
           <ErrorMessage message={errorMessage} />
           <button
@@ -217,18 +259,18 @@ export const WorkspaceConnectionsSection = ({ workspaceId }: { workspaceId: Work
   const connections = useQuery(listWorkspaceConnections, workspaceId)
   const { errorMessage, isPending, run } = useGuardedAction()
   return (
-    <LabelledSection title="Connections">
+    <LabelledSection title="Servers">
       {connections.length === 0 ? (
-        <p className="text-sm text-muted">No workspace connections</p>
+        <p className="text-sm text-muted">No servers yet</p>
       ) : (
-        <ul aria-label="Workspace connections" className="flex flex-col gap-3">
+        <ul aria-label="Servers" className="flex flex-col gap-3">
           {connections.map((connection) => (
             <ConnectionCard key={connection.id} workspaceId={workspaceId} connection={connection} />
           ))}
         </ul>
       )}
       <ConnectionForm
-        label="Add connection"
+        label="Add server"
         onSubmit={(input) => run(() => commands.addWorkspaceConnection({ workspaceId, ...input }))}
       />
       {isPending && <p className="text-sm text-muted">Listing the server's tools…</p>}
