@@ -17,12 +17,10 @@ import {
   type WorkspacePermission,
 } from '@spyria/kernel'
 
-export type JoinBy = 'domain' | 'invited_address'
 type WorkspaceRow = {
   id: WorkspaceId
   name: string
   localSessions: boolean
-  joinBy: JoinBy
   aiProviderAllowList: AiProviderAllowList | null
   devLoop: DevLoopSettings | null
   setupCommands: readonly SetupCommand[]
@@ -181,7 +179,6 @@ type LlmCredentialRow = {
   provider: string
   last4: string
 }
-type SsoDomainRow = { workspaceId: WorkspaceId; domain: string; isVerified: boolean }
 type GitHubAppRow = { workspaceId: WorkspaceId }
 type GitHubConnectionRow = { workspaceId: WorkspaceId; memberId: MemberId }
 type WorkspaceOnboardingRow = { workspaceId: WorkspaceId; task: string }
@@ -252,7 +249,6 @@ export type Snapshot = {
   chatMembers: readonly ChatMemberRow[]
   chatRoles: readonly ChatRoleRow[]
   llmCredentials: readonly LlmCredentialRow[]
-  ssoDomains: readonly SsoDomainRow[]
   githubApps: readonly GitHubAppRow[]
   githubConnections: readonly GitHubConnectionRow[]
   workspaceOnboarding: readonly WorkspaceOnboardingRow[]
