@@ -4,9 +4,10 @@ import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
 import { createSmtpMailer } from './auth/mail.ts'
-import { createSecretBox } from './auth/secret-box.ts'
+import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { hasNoWorkspace, replaceSignInApp, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
+import { countRuntimesRunningOnPreviousKeys, resealSecrets } from './reseal-secrets.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
@@ -94,9 +95,20 @@ const commands: Record<string, () => Promise<void>> = {
       throw new Error(
         'Usage: bun run operator sso:sign-in-app --client-id <id>, with the client secret on standard input',
       )
-    const secretBox = createSecretBox(requiredEnvironment('SPYRIA_SECRETS_KEY'))
+    const secretBox = createSecretBox(secretsKeyringFrom(process.env))
     const count = await replaceSignInApp(database, secretBox, { clientId, clientSecret: await Bun.stdin.text() })
     console.log(`${count} workspace${count === 1 ? '' : 's'} now sign in through client ${clientId}`)
+  },
+  'secrets:reseal': async () => {
+    const keyring = secretsKeyringFrom(process.env)
+    const resealedCount = await resealSecrets(database, createSecretBox(keyring))
+    console.log(`Sealed ${resealedCount} stored secret${resealedCount === 1 ? '' : 's'} again with SPYRIA_SECRETS_KEY`)
+    const runningCount = await countRuntimesRunningOnPreviousKeys(database, keyring.currentKeyId)
+    console.log(
+      runningCount === 0
+        ? 'Nothing uses a previous key any more: SPYRIA_PREVIOUS_SECRETS_KEYS can be removed'
+        : `${runningCount} running runtime${runningCount === 1 ? '' : 's'} still use${runningCount === 1 ? 's' : ''} a previous key and move to SPYRIA_SECRETS_KEY when they next start (an idle runtime stops after an hour): keep SPYRIA_PREVIOUS_SECRETS_KEYS until this command reports none`,
+    )
   },
   'workspace:restore': async () => {
     const [workspaceId] = options

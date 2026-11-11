@@ -1,6 +1,7 @@
 import type { HarnessId, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
+type HostLocation = Omit<SandboxLocation, 'runtimeId'>
 export type SandboxStatus = 'running' | 'stopped' | 'missing'
 export type PackageCacheScope = { repository: string; ownerId: string }
 type SandboxRequest = {
@@ -27,11 +28,13 @@ export type SandboxTransport = {
 export type SandboxProvider = {
   create(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
   recreate(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
-  apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'>): string
+  currentApiKeyId: string
+  apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'> & { apiKeyId?: string }): string
   start(sandbox: SandboxLocation): Promise<void>
   stop(sandbox: SandboxLocation): Promise<void>
   remove(sandbox: SandboxLocation): Promise<void>
   status(sandbox: SandboxLocation): Promise<SandboxStatus>
+  runtimeIdsOn(host: HostLocation): Promise<string[]>
   hasHarness(sandbox: SandboxLocation & { harness: HarnessId }): Promise<boolean>
   installHarness(sandbox: SandboxLocation & { harness: HarnessId }): Promise<void>
   connect(sandbox: SandboxLocation): SandboxTransport

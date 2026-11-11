@@ -21,7 +21,7 @@ import {
   rpcOf,
   runtimeTurn,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
   virtualKeyOf,
 } from './testing/testing.ts'
 
@@ -242,7 +242,7 @@ test('a model call is retried once when the gateway refuses the connection, neve
     },
   })
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testSecretsKey,
+    secretsKeyring: testSecretsKeyring,
     databases: () => [database],
     relayModelCall: createModelCallRelay({
       llmGateway,

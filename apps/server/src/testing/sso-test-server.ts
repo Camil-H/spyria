@@ -4,7 +4,7 @@ import { createApp } from '../app.ts'
 import { serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { startFakeSmtp } from './fake-smtp.ts'
 import { serveWithLifecycleLogs } from './process-lifecycle.ts'
-import { testAuthSettings, testSecretsKey } from './testing.ts'
+import { testAuthSettings, testSecretsKeyring } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3102)
 const smtp = startFakeSmtp()
@@ -23,7 +23,7 @@ const app = createApp({
   appOrigin: process.env.SPYRIA_APP_ORIGIN ?? 'http://localhost:5191',
   oidc: { ...testAuthSettings.oidc, redirectUri: `http://localhost:${port}/auth/callback` },
   authMode: 'sso',
-  secretsKey: testSecretsKey,
+  secretsKeyring: testSecretsKeyring,
   testDatabaseByName: databaseNamed,
   mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@e2e.test>' },
 }).get('/test/mails', (context) => context.json(smtp.mails))

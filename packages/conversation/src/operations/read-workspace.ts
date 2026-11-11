@@ -2,7 +2,13 @@ import { type ChatPermission, type MemberId, requireChatPermission } from '@spyr
 import type { AgentChat } from '../contracts/agent.ts'
 import { allowedRuntimeMediaFormatOf, isRuntimeMediaPath } from '../domain/attachments.ts'
 import { RuntimeMediaUnavailable } from '../domain/errors.ts'
-import { agentWorkspacePathOf, branchReads, snapshotReadingOf, type WorkspaceRead } from '../domain/workspace-reads.ts'
+import {
+  agentWorkspacePathOf,
+  branchReads,
+  completeSnapshotOf,
+  snapshotReadingOf,
+  type WorkspaceRead,
+} from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient'>
@@ -50,7 +56,8 @@ export const snapshotWorkspace = async (dependencies: Dependencies, chat: AgentC
       baseBranch ? liveReadingOf(dependencies, chat, agentWorkspacePathOf(read, '', baseBranch)) : undefined,
     ),
   ])
-  if (tree) await dependencies.runtimes.keepSnapshot(chat, JSON.stringify({ tree, changes, commits, status }))
+  const snapshot = completeSnapshotOf({ tree, changes, commits, status }, Boolean(baseBranch))
+  if (snapshot) await dependencies.runtimes.keepSnapshot(chat, snapshot)
 }
 
 export const wakeWorkspace = async (dependencies: Dependencies, input: Input) => {

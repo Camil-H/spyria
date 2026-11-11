@@ -12,6 +12,7 @@ import {
 } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
+import { secretsKeyringOf } from '../auth/secret-box.ts'
 import { startJobWorker } from '../job-worker.ts'
 import {
   acme,
@@ -28,6 +29,7 @@ import {
   succeeded,
   testAuthSettings,
   testSecretsKey,
+  testSecretsKeyring,
   testSpyriaAgentImage,
   waitFor,
 } from '../testing/testing.ts'
@@ -35,7 +37,7 @@ import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testSecretsKey,
+  secretsKeyring: secretsKeyringOf('rotated-integration-secrets-key-0123456789', [testSecretsKey]),
   databases: () => [database],
   spyriaAgentImage: testSpyriaAgentImage,
 })
@@ -265,7 +267,7 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
   ])
 })
 
-test('the sweep removes runtimes stopped for 30 days with their container and volumes, keeping the chat history', async () => {
+test('the sweep removes runtimes stopped for 7 days with their container and volumes, keeping the chat history', async () => {
   const host = await fakeHost('Removing host')
   const oldChat = chatId('chat-invoice-bug')
   const recentChat = await newRuntimeChat()
@@ -278,8 +280,8 @@ test('the sweep removes runtimes stopped for 30 days with their container and vo
   const history = await historyOf()
   expect(history.messages).toBeGreaterThan(0)
 
-  await idleFor(oldChat, '31 days')
-  await idleFor(recentChat, '29 days')
+  await idleFor(oldChat, '8 days')
+  await idleFor(recentChat, '6 days')
   await sweep()
   await runtimeIn(oldChat, 'removed')
   expect((await runtimeOf(recentChat)).state).toBe('stopped')
@@ -353,6 +355,29 @@ test('commands to an offline host retry until it returns, rows stay untouched me
   await waitFor(async () =>
     (await jobsOf('runtime.stop', stopping.id)).some((job) => job.state === 'done' && job.attempts >= 2),
   )
+})
+
+test('a host that connects removes the runtimes Spyria no longer knows or removed, and keeps the others', async () => {
+  const host = await fakeHost('Leaking host')
+  const [keptChat, removedChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const kept = await stoppedRuntime(keptChat)
+  const removed = await stoppedRuntime(removedChat)
+  await host.disconnect()
+  await database.$client`update runtimes set state = 'removed' where id = ${removed.id}`
+  const discarded = crypto.randomUUID()
+  host.containers.set(discarded, { running: false, apiKey: '' })
+  host.commands.length = 0
+
+  await host.connect()
+  await waitFor(() => !host.containers.has(discarded) && !host.containers.has(removed.id))
+  expect(host.containers.has(kept.id)).toBe(true)
+  expect(
+    host.commands
+      .filter((command) => command.op === 'remove')
+      .map((command) => command.runtimeId)
+      .toSorted(),
+  ).toEqual([discarded, removed.id].toSorted())
+  expect((await runtimeOf(keptChat)).state).toBe('stopped')
 })
 
 test('removing a host marks its runtimes failed/lost', async () => {
@@ -441,8 +466,10 @@ test('a runtime job whose worker died after claiming it is claimed again once it
   const apiKey = gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: id })
   await database.$client.begin(async (sql) => {
     await sql`
-      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, last_active_at, created_at, state_changed_at)
-      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage}, now(), now(), now())`
+      insert into runtimes (workspace_id, id, chat_id, host_id, state, image, api_key_id, last_active_at, created_at,
+        state_changed_at)
+      values (${acme}, ${id}, ${chat}, ${host.id}, 'creating', ${testSpyriaAgentImage},
+        ${gateway.sandboxProvider.currentApiKeyId}, now(), now(), now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${acme}, ${`job-${id}`}, 'runtime.create', ${JSON.stringify({ runtimeId: id })}::jsonb, now() + interval '1 second', 0, 'running')`
@@ -498,7 +525,7 @@ test("a failed install fails the runtime at once with npm's reason, and a retry 
   expect(machine.installedHarnesses).toEqual(new Set(['codex']))
 })
 
-test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 30 days are removed by the sweep', async () => {
+test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 7 days are removed by the sweep', async () => {
   const machine = await newMachine()
   const [retriedChat, abandonedChat] = [
     await newRuntimeChat('Retried chat', undefined, 'codex'),
@@ -524,10 +551,10 @@ test('a failed bring-up stops its container to release its network; a retry remo
   expect(opsOf(failed.id).at(-1)).toBe('remove')
   expect((await runtimeOf(retriedChat)).id).not.toBe(failed.id)
 
-  await idleFor(abandonedChat, '29 days')
+  await idleFor(abandonedChat, '6 days')
   await sweep()
   expect((await runtimeOf(abandonedChat)).state).toBe('failed')
-  await idleFor(abandonedChat, '31 days')
+  await idleFor(abandonedChat, '8 days')
   await sweep()
   await runtimeIn(abandonedChat, 'removed')
   expect(machine.containers.has(abandoned.id)).toBe(false)
@@ -602,4 +629,37 @@ test('a stopped runtime left on an older image is recreated on the current image
     image: testSpyriaAgentImage,
   })
   expect((await runtimeOf(chat)).image).toBe(testSpyriaAgentImage)
+})
+
+test('a runtime started before the secrets key rotated keeps its key while it runs, and is recreated under the current key when it starts again', async () => {
+  const host = await fakeHost('Rotated key host')
+  const chat = await newRuntimeChat()
+  const runtime = await runningRuntime(chat)
+  expect(runtime.api_key_id).toBe(gateway.sandboxProvider.currentApiKeyId)
+  const gatewayBeforeRotation = createRuntimeHostGateway({ secretsKeyring: testSecretsKeyring, databases: () => [] })
+  const keyBeforeRotation = gatewayBeforeRotation.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id })
+  await database.$client`update runtimes set api_key_id = ${testSecretsKeyring.currentKeyId} where id = ${runtime.id}`
+  const container = host.containers.get(runtime.id)
+  if (container) container.apiKey = keyBeforeRotation
+
+  const recordedKeyId = (await runtimeOf(chat)).api_key_id
+  expect(gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id, apiKeyId: recordedKeyId })).toBe(
+    keyBeforeRotation,
+  )
+  host.commands.length = 0
+  await ensure(chat)
+  expect(host.lifecycleCommands()).toEqual([])
+
+  await stoppedRuntime(chat)
+  host.commands.length = 0
+  expect(await ensure(chat)).toMatchObject({ id: runtime.id, state: 'starting' })
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['recreate', 'start'])
+  const currentKey = gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id })
+  expect(currentKey).not.toBe(keyBeforeRotation)
+  expect(host.commands.find((command) => command.op === 'recreate')).toMatchObject({
+    runtimeId: runtime.id,
+    apiKey: currentKey,
+  })
+  expect((await runtimeOf(chat)).api_key_id).toBe(gateway.sandboxProvider.currentApiKeyId)
 })

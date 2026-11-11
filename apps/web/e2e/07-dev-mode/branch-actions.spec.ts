@@ -18,6 +18,7 @@ import {
 
 type AgentScript = (chatId: string, script: object) => Promise<void>
 
+const toastShownMilliseconds = 5000
 const commitCommand = (subject: string) =>
   `git add -A && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm '${subject}'`
 const appEdit = (from: number, to: number) => ({
@@ -142,14 +143,17 @@ test.describe('Branch actions', () => {
     await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
   })
 
-  test('As a chat owner, I see a toast confirm Refresh that fades on its own, and a refused Push stays until I dismiss it', {
+  test('As a chat owner, I see a toast confirm Refresh that fades on its own unless I hover it, and a refused Push stays until I dismiss it', {
     tag: ['@spec-43'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
     await devChatWithCommit(page, agentScript, 'Toast totals')
     await headerButtonOf(page, 'Refresh').click()
     const refreshed = tabPanelOf(page).getByRole('status').filter({ hasText: 'Changes refreshed' })
+    await refreshed.hover()
+    await page.waitForTimeout(toastShownMilliseconds + 1000)
     await expect(refreshed).toBeVisible()
+    await page.mouse.move(0, 0)
     await expect(refreshed).toHaveCount(0, { timeout: 10_000 })
 
     await headerButtonOf(page, 'Push').click()
