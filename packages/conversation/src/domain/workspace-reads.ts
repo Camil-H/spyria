@@ -15,6 +15,11 @@ export const runtimeHeadsOf = (status: object | undefined) => {
   return [head, baseHead].filter((commit): commit is string => typeof commit === 'string')
 }
 
+export const completeSnapshotOf = ({ tree, changes, commits, status }: WorkspaceSnapshot, hasBaseBranch: boolean) =>
+  tree && (!hasBaseBranch || (changes && commits && status))
+    ? JSON.stringify({ tree, changes, commits, status })
+    : undefined
+
 export const snapshotReadingOf = (snapshot: string | undefined, read: WorkspaceRead, path: string) => {
   const { tree, changes, commits = changes, status } = JSON.parse(snapshot ?? '{}') as WorkspaceSnapshot
   if (read === 'tree' && path === '') return tree
