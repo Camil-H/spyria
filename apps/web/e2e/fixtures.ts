@@ -236,7 +236,6 @@ export const switchWorkspace = async (page: Page, workspaceName: string) => {
 export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Tool connections' })
 export const openMyConnections = async (page: Page, workspace = 'workspace-acme') => {
   await page.goto(`/w/${workspace}/profile`)
-  await connectionsOf(page).getByRole('tab', { name: 'My connections' }).click()
 }
 export const inPopup = async (page: Page, open: () => Promise<void>) => {
   const popup = page.waitForEvent('popup')

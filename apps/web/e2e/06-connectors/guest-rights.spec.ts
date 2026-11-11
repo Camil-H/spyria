@@ -38,7 +38,7 @@ test.describe('Guest rights', () => {
     await openChat(page, 'Research')
   })
 
-  test('As a prompter in someone’s chat, I cannot use the owner’s personal connection: the agent gets a refusal, while the owner’s own prompt uses it', {
+  test('As a prompter in someone’s chat, I cannot use a server the owner signed in to with their own account: the agent gets a refusal, while the owner’s own prompt uses it', {
     tag: ['@spec-33', '@smoke'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const account = accountOf('alice-acme')
@@ -48,14 +48,12 @@ test.describe('Guest rights', () => {
     await addLlmKey(bobPage, 'Mistral')
     await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
       ...toolScript,
-      text: 'I cannot use Alice’s personal connections.',
+      text: 'I cannot use Alice’s own accounts.',
     })
     await expect(await lastToolResultOf(bobPage)).toContainText(
-      "fake is Alice's personal connection, used only on Alice's own prompts",
+      "fake signs in with Alice's own account, so only Alice's prompts can use it",
     )
-    await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s personal connections.' })).toHaveCount(
-      1,
-    )
+    await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s own accounts.' })).toHaveCount(1)
     await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
 
     await promptTool(page, agentScript, 'Alice asks who the agent is')

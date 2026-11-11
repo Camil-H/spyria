@@ -18,12 +18,12 @@ export const toolScript = { steps: [{ tool: 'fake-whoami' }], text: 'Checked who
 export const accountOf = (label: string) => `${label}-${crypto.randomUUID().slice(0, 8)}`
 export const logInAtFakeProvider = (context: BrowserContext, account: string) =>
   context.addCookies([{ name: 'fake_mcp_user', value: account, url: fakeMcpUrl }])
-export const connectedRowOf = (page: Page) => connectionsOf(page).getByRole('listitem').filter({ hasText: 'fake' })
+export const fakeRowOf = (page: Page) => connectionsOf(page).getByRole('listitem', { name: 'fake', exact: true })
 export const connectFake = async (page: Page, account: string, workspace = 'workspace-acme') => {
   await logInAtFakeProvider(page.context(), account)
   await openMyConnections(page, workspace)
   await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
-  await expect(connectedRowOf(page)).toContainText('Connected')
+  await expect(fakeRowOf(page).getByRole('button', { name: 'Disconnect fake' })).toBeVisible()
 }
 export const promptTool = async (
   page: Page,
