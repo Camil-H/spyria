@@ -1,7 +1,8 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { focusRing } from '@spyria/ui'
-import { FileText, Image as ImageIcon, Play } from 'lucide-react'
+import { focusRing, iconButtonClass } from '@spyria/ui'
+import { Download, FileText, Image as ImageIcon, Play, X } from 'lucide-react'
 import { type ReactNode, use, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useOutletContext } from 'react-router'
 import {
   type Attachment,
@@ -66,11 +67,58 @@ const Failure = ({ name, failure }: { name: string; failure: string }) => (
   </span>
 )
 
-const LoadedImage = ({ url, name }: { url: string; name: string }) => (
-  <a href={url} target="_blank" rel="noopener noreferrer" className={`inline-block rounded-md ${focusRing}`}>
-    <img src={url} alt={name} className={mediaClassName} />
-  </a>
+const showModal = (dialog: HTMLDialogElement | null) => {
+  if (dialog && !dialog.open) dialog.showModal()
+}
+
+const ImageOverlay = ({ url, name, onClose }: { url: string; name: string; onClose: () => void }) => (
+  <dialog
+    ref={showModal}
+    aria-label={name}
+    onClose={onClose}
+    onKeyDown={(event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.currentTarget.close()
+    }}
+    onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+    className="m-0 h-full max-h-none w-full max-w-none items-center justify-center bg-transparent p-12 backdrop:bg-black/80 open:flex"
+  >
+    <div className="absolute top-3 right-3 flex items-center gap-1 rounded-md bg-raised shadow-lg">
+      <a href={url} download={name} aria-label={`Save ${name}`} title={`Save ${name}`} className={iconButtonClass}>
+        <Download aria-hidden size={18} />
+      </a>
+      <button
+        type="button"
+        aria-label="Close"
+        title="Close"
+        onClick={(event) => event.currentTarget.closest('dialog')?.close()}
+        className={iconButtonClass}
+      >
+        <X aria-hidden size={18} />
+      </button>
+    </div>
+    <img src={url} alt={name} className="max-h-full max-w-full rounded-md object-contain" />
+  </dialog>
 )
+
+const LoadedImage = ({ url, name }: { url: string; name: string }) => {
+  const [isEnlarged, setIsEnlarged] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`Enlarge ${name}`}
+        onClick={() => setIsEnlarged(true)}
+        className={`inline-block cursor-zoom-in rounded-md ${focusRing}`}
+      >
+        <img src={url} alt={name} className={mediaClassName} />
+      </button>
+      {isEnlarged &&
+        createPortal(<ImageOverlay url={url} name={name} onClose={() => setIsEnlarged(false)} />, document.body)}
+    </>
+  )
+}
 
 const ImageMedia = ({ path, name }: { path: string; name: string }) => {
   const { ref, isNear } = useIsNearViewport()
