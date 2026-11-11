@@ -599,6 +599,23 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
   expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('end_turn')
 })
 
+test('a conversation deleted while its timed-out adapter is still stopping logs no failure', async () => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const { call, create } = started({ requestTimeoutMilliseconds: 300 })
+    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=1500'))
+    const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+    await Bun.sleep(700)
+    expect((await call('DELETE', `/api/conversations/${id}`)).status).toBe(200)
+    await switching
+    await Bun.sleep(200)
+    expect(lines.filter((line) => line['event.name'] === 'agent.adapter_failed')).toStrictEqual([])
+  } finally {
+    await telemetry.shutdown()
+  }
+})
+
 test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {
   const lines: Record<string, unknown>[] = []
   const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
