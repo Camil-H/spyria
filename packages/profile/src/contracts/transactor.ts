@@ -5,7 +5,7 @@ import type {
   LlmCredentialRepository,
   MemberGatewayKeyRepository,
   MemberRepository,
-  PersonalConnectionRepository,
+  ToolConnectionRepository,
   WorkspaceConnectionRepository,
   WorkspaceEventLog,
 } from './repositories.ts'
@@ -16,7 +16,7 @@ export type UnitOfWork = {
   aiProviders: AiProviderRepository
   memberGatewayKeys: MemberGatewayKeyRepository
   gatewayJobs: GatewayJobs
-  personalConnections: PersonalConnectionRepository
+  toolConnections: ToolConnectionRepository
   workspaceConnections: WorkspaceConnectionRepository
   workspaceEvents: WorkspaceEventLog
 }
