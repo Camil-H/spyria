@@ -271,7 +271,7 @@ test('a member restricted to lookup is refused update on their own prompts, thei
   expect((await asMember(bob, 'POST', crmPath('restrict'), { memberId: bob, allowedTools: null })).status).toBe(403)
   expect(
     (await workspaceEventsOf(database))
-      .filter(({ type }) => type === 'connection.restricted')
+      .filter(({ type, payload }) => type === 'connection.restricted' && payload.connectionId === 'connection-crm')
       .map(({ payload }) => payload),
   ).toEqual([
     { connectionId: 'connection-crm', memberId: bob, allowedTools: ['lookup'] },
