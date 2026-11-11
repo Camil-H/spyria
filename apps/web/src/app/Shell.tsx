@@ -16,18 +16,13 @@ import { SessionProvider, useSession } from '@spyria/session'
 import { KeyboardShortcuts } from '@spyria/ui'
 import { BudgetNotice, UsageProvider } from '@spyria/usage'
 import { NoChatSelected, TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
-import { lazy, Suspense, use } from 'react'
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useOutletContext, useParams } from 'react-router'
-import { sharedAuthMode } from './auth.ts'
 import type { Application } from './factory.ts'
 
 const SettingsRoute = lazy(() => import('./SettingsRoute.tsx'))
 const ProfileRoute = lazy(() => import('./ProfileRoute.tsx'))
 const ChatUsageTable = lazy(() => import('@spyria/usage').then(({ ChatUsageTable }) => ({ default: ChatUsageTable })))
-
-const ChecklistLink = (props: { workspaceId: WorkspaceId; isCollapsed: boolean }) => (
-  <SidebarChecklistLink {...props} usesSingleSignOn={use(sharedAuthMode()).authMode === 'sso'} />
-)
 
 const ChatRoute = ({ commands }: { commands: Application['conversationCommands'] }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
@@ -92,11 +87,7 @@ export const App = ({ app }: { app: Application }) => (
                           element={
                             <WorkspaceLayout
                               chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />}
-                              sidebarTopItem={(props) => (
-                                <Suspense>
-                                  <ChecklistLink {...props} />
-                                </Suspense>
-                              )}
+                              sidebarTopItem={(props) => <SidebarChecklistLink {...props} />}
                               searchDialog={(props) => (
                                 <Suspense>
                                   <SearchDialog {...props} />

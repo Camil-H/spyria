@@ -1,7 +1,6 @@
 import type { WorkspacePermission } from '@spyria/kernel'
 
 export const onboardingTasks = [
-  'verify-domain',
   'connect-github-app',
   'connect-runtime',
   'add-ai-key',
@@ -12,11 +11,10 @@ export const onboardingTasks = [
 
 export type OnboardingTask = (typeof onboardingTasks)[number]
 export type TaskScope = 'workspace' | 'member'
-export type TaskState = 'done' | 'blocked' | 'open'
+export type TaskState = 'done' | 'open'
 export type TaskView = Readonly<{ task: OnboardingTask; scope: TaskScope; state: TaskState }>
 
 export type OnboardingFacts = Readonly<{
-  isDomainVerified: boolean
   hasGitHubApp: boolean
   hasClaimedRuntimeHost: boolean
   hasInvitedSomeone: boolean
@@ -30,17 +28,15 @@ export type OnboardingRecords = Readonly<{
   skipped: ReadonlySet<OnboardingTask>
 }>
 
-export type Viewer = Readonly<{ permissions: readonly WorkspacePermission[]; usesSingleSignOn: boolean }>
+export type Viewer = Readonly<{ permissions: readonly WorkspacePermission[] }>
 
 const permissionByWorkspaceTask: Partial<Record<OnboardingTask, WorkspacePermission>> = {
-  'verify-domain': 'sso.manage',
   'connect-github-app': 'github.manage',
   'connect-runtime': 'runtimes.manage',
   'invite-members': 'members.invite',
 }
 
 const factByTask: Record<OnboardingTask, keyof OnboardingFacts> = {
-  'verify-domain': 'isDomainVerified',
   'connect-github-app': 'hasGitHubApp',
   'connect-runtime': 'hasClaimedRuntimeHost',
   'add-ai-key': 'hasAiKey',
@@ -71,16 +67,10 @@ export const taskViewsOf = (facts: OnboardingFacts, records: OnboardingRecords, 
   const isShown = (task: OnboardingTask) => {
     if (!mayDo(task, viewer.permissions)) return false
     if (records.skipped.has(task)) return false
-    if (task === 'verify-domain') return viewer.usesSingleSignOn
     if (task === 'link-github-account') return isDone('connect-github-app')
     return true
   }
-  const isBlocked = (task: OnboardingTask) =>
-    task === 'invite-members' && viewer.usesSingleSignOn && !isDone('verify-domain')
-  const stateOf = (task: OnboardingTask): TaskState => {
-    if (isDone(task)) return 'done'
-    return isBlocked(task) ? 'blocked' : 'open'
-  }
+  const stateOf = (task: OnboardingTask): TaskState => (isDone(task) ? 'done' : 'open')
   return onboardingTasks.filter(isShown).map((task) => ({ task, scope: scopeOf(task), state: stateOf(task) }))
 }
 

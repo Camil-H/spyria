@@ -8,7 +8,6 @@ Spyria signs everyone in through a single sign-on provider: there are no passwor
 | A workspace owns | One verified email domain, which routes sign-in | No domain |
 | Who joins | Invited people, signing in with an address at the domain | Exactly the invited addresses |
 | Providers | Google Workspace, Microsoft Entra (one tenant), any OIDC provider, Cloudflare Access | Any Google account (Gmail included), any OIDC provider; Microsoft Entra of one tenant |
-| Before inviting | The domain is verified, by a link sent to an address at it, or `spyria verify-domain` without mail | Nothing: invites work at once |
 
 Either way:
 
