@@ -10,6 +10,7 @@ import {
   memberId,
   workspaceId as spyriaWorkspaceId,
   storedActorOf,
+  systemActor,
   type WorkspacePermission,
 } from '@spyria/kernel'
 import { addInstallHostIn } from '@spyria/runtime/server'
@@ -74,7 +75,7 @@ export const workspaceProvidersForEmail = (database: Database, email: string) =>
       or exists(select 1 from memberships join users on users.id = memberships.user_id
         where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
           and users.email = ${normalizedEmail(email)}))
-    order by workspaces.created_at`
+    order by workspaces.created_at, workspace_id`
 
 export const requireMemberPermission = async (
   sql: Sql,
@@ -231,15 +232,23 @@ export const confirmSsoSettings = (database: Database, pending: PendingSso, iden
     return { workspaceId, userId }
   })
 
+const removeWorkspaceSso = async (sql: Sql, workspaceId: string, actor: Actor) => {
+  const removed = await sql`delete from workspace_sso where workspace_id = ${workspaceId} returning 1`
+  if (removed.length === 0) return false
+  await sql`delete from sessions where workspace_id = ${workspaceId}`
+  await recordWorkspaceEvent(sql, workspaceId, 'sso.removed', actor, {})
+  return true
+}
+
 export const stopWorkspaceSso = (database: Database, member: Member, hasAccountSignIn: boolean) =>
   database.$client.begin(async (sql) => {
     await requireMemberPermission(sql, member, 'sso.manage')
     if (!hasAccountSignIn) throw new NoAccountSignIn()
-    const removed = await sql`delete from workspace_sso where workspace_id = ${member.workspaceId} returning 1`
-    if (removed.length === 0) return
-    await sql`delete from sessions where workspace_id = ${member.workspaceId}`
-    await recordWorkspaceEvent(sql, member.workspaceId, 'sso.removed', memberActor(memberId(member.userId)), {})
+    await removeWorkspaceSso(sql, member.workspaceId, memberActor(memberId(member.userId)))
   })
+
+export const stopWorkspaceSsoByOperator = (database: Database, workspaceId: string) =>
+  database.$client.begin((sql) => removeWorkspaceSso(sql, workspaceId, systemActor('operator')))
 
 export const hasNoWorkspace = async (sql: Sql | Database['$client']) =>
   (await sql`select 1 from workspaces limit 1`).length === 0
@@ -319,9 +328,15 @@ export const createFirstWorkspace = async (
   return database.$client.begin(async (sql) => {
     await sql`lock table workspaces in share row exclusive mode`
     await assertWorkspaceCreationOpen(sql)
-    const [user] = await sql<{ id: string }[]>`
-      insert into users (id, email) values (${crypto.randomUUID()}, ${email})
-      on conflict (email) do update set email = excluded.email returning id`
+    const [account] = provider
+      ? []
+      : await sql<{ id: string }[]>`
+          select user_id as id from account_identities where issuer = ${identity.issuer} and subject = ${identity.subject}`
+    const [user] = account
+      ? [account]
+      : await sql<{ id: string }[]>`
+          insert into users (id, email) values (${crypto.randomUUID()}, ${email})
+          on conflict (email) do update set email = excluded.email returning id`
     const userId = user?.id ?? ''
     const workspaceId = await insertWorkspace(sql, { userId, workspaceName, identity: { ...identity, email } })
     if (provider) {
