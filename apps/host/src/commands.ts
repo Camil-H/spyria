@@ -44,12 +44,13 @@ const operations = [
   'status',
   'installed',
   'install',
+  'list',
 ] as const
 
 type Operation = (typeof operations)[number]
 type HarnessOperation = 'installed' | 'install'
 type CreateOperation = 'create' | 'recreate'
-type RuntimeOperation = Exclude<Operation, CreateOperation | 'prepare' | HarnessOperation>
+type RuntimeOperation = Exclude<Operation, CreateOperation | 'prepare' | 'list' | HarnessOperation>
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string>; Image?: string }
   State?: { Running?: boolean }
@@ -59,6 +60,7 @@ type CreateRequest = { runtimeId: string; image: string; apiKey: string; package
 export type Command =
   | ({ op: CreateOperation } & CreateRequest)
   | { op: 'prepare'; image: string }
+  | { op: 'list' }
   | { op: RuntimeOperation; runtimeId: string }
   | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
 
@@ -75,6 +77,7 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
     recreate: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
     prepare: ['image'],
+    list: [],
     installed: ['runtimeId', 'harness'],
     install: ['runtimeId', 'harness'],
   }[op as string] ?? ['runtimeId']
@@ -86,6 +89,7 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     return image
   }
   if (op === 'prepare') return { op, image: imageOf() }
+  if (op === 'list') return { op }
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
   if (op === 'installed' || op === 'install') {
     if (!harnessIds.includes(fields.harness as HarnessId)) throw new Refused('unknown harness')
@@ -105,6 +109,7 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
 
 const containerNameOf = (prefix: string, runtimeId: string) => `${prefix}rt-${runtimeId}`
 const networkNameOf = (prefix: string, runtimeId: string) => `${containerNameOf(prefix, runtimeId)}-net`
+const packageCachePrefixOf = (prefix: string) => `${prefix}cache-`
 
 export const containerBodyOf = ({
   prefix,
@@ -150,7 +155,13 @@ export const containerBodyOf = ({
           }),
         ),
         ...(packageCacheKey
-          ? [{ Type: 'volume', Source: `${prefix}cache-${packageCacheKey}`, Target: packageCacheTarget } as const]
+          ? [
+              {
+                Type: 'volume',
+                Source: `${packageCachePrefixOf(prefix)}${packageCacheKey}`,
+                Target: packageCacheTarget,
+              } as const,
+            ]
           : []),
         ...(personal ? [...credentialsMountsOf(prefix), harnessesMountOf(prefix)] : []),
       ],
@@ -245,6 +256,25 @@ export const createCommandRunner = ({
     if (!isPresent) await pull(image)
     if (personal) await ensureCredentialsReaders(docker, prefix, image)
   }
+  const runtimeIdsOf = async (includingStopped: boolean) => {
+    const filters = encodeURIComponent(JSON.stringify({ label: ['spyria.managed=1', 'spyria.runtime'] }))
+    const containers = await docker<{ Names: string[]; Labels: Record<string, string> }[]>(
+      'GET',
+      `/containers/json?all=${includingStopped}&filters=${filters}`,
+    )
+    return containers
+      .map(({ Names, Labels }) => ({ Names, runtimeId: Labels['spyria.runtime'] ?? '' }))
+      .filter(({ Names, runtimeId }) => Names.includes(`/${containerNameOf(prefix, runtimeId)}`))
+      .map(({ runtimeId }) => runtimeId)
+  }
+  const removeUnusedPackageCaches = async () => {
+    const cachePrefix = packageCachePrefixOf(prefix)
+    const filters = encodeURIComponent(JSON.stringify({ name: [cachePrefix], dangling: ['true'] }))
+    const { Volumes } = await docker<{ Volumes: { Name: string }[] | null }>('GET', `/volumes?filters=${filters}`)
+    for (const { Name } of Volumes ?? [])
+      if (Name.startsWith(cachePrefix) && packageCacheKeyPattern.test(Name.slice(cachePrefix.length)))
+        await docker('DELETE', `/volumes/${Name}`).catch(ignoring(404, 409))
+  }
   const create = async (request: CreateRequest) => {
     await Promise.all([createNetwork(networkNameOf(prefix, request.runtimeId)), prepare(request.image)])
     await docker(
@@ -255,6 +285,7 @@ export const createCommandRunner = ({
   }
   const run = async (command: Command) => {
     if (command.op === 'prepare') return void (await prepare(command.image))
+    if (command.op === 'list') return runtimeIdsOf(true)
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
     if (command.op === 'recreate') {
@@ -292,6 +323,7 @@ export const createCommandRunner = ({
     for (const suffix of Object.keys(volumeTargets))
       await docker('DELETE', `/volumes/${name}-${suffix}`).catch(ignoringMissing)
     await removeNetwork(network)
+    await removeUnusedPackageCaches()
   }
   return {
     run,
@@ -301,15 +333,6 @@ export const createCommandRunner = ({
       if (!address) throw new Refused('runtime is not running')
       return `http://${address}:${spyriaAgentPort}`
     },
-    runningCount: async () => {
-      const filters = encodeURIComponent(JSON.stringify({ label: ['spyria.managed=1', 'spyria.runtime'] }))
-      const containers = await docker<{ Names: string[]; Labels: Record<string, string> }[]>(
-        'GET',
-        `/containers/json?filters=${filters}`,
-      )
-      return containers.filter(({ Names, Labels }) =>
-        Names.includes(`/${containerNameOf(prefix, Labels['spyria.runtime'] ?? '')}`),
-      ).length
-    },
+    runningCount: async () => (await runtimeIdsOf(false)).length,
   }
 }

@@ -355,6 +355,29 @@ test('commands to an offline host retry until it returns, rows stay untouched me
   )
 })
 
+test('a host that connects removes the runtimes Spyria no longer knows or removed, and keeps the others', async () => {
+  const host = await fakeHost('Leaking host')
+  const [keptChat, removedChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const kept = await stoppedRuntime(keptChat)
+  const removed = await stoppedRuntime(removedChat)
+  await host.disconnect()
+  await database.$client`update runtimes set state = 'removed' where id = ${removed.id}`
+  const discarded = crypto.randomUUID()
+  host.containers.set(discarded, { running: false, apiKey: '' })
+  host.commands.length = 0
+
+  await host.connect()
+  await waitFor(() => !host.containers.has(discarded) && !host.containers.has(removed.id))
+  expect(host.containers.has(kept.id)).toBe(true)
+  expect(
+    host.commands
+      .filter((command) => command.op === 'remove')
+      .map((command) => command.runtimeId)
+      .toSorted(),
+  ).toEqual([discarded, removed.id].toSorted())
+  expect((await runtimeOf(keptChat)).state).toBe('stopped')
+})
+
 test('removing a host marks its runtimes failed/lost', async () => {
   const host = await fakeHost('Doomed host')
   const [runningChat, stoppedChat] = [await newRuntimeChat(), await newRuntimeChat()]

@@ -130,7 +130,7 @@ const claim = async (code: string) => {
 const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) =>
   'closed' in outcome ? outcome.closed.reason : 'not refused'
 
-const hostVersions = { hostVersion: 'test', protocolVersion: 2 }
+const hostVersions = { hostVersion: 'test', protocolVersion: 3 }
 
 const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean }) => {
   const { id, code } = await addedHost(name)
