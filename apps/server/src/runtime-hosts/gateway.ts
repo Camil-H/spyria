@@ -382,8 +382,8 @@ export const createRuntimeHostGateway = ({
   const packageCacheKeyOf = (workspaceId: WorkspaceId, { repository, ownerId }: PackageCacheScope) =>
     createHash('sha256').update(`package-cache.${workspaceId}.${repository}.${ownerId}`).digest('hex').slice(0, 32)
 
-  const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
-    secretsKeyring.derivedKeyOf(secretsKeyring.currentKeyId, `runtime-api-key.${workspaceId}.${runtimeId}`)
+  const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId, apiKeyId }) =>
+    secretsKeyring.derivedKeyOf(apiKeyId ?? secretsKeyring.currentKeyId, `runtime-api-key.${workspaceId}.${runtimeId}`)
 
   const createWith =
     (op: 'create' | 'recreate'): SandboxProvider['create'] =>
@@ -398,6 +398,7 @@ export const createRuntimeHostGateway = ({
   const sandboxProvider: SandboxProvider = {
     create: createWith('create'),
     recreate: createWith('recreate'),
+    currentApiKeyId: secretsKeyring.currentKeyId,
     apiKeyOf,
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),

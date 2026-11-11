@@ -28,7 +28,8 @@ export type SandboxTransport = {
 export type SandboxProvider = {
   create(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
   recreate(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
-  apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'>): string
+  currentApiKeyId: string
+  apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'> & { apiKeyId?: string }): string
   start(sandbox: SandboxLocation): Promise<void>
   stop(sandbox: SandboxLocation): Promise<void>
   remove(sandbox: SandboxLocation): Promise<void>
