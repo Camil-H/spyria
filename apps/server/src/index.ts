@@ -7,14 +7,10 @@ import { createBifrostUsageLogs } from '@spyria/usage/server'
 import { joinByOf } from '@spyria/workspace/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
+import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
-import {
-  applyConfiguredSignInApp,
-  assertInstanceAppsConfigured,
-  hasNoWorkspace,
-  isInstallHostToken,
-} from './auth/sso.ts'
+import { applyConfiguredSignInApp, assertInstanceAppsConfigured, hasNoWorkspace } from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
@@ -67,7 +63,7 @@ const installHostToken = process.env.SPYRIA_INSTALL_HOST_TOKEN || undefined
 const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
   awaitsFirstWorkspace: async (claimCode) =>
-    isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
+    isSameSecret(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
   runtimeKeySecret: secretsKey,
   hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   databases: () => [database],

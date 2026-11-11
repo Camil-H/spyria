@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { type Database, transactWithin } from '@spyria/db/postgres'
 import {
   type Actor,
@@ -491,8 +491,3 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
         .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.`,
     )
 }
-
-const sha256Of = (value: string) => createHash('sha256').update(value).digest()
-
-export const isInstallHostToken = (installHostToken: string | undefined, code: string) =>
-  installHostToken !== undefined && timingSafeEqual(sha256Of(installHostToken), sha256Of(code))
