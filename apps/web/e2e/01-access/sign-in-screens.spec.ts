@@ -31,7 +31,7 @@ const signedOutPageOf = async (
 }
 
 test.describe('Sign-in screens', () => {
-  test('As a visitor, I see the sign-in card asking for my email', async ({ browser }) => {
+  test('As a visitor, I see the sign-in card asking for my email', { tag: ['@spec-37'] }, async ({ browser }) => {
     const page = await signedOutPageOf(browser, {})
     await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
     const form = page.getByRole('form', { name: 'Sign in' })
