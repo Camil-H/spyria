@@ -4,19 +4,14 @@ import { ProfileView } from '@spyria/profile'
 import { MyMachineSection } from '@spyria/runtime'
 import { useSession } from '@spyria/session'
 import { MyUsageSection } from '@spyria/usage'
-import { use } from 'react'
 import { useOutletContext } from 'react-router'
-import { sharedAuthMode } from './auth.ts'
 
 const ProfileRoute = () => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const { memberId } = useSession()
-  const usesSingleSignOn = use(sharedAuthMode()).authMode === 'sso'
   return (
     <div className="px-6 py-6 md:px-12 xl:px-16">
-      <ProfileView
-        intro={<ChecklistBlock workspaceId={workspaceId} scope="member" usesSingleSignOn={usesSingleSignOn} />}
-      >
+      <ProfileView intro={<ChecklistBlock workspaceId={workspaceId} scope="member" />}>
         <MyMachineSection workspaceId={workspaceId} memberId={memberId} />
         <MyUsageSection workspaceId={workspaceId} memberId={memberId} />
       </ProfileView>

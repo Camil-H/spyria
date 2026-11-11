@@ -17,9 +17,6 @@ export const createZeroTransactor = (tx: Transaction, { workspaceId, userId }: Z
   const unitOfWork: UnitOfWork = {
     onboarding: {
       facts: async () => ({
-        isDomainVerified: await isFound(
-          tx.run(zql.ssoDomains.where('workspaceId', workspaceId).where('verifiedAt', 'IS NOT', null).one()),
-        ),
         hasGitHubApp: await isFound(tx.run(zql.githubApps.where('workspaceId', workspaceId).one())),
         hasClaimedRuntimeHost: await isFound(
           tx.run(

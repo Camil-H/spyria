@@ -24,8 +24,7 @@ export const secretVariables: Record<string, string> = {
   'google-client-secret': 'SPYRIA_SETUP_GOOGLE_CLIENT_SECRET',
   'microsoft-client-secret': 'SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET',
   'okta-token': 'SPYRIA_SETUP_OKTA_TOKEN',
-  'resend-key': 'SPYRIA_SETUP_RESEND_KEY',
-  'smtp-url': 'SPYRIA_SETUP_SMTP_URL',
+  'oidc-client-secret': 'SPYRIA_SETUP_OIDC_CLIENT_SECRET',
   'host-claim-url': 'SPYRIA_SETUP_HOST_CLAIM_URL',
 }
 

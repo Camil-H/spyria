@@ -2,12 +2,10 @@ import { createDatabase, type Database } from '@spyria/db/postgres'
 import { databaseUrlOf } from '@spyria/db/testing'
 import { createApp } from '../app.ts'
 import { serverWebSocket } from '../runtime-hosts/gateway.ts'
-import { startFakeSmtp } from './fake-smtp.ts'
 import { serveWithLifecycleLogs } from './process-lifecycle.ts'
 import { testAuthSettings, testSecretsKeyring } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3102)
-const smtp = startFakeSmtp()
 const databaseByName = new Map<string, Database>()
 const databaseNamed = (databaseName: string) => {
   const known = databaseByName.get(databaseName)
@@ -25,8 +23,10 @@ const app = createApp({
   authMode: 'sso',
   secretsKeyring: testSecretsKeyring,
   testDatabaseByName: databaseNamed,
-  mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@e2e.test>' },
-}).get('/test/mails', (context) => context.json(smtp.mails))
+  instanceSignInApps: {
+    oidc: { issuer: testAuthSettings.oidc.issuer, clientId: 'spyria-sso', clientSecret: 'spyria-sso-e2e-secret' },
+  },
+})
 
 serveWithLifecycleLogs('sso_test_server', port, () =>
   Bun.serve({ port, hostname: '0.0.0.0', idleTimeout: 0, fetch: app.fetch, websocket: serverWebSocket }),

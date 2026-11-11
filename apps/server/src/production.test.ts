@@ -9,8 +9,6 @@ const production = {
   SPYRIA_SETUP_TOKEN: 'd'.repeat(48),
   SPYRIA_APP_ORIGIN: 'https://spyria.example',
   SPYRIA_OIDC_REDIRECT_URI: 'https://spyria.example/auth/callback',
-  SPYRIA_SMTP_URL: 'smtp://user:pass@smtp.example:587',
-  SPYRIA_MAIL_FROM: 'Spyria <spyria@spyria.example>',
   SPYRIA_GATEWAY_URL: 'http://gateway:8080',
   SPYRIA_GATEWAY_ADMIN_USER: 'gateway-admin',
   SPYRIA_GATEWAY_ADMIN_PASSWORD: 'c'.repeat(40),
@@ -58,19 +56,18 @@ test('the app origin is https and the OIDC redirect is on it', () => {
   ])
 })
 
-test('mail is optional, but a sender is required once SMTP is set', () => {
-  expect(problemsWith({ SPYRIA_SMTP_URL: undefined, SPYRIA_MAIL_FROM: undefined })).toEqual([])
-  expect(problemsWith({ SPYRIA_MAIL_FROM: undefined })).toEqual(['SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.'])
-})
-
-test('a sign-in app in the settings takes its client id and secret together', () => {
-  const together = 'SPYRIA_SIGN_IN_APP_CLIENT_ID and SPYRIA_SIGN_IN_APP_CLIENT_SECRET are set together or not at all.'
-  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app', SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([])
-  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app' })).toEqual([together])
-  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_SECRET: 'secret' })).toEqual([together])
-  expect(problemsWith({ SPYRIA_SIGN_IN_APP_CLIENT_ID: 'app', SPYRIA_SIGN_IN_APP_CLIENT_SECRET: '  ' })).toEqual([
-    together,
-  ])
+test('an OIDC app for accounts takes its issuer, client id and secret together', () => {
+  const together =
+    'SPYRIA_OIDC_ISSUER, SPYRIA_OIDC_CLIENT_ID, SPYRIA_OIDC_CLIENT_SECRET are set together or not at all.'
+  const app = {
+    SPYRIA_OIDC_ISSUER: 'https://idp.example',
+    SPYRIA_OIDC_CLIENT_ID: 'app',
+    SPYRIA_OIDC_CLIENT_SECRET: 'secret',
+  }
+  expect(problemsWith(app)).toEqual([])
+  expect(problemsWith({ ...app, SPYRIA_OIDC_CLIENT_SECRET: undefined })).toEqual([together])
+  expect(problemsWith({ SPYRIA_OIDC_ISSUER: 'https://idp.example' })).toEqual([together])
+  expect(problemsWith({ ...app, SPYRIA_OIDC_CLIENT_ID: '  ' })).toEqual([together])
 })
 
 test.each(['SPYRIA_GATEWAY_URL'])('%s is required', (name) => {

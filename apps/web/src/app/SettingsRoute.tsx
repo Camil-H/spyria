@@ -225,7 +225,7 @@ const SettingsRoute = () => {
   return (
     <div className="flex flex-col gap-8 px-6 py-6 md:px-12 xl:px-16">
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
-      <ChecklistBlock workspaceId={workspaceId} scope="workspace" usesSingleSignOn={!isDexSignIn} />
+      <ChecklistBlock workspaceId={workspaceId} scope="workspace" />
       {allowedSections.length > 0 ? (
         allowedSections.map(({ title, cards }) => (
           <LabelledSection key={title} title={title}>

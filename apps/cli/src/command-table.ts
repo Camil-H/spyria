@@ -1,15 +1,5 @@
 import { type Cloud, clouds, setupCloud } from './cloud.ts'
-import {
-  backup,
-  changeSignInApp,
-  doctor,
-  installFolderOf,
-  installIn,
-  printSetupLink,
-  restore,
-  upgrade,
-  verifyDomain,
-} from './commands.ts'
+import { backup, doctor, installFolderOf, installIn, printSetupLink, restore, upgrade } from './commands.ts'
 import { runCompose } from './compose.ts'
 import { composeArgumentsOf, type Flags } from './flags.ts'
 import { cliVersion } from './release.ts'
@@ -31,8 +21,6 @@ export const commandsOf = (flags: Flags, commandLine: readonly string[]): Record
       if (!doctor(installIn(folder))) process.exitCode = 1
     },
     'setup-link': () => printSetupLink(installIn(folder)),
-    'verify-domain': () => verifyDomain(installIn(folder), flags),
-    'sign-in-app': () => changeSignInApp(installIn(folder), flags),
     version: () => console.log(cliVersion),
     compose: () => {
       process.exitCode =

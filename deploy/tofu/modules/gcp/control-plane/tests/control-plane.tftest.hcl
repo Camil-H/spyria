@@ -66,7 +66,7 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "With a Cloud DNS zone the hostname points at the load balancer by itself"
   }
   assert {
-    condition     = !contains(keys(google_secret_manager_secret.setting), "SPYRIA_SMTP_URL") && !contains(keys(google_secret_manager_secret.setting), "SPYRIA_SIGN_IN_APP_CLIENT_SECRET") && contains(keys(google_secret_manager_secret.setting), "SPYRIA_SECRETS_KEY")
+    condition     = !contains(keys(google_secret_manager_secret.setting), "SPYRIA_GOOGLE_CLIENT_SECRET") && !contains(keys(google_secret_manager_secret.setting), "SPYRIA_OIDC_CLIENT_SECRET") && contains(keys(google_secret_manager_secret.setting), "SPYRIA_SECRETS_KEY")
     error_message = "Set secrets live in Secret Manager; unset optional ones are left out"
   }
   assert {
@@ -98,25 +98,26 @@ run "without_a_cloud_dns_zone_it_names_the_record_to_create" {
   }
 }
 
-run "a_sign_in_app_in_the_settings_reaches_the_server_with_its_secret_in_secret_manager" {
+run "an_oidc_app_for_accounts_reaches_the_server_with_its_secret_in_secret_manager" {
   command = apply
   variables {
-    join_by                   = "invited-address"
-    sign_in_app_client_id     = "garage-sign-in-app"
-    sign_in_app_client_secret = "garage-secret"
+    oidc_issuer        = "https://login.example.com"
+    oidc_client_id     = "spyria"
+    oidc_client_secret = "oidc-secret"
   }
   assert {
-    condition     = contains(keys(google_secret_manager_secret.setting), "SPYRIA_SIGN_IN_APP_CLIENT_SECRET") && module.settings.server_environment.SPYRIA_SIGN_IN_APP_CLIENT_ID == "garage-sign-in-app"
-    error_message = "The server gets the sign-in app's client id as a setting and its secret from Secret Manager"
+    condition     = contains(keys(google_secret_manager_secret.setting), "SPYRIA_OIDC_CLIENT_SECRET") && module.settings.server_environment.SPYRIA_OIDC_ISSUER == "https://login.example.com" && module.settings.server_environment.SPYRIA_OIDC_CLIENT_ID == "spyria"
+    error_message = "The server gets the OIDC app's issuer and client id as settings and its secret from Secret Manager"
   }
 }
 
-run "a_sign_in_app_takes_its_client_id_and_secret_together" {
+run "an_oidc_app_takes_its_issuer_client_id_and_secret_together" {
   command = plan
   variables {
-    sign_in_app_client_id = "garage-sign-in-app"
+    oidc_issuer    = "https://login.example.com"
+    oidc_client_id = "spyria"
   }
-  expect_failures = [var.sign_in_app_client_secret]
+  expect_failures = [var.oidc_client_secret]
 }
 
 run "the_digest_before_a_change" {
@@ -125,8 +126,8 @@ run "the_digest_before_a_change" {
     source = "./"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret
@@ -160,8 +161,8 @@ run "every_service_carries_a_digest_of_its_secret_values_so_a_changed_secret_res
     values = { result = "ABCDEFGHJKMNPQRS" }
   }
   variables {
-    smtp_url  = "smtps://user:rotated@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "rotated-secret"
   }
   assert {
     condition = alltrue([for container in google_cloud_run_v2_service.server.template[0].containers :
@@ -191,8 +192,8 @@ run "the_same_values_applied_again" {
     source = "../../gcp/control-plane"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret

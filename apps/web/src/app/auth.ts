@@ -1,23 +1,22 @@
 import type { WorkspaceSession } from '@spyria/db/zero-store'
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
+export type SignInProvider = { id: string; kind: 'google' | 'microsoft' | 'oidc'; isWorkspaceSso: boolean }
 type SignInResult =
   | { status: 'signed_in' }
   | { status: 'not_invited'; email: string }
-  | { status: 'unknown_domain'; domain: string }
+  | { status: 'no_workspace' }
   | { status: 'failed' }
   | { status: 'closed' }
   | { status: 'refused'; message: string }
+  | { status: 'choose_provider'; providers: SignInProvider[] }
 
 const popupPollMilliseconds = 200
 const popupName = 'spyria-sign-in'
+const csrfHeaders = { 'content-type': 'application/json', 'x-spyria-csrf': '1' }
 
 const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string, string> = {}) =>
-  fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-spyria-csrf': '1', ...headers },
-    body: JSON.stringify({ workspaceId }),
-  })
+  fetch(path, { method: 'POST', headers: { ...csrfHeaders, ...headers }, body: JSON.stringify({ workspaceId }) })
 
 export const loadSessions = async (): Promise<
   | { userId?: undefined; sessions: [] }
@@ -28,9 +27,9 @@ export const loadAuthMode = async (
   setupToken?: string,
 ): Promise<{
   authMode: 'dex' | 'sso'
-  joinBy: 'domain' | 'invited_address'
   isBeingSetUp: boolean
   canCreateWorkspace: boolean
+  accountProviders: ('google' | 'microsoft' | 'oidc')[]
   instanceApps: ('google' | 'microsoft')[]
 }> => (await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')).json()
 
@@ -74,14 +73,40 @@ const resultOf = (popup: Window | null) =>
   })
 
 const openPopup = (url: string) => window.open(url, popupName, 'popup,width=480,height=640')
+const loginUrlOf = (target: Record<string, string | undefined>) =>
+  `/auth/login?${new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))}`
 
-export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string } = {}) => {
-  const query = new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => !!entry[1]))
-  return resultOf(openPopup(`/auth/login?${query}`))
+export const signInWithPopup = (target: { workspace?: WorkspaceId; email?: string; provider?: string } = {}) =>
+  resultOf(openPopup(loginUrlOf(target)))
+
+export const signInWithEmail = async (email: string): Promise<SignInResult> => {
+  const popup = openPopup('')
+  const response = await fetch(`/auth/providers?${new URLSearchParams({ email })}`).catch(() => undefined)
+  const { providers = [] }: { providers?: SignInProvider[] } = response?.ok ? await response.json() : {}
+  const [onlyProvider] = providers
+  if (popup && onlyProvider && providers.length === 1) {
+    popup.location.href = loginUrlOf({ email, provider: onlyProvider.id })
+    return resultOf(popup)
+  }
+  popup?.close()
+  if (!response?.ok) return { status: 'failed' }
+  return providers.length === 0 ? { status: 'not_invited', email } : { status: 'choose_provider', providers }
 }
 
-export const createWorkspaceWithPopup = (form: HTMLFormElement) => {
+export const submitInPopup = (form: HTMLFormElement, action: string) => {
   const popup = openPopup('')
-  Object.assign(form, { method: 'post', action: '/auth/first-workspace', target: popupName }).submit()
+  Object.assign(form, { method: 'post', action, target: popupName }).submit()
   return resultOf(popup)
+}
+
+export const createWorkspaceOfAccount = async (name: string): Promise<WorkspaceSession> => {
+  const response = await fetch('/auth/workspaces', {
+    method: 'POST',
+    headers: csrfHeaders,
+    body: JSON.stringify({ name }),
+  })
+  const body = await response.json().catch(() => ({}))
+  if (response.status === 401) throw new Error('Your sign-in expired: sign in again to create a workspace')
+  if (!response.ok) throw new Error(body.message ?? 'The workspace could not be created. Try again.')
+  return body
 }

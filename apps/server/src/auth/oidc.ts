@@ -1,5 +1,5 @@
 import { DomainError, withRetries } from '@spyria/kernel'
-import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose'
+import { createRemoteJWKSet, decodeJwt, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
@@ -15,11 +15,14 @@ type ClientSettings = OidcSettings & {
   emailOf?: (claims: JWTPayload) => EmailClaim
   subjectOf?: (claims: JWTPayload) => string | undefined
   canBindByEmailOf?: (claims: JWTPayload) => boolean
+  isIssuerPerTenant?: boolean
 }
 type LoginState = { state: string; nonce: string; codeVerifier: string }
 
 const idTokenClockToleranceSeconds = 30
 const providerTimeoutMilliseconds = 10_000
+const tenantPlaceholder = '{tenantid}'
+const tenantIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const insecureOptionOf = (issuerUrl: URL) => ({ [oauth.allowInsecureRequests]: issuerUrl.protocol === 'http:' })
 
@@ -32,6 +35,24 @@ export const discoverIssuer = async (issuer: string) => {
       withRetries((signal) => fetch(url, { ...options, signal }), { timeoutMilliseconds: providerTimeoutMilliseconds }),
   })
   return oauth.processDiscoveryResponse(issuerUrl, response)
+}
+
+const discoverPerTenantIssuer = async (issuer: string) => {
+  const response = await withRetries((signal) => fetch(`${issuer}/.well-known/openid-configuration`, { signal }), {
+    timeoutMilliseconds: providerTimeoutMilliseconds,
+  })
+  if (!response.ok) throw new Error(`The discovery of ${issuer} answered ${response.status}`)
+  const server = (await response.json()) as oauth.AuthorizationServer
+  if (server.issuer !== `${new URL(issuer).origin}/${tenantPlaceholder}/v2.0`)
+    throw new Error(`${issuer} does not name an issuer per tenant`)
+  return server
+}
+
+const tenantIssuerOf = async (server: oauth.AuthorizationServer, tokenResponse: Response) => {
+  const { id_token: idToken } = (await tokenResponse.json()) as { id_token?: string }
+  const { tid } = decodeJwt(idToken ?? '')
+  if (typeof tid !== 'string' || !tenantIdPattern.test(tid)) throw new Error('The ID token names no tenant')
+  return server.issuer.replace(tenantPlaceholder, tid)
 }
 
 const verifiedEmailOf = (claims: JWTPayload): EmailClaim => {
@@ -47,12 +68,13 @@ export const createOidc = ({
   emailOf = verifiedEmailOf,
   subjectOf = (claims) => claims.sub,
   canBindByEmailOf = () => true,
+  isIssuerPerTenant = false,
 }: ClientSettings) => {
   const client: oauth.Client = { client_id: clientId }
   const clientAuthentication = clientSecret ? oauth.ClientSecretPost(clientSecret) : oauth.None()
   let discovery: Promise<{ server: oauth.AuthorizationServer; keys: ReturnType<typeof createRemoteJWKSet> }> | undefined
   const discover = () => {
-    discovery ??= discoverIssuer(issuer)
+    discovery ??= (isIssuerPerTenant ? discoverPerTenantIssuer(issuer) : discoverIssuer(issuer))
       .then((server) => ({ server, keys: createRemoteJWKSet(new URL(server.jwks_uri ?? '')) }))
       .catch((error) => {
         discovery = undefined
@@ -61,7 +83,7 @@ export const createOidc = ({
     return discovery
   }
   return {
-    authorizationUrl: async () => {
+    authorizationUrl: async (loginHint?: string) => {
       const { server } = await discover()
       const login: LoginState = {
         state: oauth.generateRandomState(),
@@ -78,6 +100,7 @@ export const createOidc = ({
         code_challenge_method: 'S256',
         state: login.state,
         nonce: login.nonce,
+        ...(loginHint && { login_hint: loginHint }),
       }).toString()
       return { url: url.href, login }
     },
@@ -93,12 +116,15 @@ export const createOidc = ({
         login.codeVerifier,
         { ...insecureOptionOf(new URL(issuer)), signal: AbortSignal.timeout(providerTimeoutMilliseconds) },
       )
-      const result = await oauth.processAuthorizationCodeResponse(server, client, response, {
+      const tokenServer = isIssuerPerTenant
+        ? { ...server, issuer: await tenantIssuerOf(server, response.clone()) }
+        : server
+      const result = await oauth.processAuthorizationCodeResponse(tokenServer, client, response, {
         expectedNonce: login.nonce,
         requireIdToken: true,
       })
       const { payload } = await jwtVerify(result.id_token ?? '', keys, {
-        issuer: server.issuer,
+        issuer: tokenServer.issuer,
         audience: clientId,
         clockTolerance: idTokenClockToleranceSeconds,
       })
@@ -112,7 +138,7 @@ export const createOidc = ({
       return {
         email,
         name: payload.name,
-        issuer: server.issuer,
+        issuer: tokenServer.issuer,
         subject,
         legacySubject,
         canBindByEmail: canBindByEmailOf(payload),

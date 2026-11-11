@@ -8,6 +8,7 @@ export const signedOutScreenOf = (page: Page, workspaceName: string) =>
   page.getByText(`You are signed out of ${workspaceName}`)
 export const anySignedOutScreenOf = (page: Page) => page.getByText(/You are signed out of/)
 export const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
+export const creationFormOf = (page: Page) => page.getByRole('form', { name: 'Create a workspace' })
 export const logInAtProvider = async (popup: Page, email: string) => {
   const popupClosed = popup.waitForEvent('close')
   await popup.locator('#login').fill(email)

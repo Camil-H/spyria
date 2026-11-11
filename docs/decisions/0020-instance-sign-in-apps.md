@@ -1,5 +1,7 @@
 # 0020. One-click Google and Microsoft sign-in through the apps of the instance
 
+Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): the apps of the instance also sign in accounts, the Microsoft app through the `common` authority with personal accounts too, and a workspace domain no longer gates matching by email.
+
 ## Context
 
 Setting up sign-in for Google Workspace or Microsoft Entra asked an Admin to register an OAuth client and paste its client id and secret. Google and Microsoft accept only redirect URIs registered in advance, so one app owned by the Spyria project cannot serve self-hosted origins it does not know.

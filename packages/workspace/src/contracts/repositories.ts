@@ -86,7 +86,6 @@ export type MembershipRepository = {
 export type InvitationRepository = {
   get(invitationId: string): Promise<Invitation | undefined>
   findOpen(email: string): Promise<Invitation | undefined>
-  awaitsDomainVerification(): Promise<boolean>
   add(invitation: Invitation): Promise<void>
   save(invitation: Invitation): Promise<void>
 }

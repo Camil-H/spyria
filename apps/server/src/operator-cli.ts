@@ -3,9 +3,8 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
-import { createSmtpMailer } from './auth/mail.ts'
 import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
-import { hasNoWorkspace, replaceSignInApp, verifyDomainByOperator } from './auth/sso.ts'
+import { hasNoWorkspace, stopWorkspaceSsoByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { countRuntimesRunningOnPreviousKeys, resealSecrets } from './reseal-secrets.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
@@ -17,7 +16,6 @@ const requiredEnvironment = (name: string) => {
   if (!value) throw new Error(`${name} is required`)
   return value
 }
-const optionOf = (name: string) => (options.includes(name) ? options[options.indexOf(name) + 1] : undefined)
 const toolServers: Record<string, () => ToolServerSetup> = {
   github: () => ({
     name: 'GitHub',
@@ -59,20 +57,6 @@ const commands: Record<string, () => Promise<void>> = {
     const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
     console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
   },
-  'mail:test': async () => {
-    const to = optionOf('--to')
-    if (!to) throw new Error('Usage: bun run operator mail:test --to <address>')
-    const mailer = createSmtpMailer({
-      smtpUrl: requiredEnvironment('SPYRIA_SMTP_URL'),
-      from: requiredEnvironment('SPYRIA_MAIL_FROM'),
-    })
-    await mailer.send({
-      to,
-      subject: 'Spyria can send mail',
-      text: 'This test message shows that Spyria can send mail.',
-    })
-    console.log(`Sent a test message to ${to}`)
-  },
   'has-workspace': async () => {
     console.log((await hasNoWorkspace(database.$client)) ? 'no' : 'yes')
   },
@@ -82,22 +66,15 @@ const commands: Record<string, () => Promise<void>> = {
     const origin = requiredEnvironment('SPYRIA_APP_ORIGIN')
     console.log(`${origin}/?${new URLSearchParams({ setup: requiredEnvironment('SPYRIA_SETUP_TOKEN') })}`)
   },
-  'sso:verify-domain': async () => {
-    const [workspaceId, domain] = ['--workspace', '--domain'].map(optionOf)
-    if (!workspaceId || !domain)
-      throw new Error('Usage: bun run operator sso:verify-domain --workspace <id> --domain <domain>')
-    await verifyDomainByOperator(database, workspaceId, domain)
-    console.log(`${domain} is verified for workspace ${workspaceId}`)
-  },
-  'sso:sign-in-app': async () => {
-    const clientId = optionOf('--client-id')
-    if (!clientId)
-      throw new Error(
-        'Usage: bun run operator sso:sign-in-app --client-id <id>, with the client secret on standard input',
-      )
-    const secretBox = createSecretBox(secretsKeyringFrom(process.env))
-    const count = await replaceSignInApp(database, secretBox, { clientId, clientSecret: await Bun.stdin.text() })
-    console.log(`${count} workspace${count === 1 ? '' : 's'} now sign in through client ${clientId}`)
+  'workspace:stop-sso': async () => {
+    const [workspaceId] = options
+    if (!workspaceId) throw new Error('Usage: bun run operator workspace:stop-sso <id>')
+    const isStopped = await stopWorkspaceSsoByOperator(database, workspaceId)
+    console.log(
+      isStopped
+        ? `Workspace ${workspaceId} no longer enforces SSO: its members sign in with their own accounts`
+        : `Workspace ${workspaceId} does not enforce SSO`,
+    )
   },
   'secrets:reseal': async () => {
     const keyring = secretsKeyringFrom(process.env)

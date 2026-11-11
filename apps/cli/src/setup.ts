@@ -11,7 +11,6 @@ import {
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
-  sendsTestMessage,
   startStack,
   writeEnvironment,
   writeReleaseFiles,
@@ -21,7 +20,7 @@ import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts
 import { type Environment, environmentOf, isDeploymentName, pairingCodeOf, type SetupAnswers } from './environment.ts'
 import { askerOf, type Flags, type ProcessEnvironment, secretVariables } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
-import { type Asker, firstWorkspaceProviderOf, mailOf, removal } from './setup-steps.ts'
+import { type Asker, firstWorkspaceProviderOf, removal } from './setup-steps.ts'
 
 const googleClientIdPattern = /^[\w-]+\.apps\.googleusercontent\.com$/
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -91,8 +90,8 @@ const instanceAppOf = (
 ) => {
   const guide =
     provider === 'google'
-      ? `Google sign-in through an app of this Spyria (optional). In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`
-      : `Microsoft sign-in through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for accounts in any organizational directory with the web redirect URI ${origin}/auth/callback, then create a client secret. Or answer create to register it now with az, signed in as an admin of your directory.`
+      ? `Sign-in with any Google account, Gmail included, through an app of this Spyria (optional). In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`
+      : `Sign-in with Microsoft work, school or personal accounts through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for Accounts in any organizational directory and personal Microsoft accounts, with the web redirect URI ${origin}/auth/callback, then create a client secret. Or answer create to register it now with az.`
   const flagPrefix = `${provider}-client`
   if (!asker.isUnattended && existing.clientId === undefined) console.log(guide)
   const clientId = asker.ask(
@@ -103,7 +102,7 @@ const instanceAppOf = (
   if (clientId === '' || clientId === removal) return undefined
   if (provider === 'microsoft' && clientId === 'create') {
     if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
-    const entra = registerEntraApp({ origin, audience: 'organizations', savedClientId: existing.clientId }, az)
+    const entra = registerEntraApp({ origin, audience: 'any-account', savedClientId: existing.clientId }, az)
     const clientSecret =
       entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
     if (!clientSecret)
@@ -127,17 +126,40 @@ const instanceAppOf = (
   return { clientId, clientSecret }
 }
 
+const oidcAccountAppOf = (asker: Asker, origin: string, existing: Environment) => {
+  const savedIssuer = existing.SPYRIA_OIDC_ISSUER
+  if (!asker.isUnattended && savedIssuer === undefined)
+    console.log(
+      `Sign-in with accounts of another OIDC provider through an app of this Spyria (optional). Register a client there with the redirect URI ${origin}/auth/callback and the scopes openid, email and profile.`,
+    )
+  const issuer = asker.ask(
+    'oidc-issuer',
+    `OIDC issuer URL, for example https://login.example.com (empty to skip${savedIssuer ? ', - to remove' : ''})`,
+    savedIssuer ?? '',
+  )
+  if (issuer === '' || issuer === removal) return undefined
+  if (URL.parse(issuer)?.protocol !== 'https:') throw new Error(`${issuer} is not an https address`)
+  const clientId = asker.require('oidc-client-id', 'OIDC client id', existing.SPYRIA_OIDC_CLIENT_ID ?? '')
+  const isSavedApp = issuer === savedIssuer && clientId === existing.SPYRIA_OIDC_CLIENT_ID
+  const savedSecret = isSavedApp ? (existing.SPYRIA_OIDC_CLIENT_SECRET ?? '') : ''
+  const clientSecret = asker.secret(
+    'oidc-client-secret',
+    savedSecret ? 'Client secret (empty keeps the saved one)' : 'Client secret',
+    savedSecret,
+  )
+  if (clientSecret === '') throw new Error(`${secretVariables['oidc-client-secret']} is required`)
+  return { issuer, clientId, clientSecret }
+}
+
 export const setup = async (
   flags: Flags,
   {
     cloudflareApiUrl = cloudflareApi,
-    resendApiUrl,
     az = runAz,
     processEnvironment = process.env,
     workspaceExistsIn = workspaceExistsInRunningStack,
   }: {
     cloudflareApiUrl?: string
-    resendApiUrl?: string
     az?: AzRunner
     processEnvironment?: ProcessEnvironment
     workspaceExistsIn?: (folder: string) => boolean | undefined
@@ -181,12 +203,6 @@ export const setup = async (
       : undefined
   if (!tunnelToken) throw new Error('A Cloudflare API token is required to create the tunnel')
 
-  const joinBy = asker.choose(
-    'join-by',
-    'Who can join: people at your email domain, or only the addresses you invite',
-    ['domain', 'invited-address'],
-    existing.SPYRIA_JOIN_BY === 'invited-address' ? 'invited-address' : 'domain',
-  )
   const google = instanceAppOf(
     asker,
     'google',
@@ -197,24 +213,21 @@ export const setup = async (
     },
     az,
   )
-  const microsoft =
-    joinBy === 'domain'
-      ? instanceAppOf(
-          asker,
-          'microsoft',
-          origin,
-          {
-            clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
-            clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
-          },
-          az,
-        )
-      : undefined
+  const microsoft = instanceAppOf(
+    asker,
+    'microsoft',
+    origin,
+    {
+      clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
+      clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
+    },
+    az,
+  )
+  const oidc = oidcAccountAppOf(asker, origin, existing)
   const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
   const context = { asker, hostname, origin, cloudflare }
-  const providerLines = await firstWorkspaceProviderOf(context, { joinBy, az })
+  const providerLines = await firstWorkspaceProviderOf(context, { az })
   if (providerLines.length > 0) console.log(['', ...providerLines, ''].join('\n'))
-  const smtp = await mailOf(context, { existing, resendApiUrl })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   const answers: SetupAnswers = {
@@ -222,13 +235,11 @@ export const setup = async (
     version,
     images: flags.values.images ?? existing.SPYRIA_IMAGES ?? defaultImages,
     origin,
-    joinBy,
     tunnelToken,
     runsHost,
     pairingCode,
     dockerGroup: dockerGroupOf(),
-    smtp,
-    instanceApps: { google, microsoft },
+    instanceApps: { google, microsoft, oidc },
     localPort,
   }
   const environment = environmentOf(answers, existing)
@@ -250,22 +261,8 @@ export const setup = async (
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
-  if (flags.switches.has('no-start')) {
-    if (smtp?.retireReplacedKeys)
-      console.log(
-        `Any earlier Resend key named Spyria on ${hostname} stays valid, since Spyria may still run on it: once Spyria runs on the new key (spyria compose up -d), delete the earlier ones in Resend.`,
-      )
-    return
-  }
+  if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
-  await smtp
-    ?.retireReplacedKeys?.()
-    .catch((error: Error) =>
-      console.log(`The Resend key this setup replaced is still valid (${error.message}): revoke it in Resend.`),
-    )
-  const testAddress = smtp && asker.ask('mail-test', 'Address to send a test message to (empty to skip)', '')
-  if (testAddress && !sendsTestMessage(folder, testAddress))
-    console.log('The test message was not sent: check the SMTP URL and the sender, then run spyria setup again.')
   const setupLink = readCompose(folder, operatorCommandOf(['setup-link']))
   console.log(
     [
@@ -280,6 +277,9 @@ export const setup = async (
           ? 'This machine runs a runtime host: it joins the first workspace when you create it.'
           : '',
       'Then, in Workspace settings, Connect GitHub to work on repositories.',
+      google || microsoft || oidc
+        ? 'Anyone who signs in with an app of this Spyria can then create a workspace; a workspace can require its own sign-in provider in Setup SSO.'
+        : 'People join the first workspace by invite, signing in with its own provider.',
     ]
       .filter(Boolean)
       .join('\n'),

@@ -112,7 +112,11 @@ export const workspaceMutators = defineMutators({
       ({ tx, ctx, args }) => renameProject(dependenciesOf(tx, ctx, args), args),
     ),
     createWorkspace: defineMutator(z.extend(workspaceArguments, { id, name }), ({ tx, ctx, args }) =>
-      createWorkspace(dependenciesOf(tx, ctx, args), { ...args, ownerId: ctx.userId }),
+      createWorkspace(dependenciesOf(tx, ctx, args), {
+        ...args,
+        ownerId: ctx.userId,
+        isSignedInThroughWorkspaceSso: ctx.signedInThroughWorkspaceSso === true,
+      }),
     ),
     inviteMember: defineMutator(
       z.extend(workspaceArguments, { id, email: z.string().check(z.maxLength(320)), role: roleArgument }),

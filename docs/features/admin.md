@@ -1,6 +1,6 @@
 # Administration
 
-This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (SMTP, the identity provider, the GitHub App) are in [Manual install](../guides/self-hosting.md).
+This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (the sign-in providers, the GitHub App) are in [Manual install](../guides/self-hosting.md).
 
 Everything here is in **Workspace settings** (the workspace menu), as cards in three sections; Escape goes back from a card's page to the cards. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
 
@@ -23,7 +23,6 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 
 | Task | Who sees it | Done once |
 |---|---|---|
-| Verify your email domain | `sso.manage`, on SSO deployments | the domain is verified |
 | Connect the GitHub App | `github.manage` | the workspace has a GitHub App |
 | Connect a runtime | `runtimes.manage` | a workspace runtime host has been claimed |
 | Add your AI key | every member | they have an LLM key in the workspace |
@@ -31,7 +30,7 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 | Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
 | Add a profile picture | every member | they have a picture |
 
-Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, greyed out or not: it leaves their lists and their count, for them only. A done task leaves the list and only counts in its "x of y done"; a list disappears once all its tasks are done, and the sidebar entry once all of the member's are.
+Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. Anyone can **Skip** a task they see: it leaves their lists and their count, for them only. A done task leaves the list and only counts in its "x of y done"; a list disappears once all its tasks are done, and the sidebar entry once all of the member's are.
 
 ## Workspace roles
 
@@ -81,10 +80,9 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 
 **Manage Team** lists the members with their workspace role, the pending invites, and an **Invite** form (email and role).
 
-- Inviting is an allow-list: no account is created and no email is sent, so tell the person yourself. The invited person signs in with their work email through the workspace's provider; their first sign-in accepts every open invite for that address.
+- Inviting is an allow-list of exact addresses: no account is created and no email is sent, so tell the person yourself. An invite works at once. The invited person signs in at that address, with their own account or, when the workspace enforces SSO, through its provider; their first sign-in accepts every open invite for that address. Nobody joins a workspace any other way.
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.
-- In SSO mode, on a workspace joined by email domain, invites open only once its domain is verified (see below), so nobody new gets in before the admin has proven they control the domain.
-- Someone who signs in without a membership or an open invite sees that no workspace has invited them.
+- Someone who signs in with an account but has no membership or open invite can create a workspace of their own, or ask an Admin to invite their address.
 - A signed-in member whose workspace takes more than 10 seconds to load, for example right after a deploy or while the connection is down, sees that it is taking longer than usual, with a **Try again** button; the app keeps trying and opens as soon as the workspace arrives, rather than sending them back to sign in. If their session ends meanwhile, the sign-in screen says so.
 
 ### Removing a member
@@ -99,29 +97,17 @@ Runtime chats they owned **freeze**: participants can still read them, but nobod
 
 Inviting a removed member's address again creates a normal invite that restores their membership when they sign in.
 
-## Sign-in and domain verification
+## Sign-in and SSO
 
-Production deployments sign in through each workspace's own OpenID Connect provider; there is no shared account system. See the decision records in [decisions](../decisions/) and [Security](../architecture/security.md) for the reasoning.
+People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Setup SSO** lets a workspace enforce its organization's own provider instead, so that people lose access when their organization account is removed. The rules and the sign-in screen are in [who can join and sign-in](../guides/who-can-join.md); the reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md).
 
-**Setup SSO** holds the provider: Google Workspace, Microsoft Entra (a tenant-specific issuer, from its tenant id) or another OIDC issuer, with the client id and a client secret that is sealed, shown only as set and replaced by entering a new one. When the deployment has its own Google or Microsoft app, those providers can use it instead: no client id or secret to enter (Microsoft still asks for the tenant id), **Use your own app** switches back to entering a client. Through Google, whichever app, only verified addresses of accounts managed by the domain's Google Workspace sign in. Through Microsoft, a person is recognized by their Entra object id, and guests from other tenants are never matched to a member or an invite by email. Changing the issuer (another provider, another Microsoft tenant or another OIDC issuer) unverifies the domain, and members cannot sign in until it is verified again; changing the client, or switching between your own app and the deployment's, keeps it verified. Saving checks the issuer's discovery document. The workspace's email domain is set when the workspace is created and cannot be changed. On a development deployment the card says sign-in uses the deployment's Dex instead.
+The card offers Google Workspace (only accounts managed by the Google Workspace of their address's domain, and Gmail addresses), Microsoft Entra (one tenant, from its tenant id) or another OIDC provider, with a client id and a client secret that is sealed, shown only as set and replaced by entering a new one. When the deployment has its own Google or Microsoft app, Google Workspace and Microsoft Entra can use it instead: no client id or secret to enter (Microsoft still asks for the tenant id). Saving checks the issuer's discovery document. On a development deployment the card says sign-in uses the deployment's Dex instead.
 
-The sign-in screen asks for a work email and routes its domain to the provider of the workspace using it, so it never reveals who is a member. A domain routes sign-in, and the workspace can invite, only once the domain is **verified**:
+- **Enforce SSO** opens the provider's sign-in: you confirm by signing in through it with your own address, and nothing changes if that does not complete. From then on only that provider opens the workspace, for everyone, Admins included.
+- **Save and sign in again** changes the provider the same way. A new provider (another issuer or tenant) signs everyone out of the workspace; members sign in again through it, matched once by the address they were invited at. A new client or secret for the same provider keeps everyone signed in.
+- **Stop enforcing SSO** signs everyone out of the workspace, you included; they then sign in with their own accounts. It is refused when the deployment offers no account provider.
 
-1. The admin enters any address at the domain; Spyria emails it a single-use link valid for 24 hours.
-2. Opening the link, without signing in, verifies the domain for that workspace.
-
-Until then the card shows the domain as not verified or pending. Two workspaces may share a domain only if they use the same provider; a different provider for a domain already claimed is refused. While a deployment has a single workspace, its own unverified domain still routes sign-in, so its first admin can sign back in before verifying; invites stay closed until verification. The first workspace of a deployment is created from the setup link; see [who can join and sign-in](../guides/who-can-join.md).
-
-Accounts are matched on the provider's issuer and subject, not the email, so a changed address at the provider keeps the same Spyria account.
-
-### Who can join
-
-An instance chooses how people join its workspaces when it is set up ([decision 0027](../decisions/0027-join-by-invited-address.md)):
-
-- **By email domain** (above): the workspace owns a verified domain.
-- **By invited address**: the workspace owns no domain. **Setup SSO** shows "Who can join: people you invite" and the sign-in app of the instance, read-only and without the domain section; an operator changes the app for every workspace with `spyria sign-in-app`. Invites open at once; an invitee signs in through the provider at exactly the invited address, and from then on is recognized by the provider identity, not the address. Through Google any confirmed Google account signs in, Gmail included; Microsoft consumer accounts never do. **New workspace** reuses the member's provider and the same setting.
-
-Either way, a Google or generic OIDC provider must confirm the address it returns (`email_verified: true`); otherwise sign-in is refused with "Your provider did not confirm this address". There is no setting to trust a provider that does not send it ([decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)). A public email domain such as `gmail.com` cannot be a workspace's domain.
+A session opened through a workspace's own provider opens only that workspace: it cannot list or open the person's other workspaces, or create one.
 
 ## GitHub
 
@@ -190,10 +176,10 @@ Spend is counted from the gateway's usage records, which Spyria reads every few 
 At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It is not a card and no workspace role can grant it: only members with the built-in Admin role see it, and the server checks the same. The dialog lists what goes and asks to type `DELETE`.
 
 - At once, every member loses access: their sessions end, their open agent streams close, running runtimes stop, and the workspace's background work, GitHub webhooks, agents' and sub-agents' model calls are refused. A few minutes later, runtimes that were still starting are removed, so a restored workspace starts those afresh. The workspace disappears from everyone's workspace switcher.
-- Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, shared connections, the link to the GitHub App, the sign-in settings and the email domain, the audit log, and the accounts of people who belonged to no other workspace.
+- Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, shared connections, the link to the GitHub App, the sign-in settings, the audit log, and the people who belonged to no other workspace and never signed in with an account of their own.
 - The GitHub App stays installed on the organization: uninstall it on GitHub.
 - Until the seven days are over, only the operator can restore the workspace ([Manual install](../guides/self-hosting.md#deleting-a-workspace)).
-- When the only workspace of a deployment is erased, its domain is free again and the sign-in page offers **Create a workspace**.
+- When the only workspace of a deployment is erased, creating one needs the setup link again ([who can join and sign-in](../guides/who-can-join.md)).
 
 ## Audit log
 
@@ -203,7 +189,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
 | Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
-| Sign-in | SSO configured, client secret replaced, domain verified |
+| Sign-in | SSO configured, client secret replaced |
 | GitHub | App configured, App secrets replaced |
 | Connections | shared connections added, changed, removed, member restrictions |
 | Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |

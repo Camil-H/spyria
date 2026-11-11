@@ -18,7 +18,7 @@ const cloudflareMailServerPattern = /\.mx\.cloudflare\.net\.?$/
 export const createAccessOidcApp = async (
   call: CloudflareCall,
   { hostname, origin, name }: { hostname: string; origin: string; name: string },
-): Promise<OidcProvider & { domain: string }> => {
+): Promise<OidcProvider> => {
   const zone = await zoneOf(call, hostname)
   const accounts = `/accounts/${zone.account.id}/access`
   const { auth_domain: teamDomain } = await call<{ auth_domain: string }>('GET', `${accounts}/organizations`)
@@ -61,7 +61,6 @@ export const createAccessOidcApp = async (
     issuer: `https://${teamDomain}/cdn-cgi/access/sso/oidc/${app.saas_app.client_id}`,
     clientId: app.saas_app.client_id,
     clientSecret: app.saas_app.client_secret,
-    domain: zone.name,
   }
 }
 

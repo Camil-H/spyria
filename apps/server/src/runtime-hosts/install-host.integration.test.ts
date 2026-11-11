@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
+import { Name } from '@spyria/workspace/server'
 import { createApp } from '../app.ts'
 import { createFirstWorkspace } from '../auth/sso.ts'
 import { runOperator } from '../testing/operator.ts'
@@ -53,9 +54,7 @@ test('the machine host waits with the install token until the first workspace ex
   const { workspaceId } = await createFirstWorkspace(
     database,
     {
-      workspaceName: 'Garage',
-      joinBy: 'invited_address',
-      domain: null,
+      workspaceName: Name('Garage'),
       provider: {
         preset: 'oidc',
         issuer: 'https://idp.install-host.test',
@@ -64,7 +63,12 @@ test('the machine host waits with the install token until the first workspace ex
         encryptedClientSecret: 'sealed',
       },
     },
-    { email: 'owner@gmail.com', subject: 'owner-subject' },
+    {
+      email: 'owner@gmail.com',
+      issuer: 'https://idp.install-host.test',
+      subject: 'owner-subject',
+      canBindByEmail: true,
+    },
     { installHostToken },
   )
   expect(await operatorSays('has-workspace')).toEqual({ exitCode: 0, stdout: 'yes\n', stderr: '' })
@@ -88,9 +92,7 @@ test('without an install host token the first workspace comes with no host', asy
     await createFirstWorkspace(
       other.database,
       {
-        workspaceName: 'Plain',
-        joinBy: 'domain',
-        domain: 'plain.test',
+        workspaceName: Name('Plain'),
         provider: {
           preset: 'oidc',
           issuer: 'https://idp.plain.test',
@@ -99,7 +101,7 @@ test('without an install host token the first workspace comes with no host', asy
           encryptedClientSecret: 'sealed',
         },
       },
-      { email: 'owner@plain.test', subject: 'owner-subject' },
+      { email: 'owner@plain.test', issuer: 'https://idp.plain.test', subject: 'owner-subject', canBindByEmail: true },
     )
     expect(await other.database.$client`select 1 from runtime_hosts`).toHaveLength(0)
   } finally {
