@@ -324,6 +324,17 @@ test('the providers of an address are the account providers, then the providers 
   ).toEqual({ providers: [] })
 })
 
+test('a sign-in started by another site is refused, so no page signs a visitor in to an account of its choosing', async () => {
+  for (const site of ['cross-site', 'same-site']) {
+    const refused = await app.request('/auth/login?workspace=hooli', { headers: { 'sec-fetch-site': site } })
+    expect(refused.status).toBe(403)
+    expect(refused.headers.get('location')).toBeNull()
+    expect(cookieHeaderOf(refused)).not.toContain('spyria_login')
+  }
+  for (const site of ['same-origin', 'none'])
+    expect((await app.request('/auth/login?workspace=hooli', { headers: { 'sec-fetch-site': site } })).status).toBe(302)
+})
+
 test('sign-in goes to the chosen provider with the address as a hint, and an unknown provider is refused before any redirect', async () => {
   const toHooli = await app.request('/auth/login?email=pat%40example.com&provider=workspace-0')
   const hooliLocation = new URL(toHooli.headers.get('location') ?? '')
