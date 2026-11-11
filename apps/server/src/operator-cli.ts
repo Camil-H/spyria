@@ -14,7 +14,6 @@ const requiredEnvironment = (name: string) => {
   if (!value) throw new Error(`${name} is required`)
   return value
 }
-const optionOf = (name: string) => (options.includes(name) ? options[options.indexOf(name) + 1] : undefined)
 const toolServers: Record<string, () => ToolServerSetup> = {
   github: () => ({
     name: 'GitHub',
