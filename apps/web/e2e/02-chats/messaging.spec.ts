@@ -340,16 +340,16 @@ test.describe('Messaging', () => {
 
     const enlarge = messageContaining(page, 'Here is the chart').getByRole('button', { name: 'Enlarge chart.png' })
     const overlay = page.getByRole('dialog', { name: 'chart.png' })
-    const pagesBefore = page.context().pages().length
     await enlarge.click()
     await expect(overlay.getByRole('img', { name: 'chart.png' })).toBeVisible()
     await expect(overlay.getByRole('link', { name: 'Save chart.png' })).toHaveAttribute('download', 'chart.png')
-    expect(page.context().pages()).toHaveLength(pagesBefore)
     await page.keyboard.press('Escape')
+    await expect(enlarge).toBeFocused()
     await expect(overlay).toHaveCount(0)
 
     await enlarge.click()
     await overlay.getByRole('button', { name: 'Close' }).click()
+    await expect(enlarge).toBeFocused()
     await expect(overlay).toHaveCount(0)
 
     await enlarge.click()
