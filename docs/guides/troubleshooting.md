@@ -9,7 +9,7 @@ Start with `spyria doctor`: it checks Docker, each service and its healthcheck, 
 | The app loads but never syncs | The proxy drops WebSocket upgrades on `/zero/`, or zero-cache is down: `/health` answers `503` naming `zero`, and the server logs `zero.unreachable`. |
 | A prompt says the runtime image is missing | The host could not pull it: `docker logs <deployment>-host` has the registry's reason. A host built from a clone (no `SPYRIA_IMAGES`) accepts only a local content ID: run `bun run agent:build` there, or load the same image. |
 | The host profile cannot reach Docker | `SPYRIA_DOCKER_GROUP` is not the group of `/var/run/docker.sock` (Linux), or Docker runs rootless. |
-| SSO client secrets or GitHub App keys stop working | `SPYRIA_SECRETS_KEY` changed. Restore it; otherwise enter every secret again. |
+| SSO client secrets or GitHub App keys stop working | `SPYRIA_SECRETS_KEY` changed without the previous value in `SPYRIA_PREVIOUS_SECRETS_KEYS`. Put it back there; otherwise enter every secret again. To change the key, [rotate it](./operations.md#rotating-the-secrets-key). |
 | Members' API keys stop working | `SPYRIA_GATEWAY_ENCRYPTION_KEY` changed. Restore it; otherwise wipe the gateway's database and have members add their keys again. |
 | Runtimes stop starting after many chats | The host ran out of Docker address pools; see [Many runtimes on one host](./self-hosting.md#many-runtimes-on-one-host). |
 | `spyria setup` stops at the Cloudflare step | The API token lacks a permission: *Account > Cloudflare Tunnel > Edit*, *Zone > DNS > Edit* and *Zone > Zone > Read*, plus the Access and Email Routing ones for those steps (`spyria --help` lists them). |

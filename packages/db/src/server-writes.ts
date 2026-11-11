@@ -261,6 +261,7 @@ const serverOnlyRuntimeColumns = {
   llmTokenHash: 'llm_token_hash',
   agentConversation: 'agent_conversation_id',
   workspaceSnapshot: 'workspace_snapshot',
+  apiKeyId: 'api_key_id',
 }
 type ServerOnlyRuntimeColumn = keyof typeof serverOnlyRuntimeColumns
 

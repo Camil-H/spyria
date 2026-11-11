@@ -3,7 +3,7 @@ import { databaseUrlOf } from '@spyria/db/testing'
 import { createApp } from '../app.ts'
 import { serverWebSocket } from '../runtime-hosts/gateway.ts'
 import { serveWithLifecycleLogs } from './process-lifecycle.ts'
-import { testAuthSettings, testSecretsKey } from './testing.ts'
+import { testAuthSettings, testSecretsKeyring } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3102)
 const databaseByName = new Map<string, Database>()
@@ -21,7 +21,7 @@ const app = createApp({
   appOrigin: process.env.SPYRIA_APP_ORIGIN ?? 'http://localhost:5191',
   oidc: { ...testAuthSettings.oidc, redirectUri: `http://localhost:${port}/auth/callback` },
   authMode: 'sso',
-  secretsKey: testSecretsKey,
+  secretsKeyring: testSecretsKeyring,
   testDatabaseByName: databaseNamed,
   instanceSignInApps: {
     oidc: { issuer: testAuthSettings.oidc.issuer, clientId: 'spyria-sso', clientSecret: 'spyria-sso-e2e-secret' },

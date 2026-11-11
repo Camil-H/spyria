@@ -65,7 +65,7 @@ const nextStates: Record<RuntimeState, readonly RuntimeState[]> = {
 }
 const minute = 60_000
 const idleStopMilliseconds = 60 * minute
-const idleRemovalMilliseconds = 30 * 24 * 60 * minute
+const idleRemovalMilliseconds = 7 * 24 * 60 * minute
 export const sweepIntervalMilliseconds = 5 * minute
 
 export const canTransition = (from: RuntimeState, to: RuntimeState) => nextStates[from].includes(to)
@@ -119,6 +119,11 @@ export const idleStepOf = (runtime: Runtime, now: number) => {
   if ((runtime.state === 'stopped' || runtime.state === 'failed') && idleMilliseconds > idleRemovalMilliseconds)
     return 'removing'
   return undefined
+}
+
+export const unknownRuntimeIdsOf = (runtimeIdsOnHost: readonly string[], known: readonly Runtime[]) => {
+  const liveIds = new Set(known.filter((runtime) => runtime.state !== 'removed').map((runtime) => runtime.id as string))
+  return runtimeIdsOnHost.filter((runtimeId) => !liveIds.has(runtimeId))
 }
 
 export const isTouchDue = (runtime: Runtime, now: number) =>

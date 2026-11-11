@@ -20,7 +20,7 @@ import {
   testSetupToken,
   workspaceEventsOf,
 } from '../testing/testing.ts'
-import { createSecretBox } from './secret-box.ts'
+import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { openSessions } from './sessions.ts'
 import { assertInstanceAppsConfigured } from './sso.ts'
 
@@ -28,7 +28,7 @@ const testDatabase = await createTestDatabase()
 const { database } = testDatabase
 const emptyInstance = await createTestDatabase()
 await emptyInstance.database.$client`truncate workspaces, users cascade`
-const secretsKey = 'sso-integration-secrets-key-0123456789'
+const secretsKeyring = secretsKeyringOf('sso-integration-secrets-key-0123456789')
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 const commonPath = '/common/v2.0'
 
@@ -99,7 +99,7 @@ const microsoftCommonIssuer = `${microsoftIdp.origin}${commonPath}`
 const ssoSettings = {
   ...testAuthSettings,
   authMode: 'sso' as const,
-  secretsKey,
+  secretsKeyring,
   microsoftLoginOrigin: microsoftIdp.origin,
   instanceSignInApps: {
     microsoft: { clientId: 'spyria-microsoft', clientSecret: 'microsoft-secret' },
@@ -133,7 +133,7 @@ const addMember = (workspaceId: string, userId: string) =>
 const enforceSso = async (workspaceId: string, idp: FakeIdp, { preset = 'oidc', issuer = idp.issuer } = {}) => {
   const clientId = `spyria-${workspaceId}`
   idp.clientSecrets[clientId] = `${workspaceId}-secret`
-  const encryptedClientSecret = await createSecretBox(secretsKey).seal(`${workspaceId}-secret`)
+  const encryptedClientSecret = await createSecretBox(secretsKeyring).seal(`${workspaceId}-secret`)
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
     values (${workspaceId}, ${preset}, ${issuer}, ${clientId}, ${encryptedClientSecret}, now())`
@@ -799,7 +799,7 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = 'stark'`
   expect(stored?.encryptedClientSecret).not.toContain('stark-secret')
-  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('stark-secret')
+  expect(await createSecretBox(secretsKeyring).open(stored?.encryptedClientSecret ?? '')).toBe('stark-secret')
   const read = await readSso('stark')
   expect(JSON.parse(read.body)).toEqual({
     settings: {
@@ -833,7 +833,7 @@ test('rotating only the client secret keeps the sessions of the workspace and is
   expect(await renewStatus('stark', aliceCookie)).toBe(200)
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = 'stark'`
-  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('stark-secret-2')
+  expect(await createSecretBox(secretsKeyring).open(stored?.encryptedClientSecret ?? '')).toBe('stark-secret-2')
   expect(await ssoEventsOf('stark')).toEqual([
     ['sso.configured', alice],
     ['sso.secret_rotated', alice],
@@ -867,7 +867,7 @@ test('stopping SSO takes the workspace back to account sign-in and ends every se
       'This Spyria has no sign-in of its own for members to use instead: an operator sets up Google, Microsoft or OIDC',
   })
   expect(await database.$client`select 1 from workspace_sso where workspace_id = 'stark'`).toHaveLength(1)
-  expect((await stop(createApp({ database, ...testAuthSettings, secretsKey }), alice)).status).toBe(204)
+  expect((await stop(createApp({ database, ...testAuthSettings, secretsKeyring }), alice)).status).toBe(204)
   expect(await database.$client`select 1 from workspace_sso where workspace_id = 'stark'`).toHaveLength(0)
   expect(await database.$client`select 1 from sessions where workspace_id = 'stark'`).toHaveLength(0)
   expect(await renewStatus('stark', aliceCookie)).toBe(401)
@@ -1016,7 +1016,7 @@ test('the first person completing sign-in becomes the Admin of a workspace with 
   const [stored] = await emptyInstance.database.$client`
     select issuer, client_id as "clientId", encrypted_client_secret as "encryptedClientSecret" from workspace_sso`
   expect(stored).toMatchObject({ issuer: firstWorkspaceIdp.issuer, clientId: 'spyria-umbrella' })
-  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('umbrella-secret')
+  expect(await createSecretBox(secretsKeyring).open(stored?.encryptedClientSecret ?? '')).toBe('umbrella-secret')
   const winnerSubject = winner === carol ? 'carol-subject' : 'dave-subject'
   expect([...(await emptyInstance.database.$client`select subject, user_id as "userId" from identities`)]).toEqual([
     { subject: winnerSubject, userId },

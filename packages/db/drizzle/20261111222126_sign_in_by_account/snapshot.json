@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "b0259e6b-499b-416b-b189-4cc527d1d2a4",
-  "prevIds": ["d859d69b-809a-474f-9fdc-23980e396a7a"],
+  "id": "49424a6b-c1a1-45db-914b-210aa391ccde",
+  "prevIds": ["709b6235-8f40-412c-a4fc-4a41cafaaa9e"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3590,6 +3590,19 @@
       "generated": null,
       "identity": null,
       "name": "llm_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "runtimes"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "api_key_id",
       "entityType": "columns",
       "schema": "public",
       "table": "runtimes"

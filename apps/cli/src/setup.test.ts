@@ -4,7 +4,8 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { commandsOf } from './command-table.ts'
 import { installFolderOf, readEnvironment } from './commands.ts'
-import { parseEnvironment } from './environment.ts'
+import type { AzRunner } from './entra.ts'
+import { parseEnvironment, serializeEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
 
@@ -252,5 +253,58 @@ test('setup refuses an answer .env cannot hold before it rewrites compose.yml an
     expect(readFileSync(join(install, '.env'), 'utf8')).toBe(environmentBefore)
   } finally {
     rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('setting up again with a Microsoft app to create keeps the app and secret the first setup registered, and refuses an app whose secret the install lost', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const azFolder = mkdtempSync(join(tmpdir(), 'spyria-az-'))
+  writeFileSync(join(azFolder, 'az'), '#!/bin/sh\n', { mode: 0o755 })
+  const originalPath = process.env.PATH
+  process.env.PATH = `${azFolder}:${originalPath}`
+  const registeredApps: string[] = []
+  const az: AzRunner = (azArguments) => {
+    const command = azArguments.slice(0, 3).join(' ')
+    if (command === 'ad app list') return { exitCode: 0, output: registeredApps.join('\n') }
+    if (command === 'ad app create') {
+      registeredApps.push(`0000000${registeredApps.length}-0000-4000-8000-000000000000`)
+      return { exitCode: 0, output: registeredApps.at(-1) ?? '' }
+    }
+    if (command === 'ad app credential') return { exitCode: 0, output: `secret-${registeredApps.length}` }
+    return { exitCode: 0, output: 'tenant-1' }
+  }
+  try {
+    const setupIn = (processEnvironment = {}) =>
+      setup(
+        parseFlags([
+          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--microsoft-client-id', 'create'],
+        ]),
+        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment, az, workspaceExistsIn: () => false },
+      )
+    const microsoftApp = () => {
+      const { SPYRIA_MICROSOFT_CLIENT_ID, SPYRIA_MICROSOFT_CLIENT_SECRET } = readEnvironment(install)
+      return { SPYRIA_MICROSOFT_CLIENT_ID, SPYRIA_MICROSOFT_CLIENT_SECRET }
+    }
+    await setupIn({ SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' })
+    const registered = microsoftApp()
+    expect(registered).toEqual({
+      SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
+      SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
+    })
+    await setupIn()
+    expect(microsoftApp()).toEqual(registered)
+    expect(registeredApps).toHaveLength(1)
+
+    const { SPYRIA_MICROSOFT_CLIENT_SECRET: _lost, ...withoutSecret } = readEnvironment(install)
+    writeFileSync(join(install, '.env'), serializeEnvironment(withoutSecret), { mode: 0o600 })
+    expect(await setupIn().catch((error: Error) => error.message)).toBe(
+      'Microsoft Entra already holds the app Spyria spyria.example.com (client id 00000000-0000-4000-8000-000000000000), whose secret this install does not have: give its client id and a new client secret of it instead of create',
+    )
+    expect(registeredApps).toHaveLength(1)
+  } finally {
+    process.env.PATH = originalPath
+    rmSync(install, { recursive: true, force: true })
+    rmSync(azFolder, { recursive: true, force: true })
   }
 })

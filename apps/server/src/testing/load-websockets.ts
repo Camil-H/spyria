@@ -1,4 +1,5 @@
 import { heapStats } from 'bun:jsc'
+import { randomBytes } from 'node:crypto'
 import { parseArgs } from 'node:util'
 import type { AgentConversation } from '@spyria/conversation/server'
 import { acme, alice } from '@spyria/db'
@@ -7,6 +8,7 @@ import { databaseUrlOf, dropDatabase, migrateDatabase, startTestPostgres } from 
 import { chatId, type LogSeverity, messageId, setLogOutput, workspaceId } from '@spyria/kernel'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp } from '../app.ts'
+import { secretsKeyringOf } from '../auth/secret-box.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
 import { openSessions } from '../auth/sessions.ts'
 import { createRuntimeHostGateway, serverWebSocket } from '../runtime-hosts/gateway.ts'
@@ -208,7 +210,10 @@ const runServer = async (options: ReturnType<typeof optionsOf>) => {
   const { database, chatIdAt, drop } = await createLoadDatabase(
     Math.ceil(Math.max(warmupSockets, ...socketCounts) / socketsPerChat),
   )
-  const runtimeHosts = createRuntimeHostGateway({ databases: () => [database], runtimeKeySecret: tokenSecret })
+  const runtimeHosts = createRuntimeHostGateway({
+    databases: () => [database],
+    secretsKeyring: secretsKeyringOf(randomBytes(32).toString('hex')),
+  })
   const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider })
   const app = createApp({
     database,

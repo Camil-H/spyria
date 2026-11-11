@@ -69,6 +69,11 @@ export const firstWorkspaceProviderOf = async (
         'In Create a workspace, choose Microsoft Entra and enter its tenant id, client id and secret.',
       ]
     const entra = registerEntraApp({ origin, audience: 'tenant' }, az)
+    if (!entra.clientSecret)
+      return [
+        `Microsoft Entra already holds the app ${entra.name}, registered by an earlier setup.`,
+        `In Create a workspace, choose Microsoft Entra and enter the tenant id ${entra.tenantId}, the client id ${entra.clientId} and the client secret setup showed then, or a new one from Certificates & secrets of that app.`,
+      ]
     return formLines('Microsoft Entra', {
       'Tenant id': entra.tenantId,
       'Client id': entra.clientId,
