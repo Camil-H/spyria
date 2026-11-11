@@ -870,7 +870,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 
 export const fakeHostVersion = 'test'
 export const fakeHostProtocolVersion = 3
-export const fakeAgentProtocolVersion = 1
+export const fakeAgentProtocolVersion = 2
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
