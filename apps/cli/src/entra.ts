@@ -1,4 +1,5 @@
 export type AzRunner = (azArguments: string[]) => { exitCode: number; output: string }
+type Audience = 'tenant' | 'any-account'
 
 export const runAz: AzRunner = (azArguments) => {
   const result = Bun.spawnSync(['az', ...azArguments], { stdout: 'pipe', stderr: 'pipe' })
@@ -9,10 +10,14 @@ export const runAz: AzRunner = (azArguments) => {
 }
 
 export const isAzSignedIn = (az: AzRunner = runAz) =>
-  Bun.which('az') !== null && az(['account', 'show', '--query', 'tenantId', '-o', 'tsv']).exitCode === 0
+  Bun.which('az', { PATH: process.env.PATH ?? '' }) !== null &&
+  az(['account', 'show', '--query', 'tenantId', '-o', 'tsv']).exitCode === 0
+
+const entraAppNameOf = (origin: string, audience: Audience) =>
+  `Spyria ${new URL(origin).hostname}${audience === 'tenant' ? ' workspace' : ''}`
 
 export const registerEntraApp = (
-  { origin, audience }: { origin: string; audience: 'tenant' | 'any-account' },
+  { origin, audience, savedClientId }: { origin: string; audience: Audience; savedClientId?: string },
   az: AzRunner = runAz,
 ) => {
   const run = (azArguments: string[]) => {
@@ -20,9 +25,18 @@ export const registerEntraApp = (
     if (exitCode !== 0) throw new Error(`az ${azArguments.slice(0, 3).join(' ')} failed: ${output}`)
     return output
   }
+  const name = entraAppNameOf(origin, audience)
   const tenantId = run(['account', 'show', '--query', 'tenantId', '-o', 'tsv'])
+  const registeredClientIds = run([
+    ...['ad', 'app', 'list', '--filter', `displayName eq '${name}'`],
+    ...['--query', '[].appId', '-o', 'tsv'],
+  ])
+    .split('\n')
+    .filter(Boolean)
+  const [registeredClientId] = registeredClientIds.filter((id) => id === savedClientId).concat(registeredClientIds)
+  if (registeredClientId) return { name, tenantId, clientId: registeredClientId, clientSecret: undefined }
   const clientId = run([
-    ...['ad', 'app', 'create', '--display-name', `Spyria ${new URL(origin).hostname}`],
+    ...['ad', 'app', 'create', '--display-name', name],
     ...(audience === 'tenant'
       ? ['--sign-in-audience', 'AzureADMyOrg']
       : ['--sign-in-audience', 'AzureADandPersonalMicrosoftAccount', '--requested-access-token-version', '2']),
@@ -33,5 +47,5 @@ export const registerEntraApp = (
     ...['ad', 'app', 'credential', 'reset', '--id', clientId, '--display-name', 'Spyria'],
     ...['--years', '2', '--query', 'password', '-o', 'tsv'],
   ])
-  return { tenantId, clientId, clientSecret }
+  return { name, tenantId, clientId, clientSecret }
 }

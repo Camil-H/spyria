@@ -67,6 +67,23 @@ The Google, Microsoft and OIDC apps that people sign in to their account with ar
 
 A workspace that enforces SSO with the deployment's Google or Microsoft app signs in through it too, so the server refuses to start while such a workspace exists without that app's settings, naming the provider: set them again rather than removing them.
 
+## Rotating the secrets key
+
+`SPYRIA_SECRETS_KEY` seals the stored secrets (SSO client secrets, GitHub App credentials, members' GitHub tokens) and derives the key the server uses to reach each runtime. To replace it, for example when it may have leaked:
+
+1. In `.env` (`.env.prod` on an install made by hand), move the current value of `SPYRIA_SECRETS_KEY` into `SPYRIA_PREVIOUS_SECRETS_KEYS` (comma-separated after any key already there), and set `SPYRIA_SECRETS_KEY` to a new value of at least 32 characters, for example from `openssl rand -hex 32`.
+2. Restart the server with `spyria compose up -d server`. It now seals with the new key and still opens what the previous keys sealed; running runtimes keep answering.
+3. Seal every stored secret again with the new key:
+
+   ```sh
+   spyria compose exec server bun apps/server/src/operator-cli.ts secrets:reseal
+   ```
+
+   It says how many secrets it sealed again, and how many running runtimes still use a previous key. A runtime moves to the new key the next time it starts, and an idle runtime stops after an hour; run the command again later until it reports none. A runtime in use all along never goes idle: **Stop runtime** in its chat's runtime menu stops it, and the next prompt starts it on the new key.
+4. Remove `SPYRIA_PREVIOUS_SECRETS_KEYS` and run `spyria compose up -d server` again.
+
+Keep the previous key with the backups taken before step 3: the secrets in them are sealed with it. The cloud modules generate `SPYRIA_SECRETS_KEY` and do not take a previous key yet, so a cloud deployment cannot rotate it this way.
+
 ## Jobs
 
 Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
@@ -101,7 +118,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 
 | What | Cleaned by | Yours to prune |
 |---|---|---|
-| Runtimes | Stopped after 60 minutes idle, removed 30 days after they stopped. A runtime's Docker network is released as soon as it stops. | Runtimes of removed hosts, with their volumes: see [Removing a host](../features/machines.md#removing-a-host). |
+| Runtimes | Stopped after 60 minutes idle, removed 7 days after they stopped. A runtime's Docker network is released as soon as it stops. A host removes the runtimes Spyria no longer knows each time it connects, and a package cache with the last runtime that uses it. | Runtimes of removed hosts, with their volumes: see [Removing a host](../features/machines.md#removing-a-host). |
 | Runtime image | About 300 MB of it is Chromium's headless shell for `take_screenshot`, shared by every runtime of a host. `bun run agent:build` removes the image it replaces, unless a container still uses it (old runtimes keep theirs until removed). | Old runtime images once their runtimes are gone. |
 | Docker build cache | `agent:build` and `smoke:prod` prune it down to 10 GB (`docker builder prune --max-used-space 10GB`). The cache belongs to the whole Docker daemon, so this also trims other projects' cache beyond that limit, oldest first. | Below 10 GB: `docker builder prune`. |
 | Base images | | Images replaced by `--pull`: `docker image ls --filter dangling=true`. |
@@ -118,7 +135,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | `<deployment>-gateway-data` | The gateway's local data. | Yes. |
 | `<deployment>-host` | The workspace host's pairing token. | Optional: a lost token means adding the host again. |
 | `<deployment>-zero-data` | zero-cache's replica, rebuilt from Postgres. | No. |
-| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
+| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` (and `SPYRIA_PREVIOUS_SECRETS_KEYS` during a [rotation](#rotating-the-secrets-key)) and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
 
 `spyria restore` reads each file whole before it changes anything, and refuses one it cannot restore completely, such as a truncated file or a plain SQL dump. By hand, a consistent dump of both databases, which `spyria restore` does not take (restore it with `psql` into an empty Postgres):
 

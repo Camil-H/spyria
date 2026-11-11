@@ -3,8 +3,10 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
+import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { hasNoWorkspace, stopWorkspaceSsoByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
+import { countRuntimesRunningOnPreviousKeys, resealSecrets } from './reseal-secrets.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
 const [command = '', ...options] = process.argv.slice(2)
@@ -72,6 +74,17 @@ const commands: Record<string, () => Promise<void>> = {
       isStopped
         ? `Workspace ${workspaceId} no longer enforces SSO: its members sign in with their own accounts`
         : `Workspace ${workspaceId} does not enforce SSO`,
+    )
+  },
+  'secrets:reseal': async () => {
+    const keyring = secretsKeyringFrom(process.env)
+    const resealedCount = await resealSecrets(database, createSecretBox(keyring))
+    console.log(`Sealed ${resealedCount} stored secret${resealedCount === 1 ? '' : 's'} again with SPYRIA_SECRETS_KEY`)
+    const runningCount = await countRuntimesRunningOnPreviousKeys(database, keyring.currentKeyId)
+    console.log(
+      runningCount === 0
+        ? 'Nothing uses a previous key any more: SPYRIA_PREVIOUS_SECRETS_KEYS can be removed'
+        : `${runningCount} running runtime${runningCount === 1 ? '' : 's'} still use${runningCount === 1 ? 's' : ''} a previous key and move to SPYRIA_SECRETS_KEY when they next start (an idle runtime stops after an hour): keep SPYRIA_PREVIOUS_SECRETS_KEYS until this command reports none`,
     )
   },
   'workspace:restore': async () => {

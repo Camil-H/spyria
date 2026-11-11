@@ -7,6 +7,7 @@ import {
   assertNoOtherProjectIn,
   assertPostgresRuns,
   backup,
+  forgetEarlierHostPairing,
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
@@ -101,8 +102,14 @@ const instanceAppOf = (
   if (clientId === '' || clientId === removal) return undefined
   if (provider === 'microsoft' && clientId === 'create') {
     if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
-    const { clientId: createdClientId, clientSecret } = registerEntraApp({ origin, audience: 'any-account' }, az)
-    return { clientId: createdClientId, clientSecret }
+    const entra = registerEntraApp({ origin, audience: 'any-account', savedClientId: existing.clientId }, az)
+    const clientSecret =
+      entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
+    if (!clientSecret)
+      throw new Error(
+        `Microsoft Entra already holds the app ${entra.name} (client id ${entra.clientId}), whose secret this install does not have: give its client id and a new client secret of it instead of create`,
+      )
+    return { clientId: entra.clientId, clientSecret }
   }
   const pattern = provider === 'google' ? googleClientIdPattern : guidPattern
   if (!pattern.test(clientId))
@@ -245,6 +252,12 @@ export const setup = async (
     assertPostgresRuns(folder, 'run setup again')
     await backup(folder, flags)
   }
+  if (
+    runsHost &&
+    existing.COMPOSE_PROFILES !== undefined &&
+    environment.SPYRIA_HOST_CLAIM_URL !== existing.SPYRIA_HOST_CLAIM_URL
+  )
+    forgetEarlierHostPairing(folder, environment)
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)

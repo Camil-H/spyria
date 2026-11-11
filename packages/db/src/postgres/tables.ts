@@ -704,6 +704,7 @@ export const runtimes = table(
     agentVersion: text(),
     agentProtocolVersion: integer(),
     llmTokenHash: text(),
+    apiKeyId: text(),
     agentConversationId: text(),
     workspaceSnapshot: text(),
     lastActiveAt: instant().notNull(),

@@ -17,6 +17,7 @@ import {
   removalStepOf,
   runtimeStatusOf,
   transitioned,
+  unknownRuntimeIdsOf,
 } from './runtime.ts'
 
 const minute = 60_000
@@ -96,15 +97,15 @@ test('placement picks the least-loaded online host below its cap', () => {
   expect(placementOf([host('full', 2, 2), host('last-slot', 13, 14)])).toEqual({ hostId: runtimeHostId('last-slot') })
 })
 
-test('a runtime idle for more than an hour stops, a stopped or failed one idle for more than 30 days is removed', () => {
+test('a runtime idle for more than an hour stops, a stopped or failed one idle for more than 7 days is removed', () => {
   const idleFor = (state: RuntimeState, milliseconds: number) =>
     idleStepOf(runtime({ state, lastActiveAt: now - milliseconds }), now)
   expect(idleFor('running', 60 * minute)).toBeUndefined()
   expect(idleFor('running', 60 * minute + 1)).toBe('stopping')
-  expect(idleFor('stopped', 30 * 24 * 60 * minute)).toBeUndefined()
-  expect(idleFor('stopped', 30 * 24 * 60 * minute + 1)).toBe('removing')
-  expect(idleFor('failed', 30 * 24 * 60 * minute)).toBeUndefined()
-  expect(idleFor('failed', 30 * 24 * 60 * minute + 1)).toBe('removing')
+  expect(idleFor('stopped', 7 * 24 * 60 * minute)).toBeUndefined()
+  expect(idleFor('stopped', 7 * 24 * 60 * minute + 1)).toBe('removing')
+  expect(idleFor('failed', 7 * 24 * 60 * minute)).toBeUndefined()
+  expect(idleFor('failed', 7 * 24 * 60 * minute + 1)).toBe('removing')
   for (const state of ['creating', 'starting', 'stopping', 'removing', 'removed'] as const)
     expect(idleFor(state, 365 * 24 * 60 * minute)).toBeUndefined()
 })
@@ -115,6 +116,22 @@ test('the idle cutoffs the sweep locks by are the last activity times past which
   expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore - 1 }), now)).toBe('stopping')
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore }), now)).toBeUndefined()
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore - 1 }), now)).toBe('removing')
+})
+
+test('a runtime on a host is unknown when no runtime has its id or the one that has it was removed', () => {
+  const known = [
+    runtime({ id: 'runtime-running' as Runtime['id'] }),
+    runtime({ id: 'runtime-stopped' as Runtime['id'], state: 'stopped' }),
+    runtime({ id: 'runtime-removing' as Runtime['id'], state: 'removing' }),
+    runtime({ id: 'runtime-removed' as Runtime['id'], state: 'removed' }),
+  ]
+  expect(
+    unknownRuntimeIdsOf(
+      ['runtime-running', 'runtime-stopped', 'runtime-removing', 'runtime-removed', 'runtime-discarded'],
+      known,
+    ),
+  ).toEqual(['runtime-removed', 'runtime-discarded'])
+  expect(unknownRuntimeIdsOf([], known)).toEqual([])
 })
 
 test('a touch writes at most once a minute, for a running runtime only', () => {

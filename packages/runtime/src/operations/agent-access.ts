@@ -16,6 +16,7 @@ export const readAgentAccess = ({ transactor }: Dependencies, { workspaceId, cha
     const capacity = (await runtimeHosts.find(workspaceId, sandbox.hostId))?.capacity
     return {
       sandbox,
+      apiKeyId: await runtimes.apiKeyIdOf(runtime),
       conversationId: (await runtimes.agentConversationOf(runtime)) ?? null,
       signedIn: capacity?.signedIn ?? [],
     }

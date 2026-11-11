@@ -12,7 +12,7 @@ import {
   sessionTokenOf,
   startAgentStack,
   succeeded,
-  testSecretsKey,
+  testSecretsKeyring,
   waitFor,
 } from './testing/testing.ts'
 
@@ -20,7 +20,7 @@ setDefaultTimeout(30_000)
 const fakeGitHub = startFakeGitHub()
 const stack = await startAgentStack({
   llm: { model: 'openai/mistral/codestral-latest' },
-  github: { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKey) },
+  github: { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKeyring) },
 })
 afterAll(() => fakeGitHub.stop())
 const { app, database } = stack

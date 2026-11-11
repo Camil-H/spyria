@@ -30,6 +30,7 @@ export type RuntimeRepository = {
   lockWaitingOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<Runtime[]>
   lockIdle(workspaceId: WorkspaceId, cutoffs: IdleCutoffs): Promise<Runtime[]>
   findByChat(workspaceId: WorkspaceId, chatId: ChatId): Promise<Runtime | undefined>
+  findByIds(workspaceId: WorkspaceId, ids: readonly string[]): Promise<Runtime[]>
   launchOptionsOf(runtime: Runtime): Promise<{ harness?: HarnessId; packageCache?: PackageCacheScope }>
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
@@ -40,6 +41,8 @@ export type RuntimeRepository = {
   forgetAgentConversation(runtime: Runtime): Promise<void>
   workspaceSnapshotOf(runtime: Runtime): Promise<string | undefined>
   keepWorkspaceSnapshot(runtime: Runtime, snapshot: string): Promise<void>
+  apiKeyIdOf(runtime: Runtime): Promise<string | undefined>
+  keepApiKeyId(runtime: Runtime, apiKeyId: string): Promise<void>
   chatOfLlmTokenHash(workspaceId: WorkspaceId, hostId: RuntimeHostId, hash: string): Promise<ChatId | undefined>
 }
 

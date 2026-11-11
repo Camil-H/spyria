@@ -12,6 +12,7 @@ import {
 import { addInstallHost } from '../operations/add-install-host.ts'
 import { addRuntimeHost } from '../operations/add-runtime-host.ts'
 import { claimRuntimeHost } from '../operations/claim-runtime-host.ts'
+import { discardUnknownRuntimes } from '../operations/discard-unknown-runtimes.ts'
 import { markHostOffline } from '../operations/mark-host-offline.ts'
 import { reconcileHostRuntimes } from '../operations/reconcile-host-runtimes.ts'
 import { recordHostHeartbeat } from '../operations/record-host-heartbeat.ts'
@@ -125,4 +126,6 @@ export const createHostSessionHandlers = (
       { transactor: createTransactingZeroTransactor(transact), provider },
       { ...host, now: Date.now() },
     ),
+  discardUnknown: (host: ConnectedHost, provider: SandboxProvider) =>
+    discardUnknownRuntimes({ transactor: createTransactingZeroTransactor(transact), provider }, host),
 })
