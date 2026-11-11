@@ -100,6 +100,50 @@ test(
 )
 
 test(
+  'a refused host logs the reason Spyria sent before the close, not the shortened close reason',
+  async () => {
+    writeFileSync(join(directory, 'token'), 'host-token')
+    const reason = `This host is out of date: update it with ${'x'.repeat(200)}`
+    const explainingSpyria = Bun.serve({
+      port: 0,
+      fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+      websocket: {
+        message: (socket) => {
+          socket.send(JSON.stringify({ type: 'refused', reason }))
+          socket.close(4001, reason.slice(0, 120))
+        },
+      },
+    })
+    const host = spawnHost(
+      ['bun', new URL('./main.ts', import.meta.url).pathname, `ws://127.0.0.1:${explainingSpyria.port}/h/CODE`],
+      {
+        env: {
+          ...process.env,
+          DOCKER_SOCKET: dockerSocket,
+          SPYRIA_DEPLOYMENT: 'spyria',
+          SPYRIA_HOST_STATE_DIR: directory,
+          SPYRIA_HOST_GATEWAY_PORT: '0',
+          OTEL_EXPORTER_OTLP_ENDPOINT: '',
+        },
+        stdout: 'pipe',
+        stderr: 'ignore',
+      },
+    )
+    try {
+      expect(await host.exited).toBe(1)
+      const lines = (await new Response(host.stdout as ReadableStream).text())
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+      expect(lines.find((line) => line['event.name'] === 'host.refused')?.['host.close_reason']).toBe(reason)
+    } finally {
+      void explainingSpyria.stop(true)
+    }
+  },
+  testMilliseconds,
+)
+
+test(
   'a personal host told its sign-ins changed reads them and sends a heartbeat at once',
   async () => {
     writeFileSync(join(directory, 'token'), 'host-token')
