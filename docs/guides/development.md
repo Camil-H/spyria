@@ -60,26 +60,9 @@ Members' API keys are stored in the gateway only; Spyria keeps a reference and t
 
 ## Tools (MCP servers) in development
 
-Members connect tools in Profile > Tool connections > My connections. The agent of a runtime chat calls them through the runtime host's relay (`/mcp`) and the gateway, always as the chat owner. The OAuth token stays in the gateway, against the member's virtual key in that workspace, which Spyria creates when the member first needs tools, with or without an LLM key; Spyria stores only the server name and a status, which it checks against the gateway when the member opens their profile. The dev data seeds no personal connection, since none would have a gateway session behind it. See [Agents](../features/agents.md) for how members use them.
+An admin adds tool servers to the workspace's catalogue in Workspace settings > Tools, and members connect those they sign in to in Profile > Tool connections (see [Admin](../features/admin.md#tools)). The agent of a runtime chat calls them through the runtime host's relay (`/mcp`) and the gateway, always as the chat owner. A member's OAuth token stays in the gateway, against the member's virtual key in that workspace, which Spyria creates when the member first needs tools, with or without an LLM key; Spyria stores only which server they signed in to and a status, which it checks against the gateway when the member opens their profile. The dev data seeds no tool server, since none would have a gateway client behind it. To try one, add Notion (`https://mcp.notion.com/mcp`, each member signs in): the gateway registers itself with Notion's MCP server, and you sign in once with your own account so it can list the tools.
 
-A tool server is set up once per deployment before members see it:
-
-1. **GitHub:** create a GitHub OAuth App (GitHub Settings > Developer settings > OAuth Apps) with the callback URL `http://localhost:5173/gateway-oauth/api/oauth/callback` (GitHub needs an exact match; in production use your origin). Then run:
-
-   ```sh
-   GITHUB_MCP_CLIENT_ID=<client id> GITHUB_MCP_CLIENT_SECRET=<client secret> bun run tools:setup github
-   ```
-
-   The scopes are `repo read:org read:user`. The secret goes to the gateway, encrypted there, never to Spyria's database.
-2. **Notion:** nothing to register (the gateway registers itself with Notion's MCP server):
-
-   ```sh
-   bun run tools:setup notion
-   ```
-
-3. Each setup prints a login URL. Open it, log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter.
-
-The OAuth redirect goes through Spyria's origin: the gateway's external client URL is `SPYRIA_GATEWAY_OAUTH_BASE` (default `http://localhost:5173/gateway-oauth`, which Vite proxies to the server). After changing it, recreate the gateway and set the servers up again:
+The OAuth redirect goes through Spyria's origin: the gateway's external client URL is `SPYRIA_GATEWAY_OAUTH_BASE` (default `http://localhost:5173/gateway-oauth`, which Vite proxies to the server). After changing it, recreate the gateway and add the servers members sign in to again:
 
 ```sh
 docker compose -f infra/docker-compose.yml --profile gateway up -d --force-recreate gateway
@@ -119,7 +102,6 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `rebuild-messages [--chat <id>]` | `db:rebuild-messages` | Rebuilds the messages projection from the event store. |
 | `failed-jobs` | `jobs:failed` | Lists jobs that exhausted their attempts, with the last error. |
 | `retry-jobs <id>\|--all` | `jobs:retry` | Requeues failed jobs with their attempts reset. |
-| `tools-setup github\|notion` | `tools:setup` | Sets up a tool server in the gateway (above). |
 | `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Manual install](./self-hosting.md)). |
 | `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
 | `has-workspace` | none | Prints `yes` once a workspace exists and `no` before; `spyria setup --host` asks for a pairing command when it prints `yes`. |
