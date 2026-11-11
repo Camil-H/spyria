@@ -348,6 +348,7 @@ export const startAgent = ({
     const error = new AcpError(
       withSummary(`The agent did not respond within ${durationOf(requestTimeoutMilliseconds)}`, errorOutput),
     )
+    if (conversations.get(conversation.id) !== conversation) return error
     reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
     if (conversation.connection === connection) fail(conversation, error)
     return error
