@@ -103,7 +103,7 @@ const instanceAppOf = (
   if (clientId === '' || clientId === removal) return undefined
   if (provider === 'microsoft' && clientId === 'create') {
     if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
-    const entra = registerEntraApp({ origin, audience: 'organizations' }, az)
+    const entra = registerEntraApp({ origin, audience: 'organizations', savedClientId: existing.clientId }, az)
     const clientSecret =
       entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
     if (!clientSecret)

@@ -17,7 +17,7 @@ const entraAppNameOf = (origin: string, audience: Audience) =>
   `Spyria ${new URL(origin).hostname}${audience === 'tenant' ? ' workspace' : ''}`
 
 export const registerEntraApp = (
-  { origin, audience }: { origin: string; audience: Audience },
+  { origin, audience, savedClientId }: { origin: string; audience: Audience; savedClientId?: string },
   az: AzRunner = runAz,
 ) => {
   const run = (azArguments: string[]) => {
@@ -27,9 +27,13 @@ export const registerEntraApp = (
   }
   const name = entraAppNameOf(origin, audience)
   const tenantId = run(['account', 'show', '--query', 'tenantId', '-o', 'tsv'])
-  const [registeredClientId] = run(['ad', 'app', 'list', '--display-name', name, '--query', '[].appId', '-o', 'tsv'])
+  const registeredClientIds = run([
+    ...['ad', 'app', 'list', '--filter', `displayName eq '${name}'`],
+    ...['--query', '[].appId', '-o', 'tsv'],
+  ])
     .split('\n')
     .filter(Boolean)
+  const [registeredClientId] = registeredClientIds.filter((id) => id === savedClientId).concat(registeredClientIds)
   if (registeredClientId) return { name, tenantId, clientId: registeredClientId, clientSecret: undefined }
   const clientId = run([
     ...['ad', 'app', 'create', '--display-name', name],
