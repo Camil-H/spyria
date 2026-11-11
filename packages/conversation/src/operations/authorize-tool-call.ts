@@ -15,7 +15,7 @@ type Turn = {
 }
 type Input = { turn: Turn; toolName: string; serverName: string; toolArguments: unknown; signal: AbortSignal }
 type Checks = {
-  accessOf: (prompterId: MemberId) => Promise<'allowed' | 'personal' | 'not_allowed'>
+  accessOf: (prompterId: MemberId) => Promise<'allowed' | 'owner_account' | 'not_allowed'>
   isReadOnly: () => Promise<boolean>
 }
 type Authorization = {
