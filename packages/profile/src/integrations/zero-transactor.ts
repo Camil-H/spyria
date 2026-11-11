@@ -196,6 +196,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         ))
           await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId: memberId })
       },
+      removeSignIn: (workspaceId, connectionId, memberId) =>
+        tx.mutate.toolConnections.delete({
+          workspaceId: inContextWorkspace(workspaceId),
+          userId: memberId,
+          connectionId,
+        }),
     },
     workspaceEvents: {
       record: async ({ workspaceId: workspace, ...event }) => {

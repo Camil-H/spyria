@@ -77,6 +77,7 @@ export type WorkspaceConnectionRepository = {
   restrict(workspaceId: WorkspaceId, restriction: ConnectionRestriction): Promise<void>
   unrestrict(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
   removeRestrictionsOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
+  removeSignIn(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
 }
 
 export type WorkspaceEventLog = {
