@@ -113,6 +113,7 @@ const acpErrorOf = ({ message, code, data }: NonNullable<Frame['error']>) =>
 export const connectAdapter = (
   launch: AdapterLaunch,
   { onUpdate, onExit, onRequest, onCancelRequest }: AdapterHandlers,
+  spawnLines = spawnJsonLines,
 ) => {
   const pending = new Map<number, PromiseWithResolvers<Json>>()
   const heldFrames: Frame[] = []
@@ -157,7 +158,7 @@ export const connectAdapter = (
     for (const request of pending.values()) request.reject(new AcpError('The adapter exited'))
     pending.clear()
   }
-  const adapter = spawnJsonLines(launch, receive, exitAfterHeldFrames)
+  const adapter = spawnLines(launch, receive, exitAfterHeldFrames)
   return {
     request: (method: string, params: Json) => {
       if (adapter.hasExited) return Promise.reject(new AcpError('The adapter exited'))
