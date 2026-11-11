@@ -7,16 +7,21 @@ const hitOf = (hit: Partial<SearchHit>): SearchHit => ({
   id: 'message-hit',
   chatId: 'chat-research',
   authorId: alice,
+  step: null,
   body: 'The release ships on Friday',
   createdAt: Date.parse('2026-10-01T09:00:00.000Z'),
   threadRootId: null,
   ...hit,
 })
 
-test('a search result names its chat and author and points a thread reply at its root', () => {
+test('a search result names its chat and author, the quality gates for their prompt, and points a thread reply at its root', () => {
   const results = getSearchResults(
     acme,
-    [hitOf({}), hitOf({ id: 'message-reply', threadRootId: 'message-root', authorId: null })],
+    [
+      hitOf({}),
+      hitOf({ id: 'message-reply', threadRootId: 'message-root', authorId: null }),
+      hitOf({ id: 'message-loop-prompt', step: { type: 'dev_loop_prompt' } }),
+    ],
     'release',
   )(createMockSnapshot())
   expect(results).toEqual([
@@ -31,6 +36,7 @@ test('a search result names its chat and author and points a thread reply at its
       snippet: { before: 'The ', match: 'release', after: ' ships on Friday' },
     },
     expect.objectContaining({ messageId: messageId('message-root'), authorName: 'Agent' }),
+    expect.objectContaining({ messageId: messageId('message-loop-prompt'), authorName: 'Quality gates' }),
   ])
 })
 

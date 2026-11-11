@@ -1,8 +1,9 @@
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { AgentAvatar, focusRing, MemberAvatar } from '@spyria/ui'
-import { Reply } from 'lucide-react'
+import { IterationCw, Reply } from 'lucide-react'
 import { type Ref, Suspense, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
+import { isDevLoopPrompt } from '../domain/dev-loop.ts'
 import { isUnreachableSessionNotice } from '../domain/session-routing.ts'
 import type { ConversationMessage } from '../queries/get-conversation.ts'
 import { AgentStep } from './AgentStep.tsx'
@@ -117,6 +118,12 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
   )
 }
 
+const QualityGatesAvatar = () => (
+  <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-full bg-selected text-muted">
+    <IterationCw size={13} />
+  </span>
+)
+
 export const MessageItem = ({
   message,
   hasMenu,
@@ -162,6 +169,8 @@ export const MessageItem = ({
             <div className="flex items-center gap-2">
               {message.kind === 'agent' ? (
                 <AgentAvatar />
+              ) : isDevLoopPrompt(message) ? (
+                <QualityGatesAvatar />
               ) : (
                 <MemberAvatar name={message.authorName} image={message.authorAvatar} />
               )}
@@ -170,9 +179,6 @@ export const MessageItem = ({
                 {timeFormat.format(message.createdAt)}
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
-              {message.step?.type === 'dev_loop_prompt' && (
-                <span className="text-xs text-muted">Sent by quality gates</span>
-              )}
             </div>
             {message.quote && !message.isDeleted && <QuotedMessage quote={message.quote} />}
             {mode === 'edit' ? (

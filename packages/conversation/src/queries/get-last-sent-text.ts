@@ -1,5 +1,6 @@
 import { inChat, type MessageRow, type Snapshot } from '@spyria/db'
 import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
+import { isDevLoopPrompt } from '../domain/dev-loop.ts'
 
 const latestOf = (latest: MessageRow | undefined, message: MessageRow) =>
   latest && latest.seq > message.seq ? latest : message
@@ -13,6 +14,7 @@ export const getLastSentText =
           inChat(workspaceId, chatId)(message) &&
           message.kind === 'member' &&
           message.authorId === memberId &&
+          !isDevLoopPrompt(message) &&
           message.threadRootId === threadRootId &&
           message.deletedAt === null &&
           message.body !== '',

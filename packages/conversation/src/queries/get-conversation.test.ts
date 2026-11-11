@@ -502,9 +502,18 @@ test('messages carry their edited flag and the agent as their author', () => {
   expect(conversationWith([replyRow(2, 'agent')])?.messages.at(-1)?.isEdited).toBe(false)
 })
 
-test('a message carries the picture of its member author, an agent message none', () => {
+test('a message carries the picture of its member author, an agent message none, and a prompt of the quality gates is theirs, not the owner’s', () => {
   const picture = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
   const snapshot = snapshotWith({ turn: false, waiting: false })
+  const ownerPrompt = snapshot.messages.find((message) => message.id === prompt)
+  if (!ownerPrompt) throw new Error('No prompt')
+  const loopPrompt = {
+    ...ownerPrompt,
+    id: messageId('message-loop-prompt'),
+    seq: 3,
+    step: { type: 'dev_loop_prompt', loopId: 'message-loop', phase: 'command' },
+  }
+  const quotingLoopPrompt = { ...ownerPrompt, id: messageId('message-quote'), seq: 4, quotedMessageId: loopPrompt.id }
   const conversation = getConversation(
     acme,
     research,
@@ -514,11 +523,13 @@ test('a message carries the picture of its member author, an agent message none'
     memberships: snapshot.memberships.map((membership) =>
       membership.memberId === alice ? { ...membership, avatar: picture } : membership,
     ),
-    messages: [...snapshot.messages, replyRow(2, 'agent')],
+    messages: [...snapshot.messages, replyRow(2, 'agent'), loopPrompt, quotingLoopPrompt],
   })
   const messageWith = (id: string) => conversation?.messages.find((message) => message.id === id)
-  expect(messageWith(prompt)).toMatchObject({ authorName: 'Alice', authorAvatar: picture })
+  expect(messageWith(prompt)).toMatchObject({ authorName: 'Alice', authorAvatar: picture, canEdit: true })
   expect(messageWith(replyRow(2, 'agent').id)).toMatchObject({ authorName: 'Agent', authorAvatar: null })
+  expect(messageWith(loopPrompt.id)).toMatchObject({ authorName: 'Quality gates', authorAvatar: null, canEdit: false })
+  expect(messageWith(quotingLoopPrompt.id)?.quote?.original?.authorName).toBe('Quality gates')
 })
 
 type RunsOnSetup = {

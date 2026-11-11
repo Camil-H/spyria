@@ -160,6 +160,10 @@ export const restartLabelOf = (step: DevLoopStep) => {
     : undefined
 }
 
+export const devLoopAuthorName = 'Quality gates'
+export const isDevLoopPrompt = (message: Readonly<{ step?: Readonly<{ type: string }> | null }>) =>
+  message.step?.type === 'dev_loop_prompt'
+
 export const movedCardLabelOf = (step: DevLoopStep) => `Quality gates: round ${step.round}, see below`
 
 const fixesOf = (config: DevLoopStepConfig | undefined) => (config && 'fixes' in config ? config.fixes : 0)

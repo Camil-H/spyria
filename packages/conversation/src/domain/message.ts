@@ -1,6 +1,7 @@
 import type { Actor, ChatId, ChatVisibility, HarnessId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 import type { StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
+import { isDevLoopPrompt } from './dev-loop.ts'
 import {
   ChatFrozen,
   InvalidQuotedMessage,
@@ -64,7 +65,7 @@ export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerR
 }
 
 const changeableBy = (message: Message, memberId: MemberId): LiveMessage => {
-  if (message.authorId !== memberId) throw new NotMessageAuthor()
+  if (message.authorId !== memberId || isDevLoopPrompt(message)) throw new NotMessageAuthor()
   if (message.status === 'deleted') throw new MessageDeleted()
   return message
 }
