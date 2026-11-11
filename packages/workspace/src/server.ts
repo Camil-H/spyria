@@ -1,7 +1,6 @@
 export type { GitHubRepositories } from './contracts/repositories.ts'
 export {
   AccountBoundElsewhere,
-  AccountSignInRequired,
   BranchNotFound,
   EmailNotConfirmed,
   GitHubNotConfigured,
@@ -37,7 +36,6 @@ export { Name } from './domain/name.ts'
 export {
   type AccountProvider,
   accountIssuerOf,
-  accountProviders,
   accountProvidersOf,
   entraObjectIdPattern,
   type InstanceAppPreset,
