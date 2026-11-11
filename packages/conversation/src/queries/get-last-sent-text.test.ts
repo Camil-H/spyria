@@ -34,7 +34,7 @@ test('the last sent text is the member’s latest message of the chat, as last e
   expect(lastSentText([messageOf(1), messageOf(2, { body: 'Edited' })])).toBe('Edited')
 })
 
-test('the last sent text skips other authors, agents, deleted or textless messages and other chats', () => {
+test('the last sent text skips other authors, agents, prompts of the quality gates, deleted or textless messages and other chats', () => {
   expect(
     lastSentText([
       messageOf(1),
@@ -44,6 +44,7 @@ test('the last sent text skips other authors, agents, deleted or textless messag
       messageOf(5, { body: '' }),
       messageOf(6, { chatId: chatId('chat-welcome') }),
       messageOf(7, { workspaceId: globex }),
+      messageOf(8, { step: { type: 'dev_loop_prompt', loopId: 'message-loop', phase: 'command' } }),
     ]),
   ).toBe('Message 1')
   expect(lastSentText([messageOf(1, { authorId: bob })])).toBe('')

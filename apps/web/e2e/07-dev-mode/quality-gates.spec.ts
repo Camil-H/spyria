@@ -47,6 +47,11 @@ test.describe('Quality gates settings', () => {
     await expect(command).toHaveAttribute('aria-label', 'Gate 2: Command')
     await command.getByLabel('Name').fill('Lint')
     await command.getByLabel('Command', { exact: true }).fill('bun run lint')
+    const fixes = command.getByLabel('Times a failure goes back to the agent')
+    await fixes.fill('')
+    await expect(fixes).toBeVisible()
+    await fixes.fill('1')
+    await expect(command).toContainText('time, then hand over')
     await section.getByRole('button', { name: 'Move Lint up' }).click()
     await expect(gatesOf(page).nth(0)).toHaveAttribute('aria-label', 'Gate 1: Lint')
     await section.getByLabel('Time limit (minutes)').fill('60')
@@ -61,6 +66,7 @@ test.describe('Quality gates settings', () => {
     await expect(switchOf(page)).toHaveAttribute('aria-checked', 'false')
     await expect(gatesOf(page)).toHaveCount(4)
     await expect(gatesOf(page).nth(0).getByLabel('Command', { exact: true })).toHaveValue('bun run lint')
+    await expect(gatesOf(page).nth(0).getByLabel('Times a failure goes back to the agent')).toHaveValue('1')
     await expect(section.getByLabel('Time limit (minutes)')).toHaveValue('60')
 
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
@@ -85,7 +91,7 @@ test.describe('Quality gates card', () => {
     await page.goto('/')
   })
 
-  test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint"', {
+  test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint", after a prompt the gates send in their own name', {
     tag: ['@spec-57'],
   }, async ({ page, agentScript, heldCommand, release, workerStack }) => {
     const lint = {
@@ -126,6 +132,9 @@ test.describe('Quality gates card', () => {
     await expect(card.getByRole('img', { name: 'running' })).toHaveCount(1)
     await expect(messageContaining(page, 'Quality gates: round 2, see below')).toHaveCount(1)
     await expect(messageContaining(page, 'Fixed lint.')).toHaveCount(1)
+    const loopPrompt = messageContaining(page, "Quality gates ran the repository's checks")
+    await expect(loopPrompt.getByText('Quality gates', { exact: true })).toBeVisible()
+    await expect(loopPrompt).not.toContainText('Alice')
     const order = () =>
       messageItemsOf(page).evaluateAll((items) =>
         items

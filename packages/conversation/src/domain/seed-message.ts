@@ -1,10 +1,12 @@
 import { type Attachment, fileSizeOf } from './attachments.ts'
+import { isDevLoopPrompt } from './dev-loop.ts'
 import type { Message } from './message.ts'
 import { MessageBody } from './message-body.ts'
 
-export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'attachments' | 'createdAt' | 'status'> & {
-  authorName: string
-}
+export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'attachments' | 'createdAt' | 'status'> &
+  Partial<Pick<Message, 'step'>> & {
+    authorName: string
+  }
 
 const attachedLineOf = (attachments: readonly Attachment[]) =>
   `Attached, not readable by you: ${attachments
@@ -21,8 +23,11 @@ export const channelThreadHeaderOf = (channelName: string) =>
 export const copiedThreadHeaderOf = (channelName: string) => `Conversation from channel thread in #${channelName}`
 export const runtimeChatHeaderOf = (chatName: string) => `Conversation so far, from the runtime chat ${chatName}:`
 
-const speakerOf = ({ authorName, kind, createdAt }: QuotedMessage) =>
-  `${authorName} (${kind === 'agent' ? 'agent' : 'member, human'}) · ${quotedTimeOf(createdAt)}`
+const speakerKindOf = (message: QuotedMessage) =>
+  message.kind === 'agent' ? 'agent' : isDevLoopPrompt(message) ? 'automatic prompt' : 'member, human'
+
+const speakerOf = (message: QuotedMessage) =>
+  `${message.authorName} (${speakerKindOf(message)}) · ${quotedTimeOf(message.createdAt)}`
 
 export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
