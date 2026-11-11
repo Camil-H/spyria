@@ -21,6 +21,7 @@ import { type Schema, schema } from './zero.ts'
 export type ZeroContext = {
   userId: MemberId
   workspaceId: WorkspaceId
+  signedInThroughWorkspaceSso?: boolean
   spyriaAgentImage?: string
   limitMessage?: (isPrompt: boolean) => void
 }
@@ -140,12 +141,13 @@ export const queries = defineQueries({
       membership.where('workspaceId', ctx.workspaceId).where('removedAt', 'IS', null),
     ),
   ),
-  workspaces: defineQuery(({ ctx }) =>
-    zql.workspaces
+  workspaces: defineQuery(({ ctx }) => {
+    const memberOf = zql.workspaces
       .where('deletedAt', 'IS', null)
       .whereExists('memberships', (membership) => membership.where('userId', ctx.userId).where('removedAt', 'IS', null))
-      .orderBy('createdAt', 'asc'),
-  ),
+      .orderBy('createdAt', 'asc')
+    return ctx.signedInThroughWorkspaceSso ? memberOf.where('workspaceId', ctx.workspaceId) : memberOf
+  }),
   memberships: defineQuery(({ ctx }) => zql.memberships.where('workspaceId', ctx.workspaceId)),
   workspaceRoles: defineQuery(({ ctx }) => zql.workspaceRoles.where('workspaceId', ctx.workspaceId)),
   workspaceRolePermissions: defineQuery(({ ctx }) =>
