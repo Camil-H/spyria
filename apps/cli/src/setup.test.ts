@@ -38,7 +38,7 @@ const runSetup = (extra: string[], processEnvironment = {}) =>
 const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'utf8'))
 
 test('an unattended setup creates the tunnel and writes the Compose file, the gateway config and a private .env', async () => {
-  await runSetup(['--hostname', 'Spyria.Example.com', '--join-by', 'invited-address'], {
+  await runSetup(['--hostname', 'Spyria.Example.com'], {
     SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'api-token',
   })
   expect(tunnelNames).toEqual(['spyria-spyria.example.com'])
@@ -51,7 +51,6 @@ test('an unattended setup creates the tunnel and writes the Compose file, the ga
     SPYRIA_DEPLOYMENT: 'spyria',
     SPYRIA_VERSION: '1.2.0',
     SPYRIA_APP_ORIGIN: 'https://spyria.example.com',
-    SPYRIA_JOIN_BY: 'invited-address',
     CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
     COMPOSE_PROFILES: 'host,cloudflare',
   })
@@ -92,15 +91,23 @@ test('run from inside an install without --folder, setup keeps that install and 
   }
 })
 
-test('choosing an SMTP URL again keeps the saved one when none is given', async () => {
-  await runSetup(['--mail', 'smtp', '--mail-from', 'Spyria <spyria@example.com>'], {
-    SPYRIA_SETUP_SMTP_URL: 'smtps://user:saved@smtp.example.com:465',
+test('an OIDC app for accounts takes its secret from the environment, keeps it when set up again without one, and - removes the app', async () => {
+  await runSetup(['--oidc-issuer', 'https://login.example.com', '--oidc-client-id', 'spyria'], {
+    SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'oidc-secret',
   })
-  await runSetup(['--mail', 'smtp'])
-  expect(environment().SPYRIA_SMTP_URL).toBe('smtps://user:saved@smtp.example.com:465')
+  const oidcSettings = {
+    SPYRIA_OIDC_ISSUER: 'https://login.example.com',
+    SPYRIA_OIDC_CLIENT_ID: 'spyria',
+    SPYRIA_OIDC_CLIENT_SECRET: 'oidc-secret',
+  }
+  expect(environment()).toMatchObject(oidcSettings)
+  await runSetup([])
+  expect(environment()).toMatchObject(oidcSettings)
+  await runSetup(['--oidc-issuer', '-'])
+  for (const name of Object.keys(oidcSettings)) expect(environment()[name]).toBeUndefined()
 })
 
-test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id', async () => {
+test('an unattended setup refuses what it cannot decide: no hostname, a new hostname without a token, a malformed client id, an OIDC app without https or a secret', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {
     const attempt = (extra: string[], processEnvironment = {}) =>
@@ -117,14 +124,23 @@ test('an unattended setup refuses what it cannot decide: no hostname, a new host
         SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't',
       }),
     ).toBe('not-google is not a Google OAuth client id')
+    const withOidcApp = (issuer: string) => [
+      '--hostname',
+      'spyria.example.com',
+      '--oidc-issuer',
+      issuer,
+      '--oidc-client-id',
+      'spyria',
+    ]
     expect(
-      await attempt(
-        ['--hostname', 'spyria.example.com', '--join-by', 'invited-address', '--provider', 'cloudflare-access'],
-        {
-          SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't',
-        },
-      ),
-    ).toBe('--provider must be microsoft or okta or google or other or skip')
+      await attempt(withOidcApp('http://login.example.com'), {
+        SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't',
+        SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'oidc-secret',
+      }),
+    ).toBe('http://login.example.com is not an https address')
+    expect(await attempt(withOidcApp('https://login.example.com'), { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' })).toBe(
+      'SPYRIA_SETUP_OIDC_CLIENT_SECRET is required',
+    )
   } finally {
     rmSync(empty, { recursive: true, force: true })
   }
@@ -169,16 +185,7 @@ test('every command of an install refuses a folder that is not one and writes no
   }
   const originalDirectory = process.cwd()
   try {
-    for (const command of [
-      'upgrade',
-      'backup',
-      'restore',
-      'doctor',
-      'setup-link',
-      'verify-domain',
-      'sign-in-app',
-      'compose',
-    ])
+    for (const command of ['upgrade', 'backup', 'restore', 'doctor', 'setup-link', 'compose'])
       expect({ command, refusal: await refusalOf(command) }).toEqual({
         command,
         refusal: `No Spyria install in ${project}: run spyria setup, or pass --folder`,
@@ -236,10 +243,10 @@ test('setup refuses an answer .env cannot hold before it rewrites compose.yml an
     writeFileSync(join(install, 'compose.yml'), keptCompose)
     writeFileSync(join(install, 'bifrost.json'), 'kept gateway config')
     const environmentBefore = readFileSync(join(install, '.env'), 'utf8')
-    const refusal = await setupIn(['--mail', 'smtp', '--mail-from', "O'Brien <spyria@example.com>"], {
-      SPYRIA_SETUP_SMTP_URL: 'smtps://user:secret@smtp.example.com:465',
+    const refusal = await setupIn(['--oidc-issuer', 'https://login.example.com', '--oidc-client-id', "o'brien"], {
+      SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'oidc-secret',
     }).catch((error: Error) => error.message)
-    expect(refusal).toBe('SPYRIA_MAIL_FROM cannot hold a quote or span lines')
+    expect(refusal).toBe('SPYRIA_OIDC_CLIENT_ID cannot hold a quote or span lines')
     expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(keptCompose)
     expect(readFileSync(join(install, 'bifrost.json'), 'utf8')).toBe('kept gateway config')
     expect(readFileSync(join(install, '.env'), 'utf8')).toBe(environmentBefore)

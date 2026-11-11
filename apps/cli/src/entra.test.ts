@@ -28,10 +28,12 @@ test('az registers a tenant-only app for a workspace with the redirect URI, its 
   expect(calls[3]).toContain('--years')
 })
 
-test('the app of this Spyria serves every organizational directory, and an az refusal says which step failed', () => {
+test('the account app of this Spyria serves work or school accounts of any directory and personal Microsoft accounts, and an az refusal says which step failed', () => {
   const calls: string[][] = []
-  registerEntraApp({ origin: 'https://spyria.example.com', audience: 'organizations' }, fakeAz(calls))
-  expect(calls[1]).toContain('AzureADMultipleOrgs')
+  registerEntraApp({ origin: 'https://spyria.example.com', audience: 'any-account' }, fakeAz(calls))
+  expect(calls[1]?.join(' ')).toContain(
+    '--sign-in-audience AzureADandPersonalMicrosoftAccount --requested-access-token-version 2',
+  )
   expect(() =>
     registerEntraApp({ origin: 'https://spyria.example.com', audience: 'tenant' }, fakeAz([], 'ad app create')),
   ).toThrow('az ad app create failed: Insufficient privileges to complete the operation.')

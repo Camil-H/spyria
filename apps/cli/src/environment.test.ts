@@ -14,7 +14,6 @@ const answers: SetupAnswers = {
   version: '1.2.0',
   images: 'ghcr.io/camil-h',
   origin: 'https://spyria.example.com',
-  joinBy: 'invited-address',
   tunnelToken: 'tunnel-token',
   runsHost: true,
   dockerGroup: '999',
@@ -42,7 +41,6 @@ test('a first setup generates every secret, the install code and the settings of
     SPYRIA_DEPLOYMENT: 'spyria',
     SPYRIA_VERSION: '1.2.0',
     SPYRIA_APP_ORIGIN: 'https://spyria.example.com',
-    SPYRIA_JOIN_BY: 'invited-address',
     COMPOSE_PROFILES: 'host,cloudflare',
     SPYRIA_TRUSTED_PROXY: 'cloudflare',
     CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token',
@@ -69,10 +67,15 @@ test('setting up again keeps every secret, so stored secrets and runtimes keep w
   })
 })
 
-test('the environment file round-trips, drops empty values and refuses a value spanning lines', () => {
+test('the OIDC app for accounts is written as the SPYRIA_OIDC settings, and the environment file round-trips, drops empty values and refuses a value spanning lines', () => {
   const environment = environmentOf({
     ...answers,
-    smtp: { url: 'smtps://resend:key@smtp.resend.com:465', from: 'Spyria <spyria@example.com>' },
+    instanceApps: { oidc: { issuer: 'https://login.example.com', clientId: 'spyria', clientSecret: 'oidc-secret' } },
+  })
+  expect(environment).toMatchObject({
+    SPYRIA_OIDC_ISSUER: 'https://login.example.com',
+    SPYRIA_OIDC_CLIENT_ID: 'spyria',
+    SPYRIA_OIDC_CLIENT_SECRET: 'oidc-secret',
   })
   expect(parseEnvironment(serializeEnvironment(environment))).toEqual(
     Object.fromEntries(Object.entries(environment).filter(([, value]) => value !== '')),
@@ -96,10 +99,14 @@ test('install codes use the claim code alphabet and differ', () => {
 })
 
 test("no secret setup reads from the environment is a setting it writes, so the install's own .env never answers for you", () => {
-  const written = Object.keys(environmentOf({ ...answers, smtp: { url: 'smtps://x', from: 'Spyria <s@x>' } }))
+  const written = Object.keys(environmentOf(answers))
   const everyInstanceApp = environmentOf({
     ...answers,
-    instanceApps: { google: { clientId: 'g', clientSecret: 'g' }, microsoft: { clientId: 'm', clientSecret: 'm' } },
+    instanceApps: {
+      google: { clientId: 'g', clientSecret: 'g' },
+      microsoft: { clientId: 'm', clientSecret: 'm' },
+      oidc: { issuer: 'https://login.example.com', clientId: 'o', clientSecret: 'o' },
+    },
   })
   for (const variable of Object.values(secretVariables)) {
     expect(written).not.toContain(variable)
