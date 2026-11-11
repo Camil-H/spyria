@@ -193,6 +193,9 @@ export const createRuntimeHostGateway = ({
         logFailure('runtime_host.prepare_failed', 'Preparing a runtime host failed'),
       )
     handlers
+      .discardUnknown(host, sandboxProvider)
+      .catch(logFailure('runtime_host.discard_failed', 'Removing runtimes Spyria no longer knows failed'))
+    handlers
       .reconcile(host, sandboxProvider)
       .catch(logFailure('runtime_host.reconcile_failed', 'Reconciling a runtime host failed'))
       .then(() => afterHello?.(database, host))
@@ -399,6 +402,10 @@ export const createRuntimeHostGateway = ({
     stop: commandWithoutResult('stop'),
     remove: commandWithoutResult('remove'),
     status: async (sandbox) => (await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })) as SandboxStatus,
+    runtimeIdsOn: async (host) => {
+      const runtimeIds = await command(host, 'list', {})
+      return Array.isArray(runtimeIds) ? runtimeIds.filter((runtimeId) => typeof runtimeId === 'string') : []
+    },
     hasHarness: async ({ harness, ...sandbox }) =>
       (await command(sandbox, 'installed', { runtimeId: sandbox.runtimeId, harness })) === true,
     installHarness: async ({ harness, ...sandbox }) => {
