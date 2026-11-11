@@ -14,7 +14,7 @@ import {
   rejectionOf,
   sessionTokenOf,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
   waitFor,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
@@ -36,7 +36,7 @@ const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathna
 const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testSecretsKey,
+  secretsKeyring: testSecretsKeyring,
   databases: () => [testDatabase.database],
   spyriaAgentImage: spyriaImage,
 })

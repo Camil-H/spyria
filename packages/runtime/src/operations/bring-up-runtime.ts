@@ -31,9 +31,9 @@ export const bringUpRuntime = async (
   { transactor, provider, currentImage }: Dependencies,
   { workspaceId, runtimeId, now, isLastAttempt }: Input,
 ) => {
-  const { runtime, harness, packageCache } = await transactor.run(async ({ runtimes }) => {
+  const { runtime, apiKeyId, harness, packageCache } = await transactor.run(async ({ runtimes }) => {
     const runtime = await runtimes.lock(workspaceId, runtimeId)
-    return { runtime, ...(await runtimes.launchOptionsOf(runtime)) }
+    return { runtime, apiKeyId: await runtimes.apiKeyIdOf(runtime), ...(await runtimes.launchOptionsOf(runtime)) }
   })
   const sandbox = locationOf(runtime)
   if (!['creating', 'starting', 'installing'].includes(runtime.state) || !sandbox) return
@@ -41,9 +41,12 @@ export const bringUpRuntime = async (
   try {
     const status = await provider.status(sandbox)
     const isOnOldImage = currentImage !== undefined && runtime.image !== currentImage
+    const isOnOldKey = apiKeyId !== provider.currentApiKeyId
+    const isRecreated = status !== 'missing' && (isOnOldImage || isOnOldKey)
     const image = isOnOldImage ? currentImage : runtime.image
     if (status === 'missing') await provider.create({ ...sandbox, image, packageCache })
-    else if (isOnOldImage) await provider.recreate({ ...sandbox, image, packageCache })
+    else if (isRecreated) await provider.recreate({ ...sandbox, image, packageCache })
+    if (isOnOldKey) await transactor.run(({ runtimes }) => runtimes.keepApiKeyId(runtime, provider.currentApiKeyId))
     if (isOnOldImage) {
       started = { ...runtime, image }
       await recordIfUnchanged(transactor, runtime, ({ runtimes }, current) => runtimes.save({ ...current, image }))
@@ -56,7 +59,7 @@ export const bringUpRuntime = async (
         throw new HarnessInstallFailed(error.message)
       })
     }
-    if (status !== 'running' || isOnOldImage) await provider.start(sandbox)
+    if (status !== 'running' || isRecreated) await provider.start(sandbox)
     const readiness = await waitUntilReady(provider.connect(sandbox), runtimeId)
     if (isAgentOutOfDate(readiness)) throw new AgentOutOfDate(readiness.protocolVersion)
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>

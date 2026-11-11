@@ -84,7 +84,12 @@ const signInWith = async (idTokenOf: IdTokenOf, loginPath?: string) => {
   const login = await startLogin(loginPath)
   nextIdToken = await idTokenOf(login.nonce)
   const response = await callback(login.state, login.cookie)
-  return { status: response.status, page: await response.text(), cookie: cookieHeaderOf(response) }
+  return {
+    status: response.status,
+    page: await response.text(),
+    cookie: cookieHeaderOf(response),
+    setCookies: response.headers.getSetCookie(),
+  }
 }
 const verifiedEmail = (email: string) => (nonce: string) => signIdToken({ nonce, email, email_verified: true })
 const signInAs = (email: string, loginPath?: string) => signInWith(verifiedEmail(email), loginPath)
@@ -251,6 +256,29 @@ test('a token naming another workspace than its session is refused', async () =>
   expect((await queryWith(aliceForged.token)).status).toBe(401)
 })
 
+test('session cookies are HttpOnly, SameSite=Lax and sent only to /auth, and no other origin may read an answer of /auth', async () => {
+  const { cookie, setCookies } = await signInAs('alice@example.com')
+  const sessionCookies = setCookies.filter((setCookie) => setCookie.startsWith('spyria_s_'))
+  expect(sessionCookies).toHaveLength(2)
+  for (const sessionCookie of sessionCookies) {
+    const attributes = sessionCookie.split(';').map((attribute) => attribute.trim())
+    expect(attributes).toEqual(expect.arrayContaining(['HttpOnly', 'SameSite=Lax', 'Path=/auth']))
+  }
+
+  const preflight = await app.request('/auth/renew', {
+    method: 'OPTIONS',
+    headers: { origin: 'http://evil.test', 'access-control-request-method': 'POST' },
+  })
+  const crossOriginRenewal = await postAuth(
+    '/auth/renew',
+    cookie,
+    { workspaceId: acme },
+    { ...sameAppHeaders, origin: 'http://evil.test' },
+  )
+  for (const response of [preflight, crossOriginRenewal])
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+})
+
 test('renewal issues a new token from the session cookie', async () => {
   const { cookie } = await signInAs('alice@example.com')
   const response = await postAuth('/auth/renew', cookie, { workspaceId: acme })
@@ -271,6 +299,12 @@ test('renewal is refused without the CSRF header, from another origin, without a
   ).toBe(403)
   expect((await postAuth('/auth/renew', '', { workspaceId: acme })).status).toBe(401)
   expect((await postAuth('/auth/logout', cookie, { workspaceId: acme }, withoutCsrf)).status).toBe(403)
+  expect(
+    (await postAuth('/auth/logout', cookie, { workspaceId: acme }, { ...sameAppHeaders, origin: 'http://evil.test' }))
+      .status,
+  ).toBe(403)
+  const { origin: _origin, ...withoutOrigin } = sameAppHeaders
+  expect((await postAuth('/auth/logout', cookie, { workspaceId: acme }, withoutOrigin)).status).toBe(403)
   expect((await postAuth('/auth/logout', cookie, { workspaceId: acme })).status).toBe(204)
   expect((await postAuth('/auth/renew', cookie, { workspaceId: acme })).status).toBe(401)
   expect((await postAuth('/auth/renew', cookie, { workspaceId: globex })).status).toBe(200)
