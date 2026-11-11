@@ -44,7 +44,7 @@ test.each([
   expect(() => ssoSettingsFrom({ ...base, ...input } as Parameters<typeof ssoSettingsFrom>[0])).toThrow(message)
 })
 
-test('Entra reads the user principal name before the mail attribute; other presets read only a confirmed email', () => {
+test('Entra reads the user principal name before the mail attribute, which an account never falls back to; other presets read only a confirmed email', () => {
   expect(ssoEmailOf('microsoft', { preferred_username: 'pat@acme.com' }, 'workspace')).toEqual({
     email: 'pat@acme.com',
   })
@@ -52,6 +52,7 @@ test('Entra reads the user principal name before the mail attribute; other prese
     email: 'pat@acme.com',
   })
   expect(ssoEmailOf('microsoft', { email: 'pat@acme.com' }, 'workspace')).toEqual({ email: 'pat@acme.com' })
+  expect(ssoEmailOf('microsoft', { email: 'pat@acme.com' }, 'account')).toEqual({ refusal: 'untrusted' })
   expect(ssoEmailOf('microsoft', {}, 'account')).toEqual({ refusal: 'untrusted' })
   expect(ssoEmailOf('oidc', { preferred_username: 'pat@acme.com', email_verified: true }, 'workspace')).toEqual({
     refusal: 'untrusted',

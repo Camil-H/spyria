@@ -74,7 +74,7 @@ const googleEmailOf = (claims: Record<string, unknown>, scope: SignInScope): Sso
 export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>, scope: SignInScope): SsoEmail => {
   if (preset === 'google') return googleEmailOf(claims, scope)
   if (preset === 'oidc') return confirmedEmailOf(claims)
-  const email = addressOf(claims.preferred_username ?? claims.email)
+  const email = addressOf(scope === 'account' ? claims.preferred_username : (claims.preferred_username ?? claims.email))
   return email === undefined ? { refusal: 'untrusted' } : { email }
 }
 

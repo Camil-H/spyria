@@ -110,12 +110,12 @@ const joinInvitedWorkspaces = async (
 }
 
 const bindAccountByEmail = async (sql: Sql, { issuer, subject }: VerifiedIdentity, email: string) => {
-  const [user] = await sql<{ id: string; isBoundAtIssuer: boolean }[]>`
+  const [user] = await sql<{ id: string }[]>`
     insert into users (id, email) values (${crypto.randomUUID()}, ${email})
-    on conflict (email) do update set email = excluded.email
-    returning id, exists(select 1 from account_identities where account_identities.user_id = users.id
-      and account_identities.issuer = ${issuer}) as "isBoundAtIssuer"`
-  if (!user || user.isBoundAtIssuer) throw new AccountBoundElsewhere(email)
+    on conflict (email) do update set email = excluded.email returning id`
+  if (!user) throw new AccountBoundElsewhere(email)
+  const [hasAccount] = await sql`select 1 from account_identities where user_id = ${user.id} limit 1`
+  if (hasAccount) throw new AccountBoundElsewhere(email)
   const [bound] = await sql<{ userId: string }[]>`
     insert into account_identities (issuer, subject, user_id) values (${issuer}, ${subject}, ${user.id})
     on conflict (issuer, subject) do update set issuer = excluded.issuer

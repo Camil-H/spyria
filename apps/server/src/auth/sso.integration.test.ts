@@ -377,7 +377,7 @@ test('an account signs in with a provider of this Spyria: the first sign-in bind
   expect(await identitiesOf('alice-account')).toEqual([])
 })
 
-test("a later sign-in with the same provider account finds the same user after its address changed, and another account of that provider carrying the user's address is refused", async () => {
+test("a later sign-in with the same provider account finds the same user after its address changed, and another account carrying the user's address, at that provider or another, is refused", async () => {
   const renamed = await signInThrough(accountIdp, 'provider=oidc', {
     sub: 'alice-account',
     email: 'alice.new@example.com',
@@ -391,10 +391,19 @@ test("a later sign-in with the same provider account finds the same user after i
   })
   expect(takeover.status).toBe(403)
   expect(takeover.page).toContain(
-    '"status":"refused","message":"alice@example.com already signs in with another account of this provider"',
+    '"status":"refused","message":"alice@example.com already signs in with another account: sign in with that one"',
   )
   expect(takeover.sessions).toEqual([])
   expect(await accountIdentitiesOf('mallory-account')).toEqual([])
+  const elsewhere = await signInThrough(microsoftIdp, 'provider=microsoft', {
+    tid: microsoftPersonalAccountsTenantId,
+    oid: '00000000-0000-4000-8000-0000000000a1',
+    sub: 'alice-per-app',
+    preferred_username: 'alice@example.com',
+  })
+  expect(elsewhere.status).toBe(403)
+  expect(elsewhere.page).toContain('already signs in with another account: sign in with that one')
+  expect(await accountIdentitiesOf('00000000-0000-4000-8000-0000000000a1')).toEqual([])
 })
 
 test('a new account joins the workspaces without their own SSO that invited exactly its address; the invites of a workspace with its own SSO and of other addresses stay pending', async () => {

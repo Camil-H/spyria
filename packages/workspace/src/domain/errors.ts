@@ -171,7 +171,7 @@ export const SsoAddressMismatch = errorKind(
 )
 export const AccountBoundElsewhere = errorKind(
   'account_bound_elsewhere',
-  (email: string) => `${email} already signs in with another account of this provider`,
+  (email: string) => `${email} already signs in with another account: sign in with that one`,
   WorkspaceError,
 )
 export const InstanceBeingSetUp = errorKind(
