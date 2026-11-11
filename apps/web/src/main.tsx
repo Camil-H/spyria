@@ -1,7 +1,13 @@
-import { Toast } from '@spyria/ui'
 import { SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
-import { createWorkspaceWithPopup, loadAuthMode, loadSessions, signInWithPopup } from './app/auth.ts'
+import {
+  createWorkspaceOfAccount,
+  loadAuthMode,
+  loadSessions,
+  signInWithEmail,
+  signInWithPopup,
+  submitInPopup,
+} from './app/auth.ts'
 import './app/styles.css'
 
 const root = createRoot(document.getElementById('root') as HTMLElement)
@@ -20,31 +26,6 @@ const rememberSignedIn = () => {
   } catch {}
 }
 const earlyAppModules = hasSignedInBefore() ? appModules() : undefined
-const pageUrl = new URL(location.href)
-const domainVerification = pageUrl.searchParams.get('domainVerification')
-pageUrl.searchParams.delete('domainVerification')
-history.replaceState(history.state, '', pageUrl)
-const domainVerificationToast = (ssoSettingsPath?: string) =>
-  domainVerification && (
-    <Toast>
-      {domainVerification !== 'invalid' ? (
-        `Domain ${domainVerification} verified`
-      ) : (
-        <>
-          This verification link is invalid or expired. Send a new one from{' '}
-          {ssoSettingsPath ? (
-            <a href={ssoSettingsPath} className="underline">
-              Workspace settings › Setup SSO
-            </a>
-          ) : (
-            'Workspace settings › Setup SSO'
-          )}
-          .
-        </>
-      )}
-    </Toast>
-  )
-
 const slowWorkspaceLoadMilliseconds = 10_000
 const sessionEndedNotice = 'Your session ended while your workspace was opening. Sign in again.'
 const sessionMissing = {
@@ -65,16 +46,11 @@ const openApp = async () => {
     clearTimeout(slowLoadTimer),
   )
   if (!app) return 'session_ended'
-  root.render(
-    <>
-      <App app={app} />
-      {domainVerificationToast(`/w/${defaultSession.workspaceId}/settings/sso`)}
-    </>,
-  )
+  root.render(<App app={app} />)
   return 'opened'
 }
 
-const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithPopup>>) => {
+const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithEmail>>) => {
   if (result.status !== 'signed_in') return result
   const opened = await openApp()
   if (opened === 'opened') return result
@@ -85,22 +61,26 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithP
 
 const showSignIn = async (notice?: string) => {
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
-  const { authMode, joinBy, isBeingSetUp, canCreateWorkspace, instanceApps } = await loadAuthMode(setupToken)
+  const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps } = await loadAuthMode(setupToken)
   root.render(
-    <>
-      <SignInScreen
-        isEmailFirst={authMode === 'sso'}
-        isBeingSetUp={isBeingSetUp}
-        joinsByInvitedAddress={joinBy === 'invited_address'}
-        canCreateWorkspace={canCreateWorkspace}
-        setupToken={setupToken}
-        instanceApps={instanceApps}
-        notice={notice}
-        signIn={async (email) => openAppWhenSignedIn(await signInWithPopup({ email }))}
-        createWorkspace={async (form) => openAppWhenSignedIn(await createWorkspaceWithPopup(form))}
-      />
-      {domainVerificationToast()}
-    </>,
+    <SignInScreen
+      isEmailFirst={authMode === 'sso'}
+      isBeingSetUp={isBeingSetUp}
+      canCreateWorkspace={canCreateWorkspace}
+      setupToken={setupToken}
+      accountProviders={accountProviders}
+      instanceApps={instanceApps}
+      notice={notice}
+      signInWithEmail={async (email) => openAppWhenSignedIn(await signInWithEmail(email))}
+      signIn={async (target) => openAppWhenSignedIn(await signInWithPopup(target))}
+      createFirstWorkspace={async (form) => openAppWhenSignedIn(await submitInPopup(form, '/auth/first-workspace'))}
+      createWorkspace={(name) =>
+        createWorkspaceOfAccount(name).then(
+          () => openAppWhenSignedIn({ status: 'signed_in' }),
+          (error: Error) => ({ status: 'refused', message: error.message }) as const,
+        )
+      }
+    />,
   )
 }
 
