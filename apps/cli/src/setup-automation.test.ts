@@ -46,7 +46,7 @@ afterAll(() => {
   rmSync(folder, { recursive: true, force: true })
 })
 
-test('setup with Cloudflare Access and Resend prints the provider values once, and stores only the sending key and the tunnel token, and keeps the key of the running install while it has not started on the new one', async () => {
+test('setup with Cloudflare Access and Resend prints the provider values once, and stores only the sending key and the tunnel token, and keeps the key of the running install while it has not started on the new one, saying it stays valid', async () => {
   const printed: string[] = []
   const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
   try {
@@ -81,4 +81,7 @@ test('setup with Cloudflare Access and Resend prints the provider values once, a
   })
   for (const secret of ['access-secret', 're_full_access', 'cloudflare-api-token']) expect(stored).not.toContain(secret)
   expect(revokedKeys).toEqual([])
+  expect(output).toContain(
+    'Any earlier Resend key named Spyria on spyria.example.com stays valid, since Spyria may still run on it: once Spyria runs on the new key (spyria compose up -d), delete the earlier ones in Resend.',
+  )
 })
