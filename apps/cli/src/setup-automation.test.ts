@@ -82,6 +82,6 @@ test('setup with Cloudflare Access and Resend prints the provider values once, a
   for (const secret of ['access-secret', 're_full_access', 'cloudflare-api-token']) expect(stored).not.toContain(secret)
   expect(revokedKeys).toEqual([])
   expect(output).toContain(
-    'Every earlier Resend key named Spyria on spyria.example.com stays valid, since Spyria may still run on one: once it runs on the new key (spyria compose up -d), delete them in Resend.',
+    'Any earlier Resend key named Spyria on spyria.example.com stays valid, since Spyria may still run on it: once Spyria runs on the new key (spyria compose up -d), delete the earlier ones in Resend.',
   )
 })

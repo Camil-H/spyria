@@ -40,6 +40,7 @@ case "$*" in
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
+  "volume rm "*) [ -f "$FAKE_DOCKER/volume-in-use" ] && { echo "Error response from daemon: volume is in use" >&2; exit 1; } ;;
   "ps -q --filter label=spyria.managed=1 --filter name=^spyria-rt-") cat "$FAKE_DOCKER/runtimes" 2>/dev/null ;;
 esac
 exit 0
@@ -90,6 +91,7 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'env-at-backup'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
+  rmSync(join(fakeDocker, 'volume-in-use'), { force: true })
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
   writeFileSync(join(fakeDocker, 'database-exists'), '1\n')
 })
@@ -312,6 +314,13 @@ test("turning this machine's host on once a workspace exists takes the command o
   rmSync(join(fakeDocker, 'calls'), { force: true })
   await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/ABCD2345' })
   expect(indexOfCall('volume rm')).toBe(-1)
+  writeFileSync(join(fakeDocker, 'volume-in-use'), '')
+  const inUse = await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/WXYZ6789' }).catch(
+    (error: Error) => error.message,
+  )
+  expect(inUse).toBe('Removing spyria-host failed: Error response from daemon: volume is in use')
+  expect(environment().SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/ABCD2345')
+  rmSync(join(fakeDocker, 'volume-in-use'))
   await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/WXYZ6789' })
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/WXYZ6789')
   expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(-1)

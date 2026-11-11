@@ -241,19 +241,19 @@ export const setup = async (
     assertPostgresRuns(folder, 'run setup again')
     await backup(folder, flags)
   }
-  writeReleaseFiles(folder, releaseFiles)
-  writeEnvironment(folder, environment)
   if (
     runsHost &&
     existing.COMPOSE_PROFILES !== undefined &&
     environment.SPYRIA_HOST_CLAIM_URL !== existing.SPYRIA_HOST_CLAIM_URL
   )
     forgetEarlierHostPairing(folder, environment)
+  writeReleaseFiles(folder, releaseFiles)
+  writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) {
     if (smtp?.retireReplacedKeys)
       console.log(
-        `Every earlier Resend key named Spyria on ${hostname} stays valid, since Spyria may still run on one: once it runs on the new key (spyria compose up -d), delete them in Resend.`,
+        `Any earlier Resend key named Spyria on ${hostname} stays valid, since Spyria may still run on it: once Spyria runs on the new key (spyria compose up -d), delete the earlier ones in Resend.`,
       )
     return
   }
