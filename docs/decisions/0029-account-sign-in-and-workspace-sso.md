@@ -24,6 +24,6 @@ Supersedes [decision 0027](0027-join-by-invited-address.md) and amends [decision
 ## Consequences
 
 - A person needs nothing but an account at a provider the instance offers; an organization gets its corporate control by enforcing its provider on its workspace.
-- Typing an address shows whether it is invited to, or a member of, a workspace that enforces SSO, by the extra provider entry; nothing else is revealed before the provider confirms the address.
+- Typing an address shows whether it is invited to, or a member of, a workspace that enforces SSO, by the extra provider entry, and following that entry reaches that workspace's provider, whose issuer, client id and Microsoft tenant can name the organization. Who joins what is decided only once the provider confirms the address.
 - An instance without account providers works only with workspaces enforcing their own provider, and nobody creates more workspaces there.
 - The operator's Microsoft app must accept personal accounts as well as any tenant.

@@ -48,8 +48,7 @@ export const DeleteWorkspaceSection = ({ workspaceId }: { workspaceId: Workspace
           <p className="text-sm text-muted">
             Every member loses access at once and running agents stop. On {erasedOn}, Spyria erases the chats and their
             history, the runtimes and their files, the members' model keys, the shared connections, the link to the
-            GitHub App, the sign-in settings and the email domain. Until then, the operator of this Spyria can restore
-            the workspace.
+            GitHub App and the sign-in settings. Until then, the operator of this Spyria can restore the workspace.
           </p>
           <p className="text-sm text-muted">The GitHub App stays installed on GitHub: uninstall it there.</p>
           <label className={labelClass}>
