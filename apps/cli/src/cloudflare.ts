@@ -3,6 +3,10 @@ export const cloudflareApi = 'https://api.cloudflare.com/client/v4'
 type Envelope<Result> = { success: boolean; errors?: { message: string }[]; result: Result }
 type Zone = { id: string; name: string; account: { id: string } }
 type Tunnel = { id: string; name: string }
+type DnsRecord = { id: string; type: string; content: string }
+
+const tunnelTarget = '.cfargotunnel.com'
+const isTunnelRecord = ({ type, content }: DnsRecord) => type === 'CNAME' && content.endsWith(tunnelTarget)
 
 export class CloudflareRefused extends Error {}
 
@@ -50,6 +54,17 @@ export const createTunnel = async ({
 }) => {
   const call = cloudflareClientOf(apiToken, api)
   const zone = await zoneOf(call, hostname)
+  const recordsAtHostname = await call<DnsRecord[]>(
+    'GET',
+    `/zones/${zone.id}/dns_records?${new URLSearchParams({ name: hostname })}`,
+  )
+  const otherRecordTypes = [
+    ...new Set(recordsAtHostname.filter((record) => !isTunnelRecord(record)).map(({ type }) => type)),
+  ]
+  if (otherRecordTypes.length > 0)
+    throw new CloudflareRefused(
+      `${hostname} already has DNS records (${otherRecordTypes.join(', ')}): delete them in Cloudflare, or choose another hostname`,
+    )
   const accountPath = `/accounts/${zone.account.id}/cfd_tunnel`
   const [existing] = await call<Tunnel[]>(
     'GET',
@@ -59,12 +74,9 @@ export const createTunnel = async ({
   await call('PUT', `${accountPath}/${tunnel.id}/configurations`, {
     config: { ingress: [{ hostname, service: 'http://server:3000' }, { service: 'http_status:404' }] },
   })
-  const record = { type: 'CNAME', name: hostname, content: `${tunnel.id}.cfargotunnel.com`, proxied: true }
-  const [existingRecord] = await call<{ id: string }[]>(
-    'GET',
-    `/zones/${zone.id}/dns_records?${new URLSearchParams({ name: hostname })}`,
-  )
-  if (existingRecord) await call('PUT', `/zones/${zone.id}/dns_records/${existingRecord.id}`, record)
+  const record = { type: 'CNAME', name: hostname, content: `${tunnel.id}${tunnelTarget}`, proxied: true }
+  const [tunnelRecord] = recordsAtHostname
+  if (tunnelRecord) await call('PUT', `/zones/${zone.id}/dns_records/${tunnelRecord.id}`, record)
   else await call('POST', `/zones/${zone.id}/dns_records`, record)
   const token = await call<string>('GET', `${accountPath}/${tunnel.id}/token`)
   return { tunnelId: tunnel.id, token, origin: `https://${hostname}` }

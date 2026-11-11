@@ -1,5 +1,15 @@
 import { expect, test } from 'bun:test'
-import { snapshotReadingOf } from './workspace-reads.ts'
+import { completeSnapshotOf, snapshotReadingOf } from './workspace-reads.ts'
+
+test('a snapshot is kept only when every read answered, so a runtime stopping mid-snapshot keeps the last complete one', () => {
+  const tree = { entries: [] }
+  const branchReadings = { changes: { files: '' }, commits: { log: '' }, status: { uncommitted: 0 } }
+  expect(JSON.parse(completeSnapshotOf({ tree, ...branchReadings }, true) ?? '')).toEqual({ tree, ...branchReadings })
+  expect(JSON.parse(completeSnapshotOf({ tree }, false) ?? '')).toEqual({ tree })
+  expect(completeSnapshotOf({ tree, ...branchReadings, commits: undefined }, true)).toBeUndefined()
+  expect(completeSnapshotOf({ tree, changes: branchReadings.changes }, true)).toBeUndefined()
+  expect(completeSnapshotOf(branchReadings, true)).toBeUndefined()
+})
 
 test('a snapshot gives each branch read its part, and a snapshot older than the commits read gives it the changes, which held the log', () => {
   const snapshot = JSON.stringify({
