@@ -74,7 +74,8 @@ export const readEnvironment = (folder: string): Environment => {
 }
 
 export const writeEnvironment = (folder: string, environment: Environment) => {
-  writeFileSync(environmentFileOf(folder), serializeEnvironment(environment), { mode: 0o600 })
+  const previousText = existsSync(environmentFileOf(folder)) ? readFileSync(environmentFileOf(folder), 'utf8') : ''
+  writeFileSync(environmentFileOf(folder), serializeEnvironment(environment, previousText), { mode: 0o600 })
   chmodSync(environmentFileOf(folder), 0o600)
 }
 
