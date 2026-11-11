@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@spyria/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { createApp } from '../app.ts'
 import { createFirstWorkspace } from '../auth/sso.ts'
+import { runOperator } from '../testing/operator.ts'
 import { testAuthSettings } from '../testing/testing.ts'
 import { serverWebSocket } from './gateway.ts'
 
@@ -33,22 +34,8 @@ const claimWith = (code: string) =>
   })
 
 const setupToken = 's'.repeat(48)
-const runOperator = async (command: string) => {
-  const operator = Bun.spawn([process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, command], {
-    stderr: 'pipe',
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrlOf(instance.name),
-      SPYRIA_APP_ORIGIN: 'https://spyria.example',
-      SPYRIA_SETUP_TOKEN: setupToken,
-    },
-  })
-  return {
-    exitCode: await operator.exited,
-    stdout: await new Response(operator.stdout).text(),
-    stderr: await new Response(operator.stderr).text(),
-  }
-}
+const operatorSays = (command: string) =>
+  runOperator(instance.name, [command], { SPYRIA_APP_ORIGIN: 'https://spyria.example', SPYRIA_SETUP_TOKEN: setupToken })
 
 test('the machine host waits with the install token until the first workspace exists, then pairs with it once as a workspace host, while the operator says whether a workspace exists and prints the setup link only until one does', async () => {
   expect(await claimWith(installHostToken)).toEqual({
@@ -56,8 +43,8 @@ test('the machine host waits with the install token until the first workspace ex
     reason: 'Waiting for the first workspace of this Spyria',
   })
   expect(await claimWith('ZZZZZZZZZZZZZZZZ')).toMatchObject({ closeCode: 4001, reason: 'This code is not valid' })
-  expect(await runOperator('has-workspace')).toEqual({ exitCode: 0, stdout: 'no\n', stderr: '' })
-  expect(await runOperator('setup-link')).toEqual({
+  expect(await operatorSays('has-workspace')).toEqual({ exitCode: 0, stdout: 'no\n', stderr: '' })
+  expect(await operatorSays('setup-link')).toEqual({
     exitCode: 0,
     stdout: `https://spyria.example/?setup=${setupToken}\n`,
     stderr: '',
@@ -80,8 +67,8 @@ test('the machine host waits with the install token until the first workspace ex
     { email: 'owner@gmail.com', subject: 'owner-subject' },
     { installHostToken },
   )
-  expect(await runOperator('has-workspace')).toEqual({ exitCode: 0, stdout: 'yes\n', stderr: '' })
-  expect(await runOperator('setup-link')).toEqual({
+  expect(await operatorSays('has-workspace')).toEqual({ exitCode: 0, stdout: 'yes\n', stderr: '' })
+  expect(await operatorSays('setup-link')).toEqual({
     exitCode: 1,
     stdout: '',
     stderr: 'A workspace already exists: the setup link is spent\n',
