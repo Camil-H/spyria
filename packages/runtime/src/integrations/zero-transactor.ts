@@ -56,7 +56,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
     const row = await tx.run(zql.runtimeHosts.where('workspaceId', workspaceId).where('id', id).one())
     return row && hostOf(row)
   }
-  const runtimesWithIds = async (workspaceId: WorkspaceId, ids: string[]) =>
+  const runtimesWithIds = async (workspaceId: WorkspaceId, ids: readonly string[]) =>
     ids.length === 0
       ? []
       : (await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('id', 'IN', ids))).map(runtimeOf)
@@ -118,6 +118,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'waitingOnHost', hostId)),
       lockIdle: async (workspaceId, { stopBefore, removeBefore }) =>
         runtimesWithIds(workspaceId, await lockRuntimes(tx, workspaceId, 'idle', stopBefore, removeBefore)),
+      findByIds: runtimesWithIds,
       findByChat: async (workspaceId, chatId) => {
         const row = await tx.run(zql.runtimes.where('workspaceId', workspaceId).where('chatId', chatId).one())
         return row && runtimeOf(row)
