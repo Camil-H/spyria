@@ -65,7 +65,7 @@ const nextStates: Record<RuntimeState, readonly RuntimeState[]> = {
 }
 const minute = 60_000
 const idleStopMilliseconds = 60 * minute
-const idleRemovalMilliseconds = 30 * 24 * 60 * minute
+const idleRemovalMilliseconds = 7 * 24 * 60 * minute
 export const sweepIntervalMilliseconds = 5 * minute
 
 export const canTransition = (from: RuntimeState, to: RuntimeState) => nextStates[from].includes(to)

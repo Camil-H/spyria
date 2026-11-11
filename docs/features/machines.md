@@ -54,7 +54,7 @@ The runtime volumes hold the files the agents worked on, so remove them only onc
 
 A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
 
-The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 30 days is removed.
+The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 7 days is removed.
 
 When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
 
