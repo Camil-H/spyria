@@ -1,20 +1,36 @@
 # Who can join and sign-in
 
-Spyria signs everyone in through a single sign-on provider: there are no passwords of its own. Who may join a workspace is chosen once per instance, before the first workspace (`spyria setup` asks, or `SPYRIA_JOIN_BY`):
+Spyria has no passwords and sends no sign-in codes: everyone signs in through a single sign-on provider.
 
-| | By email domain (`domain`) | By invited address (`invited-address`) |
-|---|---|---|
-| For | An organization with its own domain | An individual or a team without one, or with consumer accounts |
-| A workspace owns | One verified email domain, which routes sign-in | No domain |
-| Who joins | Invited people, signing in with an address at the domain | Exactly the invited addresses |
-| Providers | Google Workspace, Microsoft Entra (one tenant), any OIDC provider, Cloudflare Access | Any Google account (Gmail included), any OIDC provider; Microsoft Entra of one tenant |
+## Signing in with an account
 
-Either way:
+People sign in with an account at a provider the deployment offers. The operator sets these account providers ([install](./install.md), [manual install](./self-hosting.md#account-providers), [clouds](./cloud.md)):
 
-- **The first workspace** is created from the setup link that `spyria setup` prints (`spyria setup-link` prints it again while no workspace exists). Without it, a fresh install says it is being set up, so nobody else can claim it before you.
-- **Addresses must be confirmed** by the provider: a Google or generic OIDC account whose provider does not confirm its address is refused with "Your provider did not confirm this address". Microsoft personal accounts never sign in. A generic OIDC provider confirms an address by sending `email_verified: true` in the ID token; if yours does not send it, add a claim mapping that does for the addresses your directory manages, and check it before switching a workspace to that provider, or its members are refused ([decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)).
-- **A member is their provider identity** (issuer and subject), matched at each sign-in; changing the address at the provider keeps the account.
-- **A public email domain** such as `gmail.com` cannot be the domain of a workspace: an instance for consumer accounts joins by invited address.
-- **New workspace** in the app reuses the member's provider and the instance's setting. On an instance joined by invited address, every workspace signs in through the one app of the instance: Admins see it in **Setup SSO** but cannot change it, and an operator changes its client id and secret for every workspace with `spyria sign-in-app`.
+| Provider | Who signs in |
+|---|---|
+| Google | Any Google account, Gmail included. |
+| Microsoft | Work or school accounts of any organization, and personal Microsoft accounts. |
+| Another OIDC provider | Its accounts, as long as it confirms their addresses. |
 
-The settings of a workspace, invites and roles are in [administration](../features/admin.md#sign-in-and-domain-verification); the reasoning is in [decision 0012](../decisions/0012-per-workspace-sso.md) and [decision 0027](../decisions/0027-join-by-invited-address.md).
+The sign-in screen asks for an email address first. It then shows the account providers of the deployment, plus the provider of each workspace that enforces SSO and where that address is invited or a member, labelled only by kind ("Continue with your organization's sign-in"), never by workspace name. Who joins what is decided only once the provider confirms the address.
+
+## Workspaces and invites
+
+- **Anyone signed in with an account can create a workspace**; a workspace of one member is the personal case. After signing in without any workspace, **Create a workspace** asks only for a name, and **New workspace** in the app works the same way.
+- **Members join only by invite** to their exact email address. An invite works at once, and no email is sent: tell the person yourself. Nobody joins a workspace any other way.
+- **An account is the provider's identity** (issuer and subject; the object id for Microsoft), never the address alone. The address binds an account only at its first sign-in at that provider, to the person with that address; afterwards the address may change at the provider and the account stays. Another account of the same provider with the same address is refused: it "already signs in with another account of this provider".
+- **Addresses must be confirmed** by Google and by generic OIDC providers; otherwise sign-in is refused with "Your provider did not confirm this address". A generic OIDC provider confirms an address by sending `email_verified: true` in the ID token; if yours does not, add a claim mapping that does, and check it before relying on it ([decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)). A Microsoft guest from another organization is never matched by address.
+
+## Workspaces enforcing SSO
+
+A workspace can enforce its organization's own provider in **Workspace settings › Setup SSO** ([administration](../features/admin.md#sign-in-and-sso)): Google Workspace, Microsoft Entra of one tenant, or any OIDC provider. Then only that provider opens the workspace, for everyone, Admins included, so people lose access when their organization account is removed.
+
+A session opened through a workspace's own provider opens only that workspace: it cannot open or list the person's other workspaces, or create a workspace. Model keys, tool connections, machines and sessions belong to each workspace membership anyway.
+
+Workspaces created before account sign-in keep their provider, with SSO enforced; their members keep access through their memberships.
+
+## The first workspace
+
+A fresh deployment shows only that it is being set up, so nobody can claim it before you. Its first workspace is created from the setup link that `spyria setup` prints (`spyria setup-link` prints it again while no workspace exists). Its creator signs in with an account provider, or with their organization's provider, which the workspace then enforces. Without account providers, people join that workspace by invite through its provider, and nobody can create further workspaces.
+
+The reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md), with [decision 0012](../decisions/0012-per-workspace-sso.md) for a workspace's own provider and [decision 0020](../decisions/0020-instance-sign-in-apps.md) for the deployment's Google and Microsoft apps.

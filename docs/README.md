@@ -18,11 +18,11 @@ The install guides (install, cloud, who can join, operations, troubleshooting, m
 
 - [Development](guides/development.md): prerequisites, the dev stack, `.env.dev`, daily commands, a local runtime host, the project layout.
 - [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the looks, the docker suite, manual checks.
-- [Install on one machine](guides/install.md): `install.sh` and `spyria setup`: the tunnel, who can join, the provider and mail, the runtime host on the machine.
+- [Install on one machine](guides/install.md): `install.sh` and `spyria setup`: the tunnel, the sign-in providers, the runtime host on the machine.
 - [Manual install](guides/self-hosting.md): what `spyria setup` does underneath: requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example.
 - [Install on AWS, Azure or Google Cloud](guides/cloud.md): the OpenTofu modules of the managed control plane and the runtime host VMs, and `spyria setup --cloud`.
 - [Operations](guides/operations.md): upgrades and backups with `spyria`, logs, traces, health, jobs, connections, disk.
-- [Who can join and sign-in](guides/who-can-join.md): by email domain or by invited address, the setup link, confirmed addresses.
+- [Who can join and sign-in](guides/who-can-join.md): signing in with an account, invites, workspaces enforcing SSO, the setup link.
 - [Troubleshooting](guides/troubleshooting.md): `spyria doctor` and the symptoms that cost the most time.
 
 ## Features
