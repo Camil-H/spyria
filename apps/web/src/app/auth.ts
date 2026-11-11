@@ -63,7 +63,7 @@ const resultOf = (popup: Window | null) =>
       resolve(result)
     }
     const receive = (event: MessageEvent) => {
-      if (event.source !== popup) return
+      if (event.source !== popup || event.origin !== location.origin) return
       popup.close()
       settle(event.data)
     }
