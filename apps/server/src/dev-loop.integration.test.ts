@@ -17,14 +17,14 @@ import {
   sessionTokenOf,
   startAgentStack,
   succeeded,
-  testSecretsKey,
+  testSecretsKeyring,
   textOf,
   waitFor,
 } from './testing/testing.ts'
 
 setDefaultTimeout(120_000)
 const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKey)
+const secretBox = createSecretBox(testSecretsKeyring)
 const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
 const { app, database } = stack
 const finish = { tool: 'finish_work', arguments: { title: 'Fix totals', body: 'The totals add up again' } }

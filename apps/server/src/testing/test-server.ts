@@ -40,7 +40,7 @@ import {
   issueTestSession,
   logInToFakeToolServer,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
 } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
@@ -48,7 +48,7 @@ const fakeMcpPort = Number(process.env.SPYRIA_FAKE_MCP_PORT ?? 3101)
 const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 const fakeGitHub = startFakeGitHub()
-const github = { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKey) }
+const github = { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKeyring) }
 
 type ServedDatabase = {
   database: Database
@@ -155,7 +155,7 @@ const testHeadersOf = (database: Database, chat: { chatId: string }) => ({
 const spyriaAgentImage = (await readSpyriaAgentImage()) ?? `sha256:${'0'.repeat(64)}`
 const placement = { spyriaAgentImage }
 const runtimeHosts = createRuntimeHostGateway({
-  runtimeKeySecret: testSecretsKey,
+  secretsKeyring: testSecretsKeyring,
   ...placement,
   hostUpdateCommandOf: hostUpdateCommandOf({ deployment: defaultDeployment, origin: testAuthSettings.appOrigin }),
   databases: () => [...servedDatabaseByName.values()].map((served) => served.database),
