@@ -23,7 +23,6 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 
 | Task | Who sees it | Done once |
 |---|---|---|
-| Verify your email domain | `sso.manage`, on SSO deployments | the domain is verified |
 | Connect the GitHub App | `github.manage` | the workspace has a GitHub App |
 | Connect a runtime | `runtimes.manage` | a workspace runtime host has been claimed |
 | Add your AI key | every member | they have an LLM key in the workspace |
@@ -31,7 +30,7 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 | Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
 | Add a profile picture | every member | they have a picture |
 
-Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. On SSO deployments, **Invite members** stays greyed out until the domain is verified. Anyone can **Skip** a task they see, greyed out or not: it leaves their lists and their count, for them only. A done task leaves the list and only counts in its "x of y done"; a list disappears once all its tasks are done, and the sidebar entry once all of the member's are.
+Workspace tasks are shared: done by one admin, done for all. A task stays done even if what completed it is undone later (the GitHub App removed, the last key deleted); the cards show the current state. Anyone can **Skip** a task they see: it leaves their lists and their count, for them only. A done task leaves the list and only counts in its "x of y done"; a list disappears once all its tasks are done, and the sidebar entry once all of the member's are.
 
 ## Workspace roles
 
@@ -83,7 +82,6 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 
 - Inviting is an allow-list: no account is created and no email is sent, so tell the person yourself. The invited person signs in with their work email through the workspace's provider; their first sign-in accepts every open invite for that address.
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.
-- In SSO mode, on a workspace joined by email domain, invites open only once its domain is verified (see below), so nobody new gets in before the admin has proven they control the domain.
 - Someone who signs in without a membership or an open invite sees that no workspace has invited them.
 - A signed-in member whose workspace takes more than 10 seconds to load, for example right after a deploy or while the connection is down, sees that it is taking longer than usual, with a **Try again** button; the app keeps trying and opens as soon as the workspace arrives, rather than sending them back to sign in. If their session ends meanwhile, the sign-in screen says so.
 

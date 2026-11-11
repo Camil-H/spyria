@@ -2,16 +2,8 @@ import type { OnboardingTask } from '../domain/tasks.ts'
 
 type TaskText = Readonly<{ title: string; explanation: string; page: string; section?: string }>
 
-export const blockedExplanation = 'Verify your domain first.'
-
-export const taskTextOf = (task: OnboardingTask, domain: string | undefined): TaskText => {
+export const taskTextOf = (task: OnboardingTask): TaskText => {
   switch (task) {
-    case 'verify-domain':
-      return {
-        title: 'Verify your email domain',
-        explanation: `Proves your organization owns ${domain ? `@${domain}` : 'its email domain'}. Until it's verified, you can't invite anyone.`,
-        page: 'settings/sso',
-      }
     case 'connect-github-app':
       return {
         title: 'Connect the GitHub App',
@@ -38,7 +30,7 @@ export const taskTextOf = (task: OnboardingTask, domain: string | undefined): Ta
       return {
         title: 'Invite members',
         explanation:
-          'Add teammates by work email; they get in the next time they sign in. No email is sent, so let them know.',
+          'Add teammates by email; they get in the next time they sign in. No email is sent, so let them know.',
         page: 'settings/team',
       }
     case 'link-github-account':
