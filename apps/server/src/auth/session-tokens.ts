@@ -6,7 +6,7 @@ export type SessionClaims = { workspaceId: string; userId: string; sessionId: st
 export type FindMember = (
   claims: SessionClaims,
   databaseName: string | undefined,
-) => Promise<{ hasLiveSession: boolean } | undefined>
+) => Promise<{ hasLiveSession: boolean; signedInThroughWorkspaceSso: boolean } | undefined>
 export type Authentication =
   | { status: 200; context: ZeroContext; databaseName?: string; sessionId: string; expiresAt: number }
   | { status: 401 | 403 }
@@ -57,5 +57,11 @@ export const createSessionAuthenticator =
     const member = await findMember({ ...context, sessionId: claims.sid }, databaseName)
     if (member === undefined) return { status: 403 }
     if (!member.hasLiveSession) return { status: 401 }
-    return { status: 200, context, databaseName, sessionId: claims.sid, expiresAt: claims.exp * 1000 }
+    return {
+      status: 200,
+      context: { ...context, signedInThroughWorkspaceSso: member.signedInThroughWorkspaceSso },
+      databaseName,
+      sessionId: claims.sid,
+      expiresAt: claims.exp * 1000,
+    }
   }

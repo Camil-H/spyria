@@ -11,7 +11,7 @@ const aliceInAcme: SessionClaims = {
 const revokedSessionIds = new Set(['session-revoked'])
 const authenticate = createSessionAuthenticator(secret, async ({ workspaceId, userId, sessionId }) =>
   workspaceId === aliceInAcme.workspaceId && userId === aliceInAcme.userId
-    ? { hasLiveSession: !revokedSessionIds.has(sessionId) }
+    ? { hasLiveSession: !revokedSessionIds.has(sessionId), signedInThroughWorkspaceSso: sessionId === 'session-sso' }
     : undefined,
 )
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
@@ -29,6 +29,15 @@ test('accepts an issued token and builds the context from the membership', async
   expect(await authenticate(bearer(await issued(aliceInAcme)))).toMatchObject({
     status: 200,
     context: { userId: aliceInAcme.userId, workspaceId: aliceInAcme.workspaceId },
+  })
+})
+
+test('tells a session opened through the workspace sign-in of its organization apart from an account session', async () => {
+  expect(await authenticate(bearer(await issued(aliceInAcme)))).toMatchObject({
+    context: { signedInThroughWorkspaceSso: false },
+  })
+  expect(await authenticate(bearer(await issued({ ...aliceInAcme, sessionId: 'session-sso' })))).toMatchObject({
+    context: { signedInThroughWorkspaceSso: true },
   })
 })
 
