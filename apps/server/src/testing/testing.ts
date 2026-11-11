@@ -31,7 +31,7 @@ import { workspaceMutators } from '@spyria/workspace/server'
 import { Hono } from 'hono'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
-import { secretsKeyringOf } from '../auth/secret-box.ts'
+import { type SecretsKeyring, secretsKeyringOf } from '../auth/secret-box.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
 import { openSessions } from '../auth/sessions.ts'
 import { createGitHubCheckouts, type GitHubDependencies } from '../github/github.ts'
@@ -582,6 +582,7 @@ export const startAgentStack = async ({
   promptsWaitingAfterHello = false,
   github,
   gatewayUrlOf,
+  secretsKeyring = testSecretsKeyring,
 }: {
   routing?: boolean
   llm?: Parameters<typeof createAgentBridge>[0]['llm']
@@ -592,11 +593,12 @@ export const startAgentStack = async ({
   promptsWaitingAfterHello?: boolean
   github?: GitHubDependencies
   gatewayUrlOf?: () => string
+  secretsKeyring?: SecretsKeyring
 } = {}) => {
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
-    secretsKeyring: testSecretsKeyring,
+    secretsKeyring,
     databases: () => [database],
     spyriaAgentImage,
     relayModelCall: routing
