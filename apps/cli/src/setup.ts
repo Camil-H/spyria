@@ -102,8 +102,14 @@ const instanceAppOf = (
   if (clientId === '' || clientId === removal) return undefined
   if (provider === 'microsoft' && clientId === 'create') {
     if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
-    const { clientId: createdClientId, clientSecret } = registerEntraApp({ origin, audience: 'organizations' }, az)
-    return { clientId: createdClientId, clientSecret }
+    const entra = registerEntraApp({ origin, audience: 'organizations' }, az)
+    const clientSecret =
+      entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
+    if (!clientSecret)
+      throw new Error(
+        `Microsoft Entra already holds the app ${entra.name} (client id ${entra.clientId}), whose secret this install does not have: give its client id and a new client secret of it instead of create`,
+      )
+    return { clientId: entra.clientId, clientSecret }
   }
   const pattern = provider === 'google' ? googleClientIdPattern : guidPattern
   if (!pattern.test(clientId))
