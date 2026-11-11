@@ -2,7 +2,7 @@ import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { type AgentReadiness, isAgentOutOfDate, readinessOf } from '../domain/agent-version.ts'
-import { RuntimeNotReady } from '../domain/errors.ts'
+import { AgentOutOfDate, HarnessInstallFailed, RuntimeNotReady } from '../domain/errors.ts'
 import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
@@ -26,9 +26,6 @@ const waitUntilReady = async (transport: SandboxTransport, runtimeId: RuntimeId)
     if (Date.now() > deadline) throw new RuntimeNotReady(runtimeId)
   }
 }
-
-class HarnessInstallFailed extends Error {}
-class AgentOutOfDate extends Error {}
 
 export const bringUpRuntime = async (
   { transactor, provider, currentImage }: Dependencies,
@@ -61,8 +58,7 @@ export const bringUpRuntime = async (
     }
     if (status !== 'running' || isOnOldImage) await provider.start(sandbox)
     const readiness = await waitUntilReady(provider.connect(sandbox), runtimeId)
-    if (isAgentOutOfDate(readiness))
-      throw new AgentOutOfDate(`spyria-agent speaks protocol ${readiness.protocolVersion}`)
+    if (isAgentOutOfDate(readiness)) throw new AgentOutOfDate(readiness.protocolVersion)
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
       runtimes.save({
         ...transitioned(current, 'running', now),

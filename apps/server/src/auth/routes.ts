@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError } from '@spyria/kernel'
 import {
@@ -18,6 +17,7 @@ import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } 
 import { HTTPException } from 'hono/http-exception'
 import type { RateLimitName } from '../rate-limits.ts'
 import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
+import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import { deleteSession, findLiveSessions, openSessions, signInUser } from './sessions.ts'
 import {
@@ -62,7 +62,6 @@ type PopupResult =
 const sessionCookiePrefix = 'spyria_s_'
 const loginCookie = 'spyria_login'
 const popupSelfCloseMilliseconds = 10_000
-const sha256 = (text: string) => createHash('sha256').update(text).digest()
 export const setupLinkNeededNotice = 'This Spyria is being set up: open the setup link to create its first workspace'
 export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
@@ -108,8 +107,7 @@ export const createAuthRoutes = ({
   closeSessionStreams,
   rateLimited,
 }: AuthRouteSettings) => {
-  const isSetupToken = (given: unknown) =>
-    setupToken !== undefined && typeof given === 'string' && timingSafeEqual(sha256(given), sha256(setupToken))
+  const isSetupToken = (given: unknown) => isSameSecret(setupToken, given)
   const scopeOf = (context: Context, tokenDatabaseName?: string) => {
     const testSettings: TestSettings = testDatabaseByName ? JSON.parse(getCookie(context, testCookie) ?? '{}') : {}
     const databaseName = tokenDatabaseName ?? testSettings.db

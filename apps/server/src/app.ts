@@ -114,16 +114,11 @@ import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
 import { createSmtpMailer } from './auth/mail.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
+import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import {
-  hasNoWorkspace,
-  isInstallHostToken,
-  readSsoSettings,
-  saveSsoSettings,
-  sendDomainVerification,
-} from './auth/sso.ts'
+import { hasNoWorkspace, readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
 import {
   disconnectGitHub,
   finishGitHubAppCreation,
@@ -255,7 +250,7 @@ export const createApp = ({
   installHostToken,
   runtimeHosts = createRuntimeHostGateway({
     awaitsFirstWorkspace: async (claimCode) =>
-      isInstallHostToken(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
+      isSameSecret(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
     databases: () => [database],
     runtimeKeySecret: secretsKey ?? randomBytes(32).toString('hex'),
     relayModelCall: llmGateway && createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),

@@ -129,6 +129,3 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_MICROSOFT_CLIENT_SECRET: answers.instanceApps.microsoft?.clientSecret ?? '',
   })
 }
-
-export const setupLinkOf = (environment: Environment) =>
-  `${environment.SPYRIA_APP_ORIGIN}/?${new URLSearchParams({ setup: environment.SPYRIA_SETUP_TOKEN ?? '' })}`

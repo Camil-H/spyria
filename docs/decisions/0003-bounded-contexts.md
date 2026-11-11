@@ -9,7 +9,7 @@ Spyria spans sign-in and roles, chats, agent runtimes, money and a dev workflow.
 - One package per bounded context under `packages/` (`workspace`, `conversation`, `runtime`, `profile`, `usage`, `panel`), each with the same layers: `domain`, `contracts`, `operations`, `queries`, `integrations`, `entrypoints`. Dependencies point inward, toward `domain`.
 - Contexts reach each other only from `integrations/`, through the other context's `published.ts`. Apps reach a context only through its `client.ts` (web) or `server.ts` (server).
 - A closed shared layer: contexts may import only `@spyria/kernel`, `@spyria/db`, `@spyria/ui` and `@spyria/session`, which hold no business rules.
-- `apps/host` and `apps/agent` import nothing from Spyria and nothing imports them; their wire frames are their contract with the server.
+- `apps/host`, `apps/agent` and `apps/cli` import nothing from Spyria and nothing imports them; their wire frames are their contract with the server.
 - `bun run check:boundaries` (dependency-cruiser) enforces all of this.
 
 ## Consequences
