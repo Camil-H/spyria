@@ -7,6 +7,7 @@ import {
   assertNoOtherProjectIn,
   assertPostgresRuns,
   backup,
+  forgetEarlierHostPairing,
   installFolderOf,
   readEnvironment,
   releaseFilesOf,
@@ -242,6 +243,12 @@ export const setup = async (
   }
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
+  if (
+    runsHost &&
+    existing.COMPOSE_PROFILES !== undefined &&
+    environment.SPYRIA_HOST_CLAIM_URL !== existing.SPYRIA_HOST_CLAIM_URL
+  )
+    forgetEarlierHostPairing(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
   if (flags.switches.has('no-start')) {
     if (smtp?.retireReplacedKeys)

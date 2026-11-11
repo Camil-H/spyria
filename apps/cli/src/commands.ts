@@ -117,10 +117,26 @@ const stopRuntimesOf = (deployment: string) => {
   return runtimes.length
 }
 
-const removeHostOfThisMachine = (folder: string, environment: Environment) => {
-  if (readCompose(folder, ['--profile', 'host', 'ps', '--all', '--quiet', 'host']).output.trim() === '') return
-  step('Removing the runtime host of this machine and stopping its runtimes')
+const hasHostContainer = (folder: string) =>
+  readCompose(folder, ['--profile', 'host', 'ps', '--all', '--quiet', 'host']).output.trim() !== ''
+const removeHostContainer = (folder: string) =>
   mustSucceed(runCompose(folder, ['--profile', 'host', 'rm', '--stop', '--force', 'host']), 'Removing the runtime host')
+
+const removeVolume = (volume: string) => {
+  const removed = Bun.spawnSync([dockerOf(), 'volume', 'rm', volume], {
+    env: shellEnvironmentOf(process.env),
+    stdout: 'ignore',
+    stderr: 'pipe',
+  })
+  if (removed.exitCode === 0) return true
+  if (removed.stderr.toString().includes('no such volume')) return false
+  throw new Error(`Removing ${volume} failed: ${removed.stderr.toString().trim()}`)
+}
+
+const removeHostOfThisMachine = (folder: string, environment: Environment) => {
+  if (!hasHostContainer(folder)) return
+  step('Removing the runtime host of this machine and stopping its runtimes')
+  removeHostContainer(folder)
   const stopped = stopRuntimesOf(environment.SPYRIA_DEPLOYMENT || 'spyria')
   console.log(
     [
@@ -128,6 +144,13 @@ const removeHostOfThisMachine = (folder: string, environment: Environment) => {
       'Remove it in Workspace settings > Connect runtime too, which revokes its token; the Machines guide shows how to delete its runtimes and their files.',
     ].join(' '),
   )
+}
+
+export const forgetEarlierHostPairing = (folder: string, environment: Environment) => {
+  if (Bun.which('docker', { PATH: process.env.PATH ?? '' }) === null) return
+  if (hasHostContainer(folder)) removeHostContainer(folder)
+  if (removeVolume(`${environment.SPYRIA_DEPLOYMENT || 'spyria'}-host`))
+    step('Forgot the pairing of the runtime host this machine ran before, so it pairs with the new code')
 }
 
 export const startStack = async (folder: string, environment: Environment) => {
@@ -271,10 +294,7 @@ export const restore = async (
   if (database === 'spyria') {
     step("Dropping zero-cache's replica, which it rebuilds from the restored database")
     mustSucceed(runCompose(folder, ['rm', '-f', 'zero-cache']), 'Removing zero-cache')
-    const volume = `${environment.SPYRIA_DEPLOYMENT}-zero-data`
-    const removed = Bun.spawnSync([dockerOf(), 'volume', 'rm', volume], { stdout: 'ignore', stderr: 'pipe' })
-    if (removed.exitCode !== 0 && !removed.stderr.toString().includes('no such volume'))
-      throw new Error(`Removing ${volume} failed: ${removed.stderr.toString().trim()}`)
+    removeVolume(`${environment.SPYRIA_DEPLOYMENT}-zero-data`)
   }
   mustSucceed(runCompose(folder, ['up', '-d']), 'Starting Spyria')
   await waitForHealth(environment)
