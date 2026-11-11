@@ -91,7 +91,7 @@ test('accounts sign in through the configured apps of this Spyria; Microsoft tak
   expect(accountIssuerOf('oidc', apps)).toBe('https://idp.acme.com')
 })
 
-test("through Google, a workspace's own sign-in takes only a confirmed account managed by the Google Workspace of its address", () => {
+test("through Google, a workspace's own sign-in takes only a confirmed account managed by the Google Workspace of its address, or a Gmail address, which Google owns", () => {
   const verified = { email: 'pat@acme.com', email_verified: true, hd: 'acme.com' }
   expect(ssoEmailOf('google', verified, 'workspace')).toEqual({ email: 'pat@acme.com' })
   expect(ssoEmailOf('google', { ...verified, email_verified: false }, 'workspace')).toEqual({ refusal: 'unconfirmed' })
@@ -101,6 +101,15 @@ test("through Google, a workspace's own sign-in takes only a confirmed account m
   expect(ssoEmailOf('google', { ...verified, hd: undefined }, 'workspace')).toEqual({ refusal: 'untrusted' })
   expect(ssoEmailOf('google', { ...verified, hd: 'globex.com' }, 'workspace')).toEqual({ refusal: 'untrusted' })
   expect(ssoEmailOf('google', { ...verified, email: 'pat@gmail.com' }, 'workspace')).toEqual({ refusal: 'untrusted' })
+  expect(ssoEmailOf('google', { email: 'pat@gmail.com', email_verified: true }, 'workspace')).toEqual({
+    email: 'pat@gmail.com',
+  })
+  expect(ssoEmailOf('google', { email: 'pat@googlemail.com', email_verified: true }, 'workspace')).toEqual({
+    email: 'pat@googlemail.com',
+  })
+  expect(ssoEmailOf('google', { email: 'pat@gmail.com', email_verified: false }, 'workspace')).toEqual({
+    refusal: 'unconfirmed',
+  })
 })
 
 test('through Google, an account takes any confirmed address, Gmail included', () => {
