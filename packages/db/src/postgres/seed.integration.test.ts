@@ -105,9 +105,7 @@ const readSnapshot = async () => {
     ),
     workspaceConnections: await database.select().from(tables.workspaceConnections),
     connectionRestrictions: (await database.select().from(tables.connectionRestrictions)).map(userAsMember),
-    toolConnections: (
-      await database.select().from(tables.toolConnections).orderBy(tables.toolConnections.position)
-    ).map(({ position, ...connection }) => userAsMember(connection)),
+    toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
     chatRoles: await database.select().from(tables.chatRoles),
     workspaceRoles: (await database.select().from(tables.workspaceRoles)).map((role) => ({
@@ -133,18 +131,9 @@ const readSnapshot = async () => {
 }
 
 const expectSnapshotRoundTrip = async () => {
-  const {
-    latestMessages,
-    latestAgentActivity,
-    pinnedSteps,
-    projects,
-    chats,
-    messages,
-    toolConnections,
-    ...unorderedCollections
-  } = createMockSnapshot()
+  const { latestMessages, latestAgentActivity, pinnedSteps, projects, chats, messages, ...unorderedCollections } =
+    createMockSnapshot()
   const stored = await readSnapshot()
-  expect(stored.toolConnections).toEqual([...toolConnections])
   expect(stored.projects).toEqual([...projects])
   expect(stored.chats).toEqual([...chats])
   expect(stored.messages).toEqual(groupedByChat(messages).map(({ replyToId, ...message }) => message))
