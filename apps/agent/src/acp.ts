@@ -115,13 +115,25 @@ export const connectAdapter = (
   { onUpdate, onExit, onRequest, onCancelRequest }: AdapterHandlers,
 ) => {
   const pending = new Map<number, PromiseWithResolvers<Json>>()
+  const heldFrames: Frame[] = []
+  let isSettlingResponse = false
   let nextId = 0
+  const deliverHeldFrames = () => {
+    isSettlingResponse = false
+    while (heldFrames.length > 0 && !isSettlingResponse) onFrame(heldFrames.shift() as Frame)
+  }
+  const receive = (frame: Frame) => {
+    heldFrames.push(frame)
+    if (!isSettlingResponse) deliverHeldFrames()
+  }
   const onFrame = (frame: Frame) => {
     if (frame.method === undefined) {
       const request = pending.get(Number(frame.id))
       pending.delete(Number(frame.id))
       if (frame.error) request?.reject(acpErrorOf(frame.error))
       else request?.resolve(frame.result ?? {})
+      isSettlingResponse = true
+      setImmediate(deliverHeldFrames)
     } else if (frame.id !== undefined) {
       const { id, method } = frame
       const answer =
@@ -139,7 +151,7 @@ export const connectAdapter = (
       onCancelRequest(frame.params.requestId as number | string)
     else if (frame.method === 'session/update' && frame.params) onUpdate(frame.params)
   }
-  const adapter = spawnJsonLines(launch, onFrame, (code) => {
+  const adapter = spawnJsonLines(launch, receive, (code) => {
     onExit(code)
     for (const request of pending.values()) request.reject(new AcpError('The adapter exited'))
     pending.clear()
