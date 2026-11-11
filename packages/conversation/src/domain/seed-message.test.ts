@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { messageId } from '@spyria/kernel'
 import { MessageBody } from './message-body.ts'
 import {
   agentPromptTextOf,
@@ -126,4 +127,13 @@ test('a prompt that replies to a message quotes it to the agent with its author 
     ].join('\n'),
   )
   expect(agentPromptTextOf(prompt, undefined, { ...answer, status: 'deleted' })).toBe('Why?')
+})
+
+test('a prompt of the quality gates is quoted as theirs, an automatic prompt, not as a member’s', () => {
+  const loopPrompt = quoted('Quality gates', 'Lint failed.', '09:05', {
+    step: { type: 'dev_loop_prompt', loopId: messageId('message-loop'), phase: 'command' },
+  })
+  expect(agentPromptTextOf({ body: MessageBody('Why?'), attachments: [] }, undefined, loopPrompt)).toBe(
+    'In reply to Quality gates (automatic prompt) · 2026-10-17 09:05 UTC:\n> Lint failed.\n\nWhy?',
+  )
 })

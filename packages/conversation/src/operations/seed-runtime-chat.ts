@@ -2,6 +2,7 @@ import { type ChatId, type MemberId, memberActor, messageId as toMessageId, type
 import type { MemberDirectory } from '../contracts/repositories.ts'
 import type { RuntimeChatStarter } from '../contracts/runtime-chat-starter.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
+import { devLoopAuthorName, isDevLoopPrompt } from '../domain/dev-loop.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { seedMessageBodyOf } from '../domain/seed-message.ts'
 
@@ -22,7 +23,11 @@ const quotedMessagesOf = async (members: MemberDirectory, messages: readonly Mes
   ])
   return messages.map((message) => ({
     ...message,
-    authorName: message.authorId ? authorNameOf(message.authorId) : 'Agent',
+    authorName: isDevLoopPrompt(message)
+      ? devLoopAuthorName
+      : message.authorId
+        ? authorNameOf(message.authorId)
+        : 'Agent',
   }))
 }
 

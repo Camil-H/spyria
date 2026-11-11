@@ -91,7 +91,7 @@ test.describe('Quality gates card', () => {
     await page.goto('/')
   })
 
-  test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint"', {
+  test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint", after a prompt the gates send in their own name', {
     tag: ['@spec-57'],
   }, async ({ page, agentScript, heldCommand, release, workerStack }) => {
     const lint = {
@@ -132,6 +132,9 @@ test.describe('Quality gates card', () => {
     await expect(card.getByRole('img', { name: 'running' })).toHaveCount(1)
     await expect(messageContaining(page, 'Quality gates: round 2, see below')).toHaveCount(1)
     await expect(messageContaining(page, 'Fixed lint.')).toHaveCount(1)
+    const loopPrompt = messageContaining(page, "Quality gates ran the repository's checks")
+    await expect(loopPrompt.getByText('Quality gates', { exact: true })).toBeVisible()
+    await expect(loopPrompt).not.toContainText('Alice')
     const order = () =>
       messageItemsOf(page).evaluateAll((items) =>
         items
