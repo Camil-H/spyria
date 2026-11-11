@@ -23,7 +23,7 @@ export const connectFake = async (page: Page, account: string, workspace = 'work
   await logInAtFakeProvider(page.context(), account)
   await openMyConnections(page, workspace)
   await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true }).click())
-  await expect(fakeRowOf(page).getByRole('button', { name: 'Disconnect fake' })).toBeVisible()
+  await expect(fakeRowOf(page)).toContainText('Connected')
 }
 export const promptTool = async (
   page: Page,

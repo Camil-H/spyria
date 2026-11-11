@@ -171,7 +171,7 @@ test('/mcp runs as the chat owner with Spyria’s attribution, lists Spyria’s 
   }
 })
 
-test('/mcp for a chat owner without an LLM key runs the workspace tools on a key that serves only tools, and a personal tool call answers that the owner needs to connect', async () => {
+test('/mcp for a chat owner without an LLM key runs the workspace tools on a key that serves only tools, and a call to a server they sign in to answers that the owner needs to connect', async () => {
   const host = await fakeHost('Keyless tools host')
   const { token } = await runtimeTurn(host, bob, bob)
   const initialized = await mcpCall(
