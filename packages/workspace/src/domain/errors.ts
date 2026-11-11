@@ -57,7 +57,8 @@ export const EmailNotConfirmed = errorKind(
 )
 export const SsoDiscoveryFailed = errorKind(
   'sso_discovery_failed',
-  (issuer: string, reason: string) => `The discovery of ${issuer} failed: ${reason}`,
+  (issuer: string) =>
+    `The discovery of ${issuer} failed: check that the issuer is right and reachable from this Spyria`,
   WorkspaceError,
 )
 export const WorkspaceCreationClosed = errorKind(

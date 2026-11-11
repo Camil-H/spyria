@@ -22,7 +22,7 @@ import {
 const providerClientId = 'spyria-sso'
 const providerClientSecret = 'spyria-sso-e2e-secret'
 const unreachableIssuer = 'http://localhost:9/nothing'
-const discoveryFailure = /^The discovery of http:\/\/localhost:9\/nothing failed: .+/
+const discoveryFailure = /^The discovery of http:\/\/localhost:9\/nothing failed: check that the issuer is right/
 const accountSignInLabel = 'Continue with single sign-on'
 const organizationSignInLabel = "Continue with your organization's sign-in"
 const notEnforcedText = 'Members sign in with their own account, through the sign-in of this Spyria.'

@@ -736,7 +736,10 @@ test('Setup SSO is only for members who may set it up, and refuses another origi
   expect((await startSsoChange('stark', aliceCookie, starkForm, 'https://elsewhere.example')).status).toBe(403)
   expect((await startSsoChange('stark', '', starkForm)).status).toBe(401)
   for (const [change, reason] of [
-    [{ issuer: 'http://127.0.0.1:9/nothing' }, 'The discovery of http://127.0.0.1:9/nothing failed: '],
+    [
+      { issuer: 'http://127.0.0.1:9/nothing' },
+      'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
+    ],
     [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
     [{ clientSecret: '' }, 'A client secret is required'],
   ] as const) {
@@ -812,7 +815,7 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
   ).not.toContain('workspace_sso')
 })
 
-test('rotating only the client secret keeps the sessions of the workspace and is recorded; a save without a secret keeps the stored one', async () => {
+test('rotating only the client secret keeps the sessions of the workspace and is recorded; a save without a secret keeps the stored one only for the same issuer and client id', async () => {
   const aliceCookie = await sessionCookieOf('stark', alice, 'workspace sso')
   starkIdp.clientSecrets['spyria-stark'] = 'stark-secret-2'
   const rotated = await callbackAfter(
@@ -832,6 +835,14 @@ test('rotating only the client secret keeps the sessions of the workspace and is
   const keptSecret = await startSsoChange('stark', aliceCookie, { ...starkForm, clientSecret: '' })
   expect(keptSecret.status).toBe(302)
   expect(new URL(keptSecret.headers.get('location') ?? '').origin).toBe(starkIdp.origin)
+  const requestsBefore = [starkIdp, hooliIdp].map((idp) => idp.tokenRequests.length)
+  for (const change of [{ clientId: 'spyria-other' }, { issuer: hooliIdp.issuer }]) {
+    const refused = await startSsoChange('stark', aliceCookie, { ...starkForm, ...change, clientSecret: '' })
+    expect(refused.status).toBe(400)
+    expect(refused.headers.get('location')).toBeNull()
+    expect(await refused.text()).toContain('"status":"refused","message":"A client secret is required"')
+  }
+  expect([starkIdp, hooliIdp].map((idp) => idp.tokenRequests.length)).toEqual(requestsBefore)
 })
 
 test('stopping SSO takes the workspace back to account sign-in and ends every session in it; it is refused to members who may not set it up and without account sign-in on this Spyria', async () => {
@@ -919,19 +930,28 @@ test('sign-in routing, the sign-in callback, workspace creation, SSO changes and
   )
 })
 
-test('on an empty Spyria, creating the first workspace refuses another origin, invalid settings and a failing discovery, creating nothing', async () => {
+test('on an empty Spyria, creating the first workspace refuses another origin, invalid settings, a failing discovery and, on an https Spyria, an issuer without https, creating nothing', async () => {
   expect((await startCreation(umbrellaForm(), 'https://elsewhere.example')).status).toBe(403)
   for (const [change, reason] of [
     [{ name: ' ' }, 'A name must contain at least one non-blank character'],
     [{ clientSecret: '' }, 'A client secret is required'],
     [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
-    [{ issuer: 'http://127.0.0.1:9/nothing' }, 'The discovery of http://127.0.0.1:9/nothing failed: '],
+    [
+      { issuer: 'http://127.0.0.1:9/nothing' },
+      'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
+    ],
   ] as const) {
     const refused = await startCreation({ ...umbrellaForm(), ...change })
     expect(refused.status).toBe(400)
     expect(refused.headers.get('location')).toBeNull()
     expect(await refused.text()).toContain(`"status":"refused","message":"${reason}`)
   }
+  const httpsApp = createApp({ database: emptyInstance.database, ...ssoSettings, appOrigin: 'https://spyria.example' })
+  const requestsBefore = firstWorkspaceIdp.requests.length
+  const plainHttp = await startCreation(umbrellaForm(), 'https://spyria.example', httpsApp)
+  expect(plainHttp.status).toBe(400)
+  expect(await plainHttp.text()).toContain('"status":"refused","message":"The issuer must be an https URL"')
+  expect(firstWorkspaceIdp.requests.length).toBe(requestsBefore)
   expect(await countsOf()).toEqual({ workspaces: 0, users: 0 })
 })
 
