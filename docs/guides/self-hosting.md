@@ -138,7 +138,7 @@ People sign in to their account through apps of the deployment, set in `.env.pro
 - **Microsoft**: in Microsoft Entra, register an app for *Accounts in any organizational directory and personal Microsoft accounts* with a web redirect URI, and create a client secret. Set `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that does not let users consent to apps needs its Entra admin to consent on the first sign-in.
 - **Another OIDC provider**: register a client with the scopes `openid`, `email` and `profile`, and set `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID` and `SPYRIA_OIDC_CLIENT_SECRET`. It must confirm addresses with `email_verified: true` ([decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)).
 
-A workspace enforcing Google Workspace or Microsoft Entra can also sign in through the deployment's Google or Microsoft app, without a client id or secret of its own. Through Google it then admits only accounts managed by the Google Workspace of their address's domain; through Microsoft, only its own tenant. The server refuses to start while a workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
+A workspace enforcing Google Workspace or Microsoft Entra can also sign in through the deployment's Google or Microsoft app, without a client id or secret of its own. Through Google it then admits only accounts managed by the Google Workspace of their address's domain, and Gmail addresses; through Microsoft, only its own tenant. The server refuses to start while a workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
 
 ## Deleting a workspace
 

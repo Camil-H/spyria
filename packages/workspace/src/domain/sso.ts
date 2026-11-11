@@ -28,6 +28,7 @@ export const microsoftLoginOrigin = 'https://login.microsoftonline.com'
 export const microsoftPersonalAccountsTenantId = '9188040d-6c67-4c5b-b112-36a304b66dad'
 const multiTenantSegments = new Set(['common', 'organizations', 'consumers'])
 const tenantIdPattern = /^[\w.-]+$/
+const gmailDomains = new Set(['gmail.com', 'googlemail.com'])
 
 const domainOfEmail = (email: string) => email.trim().toLowerCase().split('@')[1] ?? ''
 
@@ -68,7 +69,9 @@ const confirmedEmailOf = (claims: Record<string, unknown>): SsoEmail => {
 const googleEmailOf = (claims: Record<string, unknown>, scope: SignInScope): SsoEmail => {
   const confirmed = confirmedEmailOf(claims)
   if (confirmed.refusal || scope === 'account') return confirmed
-  return claims.hd === domainOfEmail(confirmed.email) ? confirmed : { refusal: 'untrusted' }
+  const domain = domainOfEmail(confirmed.email)
+  const isManagedByGoogle = claims.hd === undefined ? gmailDomains.has(domain) : claims.hd === domain
+  return isManagedByGoogle ? confirmed : { refusal: 'untrusted' }
 }
 
 export const ssoEmailOf = (preset: SsoPreset, claims: Record<string, unknown>, scope: SignInScope): SsoEmail => {
