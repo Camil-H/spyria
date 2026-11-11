@@ -8,6 +8,7 @@ export {
   GitHubPermissionMissing,
   GitHubRefused,
   GitHubUnreachable,
+  InstanceBeingSetUp,
   InvalidGitHubSettings,
   InvalidSsoSettings,
   NoAccountSignIn,
