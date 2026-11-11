@@ -152,7 +152,6 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   expect(pending).toMatchObject({ name: 'Docs', signIn: 'member', tools: [], allowedTools: [] })
   expect(pending?.setupId).not.toBeNull()
   const gatewayName = pending?.gatewayName ?? ''
-  expect(await gatewayClientNames()).toContain(gatewayName)
 
   const consent = await consentThroughSpyria(authorizeUrl, `fake_mcp_user=admin-${crypto.randomUUID()}`)
   expect(consent.status).toBe(200)
@@ -163,6 +162,7 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
     tools: [{ name: 'whoami', readOnly: true }],
     allowedTools: ['whoami'],
   })
+  expect(await gatewayClientNames()).toContain(gatewayName)
   expect((await workspaceEventsOf(database)).at(-1)).toEqual({
     type: 'connection.added',
     actorId: alice,
