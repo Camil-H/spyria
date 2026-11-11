@@ -4,6 +4,7 @@ import {
   adminRoleId,
   builtInChatRoles,
   builtInWorkspaceRoles,
+  log,
   MissingWorkspacePermission,
   memberActor,
   memberId,
@@ -49,6 +50,7 @@ export type SsoDependencies = {
   microsoftLoginOrigin?: string
   instanceApps?: InstanceApps
   installHostToken?: string
+  requiresHttpsIssuers?: boolean
 }
 type Member = { workspaceId: string; userId: string }
 type OwnProvider = Omit<SsoProvider, 'workspaceId'>
@@ -99,10 +101,12 @@ export const recordWorkspaceEvent = (sql: Sql, workspaceId: string, type: string
 const formField = (form: Record<string, unknown>, name: string) =>
   (typeof form[name] === 'string' ? form[name] : '').trim().slice(0, 500)
 
+type StoredApp = { issuer: string; clientId: string; encryptedClientSecret: string }
+
 const ownProviderFrom = async (
   form: Record<string, unknown>,
-  { microsoftLoginOrigin, instanceApps, secretBox }: SsoDependencies,
-  { isSecretKept = false } = {},
+  { microsoftLoginOrigin, instanceApps, secretBox, requiresHttpsIssuers }: SsoDependencies,
+  stored?: StoredApp,
 ): Promise<OwnProvider> => {
   const input: SsoSettingsInput = {
     preset: formField(form, 'preset') as SsoPreset,
@@ -112,18 +116,29 @@ const ownProviderFrom = async (
     usesInstanceApp: formField(form, 'usesInstanceApp') === 'true',
   }
   const clientSecret = input.usesInstanceApp ? '' : formField(form, 'clientSecret')
-  if (!input.usesInstanceApp && clientSecret === '' && !isSecretKept)
-    throw new InvalidSsoSettings('A client secret is required')
   if (clientSecret !== '' && !secretBox) throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
   const clientId = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset).clientId : input.clientId
   const settings = ssoSettingsFrom({ ...input, clientId }, microsoftLoginOrigin)
+  const keptSecret =
+    stored?.issuer === settings.issuer && stored.clientId === settings.clientId ? stored.encryptedClientSecret : ''
+  if (!input.usesInstanceApp && clientSecret === '' && keptSecret === '')
+    throw new InvalidSsoSettings('A client secret is required')
+  if (requiresHttpsIssuers && new URL(settings.issuer).protocol !== 'https:')
+    throw new InvalidSsoSettings('The issuer must be an https URL')
   await discoverIssuer(settings.issuer).catch((error: Error) => {
-    throw new SsoDiscoveryFailed(settings.issuer, error.message)
+    log.warn({
+      event: 'sso.discovery_failed',
+      body: `The discovery of ${settings.issuer} failed`,
+      attributes: { 'spyria.sso.issuer': settings.issuer },
+      error,
+    })
+    throw new SsoDiscoveryFailed(settings.issuer)
   })
+  const encryptedClientSecret = clientSecret === '' ? keptSecret : ((await secretBox?.seal(clientSecret)) ?? '')
   return {
     ...settings,
     usesInstanceApp: input.usesInstanceApp === true,
-    encryptedClientSecret: clientSecret === '' ? '' : ((await secretBox?.seal(clientSecret)) ?? ''),
+    encryptedClientSecret: input.usesInstanceApp ? '' : encryptedClientSecret,
   }
 }
 
@@ -190,19 +205,12 @@ export const prepareSsoSettings = async (
   member: Member,
   form: Record<string, unknown>,
 ): Promise<PendingSso> => {
-  const [user] = await database.$client.begin(async (sql) => {
+  const { email, stored } = await database.$client.begin(async (sql) => {
     await requireMemberPermission(sql, member, 'sso.manage')
-    return sql<{ email: string; storedSecret: string | null }[]>`
-      select email, (select nullif(encrypted_client_secret, '') from workspace_sso
-        where workspace_id = ${member.workspaceId}) as "storedSecret"
-      from users where id = ${member.userId}`
+    const [user] = await sql<{ email: string }[]>`select email from users where id = ${member.userId}`
+    return { email: user?.email ?? '', stored: (await settingsOf(sql, member.workspaceId))[0] }
   })
-  const provider = await ownProviderFrom(form, dependencies, { isSecretKept: !!user?.storedSecret })
-  const encryptedClientSecret =
-    provider.usesInstanceApp || provider.encryptedClientSecret
-      ? provider.encryptedClientSecret
-      : (user?.storedSecret ?? '')
-  return { ...member, email: user?.email ?? '', provider: { ...provider, encryptedClientSecret } }
+  return { ...member, email, provider: await ownProviderFrom(form, dependencies, stored) }
 }
 
 export const confirmSsoSettings = (database: Database, pending: PendingSso, identity: VerifiedIdentity) =>

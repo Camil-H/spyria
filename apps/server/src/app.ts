@@ -300,6 +300,7 @@ export const createApp = ({
     microsoftLoginOrigin,
     instanceApps: instanceSignInApps,
     installHostToken,
+    requiresHttpsIssuers: new URL(appOrigin).protocol === 'https:',
   }
   const githubDependencies = github ?? { api: createGitHubApi(githubDotCom), secretBox: sso.secretBox }
   const githubCallbackUrl = `${appOrigin}${githubCallbackPath}`
