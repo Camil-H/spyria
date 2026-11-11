@@ -14,7 +14,7 @@ test('an answer read together with the next update settles before that update is
   const delivered: string[] = []
   const updated = Promise.withResolvers<void>()
   const connection = connectAdapter(
-    { command: ['sh', '-c', `read request; printf '%s\\n' '${answerThenUpdate}'; sleep 5`], env: {}, cwd: '/' },
+    { command: ['sh', '-c', `read request; printf '%s\\n' '${answerThenUpdate}'; exec sleep 5`], env: {}, cwd: '/' },
     {
       onUpdate: () => {
         delivered.push('update')

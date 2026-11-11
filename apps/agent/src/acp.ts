@@ -151,11 +151,13 @@ export const connectAdapter = (
       onCancelRequest(frame.params.requestId as number | string)
     else if (frame.method === 'session/update' && frame.params) onUpdate(frame.params)
   }
-  const adapter = spawnJsonLines(launch, receive, (code) => {
+  const exitAfterHeldFrames = (code: number | null) => {
+    if (isSettlingResponse) return void setImmediate(() => exitAfterHeldFrames(code))
     onExit(code)
     for (const request of pending.values()) request.reject(new AcpError('The adapter exited'))
     pending.clear()
-  })
+  }
+  const adapter = spawnJsonLines(launch, receive, exitAfterHeldFrames)
   return {
     request: (method: string, params: Json) => {
       if (adapter.hasExited) return Promise.reject(new AcpError('The adapter exited'))
