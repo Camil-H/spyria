@@ -1,4 +1,5 @@
 export type AzRunner = (azArguments: string[]) => { exitCode: number; output: string }
+type Audience = 'tenant' | 'organizations'
 
 export const runAz: AzRunner = (azArguments) => {
   const result = Bun.spawnSync(['az', ...azArguments], { stdout: 'pipe', stderr: 'pipe' })
@@ -9,10 +10,14 @@ export const runAz: AzRunner = (azArguments) => {
 }
 
 export const isAzSignedIn = (az: AzRunner = runAz) =>
-  Bun.which('az') !== null && az(['account', 'show', '--query', 'tenantId', '-o', 'tsv']).exitCode === 0
+  Bun.which('az', { PATH: process.env.PATH ?? '' }) !== null &&
+  az(['account', 'show', '--query', 'tenantId', '-o', 'tsv']).exitCode === 0
+
+const entraAppNameOf = (origin: string, audience: Audience) =>
+  `Spyria ${new URL(origin).hostname}${audience === 'tenant' ? ' workspace' : ''}`
 
 export const registerEntraApp = (
-  { origin, audience }: { origin: string; audience: 'tenant' | 'organizations' },
+  { origin, audience }: { origin: string; audience: Audience },
   az: AzRunner = runAz,
 ) => {
   const run = (azArguments: string[]) => {
@@ -20,9 +25,14 @@ export const registerEntraApp = (
     if (exitCode !== 0) throw new Error(`az ${azArguments.slice(0, 3).join(' ')} failed: ${output}`)
     return output
   }
+  const name = entraAppNameOf(origin, audience)
   const tenantId = run(['account', 'show', '--query', 'tenantId', '-o', 'tsv'])
+  const [registeredClientId] = run(['ad', 'app', 'list', '--display-name', name, '--query', '[].appId', '-o', 'tsv'])
+    .split('\n')
+    .filter(Boolean)
+  if (registeredClientId) return { name, tenantId, clientId: registeredClientId, clientSecret: undefined }
   const clientId = run([
-    ...['ad', 'app', 'create', '--display-name', `Spyria ${new URL(origin).hostname}`],
+    ...['ad', 'app', 'create', '--display-name', name],
     ...['--sign-in-audience', audience === 'tenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs'],
     ...['--web-redirect-uris', `${origin}/auth/callback`, '--query', 'appId', '-o', 'tsv'],
   ])
@@ -31,5 +41,5 @@ export const registerEntraApp = (
     ...['ad', 'app', 'credential', 'reset', '--id', clientId, '--display-name', 'Spyria'],
     ...['--years', '2', '--query', 'password', '-o', 'tsv'],
   ])
-  return { tenantId, clientId, clientSecret }
+  return { name, tenantId, clientId, clientSecret }
 }
