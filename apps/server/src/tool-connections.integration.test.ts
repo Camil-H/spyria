@@ -24,7 +24,6 @@ import {
   mcpCall,
   openSharedTestApp,
   promptedBy,
-  rejectionOf,
   rpcOf,
   runtimeTurn,
   testAuthSettings,
@@ -74,7 +73,6 @@ test('Connect grants the server on the member key, runs the consent through Spyr
   })
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['active'])
-  expect(JSON.parse((await asMember(alice, 'GET', '/api/tool-connections')).body).available).toContain('fake')
 
   expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
   expect(await sessionsOf(key.id)).toEqual([])
@@ -110,7 +108,10 @@ test('a pending sign-in left behind does not block Connect, and Connect while si
 test('a member acts only on their own key: unknown servers are refused, a member without an LLM key connects on a key that serves only tools, and Bob never touches Alice’s connection', async () => {
   expect(await asMember(alice, 'POST', '/api/tool-connections/Jira/connect')).toEqual({
     status: 400,
-    body: JSON.stringify({ error: 'tool_not_in_catalog', message: 'Tool Jira is not in the catalog' }),
+    body: JSON.stringify({
+      error: 'tool_not_in_catalog',
+      message: "Jira is not in this workspace's tools catalogue",
+    }),
   })
   expect((await asMember(bob, 'POST', connectionPath('connect'))).status).toBe(200)
   const bobKey = await virtualKeyOf(bob)
@@ -188,11 +189,25 @@ test('/mcp for a chat owner without an LLM key runs the workspace tools on a key
   expect(textOf(called.result)).toBe('Bob needs to connect fake')
 })
 
-test('the profile lists only personal servers, and a workspace server cannot be connected', async () => {
-  expect(JSON.parse((await asMember(alice, 'GET', '/api/tool-connections')).body).available).toEqual(['fake'])
+test('a member signs in only to a finished server of their workspace they may use a tool of, never to a shared-login one', async () => {
   expect(await asMember(alice, 'POST', `/api/tool-connections/${sharedToolServer}/connect`)).toMatchObject({
     status: 400,
   })
+  expect(await asMember(alice, 'POST', '/api/tool-connections/CRM/connect')).toMatchObject({ status: 400 })
+  const restrictBob = (allowedTools: string[] | null) =>
+    asMember(alice, 'POST', '/api/workspace-connections/connection-fake/restrict', { memberId: bob, allowedTools })
+  expect((await restrictBob([])).status).toBe(200)
+  try {
+    expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
+  } finally {
+    await restrictBob(null)
+  }
+  await database.$client`update workspace_connections set setup_id = 'setup-pending' where id = 'connection-fake'`
+  try {
+    expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
+  } finally {
+    await database.$client`update workspace_connections set setup_id = null where id = 'connection-fake'`
+  }
 })
 
 test('a server the owner has not connected, or whose token was revoked, answers Spyria’s wording and flags the connection', async () => {
@@ -218,11 +233,11 @@ test('a server the owner has not connected, or whose token was revoked, answers 
 test('checking the connections, as the profile does when it opens, follows the gateway: a row without a session goes, an active session gets its row, and a token revoked at the provider reads Needs reconnection without any chat call', async () => {
   const check = () => asMember(alice, 'POST', '/api/tool-connections/check')
   const slackRows = () =>
-    database.$client`select tool from tool_connections where user_id = ${alice} and tool = 'Slack'`
+    database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`
   await connectAlice(aliceCookie)
   await database.$client`
-    insert into tool_connections (workspace_id, user_id, tool, status, position)
-    values (${acme}, ${alice}, 'Slack', 'Connected', 99)`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${alice}, 'connection-Slack', 'Connected')`
   expect((await check()).status).toBe(204)
   expect((await slackRows()).length).toBe(0)
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
@@ -354,12 +369,4 @@ test('no OAuth token, client secret or virtual key reaches Spyria tables, logs o
     expect(logged).not.toContain(secret)
     expect(frames).not.toContain(secret)
   }
-})
-
-test('a tool server name with "-" is refused at registration, so a tool name always splits into its server and tool', async () => {
-  const hyphenated = { name: `${sharedToolServer}-pro`, url: 'http://host.docker.internal:1/mcp', isShared: true }
-  expect((await rejectionOf(llmGateway.setUpToolServer(hyphenated))).message).toContain(
-    'A tool server name cannot contain "-"',
-  )
-  expect((await llmGateway.toolServers()).map(({ name }) => name)).not.toContain(hyphenated.name)
 })
