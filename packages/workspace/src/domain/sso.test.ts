@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { JoinBySettingInvalid } from './errors.ts'
 import {
   domainOfEmail,
   entraObjectIdPattern,
@@ -71,7 +72,7 @@ test('the instance setting names how people join, with domain as the default', (
   expect(joinByOf('')).toBe('domain')
   expect(joinByOf('domain')).toBe('domain')
   expect(joinByOf('invited-address')).toBe('invited_address')
-  expect(() => joinByOf('anyone')).toThrow('SPYRIA_JOIN_BY must be domain or invited-address')
+  expect(() => joinByOf('anyone')).toThrow(JoinBySettingInvalid)
   expect(isPublicEmailDomain('outlook.com')).toBe(true)
   expect(isPublicEmailDomain('acme.com')).toBe(false)
 })

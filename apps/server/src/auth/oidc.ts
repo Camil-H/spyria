@@ -1,15 +1,13 @@
-import { withRetries } from '@spyria/kernel'
+import { DomainError, withRetries } from '@spyria/kernel'
 import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
 export type EmailRefusal = 'unconfirmed' | 'untrusted'
 export type EmailClaim = { email: string; refusal?: undefined } | { email?: undefined; refusal: EmailRefusal }
-export class EmailRefused extends Error {
-  readonly refusal: EmailRefusal
-  constructor(refusal: EmailRefusal) {
-    super(`The ID token carries no trusted email for this login: ${refusal}`)
-    this.refusal = refusal
+export class EmailRefused extends DomainError {
+  constructor(readonly refusal: EmailRefusal) {
+    super('email_refused', `The ID token carries no trusted email for this login: ${refusal}`)
   }
 }
 type ClientSettings = OidcSettings & {

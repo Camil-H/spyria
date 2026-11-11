@@ -1,4 +1,4 @@
-import { InvalidSsoSettings, PublicEmailDomain } from './errors.ts'
+import { InvalidSsoSettings, JoinBySettingInvalid, PublicEmailDomain } from './errors.ts'
 
 export const ssoPresets = ['google', 'microsoft', 'oidc'] as const
 export type SsoPreset = (typeof ssoPresets)[number]
@@ -61,7 +61,7 @@ const joinBySettings: Record<string, JoinBy> = { domain: 'domain', 'invited-addr
 
 export const joinByOf = (setting: string | undefined): JoinBy => {
   const joinBy = joinBySettings[setting || 'domain']
-  if (!joinBy) throw new Error('SPYRIA_JOIN_BY must be domain or invited-address')
+  if (!joinBy) throw new JoinBySettingInvalid()
   return joinBy
 }
 
