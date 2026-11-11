@@ -243,7 +243,13 @@ export const setup = async (
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
-  if (flags.switches.has('no-start')) return
+  if (flags.switches.has('no-start')) {
+    if (smtp?.retireReplacedKeys)
+      console.log(
+        `Every earlier Resend key named Spyria on ${hostname} stays valid, since Spyria may still run on one: once it runs on the new key (spyria compose up -d), delete them in Resend.`,
+      )
+    return
+  }
   await startStack(folder, environment)
   await smtp
     ?.retireReplacedKeys?.()
