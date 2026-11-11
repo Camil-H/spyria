@@ -12,6 +12,7 @@ import {
 } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
+import { secretsKeyringOf } from '../auth/secret-box.ts'
 import { startJobWorker } from '../job-worker.ts'
 import {
   acme,
@@ -27,6 +28,7 @@ import {
   requestMutation,
   succeeded,
   testAuthSettings,
+  testSecretsKey,
   testSecretsKeyring,
   testSpyriaAgentImage,
   waitFor,
@@ -35,7 +37,7 @@ import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({
-  secretsKeyring: testSecretsKeyring,
+  secretsKeyring: secretsKeyringOf('rotated-integration-secrets-key-0123456789', [testSecretsKey]),
   databases: () => [database],
   spyriaAgentImage: testSpyriaAgentImage,
 })
@@ -625,4 +627,37 @@ test('a stopped runtime left on an older image is recreated on the current image
     image: testSpyriaAgentImage,
   })
   expect((await runtimeOf(chat)).image).toBe(testSpyriaAgentImage)
+})
+
+test('a runtime started before the secrets key rotated keeps its key while it runs, and is recreated under the current key when it starts again', async () => {
+  const host = await fakeHost('Rotated key host')
+  const chat = await newRuntimeChat()
+  const runtime = await runningRuntime(chat)
+  expect(runtime.api_key_id).toBe(gateway.sandboxProvider.currentApiKeyId)
+  const gatewayBeforeRotation = createRuntimeHostGateway({ secretsKeyring: testSecretsKeyring, databases: () => [] })
+  const keyBeforeRotation = gatewayBeforeRotation.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id })
+  await database.$client`update runtimes set api_key_id = ${testSecretsKeyring.currentKeyId} where id = ${runtime.id}`
+  const container = host.containers.get(runtime.id)
+  if (container) container.apiKey = keyBeforeRotation
+
+  const recordedKeyId = (await runtimeOf(chat)).api_key_id
+  expect(gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id, apiKeyId: recordedKeyId })).toBe(
+    keyBeforeRotation,
+  )
+  host.commands.length = 0
+  await ensure(chat)
+  expect(host.lifecycleCommands()).toEqual([])
+
+  await stoppedRuntime(chat)
+  host.commands.length = 0
+  expect(await ensure(chat)).toMatchObject({ id: runtime.id, state: 'starting' })
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['recreate', 'start'])
+  const currentKey = gateway.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id })
+  expect(currentKey).not.toBe(keyBeforeRotation)
+  expect(host.commands.find((command) => command.op === 'recreate')).toMatchObject({
+    runtimeId: runtime.id,
+    apiKey: currentKey,
+  })
+  expect((await runtimeOf(chat)).api_key_id).toBe(gateway.sandboxProvider.currentApiKeyId)
 })
