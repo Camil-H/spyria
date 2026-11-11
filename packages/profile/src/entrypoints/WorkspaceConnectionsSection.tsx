@@ -233,7 +233,9 @@ const ConnectionCard = ({
           </table>
         </>
       ) : (
-        <p className="text-muted">The sign-in that lists its tools was not finished: remove it and add it again.</p>
+        <p className="text-muted">
+          Waiting for the sign-in that lists its tools. If that window was closed, remove this server and add it again.
+        </p>
       )}
       {!isRemoving && <ErrorMessage message={errorMessage} />}
       {isRemoving && (
