@@ -84,6 +84,23 @@ sign_in_app_client_secret = "<new client secret>"
 
 The server applies it to every workspace when it restarts with the new settings, and leaves the stored app alone while they match. An install made by hand can do the same with `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` in `.env.prod`. Once these settings are set they win: each start puts their app back, so change the app there rather than with `spyria sign-in-app`.
 
+## Rotating the secrets key
+
+`SPYRIA_SECRETS_KEY` seals the stored secrets (SSO client secrets, GitHub App credentials, members' GitHub tokens) and derives the key the server uses to reach each runtime. To replace it, for example when it may have leaked:
+
+1. In `.env` (`.env.prod` on an install made by hand), move the current value of `SPYRIA_SECRETS_KEY` into `SPYRIA_PREVIOUS_SECRETS_KEYS` (comma-separated after any key already there), and set `SPYRIA_SECRETS_KEY` to a new value of at least 32 characters, for example from `openssl rand -hex 32`.
+2. Restart the server with `spyria compose up -d server`. It now seals with the new key and still opens what the previous keys sealed; running runtimes keep answering.
+3. Seal every stored secret again with the new key:
+
+   ```sh
+   spyria compose exec server bun apps/server/src/operator-cli.ts secrets:reseal
+   ```
+
+   It says how many secrets it sealed again, and how many running runtimes still use a previous key. A runtime moves to the new key the next time it starts, and an idle runtime stops after an hour; run the command again later until it reports none.
+4. Remove `SPYRIA_PREVIOUS_SECRETS_KEYS` and run `spyria compose up -d server` again.
+
+Keep the previous key with the backups taken before step 3: the secrets in them are sealed with it. The cloud modules generate `SPYRIA_SECRETS_KEY` and do not take a previous key yet, so a cloud deployment cannot rotate it this way.
+
 ## Jobs
 
 Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
@@ -135,7 +152,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | `<deployment>-gateway-data` | The gateway's local data. | Yes. |
 | `<deployment>-host` | The workspace host's pairing token. | Optional: a lost token means adding the host again. |
 | `<deployment>-zero-data` | zero-cache's replica, rebuilt from Postgres. | No. |
-| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
+| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` (and `SPYRIA_PREVIOUS_SECRETS_KEYS` during a [rotation](#rotating-the-secrets-key)) and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
 
 `spyria restore` reads each file whole before it changes anything, and refuses one it cannot restore completely, such as a truncated file or a plain SQL dump. By hand, a consistent dump of both databases, which `spyria restore` does not take (restore it with `psql` into an empty Postgres):
 
