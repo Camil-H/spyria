@@ -193,10 +193,16 @@ export const createLlmGateway = ({
       await request('DELETE', `/api/governance/virtual-keys/${listingKey.id}`)
     }
   }
+  const grantedToolsOf = async (virtualKeyValue: string | undefined, server: ToolServer) =>
+    (await listedToolsOf(virtualKeyValue)).filter((tool) => tool.name.startsWith(`${server.name}-`))
   const readOnlyToolOf = async (virtualKeyValue: string | undefined, server: ToolServer) =>
-    (await listedToolsOf(virtualKeyValue)).find(
-      (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
-    )?.name
+    (await grantedToolsOf(virtualKeyValue, server)).find((tool) => tool.annotations?.readOnlyHint === true)?.name
+  const consentToolOf = async (virtualKeyValue: string | undefined, server: ToolServer) => {
+    const granted = await grantedToolsOf(virtualKeyValue, server)
+    const consentTool = (granted.find((tool) => tool.annotations?.readOnlyHint === true) ?? granted[0])?.name
+    if (!consentTool) throw new Error(`The gateway grants no tool of ${server.name} to start a consent`)
+    return consentTool
+  }
   const gateway: BifrostGateway = {
     url,
     refreshListedModels: () => {
@@ -283,7 +289,7 @@ export const createLlmGateway = ({
     },
     startToolConsent: async (virtualKeyId, server) => {
       const virtualKeyValue = await gateway.virtualKeyValue(virtualKeyId)
-      const consentTool = (await readOnlyToolOf(virtualKeyValue, server)) ?? `${server.name}-${server.tools[0]}`
+      const consentTool = await consentToolOf(virtualKeyValue, server)
       const response = await mcpRequest(virtualKeyValue, 'tools/call', { name: consentTool, arguments: {} })
       const flowId = (await response.text()).match(/flow=([0-9a-f-]{36})/)?.[1]
       if (!flowId) throw new Error(`The gateway started no consent for ${server.name}`)
