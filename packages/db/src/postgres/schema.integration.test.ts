@@ -19,12 +19,12 @@ test('migrations apply from scratch and create every table of the schema', async
   expect(await publicTableNames('')).toEqual(allTables.map((table) => getTableName(table)).sort())
 })
 
-test('every table except users carries a non-null workspace_id', async () => {
+test('every table except the account tables, users and account_identities, carries a non-null workspace_id', async () => {
   expect(
     await publicTableNames(
       `and table_name not in (select table_name from information_schema.columns where table_schema = 'public' and column_name = 'workspace_id' and is_nullable = 'NO')`,
     ),
-  ).toEqual(['users'])
+  ).toEqual(['account_identities', 'users'])
 })
 
 test('the zero publication replicates exactly the tables and columns of the Zero schema', async () => {
