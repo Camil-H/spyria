@@ -13,11 +13,20 @@ import {
   fakeGitHubUserId,
   startFakeGitHub,
 } from './testing/fake-github.ts'
-import { acme, alice, bob, lee, sessionTokenOf, startAgentStack, testSecretsKey, waitFor } from './testing/testing.ts'
+import {
+  acme,
+  alice,
+  bob,
+  lee,
+  sessionTokenOf,
+  startAgentStack,
+  testSecretsKeyring,
+  waitFor,
+} from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
 const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKey)
+const secretBox = createSecretBox(testSecretsKeyring)
 const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
 afterAll(() => fakeGitHub.stop())
 const { app, database } = stack

@@ -31,6 +31,7 @@ import { workspaceMutators } from '@spyria/workspace/server'
 import { Hono } from 'hono'
 import { createAgentBridge } from '../agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from '../app.ts'
+import { type SecretsKeyring, secretsKeyringOf } from '../auth/secret-box.ts'
 import { issueSessionToken } from '../auth/session-tokens.ts'
 import { openSessions } from '../auth/sessions.ts'
 import { createGitHubCheckouts, type GitHubDependencies } from '../github/github.ts'
@@ -50,6 +51,7 @@ import {
 } from './spyria-agent-relay.ts'
 
 export const testSecretsKey = 'e2e-and-integration-test-secrets-key'
+export const testSecretsKeyring = secretsKeyringOf(testSecretsKey)
 export const testSetupToken = 'e2e-and-integration-test-setup-token'
 const unlimitedRateBudgets = Object.fromEntries(
   Object.entries(rateBudgets).map(([name, budget]) => [name, { ...budget, count: 1_000_000_000 }]),
@@ -209,7 +211,7 @@ const startSharedTestApp = async () => {
   const llmGateway = llmGatewayAt(`http://127.0.0.1:${integrationGatewayPort}`)
   setModelDirectory(llmGateway.listedModels)
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testSecretsKey,
+    secretsKeyring: testSecretsKeyring,
     databases: () => [database],
     relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
   })
@@ -580,6 +582,7 @@ export const startAgentStack = async ({
   promptsWaitingAfterHello = false,
   github,
   gatewayUrlOf,
+  secretsKeyring = testSecretsKeyring,
 }: {
   routing?: boolean
   llm?: Parameters<typeof createAgentBridge>[0]['llm']
@@ -590,11 +593,12 @@ export const startAgentStack = async ({
   promptsWaitingAfterHello?: boolean
   github?: GitHubDependencies
   gatewayUrlOf?: () => string
+  secretsKeyring?: SecretsKeyring
 } = {}) => {
   const testApp = await openSharedTestApp()
   const { database, llmGateway } = testApp
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testSecretsKey,
+    secretsKeyring,
     databases: () => [database],
     spyriaAgentImage,
     relayModelCall: routing

@@ -28,7 +28,7 @@ import {
   rpcOf,
   runtimeTurn,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
   textOf,
   virtualKeyOf,
   waitFor,
@@ -261,7 +261,7 @@ test('session headers pass through, Spyria’s tools join the gateway’s list w
     (await mcpCall(host, token, rpcOf('tools/list'))).result?.tools?.map((tool: { name: string }) => tool.name)
   let gatewayUrl = stubGateway.url.origin
   const runtimeHosts = createRuntimeHostGateway({
-    runtimeKeySecret: testSecretsKey,
+    secretsKeyring: testSecretsKeyring,
     databases: () => [database],
     relayModelCall: createModelCallRelay({
       llmGateway,

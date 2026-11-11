@@ -41,6 +41,8 @@ export type RuntimeRepository = {
   forgetAgentConversation(runtime: Runtime): Promise<void>
   workspaceSnapshotOf(runtime: Runtime): Promise<string | undefined>
   keepWorkspaceSnapshot(runtime: Runtime, snapshot: string): Promise<void>
+  apiKeyIdOf(runtime: Runtime): Promise<string | undefined>
+  keepApiKeyId(runtime: Runtime, apiKeyId: string): Promise<void>
   chatOfLlmTokenHash(workspaceId: WorkspaceId, hostId: RuntimeHostId, hash: string): Promise<ChatId | undefined>
 }
 

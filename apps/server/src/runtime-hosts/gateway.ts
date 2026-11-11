@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -20,6 +20,7 @@ import {
 } from '@spyria/runtime/server'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
+import type { SecretsKeyring } from '../auth/secret-box.ts'
 import type { ModelCallRelay, RelayFrame } from '../llm-relay.ts'
 import { traceHeadersOf } from '../telemetry.ts'
 
@@ -86,7 +87,7 @@ export const createRuntimeHostGateway = ({
   afterHello,
   relayModelCall,
   spyriaAgentImage,
-  runtimeKeySecret,
+  secretsKeyring,
   hostUpdateCommandOf,
   awaitsFirstWorkspace = async () => false,
 }: {
@@ -95,7 +96,7 @@ export const createRuntimeHostGateway = ({
   afterHello?: (database: Database, host: ConnectedHost) => Promise<unknown>
   relayModelCall?: ModelCallRelay
   spyriaAgentImage?: string
-  runtimeKeySecret: string
+  secretsKeyring: SecretsKeyring
   hostUpdateCommandOf?: (host: RuntimeHost) => string
   awaitsFirstWorkspace?: (claimCode: string) => Promise<boolean>
 }) => {
@@ -381,8 +382,8 @@ export const createRuntimeHostGateway = ({
   const packageCacheKeyOf = (workspaceId: WorkspaceId, { repository, ownerId }: PackageCacheScope) =>
     createHash('sha256').update(`package-cache.${workspaceId}.${repository}.${ownerId}`).digest('hex').slice(0, 32)
 
-  const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId }) =>
-    createHmac('sha256', runtimeKeySecret).update(`runtime-api-key.${workspaceId}.${runtimeId}`).digest('base64url')
+  const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId, apiKeyId }) =>
+    secretsKeyring.derivedKeyOf(apiKeyId ?? secretsKeyring.currentKeyId, `runtime-api-key.${workspaceId}.${runtimeId}`)
 
   const createWith =
     (op: 'create' | 'recreate'): SandboxProvider['create'] =>
@@ -397,6 +398,7 @@ export const createRuntimeHostGateway = ({
   const sandboxProvider: SandboxProvider = {
     create: createWith('create'),
     recreate: createWith('recreate'),
+    currentApiKeyId: secretsKeyring.currentKeyId,
     apiKeyOf,
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),

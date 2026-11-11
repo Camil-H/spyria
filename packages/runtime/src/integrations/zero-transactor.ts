@@ -149,6 +149,10 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       keepWorkspaceSnapshot: async (runtime, snapshot) => {
         await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'workspaceSnapshot', snapshot)
       },
+      apiKeyIdOf: (runtime) => serverOnlyRuntimeValueOf(tx, runtime.workspaceId, runtime.id, 'apiKeyId'),
+      keepApiKeyId: async (runtime, apiKeyId) => {
+        await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'apiKeyId', apiKeyId)
+      },
       chatOfLlmTokenHash: async (workspaceId, hostId, hash) => {
         const id = await runtimeChatOfLlmTokenHash(tx, workspaceId, hostId, hash)
         return id === undefined ? undefined : chatId(id)

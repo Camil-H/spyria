@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { commandOutputPathOf, rebuildMessages } from '@spyria/conversation/server'
 import { schema } from '@spyria/db/zero'
+import { secretsKeyringOf } from '../auth/secret-box.ts'
 import { startJobWorker } from '../job-worker.ts'
 import {
   acme,
@@ -20,10 +21,12 @@ import {
   startAgentStack,
   succeeded,
   testAuthSettings,
+  testSecretsKey,
   waitFor,
 } from '../testing/testing.ts'
 
 setDefaultTimeout(30_000)
+const previousSecretsKey = 'previous-agent-bridge-secrets-key-0123456789'
 const {
   database,
   app,
@@ -41,7 +44,10 @@ const {
   holdUrl,
   jobDone,
   ...stack
-} = await startAgentStack({ llm: { model: 'openai/mistral/codestral-latest' } })
+} = await startAgentStack({
+  llm: { model: 'openai/mistral/codestral-latest' },
+  secretsKeyring: secretsKeyringOf(testSecretsKey, [previousSecretsKey]),
+})
 const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body'])
 const answered = stack.answered
 const agentHost = () => stack.agentHost('Agent host', { holdUrl })
@@ -665,4 +671,29 @@ test('removing the owner of a runtime chat closes their stream, stops the turn a
   ).toEqual(succeeded)
   await answered(await prompt(chat, 'Back after the transfer'))
   expect((await runtimeOf(chat)).state).toBe('running')
+})
+
+test('a runtime started under a previous secrets key is still reached with its key after the rotation', async () => {
+  const { host, relay } = await agentHost()
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Before the rotation'))
+  await turnEnded(chat)
+  const runtime = await runtimeOf(chat)
+  const container = host.containers.get(runtime.id)
+  if (!container) throw new Error(`No container for runtime ${runtime.id}`)
+  const previousKeyId = secretsKeyringOf(previousSecretsKey).currentKeyId
+  await relay.restart()
+  container.apiKey = runtimeHosts.sandboxProvider.apiKeyOf({
+    workspaceId: acme,
+    runtimeId: runtime.id,
+    apiKeyId: previousKeyId,
+  })
+  await database.$client`update runtimes set api_key_id = ${previousKeyId} where id = ${runtime.id}`
+
+  const afterRotation = await prompt(chat, 'After the rotation')
+  await answered(afterRotation)
+  expect(await repliesTo(afterRotation)).toEqual([
+    { kind: 'agent', body: expect.stringContaining('Hello from the stub') },
+  ])
+  expect(container.apiKey).not.toBe(runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: runtime.id }))
 })
