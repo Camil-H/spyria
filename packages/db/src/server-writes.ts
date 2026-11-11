@@ -959,7 +959,8 @@ export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) =
     tx,
     `delete from users where id = any($1::text[])
        and not exists(select 1 from memberships where memberships.user_id = users.id)
-       and not exists(select 1 from workspaces where workspaces.created_by = users.id)`,
+       and not exists(select 1 from workspaces where workspaces.created_by = users.id)
+       and not exists(select 1 from account_identities where account_identities.user_id = users.id)`,
     [userIds],
   )
 }
