@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { workspacePermissions } from '@spyria/kernel'
 import { microsoftPersonalAccountsTenantId } from '@spyria/workspace/server'
+import { serializeSigned } from 'hono/utils/cookie'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
@@ -438,7 +439,7 @@ test('a new account joins the workspaces without their own SSO that invited exac
   ]).toEqual([{ role: 'member', display_name: 'Nina Doe' }])
 })
 
-test('an account in no workspace hears so and creates one as its Admin, from this app only', async () => {
+test('an account in no workspace hears so and creates one as its Admin, from this app only and within the time its sign-in allows', async () => {
   const signedIn = await signInThrough(accountIdp, 'provider=oidc', { sub: 'olive-account', email: 'olive@gmail.com' })
   expect(signedIn.status).toBe(200)
   expect(signedIn.page).toContain('"status":"no_workspace"')
@@ -457,6 +458,10 @@ test('an account in no workspace hears so and creates one as its Admin, from thi
   ).toBe(403)
   expect((await createWorkspaceWith('', { name: 'Olive Co' })).status).toBe(401)
   expect((await createWorkspaceWith(`${signedIn.cookie}x`, { name: 'Olive Co' })).status).toBe(401)
+  for (const account of [{ userId: oliveId, expiresAt: Date.now() - 1000 }, { userId: oliveId }]) {
+    const stale = await serializeSigned('spyria_account', JSON.stringify(account), testAuthSettings.tokenSecret)
+    expect((await createWorkspaceWith(stale.split(';')[0] ?? '', { name: 'Olive Co' })).status).toBe(401)
+  }
   const blank = await createWorkspaceWith(signedIn.cookie, { name: ' ' })
   expect(blank.status).toBe(400)
   expect(await blank.json()).toEqual({
