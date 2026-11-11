@@ -31,11 +31,10 @@ const readSnapshot = async () => {
   const answeredIds = new Set(messages.map((message) => message.replyToId))
   return {
     workspaces: (await database.select().from(tables.workspaces)).map(
-      ({ workspaceId, name, localSessions, joinBy, aiProviderAllowList, devLoop, setupCommands }) => ({
+      ({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands }) => ({
         id: workspaceId,
         name,
         localSessions,
-        joinBy,
         aiProviderAllowList,
         devLoop,
         setupCommands: setupCommands ?? [],
@@ -80,11 +79,6 @@ const readSnapshot = async () => {
     llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
       userAsMember(credential),
     ),
-    ssoDomains: (await database.select().from(tables.ssoDomains)).map(({ workspaceId, domain, verifiedAt }) => ({
-      workspaceId,
-      domain,
-      isVerified: verifiedAt !== null,
-    })),
     githubApps: (await database.select().from(tables.githubApps)).map(({ workspaceId }) => ({ workspaceId })),
     githubConnections: (await database.select().from(tables.githubConnections)).map(({ workspaceId, userId }) => ({
       workspaceId,

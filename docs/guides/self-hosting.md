@@ -9,8 +9,7 @@ Spyria runs as one Docker Compose file on one machine: Postgres, the migrations,
 | Docker with Compose | Every service runs in a container, from images published on GHCR for `amd64` and `arm64` and signed with cosign (`spyria-server`, `spyria-host`, `spyria-agent`). |
 | An HTTPS origin, for example `https://spyria.example.com` | The server refuses to start in production without `https://` (secure cookies, OIDC redirects, GitHub callbacks). |
 | A reverse proxy or tunnel that terminates TLS | For example Caddy, nginx, Traefik or a tunnel service, routing the hostname to the server (see below). |
-| An OIDC provider for the first workspace | Google Workspace, Microsoft Entra, or any OIDC issuer. Production sign-in is per-workspace SSO only. |
-| Optionally, an SMTP service that sends from your domain | Domain verification links (invites send no email). Without mail, an operator verifies the domain from the command line (see below). |
+| At least one sign-in provider | Google, Microsoft or any OIDC provider that people sign in to their account with, or the own provider of the first workspace. Production sign-in is single sign-on only. |
 | A GitHub App (later, from the app) | Only for dev chats on repositories. |
 
 ### Path routing
@@ -51,13 +50,11 @@ Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose r
 | `SPYRIA_APP_ORIGIN` | Public origin, `https://`. |
 | `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
 | `SPYRIA_SETUP_TOKEN` | One-time setup token, at least 32 characters: only the setup link carrying it can create the first workspace; spent once one exists. |
-| `SPYRIA_JOIN_BY` | Who can join the workspaces: `domain` (default; each workspace owns a verified email domain) or `invited-address` (no domain; only invited addresses, any Google or OIDC account the provider confirms). Chosen before the first workspace; see [admin](../features/admin.md#who-can-join). |
 | `SPYRIA_SECRETS_KEY` | Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM, and derives the key the server uses to reach each runtime. At least 32 characters. Never just change it: a stored secret sealed with a key the server no longer has must be entered again. To replace it, [rotate it](./operations.md#rotating-the-secrets-key). |
 | `SPYRIA_PREVIOUS_SECRETS_KEYS` | Only while [rotating the secrets key](./operations.md#rotating-the-secrets-key): the previous values of `SPYRIA_SECRETS_KEY`, comma-separated. The server still opens what they sealed and still reaches the runtimes started with them, but seals nothing new with them. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except in the [Cloudflare example](#example-cloudflare) (`cloudflare`), or behind a load balancer that appends the client to `X-Forwarded-For` and is the only way in (`x-forwarded-for:<hops from the end>`; the cloud modules set it). Behind a proxy, rate limits on unauthenticated routes see every client as the proxy's address. |
-| `SPYRIA_SMTP_URL`, `SPYRIA_MAIL_FROM` | Optional mail, for example `smtp://user:pass@smtp.example.com:587` and `Spyria <spyria@example.com>`; the sender is required once SMTP is set. |
-| `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional apps of the deployment for one-click sign-in, see [One-click Google and Microsoft](#one-click-google-and-microsoft). |
-| `SPYRIA_SIGN_IN_APP_CLIENT_ID`, `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` | Optional, together, when people join by invited address: the one sign-in app of every workspace, which the server applies when it starts if it differs from the stored one ([operations](./operations.md#sign-in-app-of-an-instance-joined-by-invited-address)). |
+| `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional account providers: apps of the deployment that people sign in to their account with, see [account providers](#account-providers). |
+| `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_CLIENT_SECRET` | Optional account provider of any other OIDC provider, set together or not at all. |
 | `SPYRIA_GATEWAY_ADMIN_USER`, `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Admin login of the gateway. |
 | `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Encrypts members' API keys inside the gateway. Never change it without wiping the gateway's database. |
 | `SPYRIA_GATEWAY_SETUP_TOKEN` | Gateway setup token. |
@@ -86,8 +83,7 @@ The server image sets `SPYRIA_ENV=production`. The server then checks its settin
 - `SPYRIA_APP_ORIGIN` starts with `https://`, and `SPYRIA_OIDC_REDIRECT_URI` is on that origin.
 - `SPYRIA_GATEWAY_URL`, `SPYRIA_GATEWAY_ADMIN_USER` and `SPYRIA_GATEWAY_ADMIN_PASSWORD` are set, and the gateway login is not a development default.
 - `SPYRIA_INSTALL_HOST_TOKEN`, when set, is 16 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`.
-- `SPYRIA_MAIL_FROM` is set when `SPYRIA_SMTP_URL` is.
-- `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` are set together or not at all.
+- `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID` and `SPYRIA_OIDC_CLIENT_SECRET` are set together or not at all.
 - `SPYRIA_TRUSTED_PROXY` is unset, `cloudflare`, or `x-forwarded-for:1` to `3`.
 
 Read the list with `docker compose --env-file .env.prod -f compose.prod.yml logs server`.
@@ -129,30 +125,21 @@ docker compose --env-file .env.prod -f deploy/compose.prod.yml -f deploy/compose
 
 ## First workspace and sign-in
 
-Production signs in through each workspace's own OIDC provider. Identities are matched on the provider's issuer and subject; the email domain routes a person to the right provider. See [security](../architecture/security.md) for the model and [admin](../features/admin.md) for the settings.
+Production signs in through single sign-on only: with an account at a provider of the deployment, or through a workspace's own provider when it enforces SSO. Who joins what is in [who can join and sign-in](./who-can-join.md), the model in [security](../architecture/security.md) and the settings in [admin](../features/admin.md#sign-in-and-sso).
 
-1. Register an OIDC client at your provider with the redirect URI `<origin>/auth/callback`, or set the deployment's own Google or Microsoft app once ([below](#one-click-google-and-microsoft)).
-2. Open the setup link: the origin with the setup token, `<origin>/?setup=<SPYRIA_SETUP_TOKEN>`, which `spyria setup` prints, or `operator-cli.ts setup-link` from the server container (see [operations](./operations.md#first-workspace)). Without it, a fresh deployment only says that it is being set up, so nobody else can claim it between the start and your first sign-in. With it, the sign-in screen offers **Create a workspace**: the organization name, its email domain (not asked when people join by invited address) and the provider (Google Workspace, Microsoft Entra with its tenant id, or **Other OIDC** with an issuer). Spyria checks the provider's discovery document, encrypts the client secret and never shows it again.
-3. Submitting opens the provider's sign-in. The first person who completes it with an address at that domain becomes the Admin of the new workspace. From then on the screen no longer offers creating a workspace and the server refuses it; **New workspace** in the app reuses the member's verified domain and provider.
-4. Verify the domain right away: in **Workspace settings > Setup SSO**, send the single-use link (valid 24 hours) to any address at the domain and open it. Until the domain is verified, the workspace cannot invite, and only its existing members can sign in.
+1. Set at least one [account provider](#account-providers), or register a client at your organization's provider with the redirect URI `<origin>/auth/callback`.
+2. Open the setup link: the origin with the setup token, `<origin>/?setup=<SPYRIA_SETUP_TOKEN>`, which `spyria setup` prints, or `operator-cli.ts setup-link` from the server container (see [operations](./operations.md#first-workspace)). Without it, a fresh deployment only says that it is being set up, so nobody else can claim it between the start and your first sign-in. With it, the sign-in screen offers **Create a workspace**: its name, then an account provider, or your organization's provider (Google Workspace, Microsoft Entra with its tenant id, or **Other OIDC** with an issuer), which the workspace then enforces. Spyria checks the provider's discovery document, encrypts the client secret and never shows it again.
+3. Submitting opens the provider's sign-in, and the person who completes it becomes the Admin of the new workspace. From then on, anyone signed in with an account can create a workspace of their own; without account providers, nobody can.
 
-When people join by invited address (`SPYRIA_JOIN_BY=invited-address`), step 3 accepts any address the provider confirms (a Gmail account through Google, for example), and step 4 does not apply: the workspace owns no domain and can invite at once.
+### Account providers
 
-Without mail (`SPYRIA_SMTP_URL` unset), **Send verification link** answers that mail isn't set up; an operator verifies the domain directly from the server container instead:
+People sign in to their account through apps of the deployment, set in `.env.prod`, each with the redirect URI `<origin>/auth/callback`:
 
-```sh
-docker compose --env-file .env.prod -f compose.prod.yml exec server \
-  bun apps/server/src/operator-cli.ts sso:verify-domain --workspace <workspace id> --domain example.com
-```
+- **Google**: in Google Cloud, create an OAuth client of type *Web application*, and an *External* consent screen asking for `openid`, `email` and `profile`. Set `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`. Any Google account signs in, Gmail included.
+- **Microsoft**: in Microsoft Entra, register an app for *Accounts in any organizational directory and personal Microsoft accounts* with a web redirect URI, and create a client secret. Set `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that does not let users consent to apps needs its Entra admin to consent on the first sign-in.
+- **Another OIDC provider**: register a client with the scopes `openid`, `email` and `profile`, and set `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID` and `SPYRIA_OIDC_CLIENT_SECRET`. It must confirm addresses with `email_verified: true` ([decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)).
 
-### One-click Google and Microsoft
-
-To spare every workspace registering its own client, register the deployment's own apps once and set them in `.env.prod`:
-
-- **Google**: in Google Cloud, create an OAuth client of type *Web application* with the redirect URI `<origin>/auth/callback`, and an *External* consent screen asking for `openid`, `email` and `profile`. Set `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`.
-- **Microsoft**: in Microsoft Entra, register an app for *Accounts in any organizational directory* with the web redirect URI `<origin>/auth/callback`, and create a client secret. Set `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that does not let users consent to apps needs its Entra admin to consent on the first sign-in.
-
-Creating a workspace and **Setup SSO** then offer **Continue with Google** or **Continue with Microsoft** without a client id or secret. Through Google, whichever app, only verified addresses of accounts in the domain's Google Workspace sign in; through Microsoft, a person is recognized by their Entra object id, the same in every app of their tenant. The server refuses to start while a live workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
+A workspace enforcing Google Workspace or Microsoft Entra can also sign in through the deployment's Google or Microsoft app, without a client id or secret of its own. Through Google it then admits only accounts managed by the Google Workspace of their address's domain, and Gmail addresses; through Microsoft, only its own tenant. The server refuses to start while a workspace uses an app whose variables are missing, naming the provider: set them again rather than removing them.
 
 ## Deleting a workspace
 
@@ -167,7 +154,7 @@ docker compose --env-file .env.prod -f compose.prod.yml exec server \
   bun apps/server/src/operator-cli.ts workspace:purge <workspace id> [--abandon-failed-cleanup]
 ```
 
-A restore is refused once the erasing has started. When the last workspace of the deployment is erased, its domain is free and the sign-in page offers **Create a workspace** again.
+A restore is refused once the erasing has started. When the last workspace of the deployment is erased, the setup link creates the next one.
 
 ## Runtime host on this machine
 
@@ -261,19 +248,13 @@ bun run smoke:prod
 
 ## Example: Cloudflare
 
-One way to get an HTTPS origin, an OIDC provider, a mailbox and SMTP without opening a port, using Cloudflare Tunnel, Access and Email Routing with Resend for SMTP. Any equivalent works. The Compose file has an optional `cloudflare` profile that runs the tunnel connector (`<deployment>-cloudflared`) on the Compose network.
+One way to get an HTTPS origin and an organization's own provider without opening a port, using Cloudflare Tunnel, Access and Email Routing. Any equivalent works. The Compose file has an optional `cloudflare` profile that runs the tunnel connector (`<deployment>-cloudflared`) on the Compose network.
 
 1. **Tunnel.** Cloudflare Zero Trust > Networks > Tunnels > Create a tunnel (cloudflared). Copy its token to `CLOUDFLARE_TUNNEL_TOKEN` in `.env.prod`, add `cloudflare` to `COMPOSE_PROFILES` and start the stack: Cloudflare saves routes only once a connector runs. Then add one public hostname, `spyria.example.com` without a path, to `http://server:3000`.
 
    Set `SPYRIA_TRUSTED_PROXY=cloudflare` so rate limits key on Cloudflare's `CF-Connecting-IP` header. Only do this when the server is reachable through Cloudflare alone, or clients could choose their own address.
-2. **Mailbox.** Email > Email Routing on the domain: forward an address such as `admin@example.com` to your inbox. It receives the domain verification link and Access one-time PINs.
-3. **OIDC through Access.** Zero Trust > Access > Applications > Add an application > SaaS, OIDC, redirect URL `https://spyria.example.com/auth/callback`, and a policy allowing emails ending in `@example.com`. Add **One-time PIN** as a login method (or your identity provider) and select it on the application. In **Create a workspace**, choose **Other OIDC** with the issuer `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client id>`, the client id and the client secret Access shows.
-4. **SMTP through Resend.** Add the domain in Resend and create the DNS records it lists in Cloudflare DNS: the `send` MX and SPF TXT, the `resend._domainkey` DKIM TXT, and a DMARC TXT if you have none. They do not touch Email Routing's MX. Then:
-
-   ```sh
-   SPYRIA_SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465
-   SPYRIA_MAIL_FROM=Spyria <spyria@example.com>
-   ```
+2. **Mailbox.** Email > Email Routing on the domain: forward an address such as `admin@example.com` to your inbox. It receives the Access one-time PINs.
+3. **OIDC through Access.** Zero Trust > Access > Applications > Add an application > SaaS, OIDC, redirect URL `https://spyria.example.com/auth/callback`, and a policy allowing emails ending in `@example.com`. Add **One-time PIN** as a login method (or your identity provider) and select it on the application. In **Create a workspace**, choose **Other OIDC** with the issuer `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client id>`, the client id and the client secret Access shows. The workspace then enforces it.
 
 Pitfalls specific to this setup:
 

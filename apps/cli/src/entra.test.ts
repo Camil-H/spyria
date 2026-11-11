@@ -39,15 +39,13 @@ test('an app of the same name an earlier setup registered is reused as it is, th
   const calls: string[][] = []
   const az = fakeAz(calls, { registered: 'client-0\nclient-9' })
   const origin = 'https://spyria.example.com'
-  expect(registerEntraApp({ origin, audience: 'organizations' }, az)).toEqual({
+  expect(registerEntraApp({ origin, audience: 'any-account' }, az)).toEqual({
     name: 'Spyria spyria.example.com',
     tenantId: 'tenant-1',
     clientId: 'client-0',
     clientSecret: undefined,
   })
-  expect(registerEntraApp({ origin, audience: 'organizations', savedClientId: 'client-9' }, az).clientId).toBe(
-    'client-9',
-  )
+  expect(registerEntraApp({ origin, audience: 'any-account', savedClientId: 'client-9' }, az).clientId).toBe('client-9')
   expect(calls.map((call) => call.slice(0, 3).join(' '))).toEqual([
     'account show --query',
     'ad app list',
@@ -56,10 +54,12 @@ test('an app of the same name an earlier setup registered is reused as it is, th
   ])
 })
 
-test('the app of this Spyria serves every organizational directory, and an az refusal says which step failed', () => {
+test('the account app of this Spyria serves work or school accounts of any directory and personal Microsoft accounts, and an az refusal says which step failed', () => {
   const calls: string[][] = []
-  registerEntraApp({ origin: 'https://spyria.example.com', audience: 'organizations' }, fakeAz(calls))
-  expect(calls[2]).toContain('AzureADMultipleOrgs')
+  registerEntraApp({ origin: 'https://spyria.example.com', audience: 'any-account' }, fakeAz(calls))
+  expect(calls[2]?.join(' ')).toContain(
+    '--sign-in-audience AzureADandPersonalMicrosoftAccount --requested-access-token-version 2',
+  )
   expect(() =>
     registerEntraApp(
       { origin: 'https://spyria.example.com', audience: 'tenant' },

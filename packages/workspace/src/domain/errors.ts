@@ -50,57 +50,20 @@ export const ChatOwnerActive = errorKind(
   WorkspaceError,
 )
 export const InvalidSsoSettings = errorKind('invalid_sso_settings', (reason: string) => reason, WorkspaceError)
-export const PublicEmailDomain = errorKind(
-  'public_email_domain',
-  (domain: string) =>
-    `${domain} is a public email domain: a workspace cannot own it. Set up Spyria to join people by invited address instead`,
-  WorkspaceError,
-)
 export const EmailNotConfirmed = errorKind(
   'email_not_confirmed',
   () => 'Your provider did not confirm this address',
   WorkspaceError,
 )
-export const SignInAppFixed = errorKind(
-  'sign_in_app_fixed',
-  () => 'Every workspace on this Spyria signs in through one app, which an operator changes with spyria sign-in-app',
-  WorkspaceError,
-)
-export const DomainClaimed = errorKind(
-  'domain_claimed',
-  (domain: string) => `${domain} already signs in through another provider`,
-  WorkspaceError,
-)
-export const DomainFixed = errorKind(
-  'domain_fixed',
-  (domain: string) =>
-    `The email domain of this workspace is ${domain}: it is set when the workspace is created and cannot be changed`,
-  WorkspaceError,
-)
 export const SsoDiscoveryFailed = errorKind(
   'sso_discovery_failed',
-  (issuer: string, reason: string) => `The discovery of ${issuer} failed: ${reason}`,
-  WorkspaceError,
-)
-export const MailNotConfigured = errorKind(
-  'mail_not_configured',
-  () => "Mail isn't set up on this deployment; an operator can verify the domain with spyria verify-domain",
-  WorkspaceError,
-)
-export const MailNotSent = errorKind(
-  'mail_not_sent',
-  (reason: string) => `The verification email could not be sent: ${reason}`,
+  (issuer: string) =>
+    `The discovery of ${issuer} failed: check that the issuer is right and reachable from this Spyria`,
   WorkspaceError,
 )
 export const WorkspaceCreationClosed = errorKind(
   'workspace_creation_closed',
-  () => 'Workspace creation is closed on this instance: sign in with your work email',
-  WorkspaceError,
-)
-export const DomainNotVerified = errorKind(
-  'domain_not_verified',
-  () =>
-    'Invites open once an email domain of this workspace is verified: send the verification link from the Sign-in settings',
+  () => 'This Spyria already has a workspace: sign in, then create yours',
   WorkspaceError,
 )
 export const InvalidGitHubSettings = errorKind('invalid_github_settings', (reason: string) => reason, WorkspaceError)
@@ -191,8 +154,29 @@ export const InvalidSetupCommands = errorKind(
   () => 'Each setup command needs a command of at most 2,000 characters, with one command per repository',
   WorkspaceError,
 )
-export const JoinBySettingInvalid = errorKind(
-  'join_by_setting_invalid',
-  () => 'SPYRIA_JOIN_BY must be domain or invited-address',
+export const AccountSignInRequired = errorKind(
+  'account_sign_in_required',
+  () => "Your organization's sign-in opens only its workspace: sign in with your own account to do this",
+  WorkspaceError,
+)
+export const NoAccountSignIn = errorKind(
+  'no_account_sign_in',
+  () =>
+    'This Spyria has no sign-in of its own for members to use instead: an operator sets up Google, Microsoft or OIDC',
+  WorkspaceError,
+)
+export const SsoAddressMismatch = errorKind(
+  'sso_address_mismatch',
+  (email: string) => `Sign in as ${email} to confirm the provider: nothing was changed`,
+  WorkspaceError,
+)
+export const AccountBoundElsewhere = errorKind(
+  'account_bound_elsewhere',
+  (email: string) => `${email} already signs in with another account: sign in with that one`,
+  WorkspaceError,
+)
+export const InstanceBeingSetUp = errorKind(
+  'instance_being_set_up',
+  () => 'This Spyria is being set up: open the setup link to create its first workspace',
   WorkspaceError,
 )

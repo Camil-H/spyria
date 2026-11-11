@@ -32,7 +32,7 @@ import {
   type WorkspaceCommands,
   workspaceMutators,
 } from '@spyria/workspace/server'
-import { logOut, openSession, renew, signInWithPopup } from './auth.ts'
+import { logOut, openSession, renew, signInWithPopup, submitInPopup } from './auth.ts'
 
 const zeroCacheURL = new URL(import.meta.env.VITE_ZERO_URL ?? 'http://localhost:4848', location.origin).href
 const testStack =
@@ -179,6 +179,7 @@ export const createApp = async (
     fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
   const toolConnections = createHttpToolConnections(fetchAsMember)
   const githubCommands = createHttpGitHubCommands(postAsMember, fetchAsMember)
+  const ssoSettingsCommands = createHttpSsoSettingsCommands(postAsMember, fetchAsMember)
   const whenChatSynced = (chatId: ChatId) =>
     new Promise<void>((resolve) => {
       const isSynced = () => store.read().chats.some(({ id }) => id === chatId)
@@ -255,7 +256,17 @@ export const createApp = async (
         location.assign('/')
         return input.workspaceId
       },
-      ...createHttpSsoSettingsCommands(postAsMember, fetchAsMember),
+      ...ssoSettingsCommands,
+      confirmSsoSettings: async ({ workspaceId, form }) => {
+        const outcome = await submitInPopup(form, '/auth/workspace-sso')
+        if (outcome.status === 'signed_in') await store.renewSession(workspaceId)
+        return outcome
+      },
+      stopSso: async (input) => {
+        await ssoSettingsCommands.stopSso(input)
+        await store.signOut(input.workspaceId)
+        location.assign('/')
+      },
       ...githubCommands,
       createDevChat: async (input) => {
         const chatId = await githubCommands.createDevChat(input)

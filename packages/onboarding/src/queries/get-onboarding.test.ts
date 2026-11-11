@@ -4,11 +4,10 @@ import { getOnboarding } from './get-onboarding.ts'
 
 const snapshot = createMockSnapshot()
 const statesOf = (rows: Snapshot, memberId = alice) =>
-  Object.fromEntries(getOnboarding(acme, memberId, true)(rows).tasks.map(({ task, state }) => [task, state]))
+  Object.fromEntries(getOnboarding(acme, memberId)(rows).tasks.map(({ task, state }) => [task, state]))
 
 test('an admin of the mock workspace has a key and teammates, and nothing else done yet', () => {
   expect(statesOf(snapshot)).toEqual({
-    'verify-domain': 'open',
     'connect-github-app': 'open',
     'connect-runtime': 'open',
     'add-ai-key': 'done',
@@ -20,11 +19,10 @@ test('an admin of the mock workspace has a key and teammates, and nothing else d
 test('facts come from synced rows of the same workspace and member only', () => {
   const withOtherRows: Snapshot = {
     ...snapshot,
-    ssoDomains: [{ workspaceId: globex, domain: 'globex.test', isVerified: true }],
     githubApps: [{ workspaceId: globex }],
     githubConnections: [{ workspaceId: acme, memberId: bob }],
   }
-  expect(statesOf(withOtherRows)).toMatchObject({ 'verify-domain': 'open', 'connect-github-app': 'open' })
+  expect(statesOf(withOtherRows)).toMatchObject({ 'connect-github-app': 'open' })
   expect(statesOf({ ...withOtherRows, githubApps: [{ workspaceId: acme }] }, bob)['link-github-account']).toBe('done')
 })
 
@@ -58,24 +56,5 @@ test('workspace records are shared and member records are the member’s own', (
   const states = statesOf(recorded)
   expect(states).toMatchObject({ 'connect-github-app': 'done', 'connect-runtime': 'open' })
   expect(states['add-profile-picture']).toBeUndefined()
-  expect(getOnboarding(acme, alice, true)(recorded).tasksToRecord).toEqual(['add-ai-key', 'invite-members'])
-})
-
-test('a workspace joined by invited address owns no domain: no verify-domain task, and invites are not held back by it', () => {
-  const withoutTeammates: Snapshot = {
-    ...snapshot,
-    memberships: snapshot.memberships.filter((membership) => membership.memberId === alice),
-    invitations: [],
-  }
-  const joinedBy = (joinBy: 'domain' | 'invited_address') =>
-    statesOf({
-      ...withoutTeammates,
-      workspaces: withoutTeammates.workspaces.map((workspace) =>
-        workspace.id === acme ? { ...workspace, joinBy } : workspace,
-      ),
-    })
-  expect(joinedBy('domain')).toMatchObject({ 'verify-domain': 'open', 'invite-members': 'blocked' })
-  const invitedOnly = joinedBy('invited_address')
-  expect(invitedOnly['verify-domain']).toBeUndefined()
-  expect(invitedOnly['invite-members']).toBe('open')
+  expect(getOnboarding(acme, alice)(recorded).tasksToRecord).toEqual(['add-ai-key', 'invite-members'])
 })

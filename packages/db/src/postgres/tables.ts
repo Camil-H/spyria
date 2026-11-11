@@ -69,7 +69,6 @@ export const workspaces = table('workspaces', {
     .notNull()
     .references(() => users.id),
   localSessions: boolean().notNull().default(true),
-  joinBy: text().$type<'domain' | 'invited_address'>().notNull().default('domain'),
   aiProviderAllowList: jsonb().$type<AiProviderAllowList>(),
   devLoop: jsonb().$type<DevLoopSettings>(),
   setupCommands: jsonb().$type<readonly SetupCommand[]>(),
@@ -201,6 +200,18 @@ export const identities = table(
   ],
 )
 
+export const accountIdentities = table(
+  'account_identities',
+  {
+    issuer: text().notNull(),
+    subject: text().notNull(),
+    userId: text()
+      .notNull()
+      .references(() => users.id),
+  },
+  (table) => [primaryKey({ columns: [table.issuer, table.subject] }), index().on(table.userId)],
+)
+
 export const workspaceSso = table('workspace_sso', {
   workspaceId: text()
     .primaryKey()
@@ -237,31 +248,13 @@ export const githubWebhookDeliveries = table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.deliveryId] })],
 )
 
-export const ssoDomains = table(
-  'sso_domains',
-  {
-    workspaceId: text()
-      .notNull()
-      .references(() => workspaceSso.workspaceId, { onDelete: 'cascade' }),
-    domain: text().notNull(),
-    verifiedAt: instant(),
-    verificationEmail: text(),
-    verificationTokenHash: text(),
-    verificationExpiresAt: instant(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.workspaceId, table.domain] }),
-    index('sso_domains_domain_index').on(table.domain),
-    uniqueIndex('sso_domains_verification_token_hash_index').on(table.verificationTokenHash),
-  ],
-)
-
 export const sessions = table(
   'sessions',
   {
     ...tenant,
     id: text().notNull(),
     userId: text().notNull(),
+    openedThroughWorkspaceSso: boolean().notNull().default(false),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
   },

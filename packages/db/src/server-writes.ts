@@ -7,8 +7,6 @@ import {
   allowedModelsOf,
   type HarnessId,
   type ListedModel,
-  memberActor,
-  memberId,
   providersOfGatewayRefs,
   reachableModelsOf,
   storedActorOf,
@@ -139,50 +137,6 @@ export const appendWorkspaceEvent = (
     ],
   )
 }
-
-export const copyWorkspaceSignIn = async (
-  tx: Transaction,
-  { fromWorkspaceId, toWorkspaceId, userId }: { fromWorkspaceId: string; toWorkspaceId: string; userId: string },
-) => {
-  const [provider] = await onServer<{ preset: string; issuer: string; clientId: string }>(
-    tx,
-    `insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
-     select $2, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now() from workspace_sso where workspace_id = $1
-     returning preset, issuer, client_id as "clientId"`,
-    [fromWorkspaceId, toWorkspaceId],
-  )
-  if (!provider) return
-  await onServer(
-    tx,
-    `update workspaces set join_by = (select join_by from workspaces where workspace_id = $1) where workspace_id = $2`,
-    [fromWorkspaceId, toWorkspaceId],
-  )
-  const [copied] = await onServer<{ domain: string }>(
-    tx,
-    `insert into sso_domains (workspace_id, domain, verified_at)
-     select $2, domain, verified_at from sso_domains
-     where workspace_id = $1 and domain = (select split_part(email, '@', 2) from users where id = $3)
-     returning domain`,
-    [fromWorkspaceId, toWorkspaceId, userId],
-  )
-  await appendWorkspaceEvent(tx, {
-    workspaceId: toWorkspaceId,
-    type: 'sso.configured',
-    actor: memberActor(memberId(userId)),
-    payload: { ...provider, domain: copied?.domain },
-  })
-}
-
-export const awaitsDomainVerification = async (tx: Transaction, workspaceId: string) =>
-  (
-    await firstOnServer<{ awaits: boolean }>(
-      tx,
-      `select exists(select 1 from workspace_sso where workspace_id = $1)
-         and (select join_by from workspaces where workspace_id = $1) = 'domain'
-         and not exists(select 1 from sso_domains where workspace_id = $1 and verified_at is not null) as awaits`,
-      [workspaceId],
-    )
-  )?.awaits ?? false
 
 const traceContextOf = (delayMilliseconds: number) => {
   const carrier: Record<string, string> = {}
@@ -871,7 +825,6 @@ export const workspaceTablesInPurgeOrder = [
   'github_apps',
   'jobs',
   'model_calls',
-  'sso_domains',
   'workspace_sso',
   'usage_sync_marks',
   'workspace_events',
@@ -1007,7 +960,8 @@ export const purgeWorkspaceRows = async (tx: Transaction, workspaceId: string) =
     tx,
     `delete from users where id = any($1::text[])
        and not exists(select 1 from memberships where memberships.user_id = users.id)
-       and not exists(select 1 from workspaces where workspaces.created_by = users.id)`,
+       and not exists(select 1 from workspaces where workspaces.created_by = users.id)
+       and not exists(select 1 from account_identities where account_identities.user_id = users.id)`,
     [userIds],
   )
 }

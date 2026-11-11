@@ -57,8 +57,9 @@ mock_provider "azurerm" {
 variables {
   hostname                = "spyria.example.com"
   spyria_version          = "1.2.0"
-  smtp_url                = "smtps://user:pass@smtp.example.com:465"
-  mail_from               = "Spyria <spyria@example.com>"
+  oidc_issuer             = "https://login.example.com"
+  oidc_client_id          = "spyria"
+  oidc_client_secret      = "oidc-secret"
   dns_zone_name           = "example.com"
   dns_zone_resource_group = "dns"
 }
@@ -94,7 +95,7 @@ run "the_control_plane_runs_one_server_with_public_ingress_and_keeps_the_rest_in
     error_message = "The platform judges the server by its own liveness, not zero-cache's or the gateway's"
   }
   assert {
-    condition     = contains([for secret in azurerm_container_app.server.secret : secret.name], "spyria-smtp-url") && !contains(keys(azurerm_key_vault_secret.setting), "SPYRIA_GOOGLE_CLIENT_SECRET")
+    condition     = contains([for secret in azurerm_container_app.server.secret : secret.name], "spyria-oidc-client-secret") && !contains(keys(azurerm_key_vault_secret.setting), "SPYRIA_GOOGLE_CLIENT_SECRET")
     error_message = "Set secrets live in Key Vault; unset optional ones are left out"
   }
   assert {
@@ -163,8 +164,8 @@ run "the_digest_before_a_change" {
     source = "./"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret
@@ -198,8 +199,8 @@ run "every_app_carries_a_digest_of_its_secret_values_so_a_changed_secret_restart
     values = { result = "ABCDEFGHJKMNPQRS" }
   }
   variables {
-    smtp_url  = "smtps://user:rotated@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "rotated-secret"
   }
   assert {
     condition = alltrue([for app in [azurerm_container_app.server, azurerm_container_app.zero, azurerm_container_app.gateway] :
@@ -230,8 +231,8 @@ run "the_same_values_applied_again" {
     source = "../../azure/control-plane"
   }
   variables {
-    smtp_url  = "smtps://user:before@smtp.example.com:465"
-    mail_from = "Spyria <spyria@example.com>"
+    google_client_id     = "spyria.apps.googleusercontent.com"
+    google_client_secret = "before-secret"
   }
   override_resource {
     target = module.secrets.random_password.secret
