@@ -55,6 +55,12 @@ export const PairedAsWorkspaceHost = errorKind(
   () => 'This host was paired as a workspace host: restart spyria-host without --personal',
   HostRefused,
 )
+export const HarnessInstallFailed = errorKind('harness_install_failed', (reason: string) => reason, RuntimeError)
+export const AgentOutOfDate = errorKind(
+  'agent_out_of_date',
+  (protocolVersion: number) => `spyria-agent speaks protocol ${protocolVersion}`,
+  RuntimeError,
+)
 export const RuntimeNotFound = errorKind(
   'runtime_not_found',
   (runtimeId: string) => `Runtime ${runtimeId} was not found`,

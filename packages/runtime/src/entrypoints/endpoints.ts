@@ -1,6 +1,6 @@
 import type { Transaction } from '@rocicorp/zero'
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
-import { type RuntimeHostId, requirePermissionIn, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
+import { type MemberId, type RuntimeHostId, requirePermissionIn, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { HostDeclaration, HostSystem, RuntimeHost } from '../domain/runtime-host.ts'
@@ -9,6 +9,7 @@ import {
   createTransactingZeroTransactor,
   createZeroTransactor,
 } from '../integrations/zero-transactor.ts'
+import { addInstallHost } from '../operations/add-install-host.ts'
 import { addRuntimeHost } from '../operations/add-runtime-host.ts'
 import { claimRuntimeHost } from '../operations/claim-runtime-host.ts'
 import { markHostOffline } from '../operations/mark-host-offline.ts'
@@ -30,6 +31,11 @@ export const addRuntimeHostFromRequest = async (tx: Transaction, context: ZeroCo
     personal: (body as Record<string, unknown> | null)?.personal === true,
     now: Date.now(),
   })
+
+export const addInstallHostIn = (
+  tx: Transaction,
+  input: { workspaceId: WorkspaceId; memberId: MemberId; installHostToken: string },
+) => addInstallHost(dependenciesOf(tx), { ...input, id: crypto.randomUUID(), now: Date.now() })
 
 export const renewClaimCodeFromRequest = async (tx: Transaction, context: ZeroContext, hostId: string) =>
   renewClaimCode(dependenciesOf(tx), {

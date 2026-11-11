@@ -191,3 +191,8 @@ export const InvalidSetupCommands = errorKind(
   () => 'Each setup command needs a command of at most 2,000 characters, with one command per repository',
   WorkspaceError,
 )
+export const JoinBySettingInvalid = errorKind(
+  'join_by_setting_invalid',
+  () => 'SPYRIA_JOIN_BY must be domain or invited-address',
+  WorkspaceError,
+)

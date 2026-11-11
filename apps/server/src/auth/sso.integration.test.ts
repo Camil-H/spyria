@@ -1,10 +1,11 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, databaseDropTimeoutMilliseconds, databaseUrlOf } from '@spyria/db/testing'
+import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { workspacePermissions } from '@spyria/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
 import { startFakeSmtp, verificationLinkIn } from '../testing/fake-smtp.ts'
+import { runOperator } from '../testing/operator.ts'
 import {
   acme,
   alice,
@@ -121,17 +122,6 @@ const openLink = async (link: string, cookie = '') => {
   return { status: response.status, location: response.headers.get('location') }
 }
 const invalidLinkRedirect = { status: 302, location: `${testAuthSettings.appOrigin}/?domainVerification=invalid` }
-const runOperator = async (args: string[], environment: Record<string, string> = {}) => {
-  const operator = Bun.spawn([process.execPath, new URL('../operator-cli.ts', import.meta.url).pathname, ...args], {
-    stderr: 'pipe',
-    env: { ...process.env, DATABASE_URL: databaseUrlOf(testDatabase.name), ...environment },
-  })
-  return {
-    exitCode: await operator.exited,
-    stdout: await new Response(operator.stdout).text(),
-    stderr: await new Response(operator.stderr).text(),
-  }
-}
 const unverified = (domain: string) => ({ domain, isVerified: false, sentTo: null, expiresAt: null })
 const readSso = async (workspaceId: string, userId = alice) => {
   const response = await app.request('/api/sso-settings', {
@@ -195,7 +185,7 @@ const identitiesOf = async (subject: string) => [
 
 test('the operator sends a test message through the configured SMTP server, and asks for an address without one', async () => {
   const mailSettings = { SPYRIA_SMTP_URL: smtp.url, SPYRIA_MAIL_FROM: 'Spyria <spyria@test.local>' }
-  expect(await runOperator(['mail:test', '--to', 'ops@example.com'], mailSettings)).toEqual({
+  expect(await runOperator(testDatabase.name, ['mail:test', '--to', 'ops@example.com'], mailSettings)).toEqual({
     exitCode: 0,
     stdout: 'Sent a test message to ops@example.com\n',
     stderr: '',
@@ -203,7 +193,7 @@ test('the operator sends a test message through the configured SMTP server, and 
   expect(smtp.mails.findLast((mail) => mail.to.includes('ops@example.com'))?.text).toContain(
     'This test message shows that Spyria can send mail.',
   )
-  expect(await runOperator(['mail:test'], mailSettings)).toEqual({
+  expect(await runOperator(testDatabase.name, ['mail:test'], mailSettings)).toEqual({
     exitCode: 1,
     stdout: '',
     stderr: 'Usage: bun run operator mail:test --to <address>\n',
@@ -625,7 +615,13 @@ test('a domain claimed by another issuer is refused; the same issuer shares it a
       })
     ).status,
   ).toBe(200)
-  const verified = await runOperator(['sso:verify-domain', '--workspace', globex, '--domain', 'example.com'])
+  const verified = await runOperator(testDatabase.name, [
+    'sso:verify-domain',
+    '--workspace',
+    globex,
+    '--domain',
+    'example.com',
+  ])
   expect(verified).toEqual({ exitCode: 0, stdout: `example.com is verified for workspace ${globex}\n`, stderr: '' })
   const aliceSignIn = await signInThrough(acmeIdp, 'email=alice@example.com', {
     sub: 'alice-subject',

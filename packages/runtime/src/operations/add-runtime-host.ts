@@ -9,6 +9,7 @@ import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { claimLifetimeMilliseconds, hashSecret, newClaimCode } from '../domain/claim.ts'
 import { LocalSessionsOff, MachineAlreadyAdded } from '../domain/errors.ts'
 import { HostName } from '../domain/host-name.ts'
+import { waitingHostOf } from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
 type Input = {
@@ -28,22 +29,15 @@ export const addRuntimeHost = async (
   { id, memberId, permissions, name, personal, now, ...input }: Input,
 ) => {
   if (!personal) requirePermissionIn(permissions, 'runtimes.manage')
-  const host = {
-    ...input,
+  const host = waitingHostOf({
+    workspaceId: input.workspaceId,
     id: runtimeHostId(id),
     name: HostName(personal ? machineName : name),
-    status: 'waiting' as const,
     claimExpiresAt: now + claimLifetimeMilliseconds,
-    capacity: null,
-    runningRuntimes: 0,
-    hostVersion: null,
-    protocolVersion: 0,
-    lastSeenAt: null,
     createdBy: memberId,
     ownerId: personal ? memberId : null,
     createdAt: now,
-    removedAt: null,
-  }
+  })
   const code = newClaimCode()
   const claimCodeHash = await hashSecret(code)
   await transactor.run(async ({ runtimeHosts, workspaces }) => {
