@@ -113,7 +113,7 @@ Every rule of the architecture standard (`.agents/skills/architecture`) and what
 | V5b | Currency on money | same as V5a (`Money` in `@spyria/kernel`) |
 | V5c | One rounding policy | same as V5a |
 | G4b | Credentials from a secrets manager | members' LLM keys: the gateway (2.2.1); Spyria's own secrets (token secret, gateway admin password, `BIFROST_ENCRYPTION_KEY`): first deployment |
-| G4c | Credential rotation | same as G4b |
+| G4c | Credential rotation | `SPYRIA_SECRETS_KEY` rotates (see S7); the other credentials: same as G4b |
 | G5 | Flags through a contract | the first runtime flag |
 | S7 | Encryption and key custody | LLM keys are encrypted at rest by the gateway (AES-256-GCM from `BIFROST_ENCRYPTION_KEY`, write-only through its API, Spyria holds references); `SPYRIA_SECRETS_KEY` seals stored secrets (AES-GCM, key id in each sealed value) and derives the runtime API key, never stored; it rotates through `SPYRIA_PREVIOUS_SECRETS_KEYS` and `secrets:reseal` (`secret-box.test.ts`, `reseal-secrets.integration.test.ts`, `runtimes.integration.test.ts`); still open: TLS and disk encryption at first deployment |
 | — | No `TRUNCATE` on `events` | first deployment: the production role holds no `TRUNCATE` on `events` (the e2e reset needs it) |

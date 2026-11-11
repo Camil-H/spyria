@@ -96,7 +96,7 @@ The server applies it to every workspace when it restarts with the new settings,
    spyria compose exec server bun apps/server/src/operator-cli.ts secrets:reseal
    ```
 
-   It says how many secrets it sealed again, and how many running runtimes still use a previous key. A runtime moves to the new key the next time it starts, and an idle runtime stops after an hour; run the command again later until it reports none.
+   It says how many secrets it sealed again, and how many running runtimes still use a previous key. A runtime moves to the new key the next time it starts, and an idle runtime stops after an hour; run the command again later until it reports none. A runtime in use all along never goes idle: **Stop runtime** in its chat's runtime menu stops it, and the next prompt starts it on the new key.
 4. Remove `SPYRIA_PREVIOUS_SECRETS_KEYS` and run `spyria compose up -d server` again.
 
 Keep the previous key with the backups taken before step 3: the secrets in them are sealed with it. The cloud modules generate `SPYRIA_SECRETS_KEY` and do not take a previous key yet, so a cloud deployment cannot rotate it this way.
