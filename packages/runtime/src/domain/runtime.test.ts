@@ -17,6 +17,7 @@ import {
   removalStepOf,
   runtimeStatusOf,
   transitioned,
+  unknownRuntimeIdsOf,
 } from './runtime.ts'
 
 const minute = 60_000
@@ -115,6 +116,22 @@ test('the idle cutoffs the sweep locks by are the last activity times past which
   expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore - 1 }), now)).toBe('stopping')
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore }), now)).toBeUndefined()
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore - 1 }), now)).toBe('removing')
+})
+
+test('a runtime on a host is unknown when no runtime has its id or the one that has it was removed', () => {
+  const known = [
+    runtime({ id: 'runtime-running' as Runtime['id'] }),
+    runtime({ id: 'runtime-stopped' as Runtime['id'], state: 'stopped' }),
+    runtime({ id: 'runtime-removing' as Runtime['id'], state: 'removing' }),
+    runtime({ id: 'runtime-removed' as Runtime['id'], state: 'removed' }),
+  ]
+  expect(
+    unknownRuntimeIdsOf(
+      ['runtime-running', 'runtime-stopped', 'runtime-removing', 'runtime-removed', 'runtime-discarded'],
+      known,
+    ),
+  ).toEqual(['runtime-removed', 'runtime-discarded'])
+  expect(unknownRuntimeIdsOf([], known)).toEqual([])
 })
 
 test('a touch writes at most once a minute, for a running runtime only', () => {

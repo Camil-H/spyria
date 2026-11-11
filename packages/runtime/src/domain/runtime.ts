@@ -121,6 +121,11 @@ export const idleStepOf = (runtime: Runtime, now: number) => {
   return undefined
 }
 
+export const unknownRuntimeIdsOf = (runtimeIdsOnHost: readonly string[], known: readonly Runtime[]) => {
+  const liveIds = new Set(known.filter((runtime) => runtime.state !== 'removed').map((runtime) => runtime.id as string))
+  return runtimeIdsOnHost.filter((runtimeId) => !liveIds.has(runtimeId))
+}
+
 export const isTouchDue = (runtime: Runtime, now: number) =>
   runtime.state === 'running' && now - runtime.lastActiveAt >= minute
 

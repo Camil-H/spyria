@@ -48,13 +48,13 @@ docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filte
 docker volume rm spyria-host
 ```
 
-The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads, and runtimes do not remove them when they are removed. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads. If you add the machine to another workspace instead, its new host removes these runtimes and their volumes when it connects, as runtimes that workspace does not know. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
 
 ## Where a chat runs
 
 A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
 
-The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 7 days is removed.
+The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 7 days is removed. When a host connects, it also removes the runtimes Spyria no longer knows, such as one replaced while the host was offline, with their volumes. A package cache is removed with the last runtime on its host that uses it.
 
 When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
 
