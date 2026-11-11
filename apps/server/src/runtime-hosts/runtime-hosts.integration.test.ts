@@ -271,7 +271,7 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(online.capacity).toEqual({ ...hostSystem, cap: 6 })
   expect(online.running_runtimes).toBe(0)
   expect(online.host_version).toBe('test')
-  expect(online.protocol_version).toBe(2)
+  expect(online.protocol_version).toBe(3)
   expect(online.last_seen_at).toBeInstanceOf(Date)
 
   const expiring = await addedHost()
