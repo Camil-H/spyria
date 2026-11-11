@@ -38,7 +38,7 @@ const FailureRule = ({
         <option value="stop">stop and hand over to the owner</option>
       </select>
     </label>
-    {step.fixes > 0 && (
+    {step.fixes !== 0 && (
       <label className="flex items-center gap-2">
         up to
         <input
