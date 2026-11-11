@@ -12,11 +12,13 @@ import {
   alice,
   asMember,
   bob,
+  consentThroughSpyria,
   createFakeHosts,
   everyStoredText,
   globex,
   lee,
   mcpCall,
+  memberMcpUrl,
   openSharedTestApp,
   openZeroStore,
   rpcOf,
@@ -46,6 +48,7 @@ const register = async (name: string, secret?: string, url = sharedMcpUrl) => {
   const answer = await asMember(alice, 'POST', connectionsPath, {
     name,
     url,
+    signIn: 'shared',
     ...(secret && { secretHeader: { name: sharedSecretHeader, value: secret } }),
   })
   expect(answer.status).toBe(201)
@@ -53,8 +56,11 @@ const register = async (name: string, secret?: string, url = sharedMcpUrl) => {
 }
 const connectionRow = async (connectionId: string) =>
   (
-    await database.$client<{ name: string; gatewayName: string; headerName: string | null; allowedTools: string[] }[]>`
-      select name, gateway_name as "gatewayName", header_name as "headerName", tools, allowed_tools as "allowedTools"
+    await database.$client<
+      { name: string; gatewayName: string; signIn: string; setupId: string | null; headerName: string | null }[]
+    >`
+      select name, gateway_name as "gatewayName", sign_in as "signIn", setup_id as "setupId", header_name as "headerName",
+        tools, allowed_tools as "allowedTools"
       from workspace_connections where id = ${connectionId}`
   )[0]
 const gatewayClientNames = async () => (await llmGateway.toolServers()).map(({ name }) => name)
@@ -78,12 +84,16 @@ const removeKeysOf = async (userId: string) => {
 
 test('an admin registers a shared server with a secret header: Spyria lists its tools, the secret reaches the server only through the gateway, never a Spyria table or read, and the event is recorded', async () => {
   const secret = `crm-secret-${crypto.randomUUID()}`
-  expect((await asMember(bob, 'POST', connectionsPath, { name: 'Billing', url: sharedMcpUrl })).status).toBe(403)
+  expect(
+    (await asMember(bob, 'POST', connectionsPath, { name: 'Billing', url: sharedMcpUrl, signIn: 'shared' })).status,
+  ).toBe(403)
   const { connectionId } = await register('Billing', secret)
   const row = await connectionRow(connectionId)
   expect(row).toEqual({
     name: 'Billing',
     gatewayName: expect.stringMatching(/^billing_[0-9a-f]{6}$/),
+    signIn: 'shared',
+    setupId: null,
     headerName: sharedSecretHeader,
     tools: [
       { name: 'lookup', readOnly: true },
@@ -107,7 +117,7 @@ test('an admin registers a shared server with a secret header: Spyria lists its 
   expect((await workspaceEventsOf(database)).at(-1)).toEqual({
     type: 'connection.added',
     actorId: alice,
-    payload: { connectionId, name: 'Billing', url: sharedMcpUrl, hasSecret: true },
+    payload: { connectionId, name: 'Billing', url: sharedMcpUrl, signIn: 'shared', hasSecret: true },
   })
 })
 
@@ -116,6 +126,7 @@ test('a server that lists no tools is refused and left out of the gateway', asyn
   const answer = await asMember(alice, 'POST', connectionsPath, {
     name: 'Dead',
     url: 'http://host.docker.internal:9/mcp',
+    signIn: 'shared',
   })
   expect(answer).toMatchObject({ status: 400 })
   expect(JSON.parse(answer.body)).toEqual({
@@ -125,6 +136,90 @@ test('a server that lists no tools is refused and left out of the gateway', asyn
   expect((await gatewayClientNames()).filter((name) => name.startsWith('dead_'))).toEqual(
     before.filter((name) => name.startsWith('dead_')),
   )
+})
+test('an admin adds a server each member signs in to: their own sign-in lists its tools, then a member connects their own account and their agent calls it as them', async () => {
+  const added = await asMember(alice, 'POST', connectionsPath, { name: 'Docs', url: memberMcpUrl, signIn: 'member' })
+  expect(added.status).toBe(201)
+  const { connectionId, authorizeUrl } = JSON.parse(added.body)
+  const pending = await connectionRow(connectionId)
+  expect(pending).toMatchObject({ name: 'Docs', signIn: 'member', tools: [], allowedTools: [] })
+  expect(pending?.setupId).not.toBeNull()
+  const gatewayName = pending?.gatewayName ?? ''
+  expect(await gatewayClientNames()).toContain(gatewayName)
+
+  const consent = await consentThroughSpyria(authorizeUrl, `fake_mcp_user=admin-${crypto.randomUUID()}`)
+  expect(consent.status).toBe(200)
+  expect((await asMember(bob, 'POST', `${connectionsPath}/${connectionId}/finish`)).status).toBe(403)
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/finish`)).status).toBe(200)
+  expect(await connectionRow(connectionId)).toMatchObject({
+    setupId: null,
+    tools: [{ name: 'whoami', readOnly: true }],
+    allowedTools: ['whoami'],
+  })
+  expect((await workspaceEventsOf(database)).at(-1)).toEqual({
+    type: 'connection.added',
+    actorId: alice,
+    payload: { connectionId, name: 'Docs', url: memberMcpUrl, signIn: 'member', hasSecret: false },
+  })
+
+  const bobAccount = `bob-${crypto.randomUUID().slice(0, 8)}`
+  const started = await asMember(bob, 'POST', '/api/tool-connections/Docs/connect')
+  expect(started.status).toBe(200)
+  expect(
+    (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=${bobAccount}`)).page,
+  ).toContain('"connected":true')
+  expect(await asMember(bob, 'POST', '/api/tool-connections/Docs/refresh')).toEqual({
+    status: 200,
+    body: JSON.stringify({ status: 'Connected' }),
+  })
+  expect((await grantsOf(bob))[gatewayName]).toEqual(['whoami'])
+  await addLlmKey(bob, 'Mistral')
+  const host = await fakeHost('Member sign-in host')
+  const { token } = await runtimeTurn(host, bob, bob)
+  expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe(`you are ${bobAccount}`)
+
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)).status).toBe(200)
+  expect((await database.$client`select 1 from tool_connections where connection_id = ${connectionId}`).length).toBe(0)
+})
+
+test('a server each member signs in to is refused with a shared secret, keeps its address, and is removed with a reason when the admin never finished signing in', async () => {
+  const secretHeader = { name: sharedSecretHeader, value: 'secret' }
+  expect(
+    JSON.parse(
+      (
+        await asMember(alice, 'POST', connectionsPath, {
+          name: 'Docs',
+          url: memberMcpUrl,
+          signIn: 'member',
+          secretHeader,
+        })
+      ).body,
+    ),
+  ).toMatchObject({ error: 'invalid_connection' })
+  expect(
+    JSON.parse(
+      (await asMember(alice, 'POST', connectionsPath, { name: 'CRM', url: sharedMcpUrl, signIn: 'shared' })).body,
+    ),
+  ).toEqual({ error: 'duplicate_connection_name', message: 'The catalogue already has a server named CRM' })
+  expect(
+    JSON.parse((await asMember(alice, 'POST', crmPath('edit'), { name: 'fake', url: sharedMcpUrl })).body),
+  ).toMatchObject({ error: 'duplicate_connection_name' })
+  expect(
+    JSON.parse(
+      (await asMember(alice, 'POST', `${connectionsPath}/connection-fake/edit`, { name: 'fake', url: sharedMcpUrl }))
+        .body,
+    ),
+  ).toMatchObject({ error: 'invalid_connection' })
+
+  const added = await asMember(alice, 'POST', connectionsPath, { name: 'Wiki', url: memberMcpUrl, signIn: 'member' })
+  const { connectionId } = JSON.parse(added.body)
+  const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
+  expect(JSON.parse((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/finish`)).body)).toEqual({
+    error: 'connection_setup_failed',
+    message: 'Wiki listed no tools after your sign-in: add it again and finish signing in',
+  })
+  expect(await connectionRow(connectionId)).toBeUndefined()
+  expect(await gatewayClientNames()).not.toContain(gatewayName)
 })
 
 test('a member restricted to lookup is refused update on their own prompts, their key holds exactly lookup, and the key kept after the last LLM key is removed keeps the restriction', async () => {
