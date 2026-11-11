@@ -157,13 +157,20 @@ test("createWorkspace is refused to a session opened through its workspace's own
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
     values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
-  expect(
-    await resultOf(bobInAcme, 'workspace.createWorkspace', { workspaceId: acme, id: 'workspace-sso', name: 'Initech' }),
-  ).toEqual(
-    failedWith("Your organization's sign-in opens only its workspace: sign in with your own account to do this"),
-  )
-  expect(await database.query.workspaces.findFirst({ where: { workspaceId: 'workspace-sso' } })).toBeUndefined()
-  await database.$client`delete from workspace_sso where workspace_id = ${acme}`
+  try {
+    expect(
+      await resultOf(bobInAcme, 'workspace.createWorkspace', {
+        workspaceId: acme,
+        id: 'workspace-sso',
+        name: 'Initech',
+      }),
+    ).toEqual(
+      failedWith("Your organization's sign-in opens only its workspace: sign in with your own account to do this"),
+    )
+    expect(await database.query.workspaces.findFirst({ where: { workspaceId: 'workspace-sso' } })).toBeUndefined()
+  } finally {
+    await database.$client`delete from workspace_sso where workspace_id = ${acme}`
+  }
 })
 
 test.each([
