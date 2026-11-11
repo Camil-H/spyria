@@ -8,8 +8,8 @@ COPY pi/package.json pi/package-lock.json /usr/local/lib/spyria/pi/
 RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/pi && npm cache clean --force \
   && ln -s /usr/local/lib/spyria/pi/node_modules/.bin/pi /usr/local/bin/pi
 RUN userdel -r node 2>/dev/null; groupadd -g 10001 spyria && useradd -u 10001 -g 10001 -m -d /home/spyria spyria \
-  && mkdir -p /workspace/project /home/spyria/.claude /home/spyria/.codex /harnesses /var/cache/spyria \
-  && chown -R 10001:10001 /workspace /home/spyria /harnesses /var/cache/spyria
+  && mkdir -p /workspace/project /home/spyria/.claude /home/spyria/.codex /harnesses /var/cache/spyria /var/lib/spyria/snapshot \
+  && chown -R 10001:10001 /workspace /home/spyria /harnesses /var/cache/spyria /var/lib/spyria/snapshot
 COPY browser/package.json browser/package-lock.json browser/screenshot.mjs /usr/local/lib/spyria/browser/
 RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/browser && npm cache clean --force \
   && node /usr/local/lib/spyria/browser/screenshot.mjs install
