@@ -189,6 +189,10 @@ export const SignInScreen = ({
     setIsSigningIn(true)
     settle(await (isEmailFirst ? signInWithEmail(email) : signIn({})))
   }
+  const useAnotherAddress = () => {
+    setProviders(undefined)
+    setRefusal(undefined)
+  }
   const signInThrough = async (provider: SignInProvider) => {
     setIsSigningIn(true)
     settle(await signIn({ email, provider: provider.id }))
@@ -226,7 +230,7 @@ export const SignInScreen = ({
               {labelOf(provider)}
             </button>
           ))}
-          <button type="button" className={ghostButtonClass} onClick={() => setProviders(undefined)}>
+          <button type="button" className={ghostButtonClass} onClick={useAnotherAddress}>
             Use another address
           </button>
         </div>
