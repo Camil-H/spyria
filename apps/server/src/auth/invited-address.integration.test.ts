@@ -3,7 +3,7 @@ import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { rejectionOf, testAuthSettings, testSetupToken } from '../testing/testing.ts'
-import { createSecretBox } from './secret-box.ts'
+import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 import { applyConfiguredSignInApp, replaceSignInApp } from './sso.ts'
@@ -48,12 +48,12 @@ const idp = Bun.serve({
   },
 })
 const issuer = idp.url.origin
-const secretsKey = 'invited-integration-secrets-key-0123456789'
+const secretsKeyring = secretsKeyringOf('invited-integration-secrets-key-0123456789')
 const app = createApp({
   database,
   ...testAuthSettings,
   authMode: 'sso',
-  secretsKey,
+  secretsKeyring,
   joinBy: 'invited_address',
 })
 afterAll(async () => {
@@ -294,7 +294,7 @@ test('Setup SSO of a workspace joined by invited address shows the sign-in app o
 })
 
 test('an operator changes the sign-in app of every workspace joined by invited address at once, and members sign in through the new one', async () => {
-  const secretBox = createSecretBox(secretsKey)
+  const secretBox = createSecretBox(secretsKeyring)
   expect(
     String(await rejectionOf(replaceSignInApp(database, secretBox, { clientId: 'spyria-rotated', clientSecret: ' ' }))),
   ).toContain('A client id and a client secret are required')
@@ -320,7 +320,7 @@ test('an operator changes the sign-in app of every workspace joined by invited a
 })
 
 test('a sign-in app set in the settings replaces the stored one when the server starts, and nothing happens while they match', async () => {
-  const secretBox = createSecretBox(secretsKey)
+  const secretBox = createSecretBox(secretsKeyring)
   const ssoEventCount = async () =>
     (await database.$client`select 1 from workspace_events where type like 'sso.%'`).length
   const before = await ssoEventCount()

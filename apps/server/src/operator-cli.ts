@@ -4,7 +4,7 @@ import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
 import { createSmtpMailer } from './auth/mail.ts'
-import { createSecretBox } from './auth/secret-box.ts'
+import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { hasNoWorkspace, replaceSignInApp, verifyDomainByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
@@ -94,7 +94,7 @@ const commands: Record<string, () => Promise<void>> = {
       throw new Error(
         'Usage: bun run operator sso:sign-in-app --client-id <id>, with the client secret on standard input',
       )
-    const secretBox = createSecretBox(requiredEnvironment('SPYRIA_SECRETS_KEY'))
+    const secretBox = createSecretBox(secretsKeyringFrom(process.env))
     const count = await replaceSignInApp(database, secretBox, { clientId, clientSecret: await Bun.stdin.text() })
     console.log(`${count} workspace${count === 1 ? '' : 's'} now sign in through client ${clientId}`)
   },

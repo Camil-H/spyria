@@ -27,7 +27,7 @@ import {
   requestMutation,
   succeeded,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
   testSpyriaAgentImage,
   waitFor,
 } from '../testing/testing.ts'
@@ -35,7 +35,7 @@ import { createRuntimeHostGateway } from './gateway.ts'
 
 const { database } = await openSharedTestApp()
 const gateway = createRuntimeHostGateway({
-  runtimeKeySecret: testSecretsKey,
+  secretsKeyring: testSecretsKeyring,
   databases: () => [database],
   spyriaAgentImage: testSpyriaAgentImage,
 })

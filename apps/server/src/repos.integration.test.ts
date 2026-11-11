@@ -22,13 +22,13 @@ import {
   sessionTokenOf,
   startAgentStack,
   succeeded,
-  testSecretsKey,
+  testSecretsKeyring,
   waitFor,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
 const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKey)
+const secretBox = createSecretBox(testSecretsKeyring)
 const stack = await startAgentStack({
   llm: { model: 'openai/mistral/codestral-latest' },
   github: { api: createGitHubApi(fakeGitHub.urls), secretBox },
