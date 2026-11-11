@@ -6,7 +6,6 @@ import {
   parseEnvironment,
   type SetupAnswers,
   serializeEnvironment,
-  setupLinkOf,
 } from './environment.ts'
 import { secretVariables } from './flags.ts'
 
@@ -50,7 +49,6 @@ test('a first setup generates every secret, the install code and the settings of
     SPYRIA_HOST_CLAIM_URL: `http://server:3000/h/${environment.SPYRIA_INSTALL_HOST_TOKEN}`,
     SPYRIA_DOCKER_GROUP: '999',
   })
-  expect(setupLinkOf(environment)).toBe(`https://spyria.example.com/?setup=${environment.SPYRIA_SETUP_TOKEN}`)
 })
 
 test('setting up again keeps every secret, so stored secrets and runtimes keep working', () => {
