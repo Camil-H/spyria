@@ -477,3 +477,143 @@ test('a model switch whose request arrives during setup and whose body arrives a
   await socket.until(kindOf('turn_end'))
   expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-large, mode bypassPermissions).')
 })
+
+const preparedOf = async (call: ReturnType<typeof started>['call']) => {
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline; await Bun.sleep(10)) {
+    const { body } = await call('GET', '/api/prepare')
+    if (body.state !== 'preparing') return body
+  }
+  throw new Error('The runtime did not finish preparing')
+}
+
+const warmRepository = (name: string) => {
+  const runs = join(directory, `${name}-setup-runs`)
+  const url = bareRepository(name, {
+    '.gitignore': 'node_modules\n',
+    '.spyria/setup.sh': `echo run >> ${runs}\nmkdir -p node_modules && echo installed > node_modules/dependency\n`,
+  })
+  const pushCommit = (file: string) => {
+    const pushed = join(directory, `${name}-pushed-${file}`)
+    git(directory, 'clone', '-q', url, pushed)
+    writeFileSync(join(pushed, file), 'changed\n')
+    git(pushed, 'add', file)
+    git(pushed, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', `Add ${file}`)
+    git(pushed, 'push', '-q', 'origin', 'main')
+  }
+  return { url, runCount: () => (existsSync(runs) ? readFileSync(runs, 'utf8').split('\n').length - 1 : 0), pushCommit }
+}
+
+const warmAgent = (name: string, snapshot = join(directory, `${name}-no-snapshot`)) => {
+  const workspaceDirectory = join(directory, `${name}-workspace`)
+  const homeDirectory = join(directory, `${name}-home`)
+  mkdirSync(homeDirectory, { recursive: true })
+  return {
+    ...started({ workspaceDirectory, homeDirectory, snapshotDirectory: snapshot }),
+    workspaceDirectory,
+    homeDirectory,
+  }
+}
+
+const branchOf = (cwd: string) => Bun.spawnSync(['git', 'branch', '--show-current'], { cwd }).stdout.toString().trim()
+
+test('a runtime prepared with no chat clones the default branch and runs the setup command; the chat that takes it gets its working branch and starts without running setup again', async () => {
+  const { url, runCount } = warmRepository('warm')
+  const { call, open, create, workspaceDirectory } = warmAgent('warm')
+  expect((await call('GET', '/api/prepare')).status).toBe(404)
+  const repository = { url, token, setup_command: 'sh .spyria/setup.sh' }
+  expect(await call('POST', '/api/prepare', { repository })).toEqual({ status: 202, body: { state: 'preparing' } })
+  expect(await preparedOf(call)).toEqual({ state: 'ready', branch: 'main', isRestored: false, isSetUp: true })
+  expect((await call('POST', '/api/prepare', { repository })).body).toMatchObject({ state: 'ready' })
+  expect(runCount()).toBe(1)
+  expect(readFileSync(join(workspaceDirectory, '.git/config'), 'utf8')).not.toContain(token)
+
+  const { launch } = launchIn('warm', url)
+  const id = await create({ ...launch, workspace: { working_dir: workspaceDirectory } })
+  const socket = open(id)
+  await socket.until(kindOf('session_started'))
+  expect(socket.events.some(isSetup)).toBe(false)
+  expect(runCount()).toBe(1)
+  expect(branchOf(workspaceDirectory)).toBe('spyria/fix-totals-1a2b3c')
+  expect(readFileSync(join(workspaceDirectory, 'node_modules/dependency'), 'utf8')).toBe('installed\n')
+})
+
+test('a chat that takes a prepared runtime after its base moved checks out the latest base and runs setup again, as a step; a failed preparation setup runs again for the chat', async () => {
+  const moved = warmRepository('moved')
+  const movedAgent = warmAgent('moved')
+  await movedAgent.call('POST', '/api/prepare', {
+    repository: { url: moved.url, token, setup_command: 'sh .spyria/setup.sh' },
+  })
+  await preparedOf(movedAgent.call)
+  moved.pushCommit('latest.txt')
+  const { launch } = launchIn('moved', moved.url)
+  const socket = movedAgent.open(
+    await movedAgent.create({ ...launch, workspace: { working_dir: movedAgent.workspaceDirectory } }),
+  )
+  await socket.until(setupEnded)
+  expect(moved.runCount()).toBe(2)
+  expect(existsSync(join(movedAgent.workspaceDirectory, 'latest.txt'))).toBe(true)
+
+  const failing = bareRepository('failing-prepare', { '.spyria/setup.sh': 'echo broken\nexit 4\n' })
+  const failingAgent = warmAgent('failing-prepare')
+  await failingAgent.call('POST', '/api/prepare', {
+    repository: { url: failing, token, setup_command: 'sh .spyria/setup.sh' },
+  })
+  expect(await preparedOf(failingAgent.call)).toMatchObject({ state: 'ready', isSetUp: false })
+  const failingSocket = failingAgent.open(
+    await failingAgent.create({
+      ...launchIn('failing-prepare', failing).launch,
+      workspace: { working_dir: failingAgent.workspaceDirectory },
+    }),
+  )
+  await failingSocket.until(kindOf('setup_failed'))
+
+  const unreachable = warmAgent('unreachable')
+  await unreachable.call('POST', '/api/prepare', { repository: { url: `file://${directory}/missing.git`, token } })
+  expect(await preparedOf(unreachable.call)).toMatchObject({
+    state: 'failed',
+    failure: expect.stringContaining('The repository could not be cloned: '),
+  })
+})
+
+test('a new runtime with a complete snapshot of its repository restores it, then checks out the latest base and runs setup; an incomplete snapshot is ignored and the repository is cloned', async () => {
+  const { url, runCount, pushCommit } = warmRepository('restored')
+  const source = warmAgent('restored-source')
+  await source.call('POST', '/api/prepare', { repository: { url, token, setup_command: 'sh .spyria/setup.sh' } })
+  await preparedOf(source.call)
+  const snapshot = join(directory, 'restored-snapshot')
+  mkdirSync(join(snapshot, 'home'), { recursive: true })
+  git(directory, 'clone', '-q', '--no-hardlinks', source.workspaceDirectory, join(snapshot, 'project'))
+  git(join(snapshot, 'project'), 'remote', 'set-url', 'origin', url)
+  mkdirSync(join(snapshot, 'project/node_modules'))
+  writeFileSync(join(snapshot, 'project/node_modules/dependency'), 'from the snapshot\n')
+  writeFileSync(join(snapshot, 'home/installed-tool'), 'tool\n')
+  pushCommit('after-snapshot.txt')
+
+  const incomplete = warmAgent('incomplete', snapshot)
+  await incomplete.create({
+    ...launchIn('incomplete', url).launch,
+    workspace: { working_dir: incomplete.workspaceDirectory },
+  })
+  expect(existsSync(join(incomplete.homeDirectory, 'installed-tool'))).toBe(false)
+
+  writeFileSync(join(snapshot, 'complete'), '')
+  const chat = warmAgent('restored-chat', snapshot)
+  const socket = chat.open(
+    await chat.create({
+      ...launchIn('restored-chat', url).launch,
+      workspace: { working_dir: chat.workspaceDirectory },
+    }),
+  )
+  await socket.until(setupEnded)
+  expect(branchOf(chat.workspaceDirectory)).toBe('spyria/fix-totals-1a2b3c')
+  expect(existsSync(join(chat.workspaceDirectory, 'after-snapshot.txt'))).toBe(true)
+  expect(readFileSync(join(chat.homeDirectory, 'installed-tool'), 'utf8')).toBe('tool\n')
+  expect(readFileSync(join(chat.workspaceDirectory, 'node_modules/dependency'), 'utf8')).toBe('installed\n')
+
+  const warm = warmAgent('restored-warm', snapshot)
+  const runsBefore = runCount()
+  await warm.call('POST', '/api/prepare', { repository: { url, token, setup_command: 'sh .spyria/setup.sh' } })
+  expect(await preparedOf(warm.call)).toEqual({ state: 'ready', branch: 'main', isRestored: true, isSetUp: true })
+  expect(existsSync(join(warm.workspaceDirectory, 'after-snapshot.txt'))).toBe(true)
+  expect(runCount()).toBe(runsBefore + 1)
+})
