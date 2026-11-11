@@ -44,7 +44,6 @@ export default drizzleZeroConfig(tables, {
     threadReadMarkers: true,
     runtimeOrigins: true,
     llmCredentials: { workspaceId: true, id: true, userId: true, provider: true, last4: true },
-    ssoDomains: { workspaceId: true, domain: true, verifiedAt: true },
     githubApps: { workspaceId: true, updatedAt: true },
     githubConnections: { workspaceId: true, userId: true, needsReconnection: true },
     workspaceOnboarding: true,

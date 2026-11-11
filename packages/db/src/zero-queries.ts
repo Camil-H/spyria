@@ -234,7 +234,6 @@ export const queries = defineQueries({
   llmCredentials: defineQuery(({ ctx }) =>
     zql.llmCredentials.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
-  ssoDomains: defineQuery(({ ctx }) => zql.ssoDomains.where('workspaceId', ctx.workspaceId)),
   githubApps: defineQuery(({ ctx }) => zql.githubApps.where('workspaceId', ctx.workspaceId)),
   githubConnections: defineQuery(({ ctx }) =>
     zql.githubConnections.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
