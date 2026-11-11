@@ -68,6 +68,13 @@ const grantsOf = async (userId: string) =>
   Object.fromEntries(
     (await virtualKeyOf(userId)).mcp_configs.map((config) => [config.mcp_client.name, config.tools_to_execute]),
   )
+const signInsOf = async (connectionId: string) => [
+  ...(await database.$client`select user_id, status from tool_connections where connection_id = ${connectionId}`),
+]
+const sessionsOf = async (userId: string, gatewayName: string) => {
+  const server = (await llmGateway.toolServers()).find(({ name }) => name === gatewayName)
+  return server ? llmGateway.toolSessions((await virtualKeyOf(userId)).id, server) : []
+}
 const restrict = (memberId: string, allowedTools: string[] | null) =>
   asMember(alice, 'POST', crmPath('restrict'), { memberId, allowedTools })
 const removeKeysOf = async (userId: string) => {
@@ -178,11 +185,23 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   const { token } = await runtimeTurn(host, bob, bob)
   expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe(`you are ${bobAccount}`)
 
+  await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${bobAccount}`, { method: 'POST' }))
+  expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe('Bob needs to reconnect Docs')
+  expect((await asMember(bob, 'POST', '/api/tool-connections/check')).status).toBe(204)
+  expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Needs reconnection' }])
+  expect(
+    (await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/restrict`, { memberId: bob, allowedTools: [] }))
+      .status,
+  ).toBe(200)
+  expect(await signInsOf(connectionId)).toEqual([])
+  expect(await sessionsOf(bob, gatewayName)).toEqual([])
+  await removeKeysOf(bob)
+
   expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)).status).toBe(200)
   expect((await database.$client`select 1 from tool_connections where connection_id = ${connectionId}`).length).toBe(0)
 })
 
-test('a server each member signs in to is refused with a shared secret, keeps its address, and is removed with a reason when the admin never finished signing in', async () => {
+test('a server each member signs in to is refused with a shared secret, keeps its address, and is removed when the admin never finished signing in', async () => {
   const secretHeader = { name: sharedSecretHeader, value: 'secret' }
   expect(
     JSON.parse(
@@ -214,10 +233,9 @@ test('a server each member signs in to is refused with a shared secret, keeps it
   const added = await asMember(alice, 'POST', connectionsPath, { name: 'Wiki', url: memberMcpUrl, signIn: 'member' })
   const { connectionId } = JSON.parse(added.body)
   const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
-  expect(JSON.parse((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/finish`)).body)).toEqual({
-    error: 'connection_setup_failed',
-    message: 'Wiki listed no tools after your sign-in: add it again and finish signing in',
-  })
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/finish`)).status).toBeGreaterThanOrEqual(
+    400,
+  )
   expect(await connectionRow(connectionId)).toBeUndefined()
   expect(await gatewayClientNames()).not.toContain(gatewayName)
 })

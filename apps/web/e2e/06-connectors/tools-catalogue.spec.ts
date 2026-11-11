@@ -237,7 +237,7 @@ test.describe('Tools catalogue', () => {
     const docsRow = connectionsOf(bobPage).getByRole('listitem', { name: 'Docs' })
     await expect(docsRow).toContainText('Not connected')
     await inPopup(bobPage, () => docsRow.getByRole('button', { name: 'Connect Docs' }).click())
-    await expect(docsRow).not.toContainText('Not connected')
+    await expect(docsRow).toContainText('Connected')
     await expect(docsRow.getByRole('button', { name: 'Disconnect Docs' })).toBeVisible()
     await bobPage.context().close()
   })

@@ -87,7 +87,7 @@ test.describe('Tool connections', () => {
       await inPopup(page, () =>
         toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true }).click(),
       )
-      await expect(toolRowOf(page, 'Linear')).not.toContainText('Not connected')
+      await expect(toolRowOf(page, 'Linear')).toContainText('Connected')
       await expect(toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true })).toHaveCount(
         0,
       )
@@ -181,6 +181,6 @@ test.describe('Tool connections', () => {
     await expect(fakeRowOf(page)).toContainText('Needs reconnection')
     await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Reconnect fake' }).click())
     await expect(fakeRowOf(page)).not.toContainText('Needs reconnection')
-    await expect(fakeRowOf(page).getByRole('button', { name: 'Disconnect fake' })).toBeVisible()
+    await expect(fakeRowOf(page)).toContainText('Connected')
   })
 })
