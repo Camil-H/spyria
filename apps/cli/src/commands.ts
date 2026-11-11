@@ -11,7 +11,7 @@ import {
   spawnCompose,
 } from './compose.ts'
 import { type Environment, parseEnvironment, serializeEnvironment } from './environment.ts'
-import { askerOf, type Flags, hiddenAnswerTo } from './flags.ts'
+import type { Flags } from './flags.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
@@ -365,31 +365,4 @@ export const doctor = (folder: string) => {
 export const runOperator = (folder: string, operatorArguments: string[]) =>
   mustSucceed(runCompose(folder, operatorCommandOf(operatorArguments)), `spyria ${operatorArguments[0]}`)
 
-export const verifyDomain = (folder: string, flags: Flags) => {
-  const { workspace, domain } = flags.values
-  if (!workspace || !domain) throw new Error('Usage: spyria verify-domain --workspace <id> --domain <domain>')
-  runOperator(folder, ['sso:verify-domain', '--workspace', workspace, '--domain', domain])
-}
-
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])
-
-const typedOrPipedSecret = async () =>
-  process.stdin.isTTY ? hiddenAnswerTo('Client secret of the new sign-in app') : await Bun.stdin.text()
-
-export const changeSignInApp = async (
-  folder: string,
-  flags: Flags,
-  { readSecret = typedOrPipedSecret }: { readSecret?: () => Promise<string> } = {},
-) => {
-  const asker = askerOf(flags)
-  const clientId = asker.require('client-id', 'Client id of the new sign-in app')
-  const clientSecret = (await readSecret()).trim()
-  if (clientSecret === '') throw new Error('The client secret is required, typed or on standard input')
-  mustSucceed(
-    runCompose(folder, operatorCommandOf(['sso:sign-in-app', '--client-id', clientId]), clientSecret),
-    'spyria sign-in-app',
-  )
-}
-
-export const sendsTestMessage = (folder: string, address: string) =>
-  runCompose(folder, operatorCommandOf(['mail:test', '--to', address])) === 0

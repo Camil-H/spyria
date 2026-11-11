@@ -197,7 +197,7 @@ test('the purge erases every row of the workspace with its chat history, gateway
   ).toEqual([alice])
 })
 
-test('once the last workspace of the instance is purged, its domain is free and a workspace can be created again', async () => {
+test('once the last workspace of the instance is purged, its sign-in settings are gone, its creator keeps their account and a workspace can be created again', async () => {
   const instance = await createTestDatabase()
   let instanceWorker: ReturnType<typeof startJobWorker> | undefined
   try {
@@ -205,12 +205,13 @@ test('once the last workspace of the instance is purged, its domain is free and 
     await sql`truncate workspaces, users cascade`
     await sql`insert into users (id, email) values ('member-erin', 'erin@umbrella.com')`
     await sql`
+      insert into account_identities (issuer, subject, user_id) values ('https://accounts.google.com', 'erin', 'member-erin')`
+    await sql`
       insert into workspaces (workspace_id, name, created_by, created_at, deleted_at, purge_at)
       values ('umbrella', 'Umbrella', 'member-erin', now(), now(), now())`
     await sql`
       insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
       values ('umbrella', 'oidc', 'https://idp.umbrella.com', 'spyria', '', now())`
-    await sql`insert into sso_domains (workspace_id, domain, verified_at) values ('umbrella', 'umbrella.com', now())`
     await sql`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values ('umbrella', 'purge', 'workspace.purge', '{"stage":"release","actorId":"member-erin"}', now(), 0, 'queued')`
@@ -218,8 +219,9 @@ test('once the last workspace of the instance is purged, its domain is free and 
     instanceWorker = startJobWorker(instance.database, { pollIntervalMilliseconds: 5, cleanupPollMilliseconds: 20 })
     await waitFor(async () => (await sql`select 1 from workspaces`).length === 0)
     expect(await hasNoWorkspace(sql)).toBe(true)
-    expect(await sql`select 1 from sso_domains`).toHaveLength(0)
-    expect(await sql`select 1 from users`).toHaveLength(0)
+    expect(await sql`select 1 from workspace_sso`).toHaveLength(0)
+    expect((await sql`select id from users`).map(({ id }) => id)).toEqual(['member-erin'])
+    expect(await sql`select 1 from account_identities`).toHaveLength(1)
   } finally {
     await instanceWorker?.stop()
     await instance.drop()

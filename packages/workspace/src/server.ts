@@ -1,20 +1,18 @@
 export type { GitHubRepositories } from './contracts/repositories.ts'
 export {
+  AccountBoundElsewhere,
   BranchNotFound,
-  DomainClaimed,
-  DomainFixed,
   EmailNotConfirmed,
   GitHubNotConfigured,
   GitHubPermissionMissing,
   GitHubRefused,
   GitHubUnreachable,
+  InstanceBeingSetUp,
   InvalidGitHubSettings,
   InvalidSsoSettings,
-  MailNotConfigured,
-  MailNotSent,
-  PublicEmailDomain,
+  NoAccountSignIn,
   RepositoryNotGranted,
-  SignInAppFixed,
+  SsoAddressMismatch,
   SsoDiscoveryFailed,
   WorkspaceCreationClosed,
 } from './domain/errors.ts'
@@ -36,17 +34,16 @@ export {
 export { displayNameFrom, normalizedEmail } from './domain/invitation.ts'
 export { Name } from './domain/name.ts'
 export {
-  domainOfEmail,
+  type AccountProvider,
+  accountIssuerOf,
+  accountProvidersOf,
   entraObjectIdPattern,
   type InstanceAppPreset,
   type InstanceApps,
   instanceAppFor,
   instanceAppPresets,
-  isPublicEmailDomain,
-  type JoinBy,
-  joinByOf,
-  normalizedDomain,
-  type SsoDomainState,
+  microsoftPersonalAccountsTenantId,
+  type SignInScope,
   type SsoEmail,
   type SsoPreset,
   type SsoSettings,
@@ -71,8 +68,4 @@ export {
   githubRepositoriesPath,
   githubSettingsPath,
 } from './integrations/http-github.ts'
-export {
-  createHttpSsoSettingsCommands,
-  domainVerificationPath,
-  ssoSettingsPath,
-} from './integrations/http-sso-settings.ts'
+export { createHttpSsoSettingsCommands, ssoSettingsPath, ssoStopPath } from './integrations/http-sso-settings.ts'

@@ -25,7 +25,7 @@ import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.t
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf, taskReportOf } from '../domain/delegation.ts'
-import { movedCardLabelOf } from '../domain/dev-loop.ts'
+import { devLoopAuthorName, isDevLoopPrompt, movedCardLabelOf } from '../domain/dev-loop.ts'
 import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
@@ -330,6 +330,8 @@ export const getConversation =
       new Map(workspaceConnectionsIn(snapshot, workspaceId).map(({ gatewayName, name }) => [gatewayName, name])),
     )
     const chatMessageById = new Map(chatMessages.map((message) => [message.id, message]))
+    const authorNameOf = (message: MessageRow) =>
+      isDevLoopPrompt(message) ? devLoopAuthorName : memberName(message.authorId)
     const quoteOf = (quotedMessageId: MessageId | null): ConversationMessage['quote'] => {
       if (quotedMessageId === null) return null
       const quoted = chatMessageById.get(quotedMessageId)
@@ -337,7 +339,7 @@ export const getConversation =
         id: quotedMessageId,
         original: quoted
           ? {
-              authorName: memberName(quoted.authorId),
+              authorName: authorNameOf(quoted),
               body: quoted.deletedAt === null ? quoted.body : '',
               isDeleted: quoted.deletedAt !== null,
             }
@@ -351,14 +353,14 @@ export const getConversation =
       return {
         id: message.id,
         kind: message.kind,
-        authorName: memberName(message.authorId),
-        authorAvatar: (message.authorId && avatarByMemberId.get(message.authorId)) ?? null,
+        authorName: authorNameOf(message),
+        authorAvatar: (!isDevLoopPrompt(message) && message.authorId && avatarByMemberId.get(message.authorId)) || null,
         createdAt: new Date(message.createdAt),
         body: message.body,
         attachments: message.attachments,
         step,
         replyToId: message.replyToId,
-        canEdit: canPost && message.authorId === viewerId,
+        canEdit: canPost && message.authorId === viewerId && !isDevLoopPrompt(message),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,

@@ -22,19 +22,17 @@ const useRecordCompletedTasks = (workspaceId: WorkspaceId, tasksToRecord: readon
 export const SidebarChecklistLink = ({
   workspaceId,
   isCollapsed,
-  usesSingleSignOn,
 }: {
   workspaceId: WorkspaceId
   isCollapsed: boolean
-  usesSingleSignOn: boolean
 }) => {
-  const { tasks, tasksToRecord, domain } = useOnboarding(workspaceId, usesSingleSignOn)
+  const { tasks, tasksToRecord } = useOnboarding(workspaceId)
   useRecordCompletedTasks(workspaceId, tasksToRecord)
   const nextTaskId = useId()
   const doneCount = tasks.filter(isDoneView).length
   if (doneCount === tasks.length) return null
   const nextTask = nextTaskOf(tasks)
-  const nextText = nextTask && taskTextOf(nextTask, domain)
+  const nextText = nextTask && taskTextOf(nextTask)
   const target = `/w/${workspaceId}/${nextText ? `${nextText.page}${nextText.section ? `#${nextText.section}` : ''}` : 'settings'}`
   const label = `Get started: ${doneCount} of ${tasks.length} done`
   if (isCollapsed)

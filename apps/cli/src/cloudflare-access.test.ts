@@ -56,7 +56,6 @@ test('an Access SaaS app signs people at the domain in with a one-time PIN, thro
     issuer: 'https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-1',
     clientId: 'client-1',
     clientSecret: 'secret-1',
-    domain: 'example.com',
   })
   expect(posted.find(({ path }) => path.endsWith('/identity_providers'))?.body).toEqual({
     type: 'onetimepin',

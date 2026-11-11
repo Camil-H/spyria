@@ -1,4 +1,4 @@
-import { buttonClass, Dialog, fieldClass, labelClass } from '@spyria/ui'
+import { buttonClass, Dialog, ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { Name } from '../domain/name.ts'
 
@@ -18,10 +18,10 @@ export const NameDialog = ({
   onClose: () => void
 }) => {
   const [draftName, setDraftName] = useState(initialName)
+  const { errorMessage, isPending, run } = useGuardedAction()
   const confirm = async (event: SubmitEvent) => {
     event.preventDefault()
-    await submit(Name(draftName))
-    onClose()
+    if (await run(() => submit(Name(draftName)))) onClose()
   }
   return (
     <Dialog label={label} onClose={onClose}>
@@ -35,7 +35,8 @@ export const NameDialog = ({
             ref={selectOnMount}
           />
         </label>
-        <button type="submit" className={buttonClass} disabled={draftName.trim() === ''}>
+        <ErrorMessage message={errorMessage} />
+        <button type="submit" className={buttonClass} disabled={isPending || draftName.trim() === ''}>
           Confirm
         </button>
       </form>

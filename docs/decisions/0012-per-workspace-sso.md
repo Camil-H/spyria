@@ -1,21 +1,22 @@
-# 0012. Per-workspace SSO with emailed domain verification
+# 0012. Per-workspace SSO
+
+Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): workspaces own no email domain, people sign in with an account at any provider the instance offers, and a workspace may enforce its own provider.
 
 ## Context
 
-Spyria is self-hosted by organizations that already have an identity provider. A shared consumer sign-in (any Google account, magic links) would let anyone create an identity; one global provider per deployment would not fit organizations with their own.
+Spyria is self-hosted by organizations that already have an identity provider, and used by people and small teams who have none. A sign-in of Spyria's own (passwords, magic links, emailed codes) would make Spyria an identity provider; one global provider per deployment would not fit organizations with their own. Signing in with any account at a provider the instance offers (Google, Gmail included, Microsoft, any OIDC provider) is acceptable once access to a workspace is bounded by its Admin's invites and, for an organization, by its own provider ([decision 0029](0029-account-sign-in-and-workspace-sso.md)).
 
 ## Decision
 
-- Production sign-in is single sign-on only. Each workspace brings its own OpenID Connect provider: Google Workspace and Microsoft Entra as presets, or any OIDC issuer. Identities are matched on issuer and subject.
-- Sign-in is email-first: the address's domain routes to the provider of the workspace using that domain.
-- An empty deployment offers "Create a workspace" on its sign-in page; the first person to complete sign-in at the chosen provider with an address at the chosen domain becomes the Admin. After that, nobody can bring a new domain to the deployment.
-- A workspace has one domain and stays unverified until an Admin opens a single-use link emailed to an address at that domain. Before that, no invites and no sign-in routing beyond existing members.
+- Production sign-in is single sign-on only. A workspace may bring its own OpenID Connect provider: Google Workspace and Microsoft Entra as presets, or any OIDC issuer. Identities are matched on issuer and subject.
+- Sign-in is email-first: the address shows the providers of the instance and those of the workspaces where it is invited or a member; nothing routes by domain.
+- An empty deployment offers "Create a workspace" only through the operator's setup link. Once a workspace exists, anyone signed in with an account can create one.
+- A workspace owns no email domain. Invites open at once, to exact addresses.
 - Invites are an admin-kept allow-list; no invite email is sent.
 - Dex is for development and tests only; production refuses it.
 
 ## Consequences
 
-- Access follows the organization's own identity provider, including leavers.
-- A deployment needs SMTP for verification (or an operator command to verify a domain directly).
-- One organization per deployment in practice; a second organization's domain cannot join an existing instance.
-- An instance can instead join people by invited address, without a domain ([decision 0027](0027-join-by-invited-address.md)).
+- An organization that enforces its own provider keeps access following that provider, including leavers.
+- A deployment needs no mail.
+- Several organizations can share one deployment: none claims a domain.

@@ -87,14 +87,13 @@ export type SetupAnswers = {
   version: string
   images: string
   origin: string
-  joinBy: 'domain' | 'invited-address'
   tunnelToken?: string
   runsHost: boolean
   dockerGroup: string
-  smtp?: { url: string; from: string }
   instanceApps: {
     google?: { clientId: string; clientSecret: string }
     microsoft?: { clientId: string; clientSecret: string }
+    oidc?: { issuer: string; clientId: string; clientSecret: string }
   }
   localPort: number
   pairingCode?: string
@@ -136,7 +135,6 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_VERSION: answers.version,
     SPYRIA_IMAGES: answers.images,
     SPYRIA_APP_ORIGIN: answers.origin,
-    SPYRIA_JOIN_BY: answers.joinBy,
     SPYRIA_LOCAL_PORT: String(answers.localPort),
     ...secrets,
     ...hostPairingOf(answers, existing),
@@ -144,11 +142,12 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_TRUSTED_PROXY: answers.tunnelToken ? 'cloudflare' : '',
     CLOUDFLARE_TUNNEL_TOKEN: answers.tunnelToken ?? '',
     SPYRIA_DOCKER_GROUP: answers.runsHost ? answers.dockerGroup : '',
-    SPYRIA_SMTP_URL: answers.smtp?.url ?? '',
-    SPYRIA_MAIL_FROM: answers.smtp?.from ?? '',
     SPYRIA_GOOGLE_CLIENT_ID: answers.instanceApps.google?.clientId ?? '',
     SPYRIA_GOOGLE_CLIENT_SECRET: answers.instanceApps.google?.clientSecret ?? '',
     SPYRIA_MICROSOFT_CLIENT_ID: answers.instanceApps.microsoft?.clientId ?? '',
     SPYRIA_MICROSOFT_CLIENT_SECRET: answers.instanceApps.microsoft?.clientSecret ?? '',
+    SPYRIA_OIDC_ISSUER: answers.instanceApps.oidc?.issuer ?? '',
+    SPYRIA_OIDC_CLIENT_ID: answers.instanceApps.oidc?.clientId ?? '',
+    SPYRIA_OIDC_CLIENT_SECRET: answers.instanceApps.oidc?.clientSecret ?? '',
   })
 }

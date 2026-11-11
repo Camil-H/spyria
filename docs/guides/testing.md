@@ -123,7 +123,7 @@ Tests start and own their containers; they never touch the dev stack.
 
 An e2e run starts by stopping (SIGTERM) every process listening on its ports: the servers and apps above and every worker's zero-cache port. `lsof` lists them in batches of 50 ports, since it refuses more than 100 at once; when it cannot list them, nothing is stopped. The run then checks that every port is free and refuses to start, naming the processes holding a port, if one is not. Each server it starts must be the one answering on its port, so a leftover server from an earlier run can never stand in for it. Every signal the setup and teardown send is printed with its target processes (`[test stack] SIGTERM to …`), and both test servers log `test_server.started` with their parent process chain, `test_server.signal` for any SIGTERM, SIGINT or SIGHUP they receive, `test_server.listen_failed` when their port is taken, and `test_server.exit` (`sso_test_server.*` for the SSO server).
 
-Playwright runs 3 workers by default; `WORKERS=<n>` changes it. The sign-in files `01-access/sso.spec.ts` and `01-access/team.spec.ts` run first, each as its own project on one worker (`sign-in-sso`, then `sign-in-team`), because two provider sign-ins running at the same time make each other fail; the rest of the suite follows on all workers.
+Playwright runs 3 workers by default; `WORKERS=<n>` changes it. The files that sign in through a provider run one at a time in their own project ([sign-in tests](#sign-in-tests)), because two provider sign-ins running at the same time make each other fail.
 
 ### Cleanup
 
@@ -138,7 +138,6 @@ No test calls a real LLM, identity provider, GitHub or npm. The fakes live in `a
 | `fake-llm.ts` | Model providers. Each chat follows a script of model answers (text, tool calls, delays), served through the real relay and gateway. |
 | `fake-mcp.ts` | An OAuth-protected MCP server, plus a shared tool server (`crm`) authenticated by a header secret. |
 | `fake-github.ts` | GitHub's API, App installations and repositories; it enforces the token permissions GitHub would. |
-| `fake-smtp.ts` | The SMTP server: captures mail so a test can follow the verification link. |
 | `harnesses.ts` | The npm registry (`startFakeNpmRegistry`) with stub harness packages, and the `spyria-test-harnesses` volume. |
 | `spyria-agent-relay.ts` | A runtime host: fake runtimes driving a real spyria-agent process. |
 | `telemetry.ts` | An OTLP collector, to check what the server exports. |

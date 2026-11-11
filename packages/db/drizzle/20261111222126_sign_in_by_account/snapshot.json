@@ -1,9 +1,15 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7dce225e-6e47-470f-bc35-8fd3ebd28c0c",
+  "id": "49424a6b-c1a1-45db-914b-210aa391ccde",
   "prevIds": ["709b6235-8f40-412c-a4fc-4a41cafaaa9e"],
   "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "account_identities",
+      "entityType": "tables",
+      "schema": "public"
+    },
     {
       "isRlsEnabled": false,
       "name": "audit_settings",
@@ -210,12 +216,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "sso_domains",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "thread_read_markers",
       "entityType": "tables",
       "schema": "public"
@@ -291,6 +291,45 @@
       "name": "workspaces",
       "entityType": "tables",
       "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "issuer",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_identities"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "subject",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_identities"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_identities"
     },
     {
       "type": "text",
@@ -3712,6 +3751,19 @@
       "table": "sessions"
     },
     {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "opened_through_workspace_sso",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -3788,84 +3840,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "domain",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "verified_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "verification_email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "verification_token_hash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "verification_expires_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sso_domains"
     },
     {
       "type": "text",
@@ -4122,7 +4096,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "connection_id",
+      "name": "tool",
       "entityType": "columns",
       "schema": "public",
       "table": "tool_connections"
@@ -4136,6 +4110,19 @@
       "generated": null,
       "identity": null,
       "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_connections"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
       "entityType": "columns",
       "schema": "public",
       "table": "tool_connections"
@@ -4357,32 +4344,6 @@
       "generated": null,
       "identity": null,
       "name": "url",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_connections"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sign_in",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_connections"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "setup_id",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_connections"
@@ -4804,19 +4765,6 @@
       "table": "workspaces"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'domain'",
-      "generated": null,
-      "identity": null,
-      "name": "join_by",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspaces"
-    },
-    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -4893,6 +4841,27 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspaces"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "account_identities_user_id_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "account_identities"
     },
     {
       "nameExplicit": false,
@@ -5668,48 +5637,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "domain",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "sso_domains_domain_index",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "verification_token_hash",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "sso_domains_verification_token_hash_index",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "workspace_id",
           "isExpression": false,
           "asc": true,
@@ -5768,34 +5695,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "tool_calls"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "connection_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "tool_connections_workspace_id_connection_id_index",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "tool_connections"
     },
     {
       "nameExplicit": true,
@@ -5922,6 +5821,19 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "workspace_roles"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "account_identities_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "account_identities"
     },
     {
       "nameExplicit": false,
@@ -6679,19 +6591,6 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["workspace_id"],
-      "schemaTo": "public",
-      "tableTo": "workspace_sso",
-      "columnsTo": ["workspace_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "sso_domains_workspace_id_workspace_sso_workspace_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
-      "nameExplicit": false,
       "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
@@ -6741,19 +6640,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "tool_calls"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["workspace_id", "connection_id"],
-      "schemaTo": "public",
-      "tableTo": "workspace_connections",
-      "columnsTo": ["workspace_id", "id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "tool_connections_A08BI1hSPkpX_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "tool_connections"
     },
     {
       "nameExplicit": false,
@@ -6897,6 +6783,14 @@
       "entityType": "fks",
       "schema": "public",
       "table": "workspaces"
+    },
+    {
+      "columns": ["issuer", "subject"],
+      "nameExplicit": false,
+      "name": "account_identities_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "account_identities"
     },
     {
       "columns": ["workspace_id", "chat_id", "url"],
@@ -7147,14 +7041,6 @@
       "table": "sources"
     },
     {
-      "columns": ["workspace_id", "domain"],
-      "nameExplicit": false,
-      "name": "sso_domains_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "sso_domains"
-    },
-    {
       "columns": ["workspace_id", "user_id", "thread_root_id"],
       "nameExplicit": false,
       "name": "thread_read_markers_pkey",
@@ -7171,7 +7057,7 @@
       "table": "tool_calls"
     },
     {
-      "columns": ["workspace_id", "user_id", "connection_id"],
+      "columns": ["workspace_id", "user_id", "tool"],
       "nameExplicit": false,
       "name": "tool_connections_pkey",
       "entityType": "pks",
@@ -7312,12 +7198,12 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["workspace_id", "name"],
+      "columns": ["workspace_id", "user_id", "position"],
       "nullsNotDistinct": false,
-      "name": "workspace_connections_workspace_id_name_unique",
+      "name": "tool_connections_workspace_id_user_id_position_unique",
       "entityType": "uniques",
       "schema": "public",
-      "table": "workspace_connections"
+      "table": "tool_connections"
     },
     {
       "nameExplicit": false,

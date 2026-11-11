@@ -1,5 +1,5 @@
 export type AzRunner = (azArguments: string[]) => { exitCode: number; output: string }
-type Audience = 'tenant' | 'organizations'
+type Audience = 'tenant' | 'any-account'
 
 export const runAz: AzRunner = (azArguments) => {
   const result = Bun.spawnSync(['az', ...azArguments], { stdout: 'pipe', stderr: 'pipe' })
@@ -37,7 +37,9 @@ export const registerEntraApp = (
   if (registeredClientId) return { name, tenantId, clientId: registeredClientId, clientSecret: undefined }
   const clientId = run([
     ...['ad', 'app', 'create', '--display-name', name],
-    ...['--sign-in-audience', audience === 'tenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs'],
+    ...(audience === 'tenant'
+      ? ['--sign-in-audience', 'AzureADMyOrg']
+      : ['--sign-in-audience', 'AzureADandPersonalMicrosoftAccount', '--requested-access-token-version', '2']),
     ...['--web-redirect-uris', `${origin}/auth/callback`, '--query', 'appId', '-o', 'tsv'],
   ])
   run(['ad', 'sp', 'create', '--id', clientId, '--query', 'id', '-o', 'tsv'])

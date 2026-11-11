@@ -1,23 +1,13 @@
 import type { CloudflareCall } from './cloudflare.ts'
 import { createAccessOidcApp, routeAdminMail } from './cloudflare-access.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
-import type { Environment } from './environment.ts'
-import { type askerOf, secretVariables } from './flags.ts'
+import type { askerOf } from './flags.ts'
 import { registerOktaApp } from './okta.ts'
-import { resendApi, setUpResend } from './resend.ts'
 
 export type Asker = ReturnType<typeof askerOf> & { isUnattended: boolean }
 type SetupContext = { asker: Asker; hostname: string; origin: string; cloudflare?: CloudflareCall }
 
 const providers = ['cloudflare-access', 'microsoft', 'okta', 'google', 'other', 'skip'] as const
-const smtpUrlOf = (asker: Asker, saved: string) => {
-  const question = 'SMTP URL, for example smtps://user:pass@smtp.example.com:465'
-  const url = asker.secret('smtp-url', saved ? `${question} (empty keeps the saved one)` : question, saved)
-  if (url === '') throw new Error(`${secretVariables['smtp-url']} is required`)
-  return url
-}
-
-const mailChoices = ['skip', 'smtp', 'resend', 'keep'] as const
 export const removal = '-'
 
 const cloudflareOf = ({ cloudflare }: SetupContext, what: string) => {
@@ -44,13 +34,13 @@ const formLines = (preset: string, fields: Record<string, string>) => [
 
 export const firstWorkspaceProviderOf = async (
   context: SetupContext,
-  { joinBy, az = runAz }: { joinBy: 'domain' | 'invited-address'; az?: AzRunner },
+  { az = runAz }: { az?: AzRunner } = {},
 ): Promise<string[]> => {
   const { asker, origin, hostname } = context
   const provider = asker.choose(
     'provider',
-    'Provider people sign in with in the first workspace',
-    providers.filter((choice) => choice !== 'cloudflare-access' || joinBy === 'domain'),
+    'Own sign-in provider of the first workspace, to set up now (skip to sign in with the apps above, or choose it in Create a workspace)',
+    providers,
     'skip',
   )
   if (provider === 'skip') return []
@@ -58,13 +48,12 @@ export const firstWorkspaceProviderOf = async (
     const cloudflare = cloudflareOf(context, 'Cloudflare Access')
     const ownerEmail = asker.require(
       'owner-email',
-      'Your own email address, where admin@ your domain forwards (sign-in PINs and the verification link)',
+      'Your own email address, where admin@ your domain forwards its sign-in PINs',
     )
     const access = await createAccessOidcApp(cloudflare, { hostname, origin, name: `Spyria ${hostname}` })
     const mail = await routeAdminMail(cloudflare, { hostname, ownerEmail })
     return [
       ...formLines('Other OIDC', {
-        'Email domain': access.domain,
         Issuer: access.issuer,
         'Client id': access.clientId,
         'Client secret': access.clientSecret,
@@ -109,45 +98,4 @@ export const firstWorkspaceProviderOf = async (
   return [
     `Register a client at your OIDC provider with the redirect URI ${origin}/auth/callback, then choose Other OIDC in Create a workspace.`,
   ]
-}
-
-export const mailOf = async (
-  context: SetupContext,
-  { existing, resendApiUrl = resendApi }: { existing: Environment; resendApiUrl?: string },
-) => {
-  const { asker, hostname } = context
-  const hasMail = Boolean(existing.SPYRIA_SMTP_URL)
-  const choice = asker.choose(
-    'mail',
-    'Mail for domain verification links: none, an SMTP URL, or Resend with its DNS records written in Cloudflare',
-    mailChoices.filter((option) => option !== 'keep' || hasMail),
-    asker.given('resend-key') ? 'resend' : asker.given('smtp-url') ? 'smtp' : hasMail ? 'keep' : 'skip',
-  )
-  if (choice === 'skip') return undefined
-  if (choice === 'keep') return { url: existing.SPYRIA_SMTP_URL ?? '', from: existing.SPYRIA_MAIL_FROM ?? '' }
-  if (choice === 'resend') {
-    const apiKey = asker.requireSecret(
-      'resend-key',
-      'Resend API key with full access (used now; a sending-only key is stored)',
-    )
-    const resend = await setUpResend({
-      apiKey,
-      hostname,
-      cloudflare: cloudflareOf(context, 'Resend'),
-      api: resendApiUrl,
-    })
-    return {
-      url: resend.smtpUrl,
-      from: asker.ask('mail-from', 'Sender', resend.mailFrom),
-      retireReplacedKeys: resend.retireReplacedKeys,
-    }
-  }
-  return {
-    url: smtpUrlOf(asker, existing.SPYRIA_SMTP_URL ?? ''),
-    from: asker.require(
-      'mail-from',
-      'Sender, for example Spyria <spyria@example.com>',
-      existing.SPYRIA_MAIL_FROM ?? '',
-    ),
-  }
 }
