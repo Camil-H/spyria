@@ -296,6 +296,8 @@ export const createAuthRoutes = ({
   const sessionIdOf = (context: Context, workspaceId: string) =>
     getCookie(context, `${sessionCookiePrefix}${workspaceId}`) ?? ''
   const isSameOrigin = (context: Context) => context.req.header('origin') === appOrigin
+  const isStartedHere = (context: Context) =>
+    ['same-origin', 'none', undefined].includes(context.req.header('sec-fetch-site'))
 
   return new Hono()
     .use('/:action{renew|logout|workspaces}', async (context, next) => {
@@ -359,6 +361,7 @@ export const createAuthRoutes = ({
       return redirectToProvider(context, await workspaceClientOf(pendingSso.provider), { pendingSso }, pendingSso.email)
     })
     .get('/login', rateLimited('emailRouting'), async (context) => {
+      if (!isStartedHere(context)) return context.json({ error: 'forbidden' }, 403)
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')
       if (scope.testUserId)
