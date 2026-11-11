@@ -575,6 +575,21 @@ test("a workspace's own provider opens only that workspace, and its session can 
   expect(await userIdsOf('theo.new@example.com')).toEqual([])
 })
 
+test('a session keeps how it was opened: once its workspace starts or stops enforcing SSO, a session left behind by a race stops working', async () => {
+  await addWorkspace('vandelay')
+  const throughAccount = await sessionCookieOf('vandelay', alice)
+  const accountToken = await sessionTokenOf(database, 'vandelay', alice)
+  await enforceSso('vandelay', hooliIdp)
+  expect(await renewStatus('vandelay', throughAccount)).toBe(401)
+  expect((await queryWith(accountToken)).status).toBe(401)
+  const throughSso = await sessionCookieOf('vandelay', alice, 'workspace sso')
+  const ssoToken = await sessionTokenOf(database, 'vandelay', alice)
+  expect((await queryWith(ssoToken)).status).toBe(200)
+  await database.$client`delete from workspace_sso where workspace_id = 'vandelay'`
+  expect(await renewStatus('vandelay', throughSso)).toBe(401)
+  expect((await openSessionWith(ssoToken, acme)).status).toBe(401)
+})
+
 test('the invites of a workspace with its own SSO are accepted only through its provider, at the invited address', async () => {
   await invite('hooli', 'quinn@example.com')
   const throughAccount = await signInThrough(accountIdp, 'provider=oidc', {

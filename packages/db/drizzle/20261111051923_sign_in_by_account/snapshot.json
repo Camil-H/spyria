@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "b6ca40b3-a1e3-4818-8114-300bf43445a2",
+  "id": "b0259e6b-499b-416b-b189-4cc527d1d2a4",
   "prevIds": ["d859d69b-809a-474f-9fdc-23980e396a7a"],
   "ddl": [
     {
@@ -3733,6 +3733,19 @@
       "generated": null,
       "identity": null,
       "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "opened_through_workspace_sso",
       "entityType": "columns",
       "schema": "public",
       "table": "sessions"

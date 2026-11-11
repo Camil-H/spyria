@@ -7,6 +7,9 @@ CREATE TABLE "account_identities" (
 --> statement-breakpoint
 DROP TABLE "sso_domains";--> statement-breakpoint
 DROP FUNCTION refuse_domain_of_invited_workspace();--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "opened_through_workspace_sso" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE "sessions" SET "opened_through_workspace_sso" = true
+  WHERE "workspace_id" IN (SELECT "workspace_id" FROM "workspace_sso");--> statement-breakpoint
 DROP TRIGGER workspaces_join_by_fixed ON "workspaces";--> statement-breakpoint
 DROP FUNCTION refuse_join_by_change();--> statement-breakpoint
 ALTER TABLE "workspaces" DROP COLUMN "join_by";--> statement-breakpoint
