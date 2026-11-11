@@ -43,11 +43,9 @@ test('a budget lets its count through, then refuses with the seconds until one m
 
 test('addresses, workspaces, members and limit names have separate buckets', () => {
   const limit = createRateLimiter(rateBudgets, clock().now)
-  for (let request = 0; request < 3; request++) limit('verificationEmails', { workspaceId: 'acme', userId: 'alice' })
-  expect(refusalOf(() => limit('verificationEmails', { workspaceId: 'acme', userId: 'bob' }))).toBeInstanceOf(
-    RateLimited,
-  )
-  expect(refusalOf(() => limit('verificationEmails', { workspaceId: 'globex', userId: 'alice' }))).toBeUndefined()
+  for (let request = 0; request < 50; request++) limit('invites', { workspaceId: 'acme', userId: 'alice' })
+  expect(refusalOf(() => limit('invites', { workspaceId: 'acme', userId: 'bob' }))).toBeInstanceOf(RateLimited)
+  expect(refusalOf(() => limit('invites', { workspaceId: 'globex', userId: 'alice' }))).toBeUndefined()
   for (let request = 0; request < 10; request++) limit('runtimeCreation', { workspaceId: 'acme', userId: 'alice' })
   expect(refusalOf(() => limit('runtimeCreation', { workspaceId: 'acme', userId: 'bob' }))).toBeUndefined()
   expect(refusalOf(() => limit('runtimeCreation', { workspaceId: 'globex', userId: 'alice' }))).toBeUndefined()
@@ -106,7 +104,7 @@ test('a spray of addresses keeps at most 10,000 buckets, sweeps at most every 10
   const time = clock()
   const limit = createRateLimiter(rateBudgets, time.now)
   for (let request = 0; request < 50_000; request++) {
-    limit('firstWorkspace', { address: `2001:db8::${request.toString(16)}` })
+    limit('workspaceCreation', { address: `2001:db8::${request.toString(16)}` })
     time.advance(1)
   }
   expect(limit.bucketCount()).toBe(10_000)
@@ -127,7 +125,7 @@ test('the least recently used bucket is evicted first, so a member in use keeps 
   const limit = createRateLimiter({ ...rateBudgets, prompts: { ...rateBudgets.prompts, count: 2 } }, time.now)
   limit('prompts', { workspaceId: 'acme', userId: 'alice' })
   for (let request = 0; request < 18_000; request++) {
-    limit('firstWorkspace', { address: `198.51.${request >> 8}.${request & 255}` })
+    limit('workspaceCreation', { address: `198.51.${request >> 8}.${request & 255}` })
     if (request === 9_000) limit('prompts', { workspaceId: 'acme', userId: 'alice' })
   }
   expect(limit.bucketCount()).toBe(10_000)

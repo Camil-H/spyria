@@ -24,6 +24,7 @@ import {
 } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import { agentNotices, hasOutlivedWait, notReadyNoticeOf } from '../domain/agent-events.ts'
+import { devLoopAuthorName, isDevLoopPrompt } from '../domain/dev-loop.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { modelNotAllowedNoticeOf, noLlmKeyNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
@@ -54,7 +55,11 @@ const runtimeStartPollMilliseconds = 500
 const quotedByPrompt = async ({ messages, members }: UnitOfWork, prompt: Message) => {
   const quoted = prompt.quotedMessageId ? await messages.find(prompt.quotedMessageId) : undefined
   if (!quoted) return undefined
-  const authorName = quoted.authorId ? await members.displayNameOf(quoted.authorId) : 'Agent'
+  const authorName = isDevLoopPrompt(quoted)
+    ? devLoopAuthorName
+    : quoted.authorId
+      ? await members.displayNameOf(quoted.authorId)
+      : 'Agent'
   return { ...quoted, authorName } satisfies QuotedMessage
 }
 

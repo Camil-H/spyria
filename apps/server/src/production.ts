@@ -2,6 +2,7 @@ import { isTrustedProxySetting } from './rate-limits.ts'
 
 const minimumSecretLength = 32
 const installHostTokenPattern = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{16}$/
+const accountOidcSettings = ['SPYRIA_OIDC_ISSUER', 'SPYRIA_OIDC_CLIENT_ID', 'SPYRIA_OIDC_CLIENT_SECRET']
 const requiredSettings = ['SPYRIA_GATEWAY_URL', 'SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD']
 const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 const originOf = (url: string) => URL.parse(url)?.origin
@@ -30,12 +31,8 @@ export const productionProblemsOf = (environment: Record<string, string | undefi
     (!originOf(appOrigin) || originOf(settingOf('SPYRIA_OIDC_REDIRECT_URI')) !== originOf(appOrigin)) &&
       'SPYRIA_OIDC_REDIRECT_URI must be on SPYRIA_APP_ORIGIN.',
     ...requiredSettings.map((name) => !settingOf(name) && `${name} is required.`),
-    settingOf('SPYRIA_SMTP_URL') !== '' &&
-      !settingOf('SPYRIA_MAIL_FROM') &&
-      'SPYRIA_MAIL_FROM is required with SPYRIA_SMTP_URL.',
-    (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_ID').trim() === '') !==
-      (settingOf('SPYRIA_SIGN_IN_APP_CLIENT_SECRET').trim() === '') &&
-      'SPYRIA_SIGN_IN_APP_CLIENT_ID and SPYRIA_SIGN_IN_APP_CLIENT_SECRET are set together or not at all.',
+    new Set(accountOidcSettings.map((name) => settingOf(name).trim() === '')).size > 1 &&
+      `${accountOidcSettings.join(', ')} are set together or not at all.`,
     !isTrustedProxySetting(environment.SPYRIA_TRUSTED_PROXY) &&
       'SPYRIA_TRUSTED_PROXY must be unset, cloudflare, or x-forwarded-for:1 to 3.',
     ...['SPYRIA_GATEWAY_ADMIN_USER', 'SPYRIA_GATEWAY_ADMIN_PASSWORD'].map(

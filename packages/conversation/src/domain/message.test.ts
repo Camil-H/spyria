@@ -46,6 +46,15 @@ test('editedMessage and deletedMessage reject other members', () => {
   expect(() => deletedMessage(messageByAlice, bob, editedAt)).toThrow(NotMessageAuthor)
 })
 
+test('editedMessage and deletedMessage reject the owner on a prompt the quality gates sent for them', () => {
+  const loopPrompt: Message = {
+    ...messageByAlice,
+    step: { type: 'dev_loop_prompt', loopId: messageId('loop'), phase: 'command' },
+  }
+  expect(() => editedMessage(loopPrompt, alice, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
+  expect(() => deletedMessage(loopPrompt, alice, editedAt)).toThrow(NotMessageAuthor)
+})
+
 test('deletedMessage turns a live message into a tombstone that keeps its body and drops its attachments', () => {
   const photo = { id: 'attachment-1', name: 'photo.png', mediaType: 'image/png', size: 2048 }
   expect(deletedMessage({ ...messageByAlice, attachments: [photo] }, alice, editedAt)).toEqual({

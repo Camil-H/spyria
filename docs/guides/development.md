@@ -40,7 +40,7 @@ In development the app signs in through Dex in a popup, so allow popups for `loc
 |---|---|
 | `alice@example.com` | Admin of the Acme and Globex workspaces |
 | `bob@example.com` | Member of Acme |
-| `nina@example.com` | No membership: the "not invited" screen |
+| `nina@example.com` | No membership: the screen that offers to create a workspace |
 
 Dex remembers the sign-in for a day of inactivity, up to a week, so the next popups close without asking. To sign in as another user, untick **Remember me** at sign-in, or use a private window.
 
@@ -102,10 +102,8 @@ Check a generated migration by hand, and never edit a migration that has shipped
 | `rebuild-messages [--chat <id>]` | `db:rebuild-messages` | Rebuilds the messages projection from the event store. |
 | `failed-jobs` | `jobs:failed` | Lists jobs that exhausted their attempts, with the last error. |
 | `retry-jobs <id>\|--all` | `jobs:retry` | Requeues failed jobs with their attempts reset. |
-| `sso:verify-domain --workspace <id> --domain <domain>` | none | Verifies a workspace's sign-in domain without email (see [Manual install](./self-hosting.md)). |
 | `setup-link` | none | Prints the setup link that creates the first workspace (`<origin>/?setup=<SPYRIA_SETUP_TOKEN>`); refused once a workspace exists. |
 | `has-workspace` | none | Prints `yes` once a workspace exists and `no` before; `spyria setup --host` asks for a pairing command when it prints `yes`. |
-| `mail:test --to <address>` | none | Sends a test message through `SPYRIA_SMTP_URL`. |
 
 ## Running agents locally: a runtime host
 

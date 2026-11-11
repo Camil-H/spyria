@@ -1,23 +1,16 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import { ErrorMessage, focusRing, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
-import { ChevronDown, Circle, Lock } from 'lucide-react'
+import { ChevronDown, Circle } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
-import { isDoneView, type TaskScope, type TaskState, type TaskView } from '../domain/tasks.ts'
+import { isDoneView, type TaskScope, type TaskView } from '../domain/tasks.ts'
 import { useOnboardingCommands } from './providers.tsx'
-import { blockedExplanation, taskTextOf } from './task-text.ts'
+import { taskTextOf } from './task-text.ts'
 import { useOnboarding } from './useOnboarding.ts'
 
 const titleByScope: Record<TaskScope, string> = {
   workspace: 'Get your workspace ready',
   member: 'Set up your profile',
-}
-
-type LeftTaskView = TaskView & { state: Exclude<TaskState, 'done'> }
-
-const stateLook: Record<LeftTaskView['state'], { label: string; Icon: typeof Circle; iconClass: string }> = {
-  blocked: { label: 'Not available yet', Icon: Lock, iconClass: 'text-muted' },
-  open: { label: 'To do', Icon: Circle, iconClass: 'text-ink' },
 }
 
 const storedIsCollapsed = (storageKey: string) => {
@@ -42,29 +35,23 @@ const useStoredCollapse = (storageKey: string) => {
 const TaskRow = ({
   workspaceId,
   view,
-  domain,
   onSkip,
   isPending,
 }: {
   workspaceId: WorkspaceId
-  view: LeftTaskView
-  domain: string | undefined
+  view: TaskView
   onSkip: () => void
   isPending: boolean
 }) => {
-  const { title, explanation, page, section } = taskTextOf(view.task, domain)
-  const { label, Icon, iconClass } = stateLook[view.state]
+  const { title, explanation, page, section } = taskTextOf(view.task)
   const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
-  const blockedClass = view.state === 'blocked' ? 'opacity-60' : ''
   return (
     <li className="flex items-start gap-3 py-2">
-      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${iconClass} ${blockedClass}`} />
-      <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${blockedClass}`}>
+      <Circle aria-hidden className="mt-0.5 size-4 shrink-0 text-ink" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span>
-          <span className="sr-only">{label}: </span>
-          {view.state === 'blocked' ? (
-            <span className="font-medium">{title}</span>
-          ) : view.scope === 'member' && section ? (
+          <span className="sr-only">To do: </span>
+          {view.scope === 'member' && section ? (
             <a href={`#${section}`} className={linkClass}>
               {title}
             </a>
@@ -74,7 +61,7 @@ const TaskRow = ({
             </Link>
           )}
         </span>
-        <span className="text-sm text-muted">{view.state === 'blocked' ? blockedExplanation : explanation}</span>
+        <span className="text-sm text-muted">{explanation}</span>
       </div>
       <button
         type="button"
@@ -89,23 +76,15 @@ const TaskRow = ({
   )
 }
 
-export const ChecklistBlock = ({
-  workspaceId,
-  scope,
-  usesSingleSignOn,
-}: {
-  workspaceId: WorkspaceId
-  scope: TaskScope
-  usesSingleSignOn: boolean
-}) => {
+export const ChecklistBlock = ({ workspaceId, scope }: { workspaceId: WorkspaceId; scope: TaskScope }) => {
   const commands = useOnboardingCommands()
-  const { tasks, domain } = useOnboarding(workspaceId, usesSingleSignOn)
+  const { tasks } = useOnboarding(workspaceId)
   const { isCollapsed, toggleCollapsed } = useStoredCollapse(`spyria.onboarding-collapsed.${scope}.${workspaceId}`)
   const { errorMessage, isPending, run } = useGuardedAction()
   const headingId = useId()
   const listId = useId()
   const shownTasks = tasks.filter((view) => view.scope === scope)
-  const leftTasks = shownTasks.filter((view): view is LeftTaskView => !isDoneView(view))
+  const leftTasks = shownTasks.filter((view) => !isDoneView(view))
   if (leftTasks.length === 0) return null
   const title = titleByScope[scope]
   return (
@@ -135,7 +114,6 @@ export const ChecklistBlock = ({
               key={view.task}
               workspaceId={workspaceId}
               view={view}
-              domain={domain}
               isPending={isPending}
               onSkip={() => run(() => commands.skipTask({ workspaceId, task: view.task }))}
             />

@@ -6,12 +6,6 @@ variable "name" { type = string }
 variable "hostname" { type = string }
 variable "spyria_version" { type = string }
 variable "images" { type = string }
-variable "join_by" { type = string }
-variable "smtp_url" {
-  type      = string
-  sensitive = true
-}
-variable "mail_from" { type = string }
 variable "google_client_id" { type = string }
 variable "google_client_secret" {
   type      = string
@@ -22,8 +16,9 @@ variable "microsoft_client_secret" {
   type      = string
   sensitive = true
 }
-variable "sign_in_app_client_id" { type = string }
-variable "sign_in_app_client_secret" {
+variable "oidc_issuer" { type = string }
+variable "oidc_client_id" { type = string }
+variable "oidc_client_secret" {
   type      = string
   sensitive = true
 }
@@ -95,14 +90,13 @@ output "server_environment" {
     SPYRIA_AUTH_MODE              = "sso"
     SPYRIA_APP_ORIGIN             = local.origin
     SPYRIA_OIDC_REDIRECT_URI      = "${local.origin}/auth/callback"
-    SPYRIA_JOIN_BY                = var.join_by
     SPYRIA_TRUSTED_PROXY          = var.trusted_proxy
     SPYRIA_GATEWAY_URL            = var.gateway_url
     SPYRIA_ZERO_URL               = var.zero_url
-    SPYRIA_MAIL_FROM              = var.mail_from
     SPYRIA_GOOGLE_CLIENT_ID       = var.google_client_id
     SPYRIA_MICROSOFT_CLIENT_ID    = var.microsoft_client_id
-    SPYRIA_SIGN_IN_APP_CLIENT_ID  = var.sign_in_app_client_id
+    SPYRIA_OIDC_ISSUER            = var.oidc_issuer
+    SPYRIA_OIDC_CLIENT_ID         = var.oidc_client_id
     DATABASE_POOL_MAX             = "20"
     DATABASE_IDLE_TIMEOUT_SECONDS = "60"
     DATABASE_MAX_LIFETIME_SECONDS = "1800"
@@ -113,17 +107,16 @@ output "server_environment" {
 output "server_secrets" {
   sensitive = true
   value = {
-    DATABASE_URL                     = local.database_url
-    SPYRIA_TOKEN_SECRET              = var.secrets.token_secret
-    SPYRIA_SECRETS_KEY               = var.secrets.secrets_key
-    SPYRIA_SETUP_TOKEN               = var.secrets.setup_token
-    SPYRIA_INSTALL_HOST_TOKEN        = var.secrets.install_host_token
-    SPYRIA_GATEWAY_ADMIN_USER        = var.secrets.gateway_admin_user
-    SPYRIA_GATEWAY_ADMIN_PASSWORD    = var.secrets.gateway_admin_password
-    SPYRIA_SMTP_URL                  = var.smtp_url
-    SPYRIA_GOOGLE_CLIENT_SECRET      = var.google_client_secret
-    SPYRIA_MICROSOFT_CLIENT_SECRET   = var.microsoft_client_secret
-    SPYRIA_SIGN_IN_APP_CLIENT_SECRET = var.sign_in_app_client_secret
+    DATABASE_URL                   = local.database_url
+    SPYRIA_TOKEN_SECRET            = var.secrets.token_secret
+    SPYRIA_SECRETS_KEY             = var.secrets.secrets_key
+    SPYRIA_SETUP_TOKEN             = var.secrets.setup_token
+    SPYRIA_INSTALL_HOST_TOKEN      = var.secrets.install_host_token
+    SPYRIA_GATEWAY_ADMIN_USER      = var.secrets.gateway_admin_user
+    SPYRIA_GATEWAY_ADMIN_PASSWORD  = var.secrets.gateway_admin_password
+    SPYRIA_GOOGLE_CLIENT_SECRET    = var.google_client_secret
+    SPYRIA_MICROSOFT_CLIENT_SECRET = var.microsoft_client_secret
+    SPYRIA_OIDC_CLIENT_SECRET      = var.oidc_client_secret
   }
 }
 

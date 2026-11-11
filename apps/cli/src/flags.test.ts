@@ -26,16 +26,14 @@ test('flags take a value after them or inline, switches stand alone, and the res
 })
 
 test('an unattended run takes flags and defaults, and refuses a missing required answer or an unknown choice', () => {
-  const { ask, choose, require } = askerOf(
-    parseFlags(['--unattended', '--join-by', 'invited-address', '--name', ' prod ']),
-  )
+  const { ask, choose, require } = askerOf(parseFlags(['--unattended', '--bind-hostname', 'no', '--name', ' prod ']))
   expect(ask('name', 'Deployment name', 'spyria')).toBe('prod')
   expect(ask('folder', 'Install folder', '~/spyria')).toBe('~/spyria')
-  expect(choose('join-by', 'Who can join', ['domain', 'invited-address'], 'domain')).toBe('invited-address')
+  expect(choose('bind-hostname', 'Bind the hostname', ['yes', 'no'], 'yes')).toBe('no')
   expect(() => require('hostname', 'Hostname')).toThrow('--hostname is required')
-  const wrong = askerOf(parseFlags(['--unattended', '--join-by', 'anyone']))
-  expect(() => wrong.choose('join-by', 'Who can join', ['domain', 'invited-address'], 'domain')).toThrow(
-    '--join-by must be domain or invited-address',
+  const wrong = askerOf(parseFlags(['--unattended', '--bind-hostname', 'maybe']))
+  expect(() => wrong.choose('bind-hostname', 'Bind the hostname', ['yes', 'no'], 'yes')).toThrow(
+    '--bind-hostname must be yes or no',
   )
 })
 
@@ -49,9 +47,9 @@ test('a secret is never a flag: it comes from its environment variable, or from 
   expect(() => askerOf(parseFlags(['setup', '--cloudflare-token', 'token']))).toThrow(
     '--cloudflare-token would leave a secret in your shell history and process list: set SPYRIA_SETUP_CLOUDFLARE_TOKEN instead',
   )
-  const unattended = askerOf(parseFlags(['--unattended']), true, { SPYRIA_SETUP_RESEND_KEY: ' re_key ' })
-  expect(unattended.secret('resend-key', 'Resend API key')).toBe('re_key')
-  expect(unattended.given('resend-key')).toBe(true)
+  const unattended = askerOf(parseFlags(['--unattended']), true, { SPYRIA_SETUP_OIDC_CLIENT_SECRET: ' oidc-secret ' })
+  expect(unattended.secret('oidc-client-secret', 'OIDC client secret')).toBe('oidc-secret')
+  expect(unattended.given('oidc-client-secret')).toBe(true)
   expect(unattended.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('saved-secret')
   expect(() => unattended.requireSecret('okta-token', 'Okta API token')).toThrow('SPYRIA_SETUP_OKTA_TOKEN is required')
 
@@ -70,23 +68,23 @@ test('a secret is never a flag: it comes from its environment variable, or from 
 
 test('variables other tools export never answer for setup, and setup names the variable it took a secret from, never the value', () => {
   const elsewhere = askerOf(parseFlags(['--unattended']), true, {
-    RESEND_API_KEY: 're_other_project',
-    SMTP_URL: 'smtps://other:project@smtp.example.com',
+    OIDC_CLIENT_SECRET: 'other-project-oidc-secret',
+    CLOUDFLARE_API_TOKEN: 'other-project-token',
     GOOGLE_CLIENT_SECRET: 'other-project-secret',
   })
-  expect(elsewhere.given('resend-key')).toBe(false)
-  expect(elsewhere.given('smtp-url')).toBe(false)
+  expect(elsewhere.given('oidc-client-secret')).toBe(false)
+  expect(elsewhere.given('cloudflare-token')).toBe(false)
   expect(elsewhere.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('saved-secret')
 
   const printed: string[] = []
   const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
   try {
-    const asker = askerOf(parseFlags(['--unattended']), true, { SPYRIA_SETUP_RESEND_KEY: 're_meant_for_spyria' })
-    expect(asker.secret('resend-key', 'Resend API key')).toBe('re_meant_for_spyria')
+    const asker = askerOf(parseFlags(['--unattended']), true, { SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'meant-for-spyria' })
+    expect(asker.secret('oidc-client-secret', 'OIDC client secret')).toBe('meant-for-spyria')
   } finally {
     log.mockRestore()
   }
-  expect(printed).toEqual(['Using SPYRIA_SETUP_RESEND_KEY from the environment'])
+  expect(printed).toEqual(['Using SPYRIA_SETUP_OIDC_CLIENT_SECRET from the environment'])
 })
 
 test('a secret typed in a terminal never shows on it, and the terminal echoes again once it is read', async () => {
@@ -96,7 +94,7 @@ test('a secret typed in a terminal never shows on it, and the terminal echoes ag
     asking,
     [
       `import { hiddenAnswerTo } from ${JSON.stringify(flagsModule)}`,
-      "const answer = hiddenAnswerTo('Resend API key')",
+      "const answer = hiddenAnswerTo('OIDC client secret')",
       "console.log(answer === 'typed-secret' ? 'answered as typed' : 'answered something else')",
       "console.log(Bun.spawnSync(['stty', '-a'], { stdin: 'inherit' }).stdout.toString().includes('-echo ') ? 'echo off' : 'echo on')",
     ].join('\n'),
@@ -117,7 +115,7 @@ test('a secret typed in a terminal never shows on it, and the terminal echoes ag
       output += decoder.decode(value)
     }
   }
-  await readUntil('Resend API key')
+  await readUntil('OIDC client secret')
   terminal.stdin.write('typed-secret\n')
   await terminal.stdin.flush()
   await readUntil('echo o')

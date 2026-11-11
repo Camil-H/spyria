@@ -61,28 +61,11 @@ spyria setup-link
 
 It is refused once a workspace exists.
 
-## Sign-in app of an instance joined by invited address
+## Account providers
 
-When people join by invited address, every workspace signs in through one app of the provider, and workspace Admins cannot change it. To replace its client id and secret for every workspace at once, for example when the secret expires:
+The Google, Microsoft and OIDC apps that people sign in to their account with are settings of the deployment ([who can join and sign-in](./who-can-join.md)). To add one, or replace a client id or secret, for example when a secret expires, run `spyria setup` again: an empty answer keeps a saved app and `-` removes it. An install made by hand sets them in `.env.prod` ([manual install](./self-hosting.md#account-providers)), a cloud deployment in `terraform.tfvars` ([clouds](./cloud.md)); the server reads them when it restarts.
 
-```sh
-spyria sign-in-app --client-id <new client id>
-```
-
-It asks for the secret, or reads it from standard input. Members keep their accounts, since the provider and its issuer stay the same. On an install made by hand, pass the secret on standard input to the operator command in the server container:
-
-```sh
-printf '%s' "$CLIENT_SECRET" | spyria-compose exec -T server bun apps/server/src/operator-cli.ts sso:sign-in-app --client-id <new client id>
-```
-
-On a cloud deployment, add the new app to the folder's `terraform.tfvars` and apply it with `spyria setup --cloud <cloud>`, which keeps your other answers:
-
-```hcl
-sign_in_app_client_id     = "<new client id>"
-sign_in_app_client_secret = "<new client secret>"
-```
-
-The server applies it to every workspace when it restarts with the new settings, and leaves the stored app alone while they match. An install made by hand can do the same with `SPYRIA_SIGN_IN_APP_CLIENT_ID` and `SPYRIA_SIGN_IN_APP_CLIENT_SECRET` in `.env.prod`. Once these settings are set they win: each start puts their app back, so change the app there rather than with `spyria sign-in-app`.
+A workspace that enforces SSO with the deployment's Google or Microsoft app signs in through it too, so the server refuses to start while such a workspace exists without that app's settings, naming the provider: set them again rather than removing them.
 
 ## Rotating the secrets key
 
@@ -112,7 +95,7 @@ spyria compose exec server bun apps/server/src/operator-cli.ts retry-jobs --all
 spyria compose exec server bun apps/server/src/operator-cli.ts rebuild-messages [--chat <chat id>]
 ```
 
-`failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued, or that a later failure of the same sweep supersedes, is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([Manual install](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
+`failed-jobs` lists failed jobs with their workspace, type, attempts, last error and when they failed; `retry-jobs` requeues them with their attempts reset (a dead sweep whose next run is already queued, or that a later failure of the same sweep supersedes, is dropped instead); `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all. `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over; `workspace:stop-sso <workspace id>` stops a workspace enforcing its own SSO when that provider no longer signs anyone in, so its members sign in with their own accounts ([Manual install](./self-hosting.md#deleting-a-workspace)). In development the same commands are `bun run jobs:failed`, `bun run jobs:retry` and `bun run db:rebuild-messages` (they read `.env.dev`).
 
 ## Database connections
 

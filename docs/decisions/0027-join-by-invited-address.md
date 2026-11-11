@@ -1,5 +1,7 @@
 # 0027. Who can join: by email domain or by invited address
 
+Superseded by [decision 0029](0029-account-sign-in-and-workspace-sso.md): workspaces own no domain and the join-by setting is deleted; people join by invites to exact addresses on every instance.
+
 ## Context
 
 [Decision 0012](0012-per-workspace-sso.md) ties every workspace to an email domain its Admin proves control of. That fits an organization, but not an individual or a small team without a domain of their own: their people sign in with Gmail or another consumer account, and a public domain such as `gmail.com` can never be owned by one workspace. The install path ([decision 0026](0026-published-images-one-entry-point.md)) has to serve them too.

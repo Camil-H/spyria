@@ -24,33 +24,6 @@ variable "images" {
   default     = "ghcr.io/camil-h"
 }
 
-variable "join_by" {
-  description = "Who can join the workspaces: domain or invited-address"
-  type        = string
-  default     = "domain"
-  validation {
-    condition     = contains(["domain", "invited-address"], var.join_by)
-    error_message = "join_by is domain or invited-address."
-  }
-}
-
-variable "smtp_url" {
-  description = "Optional SMTP URL for domain verification links"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "mail_from" {
-  description = "Sender of the mail, required with smtp_url"
-  type        = string
-  default     = ""
-  validation {
-    condition     = nonsensitive(var.smtp_url == "") || var.mail_from != ""
-    error_message = "Set mail_from with smtp_url: the server refuses to start with one and not the other."
-  }
-}
-
 variable "google_client_id" {
   type    = string
   default = ""
@@ -71,6 +44,27 @@ variable "microsoft_client_secret" {
   type      = string
   default   = ""
   sensitive = true
+}
+
+variable "oidc_issuer" {
+  description = "Issuer of an OIDC app people sign in to their account with, besides Google and Microsoft"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "oidc_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+  validation {
+    condition     = length(toset([var.oidc_issuer == "", var.oidc_client_id == "", nonsensitive(var.oidc_client_secret == "")])) == 1
+    error_message = "Set oidc_issuer, oidc_client_id and oidc_client_secret together or not at all: the server refuses to start otherwise."
+  }
 }
 
 variable "size" {
@@ -98,21 +92,4 @@ variable "dns_zone_name" {
   description = "Cloud DNS managed zone holding the hostname: the module points the hostname at the load balancer. Leave empty to create the record of the dns_records output yourself"
   type        = string
   default     = ""
-}
-
-variable "sign_in_app_client_id" {
-  description = "When people join by invited address: the client id of the one sign-in app of every workspace, applied when the server starts"
-  type        = string
-  default     = ""
-}
-
-variable "sign_in_app_client_secret" {
-  description = "The client secret of that sign-in app"
-  type        = string
-  default     = ""
-  sensitive   = true
-  validation {
-    condition     = (var.sign_in_app_client_id == "") == nonsensitive(var.sign_in_app_client_secret == "")
-    error_message = "Set sign_in_app_client_id and sign_in_app_client_secret together: the server refuses to start with one and not the other."
-  }
 }

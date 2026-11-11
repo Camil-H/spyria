@@ -4,7 +4,7 @@ import awsExample from '../../../deploy/tofu/examples/aws/main.tf' with { type: 
 import azureExample from '../../../deploy/tofu/examples/azure/main.tf' with { type: 'text' }
 import gcpExample from '../../../deploy/tofu/examples/gcp/main.tf' with { type: 'text' }
 import { installFolderOf } from './commands.ts'
-import { askerOf, type Flags, hiddenAnswerTo, type ProcessEnvironment, type SecretReader } from './flags.ts'
+import { askerOf, type Flags, type ProcessEnvironment } from './flags.ts'
 import { cliVersion, latestVersion, repository } from './release.ts'
 import { removal } from './setup-steps.ts'
 
@@ -106,20 +106,13 @@ const stringOf = (value: TfValue | undefined) => (typeof value === 'string' ? va
 
 const optionalAnswerOf =
   (asker: ReturnType<typeof askerOf>, existing: TfVariables) =>
-  (flag: string, variable: string, question: string, whenEmpty: string, { isSecret = false } = {}) => {
+  (flag: string, variable: string, question: string, whenEmpty: string) => {
     const saved = stringOf(existing[variable])
-    const answer = isSecret
-      ? asker.secret(
-          flag,
-          saved ? `${question} (empty keeps the saved one, ${removal} removes it)` : `${question} (${whenEmpty})`,
-          saved,
-        )
-      : saved
-        ? asker.ask(flag, `${question} (${removal} removes it)`, saved)
-        : asker.ask(flag, `${question} (${whenEmpty})`)
+    const answer = saved
+      ? asker.ask(flag, `${question} (${removal} removes it)`, saved)
+      : asker.ask(flag, `${question} (${whenEmpty})`)
     return answer === removal ? '' : answer
   }
-const joinBys = ['domain', 'invited-address'] as const
 const sizes = ['small', 'medium', 'large'] as const
 const choiceOf = <Choice extends string>(choices: readonly [Choice, ...Choice[]], previous: string) =>
   choices.find((choice) => choice === previous) ?? choices[0]
@@ -210,13 +203,10 @@ const run = (folder: string, command: string[]) =>
 export const setupCloud = async (
   flags: Flags,
   cloud: Cloud,
-  {
-    environment = process.env,
-    readSecret = hiddenAnswerTo,
-  }: { environment?: ProcessEnvironment; readSecret?: SecretReader } = {},
+  { environment = process.env }: { environment?: ProcessEnvironment } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
-  const asker = askerOf(flags, isUnattended, environment, readSecret)
+  const asker = askerOf(flags, isUnattended, environment)
   const folder = installFolderOf({
     ...flags,
     values: {
@@ -237,25 +227,13 @@ export const setupCloud = async (
   if (Object.keys(existing).length > 0) console.log(`Setting up ${folder} again: its answers are the defaults.`)
   const version =
     flags.values.version || was('spyria_version') || (cliVersion === 'dev' ? await latestVersion() : cliVersion)
-  const smtpUrl = optionalAnswerOf(asker, existing)(
-    'smtp-url',
-    'smtp_url',
-    'SMTP URL for verification links',
-    'empty to skip',
-    { isSecret: true },
-  )
   const variables: TfVariables = {
     ...existing,
     hostname: asker
       .require('hostname', 'Hostname of Spyria, for example spyria.example.com', was('hostname'))
       .toLowerCase(),
     spyria_version: version,
-    join_by: asker.choose('join-by', 'Who can join', joinBys, choiceOf(joinBys, was('join_by'))),
     size: asker.choose('size', 'Size', sizes, choiceOf(sizes, was('size'))),
-    smtp_url: smtpUrl,
-    mail_from: smtpUrl
-      ? asker.require('mail-from', 'Sender, for example Spyria <spyria@example.com>', was('mail_from'))
-      : '',
     ...cloudVariablesOf(cloud, asker, existing),
   }
   writeFileSync(join(folder, markerFile), `${cloud}\n`)

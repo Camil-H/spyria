@@ -87,9 +87,9 @@ import {
   workspaceSpendTrendFromRequest,
 } from '@spyria/usage/server'
 import {
+  accountProvidersOf,
   createDevChatFromRequest,
   devChatsPath,
-  domainVerificationPath,
   type GitHubSettingsInput,
   githubAppCreatedPath,
   githubAppManifestPath,
@@ -100,9 +100,8 @@ import {
   githubSettingsPath,
   githubWebhooksPath,
   type InstanceApps,
-  type JoinBy,
-  type SsoSettingsInput,
   ssoSettingsPath,
+  ssoStopPath,
   workspaceMutators,
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
@@ -110,14 +109,13 @@ import { compress } from 'hono/compress'
 import { HTTPException } from 'hono/http-exception'
 import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
-import { createSmtpMailer } from './auth/mail.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox, type SecretsKeyring, secretsKeyringOf } from './auth/secret-box.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import { hasNoWorkspace, readSsoSettings, saveSsoSettings, sendDomainVerification } from './auth/sso.ts'
+import { hasNoWorkspace, readSsoSettings, stopWorkspaceSso } from './auth/sso.ts'
 import {
   disconnectGitHub,
   finishGitHubAppCreation,
@@ -236,7 +234,6 @@ export const createApp = ({
   secretsKeyring,
   microsoftLoginOrigin,
   instanceSignInApps,
-  mail,
   appOrigin,
   deployment = defaultDeployment,
   webDist,
@@ -245,7 +242,6 @@ export const createApp = ({
   hostImage,
   version = 'dev',
   setupToken,
-  joinBy = 'domain',
   installHostToken,
   runtimeHosts = createRuntimeHostGateway({
     awaitsFirstWorkspace: async (claimCode) =>
@@ -270,7 +266,6 @@ export const createApp = ({
   secretsKeyring?: SecretsKeyring
   microsoftLoginOrigin?: string
   instanceSignInApps?: InstanceApps
-  mail?: { smtpUrl: string; from: string }
   appOrigin: string
   deployment?: string
   webDist?: string
@@ -287,7 +282,6 @@ export const createApp = ({
   hostImage?: string
   version?: string
   setupToken?: string
-  joinBy?: JoinBy
   installHostToken?: string
 }) => {
   const rateLimited = rateLimitedBy(limit, trustedProxy)
@@ -304,9 +298,8 @@ export const createApp = ({
     secretBox: secretsKeyring && createSecretBox(secretsKeyring),
     microsoftLoginOrigin,
     instanceApps: instanceSignInApps,
-    mailer: mail && createSmtpMailer(mail),
-    appOrigin,
     installHostToken,
+    requiresHttpsIssuers: new URL(appOrigin).protocol === 'https:',
   }
   const githubDependencies = github ?? { api: createGitHubApi(githubDotCom), secretBox: sso.secretBox }
   const githubCallbackUrl = `${appOrigin}${githubCallbackPath}`
@@ -466,7 +459,6 @@ export const createApp = ({
         version,
         hostImage,
         setupToken,
-        joinBy,
         database,
         authenticate,
         testDatabaseByName,
@@ -742,18 +734,15 @@ export const createApp = ({
         settings: await readSsoSettings(context.get('database'), context.get('zeroContext')),
       })),
     )
-    .post(ssoSettingsPath, async (context) => {
-      const input = ((await context.req.json().catch(() => null)) ?? {}) as SsoSettingsInput
-      return endpointResponse('Saving the SSO settings', 200, async () => ({
-        settings: await saveSsoSettings(context.get('database'), sso, context.get('zeroContext'), input),
-      }))
-    })
-    .post(domainVerificationPath, rateLimited('verificationEmails'), async (context) => {
-      const input = (await context.req.json().catch(() => null)) ?? {}
-      return endpointResponse('Sending a domain verification', 200, async () => ({
-        settings: await sendDomainVerification(context.get('database'), sso, context.get('zeroContext'), input),
-      }))
-    })
+    .post(ssoStopPath, (context) =>
+      endpointResponse('Stopping the SSO of a workspace', 204, () =>
+        stopWorkspaceSso(
+          context.get('database'),
+          context.get('zeroContext'),
+          authMode === 'dex' || accountProvidersOf(instanceSignInApps ?? {}).length > 0,
+        ),
+      ),
+    )
     .get(githubSettingsPath, (context) =>
       endpointResponse('Reading the GitHub settings', 200, async () => ({
         settings: await readGitHubSettings(context.get('database'), githubDependencies, context.get('zeroContext')),

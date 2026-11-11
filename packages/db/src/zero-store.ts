@@ -137,11 +137,10 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     uniqueBy(workspaces, (workspace) => workspace.workspaceId),
   )
   const workspaceRowsOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
-    workspaces.map(({ workspaceId, name, localSessions, joinBy, aiProviderAllowList, devLoop, setupCommands }) => ({
+    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands }) => ({
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
-      joinBy: joinBy === 'invited_address' ? joinBy : 'domain',
       aiProviderAllowList: aiProviderAllowListFrom(aiProviderAllowList),
       devLoop: devLoopSettingsFrom(devLoop),
       setupCommands: setupCommandsFrom(setupCommands),
@@ -276,11 +275,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const chatMembersOf = mappedRows(withMemberId<ZeroRows['chatParticipants'][number]>)
   const chatRolesOf = mappedRows((role: ZeroRows['chatRoles'][number]) => role)
   const llmCredentialsOf = mappedRows(withMemberId<ZeroRows['llmCredentials'][number]>)
-  const ssoDomainsOf = mappedRows(({ workspaceId, domain, verifiedAt }: ZeroRows['ssoDomains'][number]) => ({
-    workspaceId,
-    domain,
-    isVerified: verifiedAt != null,
-  }))
   const githubAppsOf = mappedRows(({ workspaceId }: ZeroRows['githubApps'][number]) => ({ workspaceId }))
   const githubConnectionsOf = mappedRows(({ workspaceId, userId }: ZeroRows['githubConnections'][number]) => ({
     workspaceId,
@@ -353,7 +347,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       chatMembers: chatMembersOf(rowsOf('chatParticipants')),
       chatRoles: chatRolesOf(rowsOf('chatRoles')),
       llmCredentials: llmCredentialsOf(rowsOf('llmCredentials')),
-      ssoDomains: ssoDomainsOf(rowsOf('ssoDomains')),
       githubApps: githubAppsOf(rowsOf('githubApps')),
       githubConnections: githubConnectionsOf(rowsOf('githubConnections')),
       workspaceOnboarding: workspaceOnboardingOf(rowsOf('workspaceOnboarding')),

@@ -340,6 +340,21 @@ test('workspaces lists every workspace of the member and users lists the members
   expect(idsOf('Alice in Globex', 'users', 'id')).toEqual([alice])
 })
 
+test("workspaces lists only the current workspace to a session opened through that workspace's own provider", async () => {
+  await testDatabase.database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
+    values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
+  try {
+    const { astByTable } = await transformOf(await tokenOf(acme, alice), [
+      { id: 'workspaces', name: 'workspaces', args: [] },
+    ])
+    expect((await rowsOf(astByTable.get('workspaces') as AST)).map((row) => row.workspace_id)).toEqual([acme])
+    expect((await readAll(globex, alice)).get('workspaces')?.map((row) => row.workspace_id)).toEqual([acme, globex])
+  } finally {
+    await testDatabase.database.$client`delete from workspace_sso where workspace_id = ${acme}`
+  }
+})
+
 test('an ownership change shows the restriction of Bob to the participants of a chat he takes over, and hides it once he no longer owns one they take part in', async () => {
   const restrictedOf = async (workspace: string, user: string) =>
     ((await readAll(workspace, user)).get('connection_restrictions') ?? []).map((row) => row.user_id).toSorted()
