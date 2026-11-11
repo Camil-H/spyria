@@ -12,7 +12,7 @@ export const isAzSignedIn = (az: AzRunner = runAz) =>
   Bun.which('az') !== null && az(['account', 'show', '--query', 'tenantId', '-o', 'tsv']).exitCode === 0
 
 export const registerEntraApp = (
-  { origin, audience }: { origin: string; audience: 'tenant' | 'organizations' },
+  { origin, audience }: { origin: string; audience: 'tenant' | 'any-account' },
   az: AzRunner = runAz,
 ) => {
   const run = (azArguments: string[]) => {
@@ -23,7 +23,9 @@ export const registerEntraApp = (
   const tenantId = run(['account', 'show', '--query', 'tenantId', '-o', 'tsv'])
   const clientId = run([
     ...['ad', 'app', 'create', '--display-name', `Spyria ${new URL(origin).hostname}`],
-    ...['--sign-in-audience', audience === 'tenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs'],
+    ...(audience === 'tenant'
+      ? ['--sign-in-audience', 'AzureADMyOrg']
+      : ['--sign-in-audience', 'AzureADandPersonalMicrosoftAccount', '--requested-access-token-version', '2']),
     ...['--web-redirect-uris', `${origin}/auth/callback`, '--query', 'appId', '-o', 'tsv'],
   ])
   run(['ad', 'sp', 'create', '--id', clientId, '--query', 'id', '-o', 'tsv'])
