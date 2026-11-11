@@ -20,6 +20,10 @@ import {
   workingIndicatorOf,
 } from './fixtures'
 
+const onePixelPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+)
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
 
 const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
@@ -323,6 +327,37 @@ test.describe('Messaging', () => {
       await expect(messageItemsOf(page)).toHaveCount(2)
     })
   })
+
+  test('As a member, I click an image sent in a chat to see it large over the chat, then close it', async ({
+    page,
+  }) => {
+    await openChat(page, 'Welcome')
+    const fileChooser = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Attach files' }).click()
+    await (await fileChooser).setFiles({ name: 'chart.png', mimeType: 'image/png', buffer: onePixelPng })
+    await expect(page.getByRole('list', { name: 'Files to send' })).toContainText(`chart.png${onePixelPng.length} B`)
+    await sendMessage(page, 'Here is the chart')
+
+    const enlarge = messageContaining(page, 'Here is the chart').getByRole('button', { name: 'Enlarge chart.png' })
+    const overlay = page.getByRole('dialog', { name: 'chart.png' })
+    await enlarge.click()
+    await expect(overlay.getByRole('img', { name: 'chart.png' })).toBeVisible()
+    await expect(overlay.getByRole('link', { name: 'Save chart.png' })).toHaveAttribute('download', 'chart.png')
+    await page.keyboard.press('Escape')
+    await expect(enlarge).toBeFocused()
+    await expect(overlay).toHaveCount(0)
+
+    await enlarge.click()
+    await overlay.getByRole('button', { name: 'Close' }).click()
+    await expect(enlarge).toBeFocused()
+    await expect(overlay).toHaveCount(0)
+
+    await enlarge.click()
+    await overlay.click({ position: { x: 8, y: 8 } })
+    await expect(overlay).toHaveCount(0)
+    await expect(enlarge).toBeVisible()
+  })
+
   test('As a member, I read a channel with its authors and times, and its composer and message menu allow only what I may do', async ({
     page,
   }) => {
