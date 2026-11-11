@@ -23,7 +23,7 @@ test('az registers a tenant-only app for a workspace with the redirect URI, its 
     clientSecret: 'secret-1',
   })
   expect(calls[1]).toEqual([
-    ...['ad', 'app', 'list', '--display-name', 'Spyria spyria.example.com workspace'],
+    ...['ad', 'app', 'list', '--filter', "displayName eq 'Spyria spyria.example.com workspace'"],
     ...['--query', '[].appId', '-o', 'tsv'],
   ])
   expect(calls[2]).toEqual([
@@ -35,15 +35,25 @@ test('az registers a tenant-only app for a workspace with the redirect URI, its 
   expect(calls[4]).toContain('--years')
 })
 
-test('an app of the same name an earlier setup registered is reused as it is: no other app and no other secret', () => {
+test('an app of the same name an earlier setup registered is reused as it is, the one this install holds first: no other app and no other secret', () => {
   const calls: string[][] = []
-  expect(
-    registerEntraApp(
-      { origin: 'https://spyria.example.com', audience: 'organizations' },
-      fakeAz(calls, { registered: 'client-0\nclient-9' }),
-    ),
-  ).toEqual({ name: 'Spyria spyria.example.com', tenantId: 'tenant-1', clientId: 'client-0', clientSecret: undefined })
-  expect(calls.map((call) => call.slice(0, 3).join(' '))).toEqual(['account show --query', 'ad app list'])
+  const az = fakeAz(calls, { registered: 'client-0\nclient-9' })
+  const origin = 'https://spyria.example.com'
+  expect(registerEntraApp({ origin, audience: 'organizations' }, az)).toEqual({
+    name: 'Spyria spyria.example.com',
+    tenantId: 'tenant-1',
+    clientId: 'client-0',
+    clientSecret: undefined,
+  })
+  expect(registerEntraApp({ origin, audience: 'organizations', savedClientId: 'client-9' }, az).clientId).toBe(
+    'client-9',
+  )
+  expect(calls.map((call) => call.slice(0, 3).join(' '))).toEqual([
+    'account show --query',
+    'ad app list',
+    'account show --query',
+    'ad app list',
+  ])
 })
 
 test('the app of this Spyria serves every organizational directory, and an az refusal says which step failed', () => {
