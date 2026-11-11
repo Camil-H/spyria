@@ -16,6 +16,7 @@ export const getDevWorkspace = (workspaceId: WorkspaceId, chatId: ChatId) => (sn
   ).length
   return {
     isAsleep: runtimeState !== null && asleepStates.includes(runtimeState),
+    canWake: runtimeState === 'stopped',
     refreshKey: [
       runtimeState,
       panelChatIn(snapshot, workspaceId, chatId)?.agentTurnMessageId ?? null,
