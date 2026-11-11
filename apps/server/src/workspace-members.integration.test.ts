@@ -68,40 +68,47 @@ test('an admin invites a normalized email once for 7 days and revokes it, at onc
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
     values (${acme}, 'oidc', 'https://idp.example.com', 'spyria-acme', 'sealed-secret', now())`
-  expect(await inviteToAcme(app, database, ' Nina@Example.COM ')).toEqual(succeeded)
-  const [invitation] = await invitationsOf('nina@example.com')
-  expect(invitation).toMatchObject({ role: 'member', invited_by: alice, lifetime: '7 days', revoked_at: null })
-  expect(await inviteToAcme(app, database, 'nina@example.com', 'admin')).toEqual(
-    failedWith('nina@example.com already has a pending invite'),
-  )
-  expect(await inviteToAcme(app, database, 'BOB@example.com')).toEqual(
-    failedWith('bob@example.com is already a member of this workspace'),
-  )
-  expect(await inviteToAcme(app, database, 'not an email')).toEqual(failedWith('not an email is not an email'))
-  const invitationId = String(invitation?.id)
-  expect(
-    await resultOf(bobInAcme, 'workspace.inviteMember', {
-      workspaceId: acme,
-      id: 'by-bob',
-      email: 'x@example.com',
-      role: 'member',
-    }),
-  ).toEqual(cannotInvite)
-  expect(await resultOf(bobInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(cannotInvite)
-  expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(succeeded)
-  expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(
-    failedWith(`Invite ${invitationId} is not pending`),
-  )
-  expect((await invitationsOf('nina@example.com'))[0]?.revoked_at).not.toBeNull()
-  expect(await workspaceEventsOf(database)).toEqual([
-    {
-      type: 'member.invited',
-      actorId: alice,
-      payload: { invitationId, email: 'nina@example.com', role: 'member' },
-    },
-    { type: 'invite.revoked', actorId: alice, payload: { invitationId, email: 'nina@example.com' } },
-  ])
-  await database.$client`delete from workspace_sso where workspace_id = ${acme}`
+  try {
+    expect(await inviteToAcme(app, database, ' Nina@Example.COM ')).toEqual(succeeded)
+    const [invitation] = await invitationsOf('nina@example.com')
+    expect(invitation).toMatchObject({ role: 'member', invited_by: alice, lifetime: '7 days', revoked_at: null })
+    expect(await inviteToAcme(app, database, 'nina@example.com', 'admin')).toEqual(
+      failedWith('nina@example.com already has a pending invite'),
+    )
+    expect(await inviteToAcme(app, database, 'BOB@example.com')).toEqual(
+      failedWith('bob@example.com is already a member of this workspace'),
+    )
+    expect(await inviteToAcme(app, database, 'not an email')).toEqual(failedWith('not an email is not an email'))
+    const invitationId = String(invitation?.id)
+    expect(
+      await resultOf(bobInAcme, 'workspace.inviteMember', {
+        workspaceId: acme,
+        id: 'by-bob',
+        email: 'x@example.com',
+        role: 'member',
+      }),
+    ).toEqual(cannotInvite)
+    expect(await resultOf(bobInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(
+      cannotInvite,
+    )
+    expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(
+      succeeded,
+    )
+    expect(await resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })).toEqual(
+      failedWith(`Invite ${invitationId} is not pending`),
+    )
+    expect((await invitationsOf('nina@example.com'))[0]?.revoked_at).not.toBeNull()
+    expect(await workspaceEventsOf(database)).toEqual([
+      {
+        type: 'member.invited',
+        actorId: alice,
+        payload: { invitationId, email: 'nina@example.com', role: 'member' },
+      },
+      { type: 'invite.revoked', actorId: alice, payload: { invitationId, email: 'nina@example.com' } },
+    ])
+  } finally {
+    await database.$client`delete from workspace_sso where workspace_id = ${acme}`
+  }
 })
 
 test('an expired invite does not block a new one, which replaces it', async () => {
