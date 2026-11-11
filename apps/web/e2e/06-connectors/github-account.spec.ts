@@ -15,7 +15,6 @@ test.describe('GitHub account', () => {
     await inPopup(page, () => github.getByRole('button', { name: 'Connect GitHub account' }).click())
     await expect(github).toContainText('Connected (alice-martin)')
     await page.reload()
-    await connectionsOf(page).getByRole('tab', { name: 'My connections' }).click()
     await expect(connectionsOf(page).getByRole('group', { name: 'GitHub account' })).toContainText(
       'Connected (alice-martin)',
     )
