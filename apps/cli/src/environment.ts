@@ -31,15 +31,26 @@ export const newInstallHostToken = () => {
 
 export const isDeploymentName = (name: string) => deploymentPattern.test(name)
 
-const unquoted = (value: string) => value.replace(/^'(.*)'$/s, '$1').replace(/^"(.*)"$/s, '$1')
+const assignmentPattern = /^\s*(export\s+)?([A-Za-z_]\w*)\s*=(.*)$/
+const quotedValuePattern = /^\s*(['"])(.*?)\1(\s+#.*)?\s*$/
+const inlineCommentPattern = /\s+#.*$/
+
+const assignmentOf = (line: string) => {
+  const [, exported = '', name, rest = ''] = line.match(assignmentPattern) ?? []
+  if (!name) return undefined
+  const [, , quotedValue, quotedComment = ''] = rest.match(quotedValuePattern) ?? []
+  if (quotedValue !== undefined) return { exported, name, value: quotedValue, comment: quotedComment }
+  const comment = rest.match(inlineCommentPattern)?.[0] ?? ''
+  return { exported, name, value: rest.slice(0, rest.length - comment.length).trim(), comment }
+}
 
 export const parseEnvironment = (text: string): Environment =>
   Object.fromEntries(
     text
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line !== '' && !line.startsWith('#') && line.includes('='))
-      .map((line) => [line.slice(0, line.indexOf('=')), unquoted(line.slice(line.indexOf('=') + 1))]),
+      .split(/\r?\n/)
+      .map(assignmentOf)
+      .filter((assignment) => assignment !== undefined)
+      .map(({ name, value }) => [name, value]),
   )
 
 const storable = (environment: Environment) => {
@@ -48,11 +59,23 @@ const storable = (environment: Environment) => {
   return environment
 }
 
-export const serializeEnvironment = (environment: Environment) =>
-  Object.entries(storable(environment))
-    .filter(([, value]) => value !== '')
-    .map(([name, value]) => `${name}='${value}'\n`)
-    .join('')
+export const serializeEnvironment = (environment: Environment, previousText = '') => {
+  const unwritten = new Map(Object.entries(storable(environment)).filter(([, value]) => value !== ''))
+  const assignmentLineOf = (name: string, exported = '', comment = '') => {
+    const line = `${exported}${name}='${unwritten.get(name)}'${comment}`
+    unwritten.delete(name)
+    return line
+  }
+  const previousLines = previousText === '' ? [] : previousText.replace(/\r?\n$/, '').split(/\r?\n/)
+  const rewrittenLines = previousLines.flatMap((line) => {
+    const assignment = assignmentOf(line)
+    if (!assignment) return [line]
+    if (!unwritten.has(assignment.name)) return []
+    return [assignmentLineOf(assignment.name, assignment.exported, assignment.comment)]
+  })
+  const addedLines = [...unwritten.keys()].map((name) => assignmentLineOf(name))
+  return [...rewrittenLines, ...addedLines].map((line) => `${line}\n`).join('')
+}
 
 export const withSecrets = (existing: Environment): Environment => ({
   ...Object.fromEntries(secretNames.map((name) => [name, existing[name] || newSecret()])),
