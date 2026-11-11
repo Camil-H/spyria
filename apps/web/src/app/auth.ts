@@ -106,6 +106,7 @@ export const createWorkspaceOfAccount = async (name: string): Promise<WorkspaceS
     body: JSON.stringify({ name }),
   })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.message ?? `Creating a workspace failed with ${response.status}`)
+  if (response.status === 401) throw new Error('Your sign-in expired: sign in again to create a workspace')
+  if (!response.ok) throw new Error(body.message ?? 'The workspace could not be created. Try again.')
   return body
 }
