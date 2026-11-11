@@ -173,7 +173,7 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
   }
 })
 
-test('a consent starts on a read-only tool of the server, or on its first tool when it marks none read-only', async () => {
+test('a consent starts on a read-only tool granted to the member, or on the first tool granted when none is read-only, never on a tool the key lacks', async () => {
   const calledTools: string[] = []
   const flowId = crypto.randomUUID()
   const consentServer = Bun.serve({
@@ -193,6 +193,7 @@ test('a consent starts on a read-only tool of the server, or on its first tool w
               { name: 'docs-create_page' },
               { name: 'docs-get_me', annotations: { readOnlyHint: true } },
               { name: 'wiki-update', annotations: { readOnlyHint: false } },
+              { name: 'notes-append' },
             ],
           },
         })
@@ -214,7 +215,15 @@ test('a consent starts on a read-only tool of the server, or on its first tool w
     expect(await consentGateway.startToolConsent('key-1', wiki)).toBe(
       `http://localhost:${consentServer.port}/authorize`,
     )
-    expect(calledTools).toEqual(['docs-get_me', 'wiki-update'])
+    const notes = { id: 'notes', name: 'notes', tools: ['archive', 'append'] }
+    expect(await consentGateway.startToolConsent('key-1', notes)).toBe(
+      `http://localhost:${consentServer.port}/authorize`,
+    )
+    const sheets = { id: 'sheets', name: 'sheets', tools: ['read'] }
+    expect(await consentGateway.startToolConsent('key-1', sheets).then(String, (error: Error) => error.message)).toBe(
+      'The gateway grants no tool of sheets to start a consent',
+    )
+    expect(calledTools).toEqual(['docs-get_me', 'wiki-update', 'notes-append'])
   } finally {
     consentServer.stop(true)
   }
