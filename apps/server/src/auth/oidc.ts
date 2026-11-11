@@ -20,6 +20,7 @@ type ClientSettings = OidcSettings & {
 type LoginState = { state: string; nonce: string; codeVerifier: string }
 
 const idTokenClockToleranceSeconds = 30
+const idTokenMaxAgeSeconds = 60 * 60
 const providerTimeoutMilliseconds = 10_000
 const tenantPlaceholder = '{tenantid}'
 const tenantIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -127,6 +128,7 @@ export const createOidc = ({
         issuer: tokenServer.issuer,
         audience: clientId,
         clockTolerance: idTokenClockToleranceSeconds,
+        maxTokenAge: idTokenMaxAgeSeconds,
       })
       const claimed = emailOf(payload)
       const subject = subjectOf(payload)

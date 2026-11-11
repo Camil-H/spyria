@@ -13,9 +13,12 @@ const { database } = testDatabase
 const idpKeys = await generateKeyPair('RS256')
 const idpPublicKey = { ...(await exportJWK(idpKeys.publicKey)), kid: 'fake-idp', alg: 'RS256', use: 'sig' }
 let nextIdToken = ''
+const challengeOfCode = new Map<string, string>()
+const s256Of = async (verifier: string) =>
+  Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))).toString('base64url')
 const idp = Bun.serve({
   port: 0,
-  fetch: (request) => {
+  fetch: async (request) => {
     const { pathname, origin } = new URL(request.url)
     if (pathname === '/.well-known/openid-configuration')
       return Response.json({
@@ -28,9 +31,12 @@ const idp = Bun.serve({
         id_token_signing_alg_values_supported: ['RS256'],
       })
     if (pathname === '/keys') return Response.json({ keys: [idpPublicKey] })
-    if (pathname === '/token')
-      return Response.json({ access_token: 'access', token_type: 'Bearer', id_token: nextIdToken })
-    return new Response(null, { status: 404 })
+    if (pathname !== '/token') return new Response(null, { status: 404 })
+    const form = new URLSearchParams(await request.text())
+    const challenge = challengeOfCode.get(form.get('code') ?? '')
+    if (challenge !== undefined && challenge !== (await s256Of(form.get('code_verifier') ?? '')))
+      return Response.json({ error: 'invalid_grant' }, { status: 400 })
+    return Response.json({ access_token: 'access', token_type: 'Bearer', id_token: nextIdToken })
   },
 })
 const idpIssuer = idp.url.origin
@@ -171,6 +177,25 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
     (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: true, exp: nowInSeconds() - 120 }),
   ],
   [
+    'an ID token issued in the future',
+    (nonce) =>
+      signIdToken({
+        nonce,
+        email: 'alice@example.com',
+        email_verified: true,
+        iat: nowInSeconds() + 600,
+        exp: nowInSeconds() + 660,
+      }),
+  ],
+  [
+    'an ID token not valid yet',
+    (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: true, nbf: nowInSeconds() + 600 }),
+  ],
+  [
+    'an ID token without its issue time',
+    (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: true, iat: undefined }),
+  ],
+  [
     'a tampered ID token',
     async (nonce) => {
       const [header, , signature] = (
@@ -226,6 +251,36 @@ test('the callback refuses a wrong state, a missing login cookie and a tampered 
     expect(response.status).toBe(400)
     expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
   }
+})
+
+test("the callback sends its login's PKCE verifier, so a code issued to another login is refused by the provider", async () => {
+  const victimLogin = await startLogin()
+  const attackerLogin = await startLogin()
+  challengeOfCode.set('code-1', attackerLogin.location.searchParams.get('code_challenge') ?? '')
+  try {
+    nextIdToken = await signIdToken({ nonce: victimLogin.nonce, email: 'alice@example.com', email_verified: true })
+    const injected = await callback(victimLogin.state, victimLogin.cookie)
+    expect(injected.status).toBe(400)
+    expect(await injected.text()).toContain('"status":"failed"')
+    expect(cookieHeaderOf(injected)).not.toContain('spyria_s_')
+
+    nextIdToken = await signIdToken({ nonce: attackerLogin.nonce, email: 'alice@example.com', email_verified: true })
+    const own = await callback(attackerLogin.state, attackerLogin.cookie)
+    expect(await own.text()).toContain('"status":"signed_in"')
+  } finally {
+    challengeOfCode.clear()
+  }
+})
+
+test('the callback refuses an authorization response that names another issuer', async () => {
+  const login = await startLogin()
+  nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
+  const response = await app.request(
+    `/auth/callback?${new URLSearchParams({ code: 'code-1', state: login.state, iss: 'http://localhost:1/evil' })}`,
+    { headers: { cookie: login.cookie } },
+  )
+  expect(response.status).toBe(400)
+  expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
 })
 
 test('the API refuses a revoked session at once, even with an unexpired token', async () => {
@@ -361,10 +416,8 @@ test('without test hooks the app ignores the spyria_test cookie, the test routes
   expect(sessions[0]?.expiresAt).toBeLessThan(Date.now() + 2000)
 })
 
-test('signs in through the real Dex form, the first account of a person bound to their address', async () => {
-  await database.$client`delete from account_identities where user_id = 'member-alice'`
-  const dexApp = createApp({ database, ...testAuthSettings })
-  const login = await dexApp.request('/auth/login')
+const dexApp = createApp({ database, ...testAuthSettings })
+const dexCallbackUrlOf = async (login: Response) => {
   let location = login.headers.get('location') ?? ''
   for (let hop = 0; !location.startsWith(testAuthSettings.oidc.redirectUri); hop++) {
     if (hop === 10) throw new Error(`Dex did not redirect back, last location ${location}`)
@@ -379,7 +432,13 @@ test('signs in through the real Dex form, the first account of a person bound to
       location = new URL(submitted.headers.get('location') ?? '', page.url).href
     } else location = new URL(location, page.url).href
   }
-  const callbackUrl = new URL(location)
+  return new URL(location)
+}
+
+test('signs in through the real Dex form, the first account of a person bound to their address', async () => {
+  await database.$client`delete from account_identities where user_id = 'member-alice'`
+  const login = await dexApp.request('/auth/login')
+  const callbackUrl = await dexCallbackUrlOf(login)
   const response = await dexApp.request(`/auth/callback${callbackUrl.search}`, {
     headers: { cookie: cookieHeaderOf(login) },
   })
@@ -388,6 +447,19 @@ test('signs in through the real Dex form, the first account of a person bound to
     acme,
     globex,
   ])
+})
+
+test("Dex refuses a code replayed into another login, whose PKCE verifier does not match the code's challenge", async () => {
+  const codeOwnerLogin = await dexApp.request('/auth/login')
+  const code = (await dexCallbackUrlOf(codeOwnerLogin)).searchParams.get('code') ?? ''
+  const victimLogin = await dexApp.request('/auth/login')
+  const victimState = new URL(victimLogin.headers.get('location') ?? '').searchParams.get('state') ?? ''
+  const response = await dexApp.request(`/auth/callback?${new URLSearchParams({ code, state: victimState })}`, {
+    headers: { cookie: cookieHeaderOf(victimLogin) },
+  })
+  expect(response.status).toBe(400)
+  expect(await response.text()).toContain('"status":"failed"')
+  expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
 })
 
 const membershipsOf = async (email: string) => [
