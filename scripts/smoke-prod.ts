@@ -28,8 +28,6 @@ const smokeEnvironment = {
   SPYRIA_TOKEN_SECRET: secretOf(),
   SPYRIA_SECRETS_KEY: secretOf(),
   SPYRIA_SETUP_TOKEN: secretOf(),
-  SPYRIA_SMTP_URL: `smtp://smoke:${secretOf()}@127.0.0.1:2525`,
-  SPYRIA_MAIL_FROM: 'Spyria smoke <smoke@example.com>',
   SPYRIA_GATEWAY_ADMIN_USER: `admin-${secretOf().slice(0, 8)}`,
   SPYRIA_GATEWAY_ADMIN_PASSWORD: secretOf(),
   SPYRIA_GATEWAY_ENCRYPTION_KEY: secretOf(),
@@ -140,8 +138,12 @@ const smoke = async () => {
   )
   const authMode = await (await fetch(`${serverUrl}/auth/mode`)).json()
   check(
-    authMode.authMode === 'sso' && authMode.isBeingSetUp === true && authMode.canCreateWorkspace === false,
-    '/auth/mode says the deployment is being set up and refuses creating a workspace without the setup link',
+    authMode.authMode === 'sso' &&
+      authMode.isBeingSetUp === true &&
+      authMode.canCreateWorkspace === false &&
+      Array.isArray(authMode.accountProviders) &&
+      authMode.accountProviders.length === 0,
+    '/auth/mode says the deployment is being set up, offers no account provider without an account app, and refuses creating a workspace without the setup link',
   )
   const setupMode = await (
     await fetch(`${serverUrl}/auth/mode?${new URLSearchParams({ setup: smokeEnvironment.SPYRIA_SETUP_TOKEN })}`)
