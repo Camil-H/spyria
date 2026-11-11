@@ -239,6 +239,7 @@ export const createLlmGateway = ({
         oauth_config: {},
       })
       toolServerList = undefined
+      if (!body.oauth_config_id || !body.authorize_url) throw new Error(`The gateway started no sign-in for ${name}`)
       return { setupId: String(body.oauth_config_id), authorizeUrl: String(body.authorize_url) }
     },
     finishMemberToolServer: async (name, setupId) => {

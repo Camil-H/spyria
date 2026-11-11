@@ -110,6 +110,8 @@ test('the tool server list is read once per short window, and again after a serv
     fetch: (request) => {
       const { pathname } = new URL(request.url)
       if (pathname === '/api/mcp/clients') listings.push(Date.now())
+      if (pathname === '/api/mcp/client')
+        return Response.json({ oauth_config_id: 'setup-1', authorize_url: 'https://docs.test/authorize' })
       return Response.json(pathname === '/api/mcp/clients' ? { clients: [] } : {})
     },
   })
