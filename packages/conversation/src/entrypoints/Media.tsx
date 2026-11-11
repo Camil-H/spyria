@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { focusRing, IconButton, iconButtonClass } from '@spyria/ui'
+import { focusRing, iconButtonClass } from '@spyria/ui'
 import { Download, FileText, Image as ImageIcon, Play, X } from 'lucide-react'
 import { type ReactNode, use, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -79,16 +79,24 @@ const ImageOverlay = ({ url, name, onClose }: { url: string; name: string; onClo
     onKeyDown={(event) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      onClose()
+      event.currentTarget.close()
     }}
-    onClick={(event) => event.target === event.currentTarget && onClose()}
-    className="fixed inset-0 z-40 m-0 flex h-full max-h-none w-full max-w-none items-center justify-center bg-transparent p-12 backdrop:bg-black/80"
+    onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+    className="m-0 h-full max-h-none w-full max-w-none items-center justify-center bg-transparent p-12 backdrop:bg-black/80 open:flex"
   >
     <div className="absolute top-3 right-3 flex items-center gap-1 rounded-md bg-raised shadow-lg">
       <a href={url} download={name} aria-label={`Save ${name}`} title={`Save ${name}`} className={iconButtonClass}>
         <Download aria-hidden size={18} />
       </a>
-      <IconButton label="Close" icon={X} onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close"
+        title="Close"
+        onClick={(event) => event.currentTarget.closest('dialog')?.close()}
+        className={iconButtonClass}
+      >
+        <X aria-hidden size={18} />
+      </button>
     </div>
     <img src={url} alt={name} className="max-h-full max-w-full rounded-md object-contain" />
   </dialog>
