@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { connectAdapter } from './acp.ts'
+import { connectAdapter, spawnJsonLines } from './acp.ts'
 
 const answerThenUpdate = [
   JSON.stringify({ jsonrpc: '2.0', id: 0, result: { stopReason: 'end_turn' } }),
@@ -75,4 +75,32 @@ test('an adapter that exits in the same read as its answers delivers them, and t
     )
   await Promise.all([answered('first'), answered('second'), exited.promise])
   expect(delivered).toEqual(['answer 0', 'update', 'answer 1', 'exit'])
+})
+
+test('a process whose output is still being written when it exits reports its exit only once that output is read', async () => {
+  const records: Record<string, unknown>[] = []
+  const exited = Promise.withResolvers<{ code: number | null; records: number; lastErrorLine?: string }>()
+  const lines = spawnJsonLines(
+    {
+      command: ['sh', '-c', `(sleep 0.2; echo '{"n":1}'; echo 'last words' >&2) & exit 3`],
+      env: { PATH: process.env.PATH ?? '' },
+      cwd: '/',
+    },
+    (record) => void records.push(record),
+    (code) => exited.resolve({ code, records: records.length, lastErrorLine: lines.errorOutput().at(-1) }),
+  )
+  expect(await exited.promise).toStrictEqual({ code: 3, records: 1, lastErrorLine: 'last words' })
+})
+
+test('a process whose output stays open after it exits, held by a process it started, still reports its exit', async () => {
+  const exited = Promise.withResolvers<number | null>()
+  const startedAt = performance.now()
+  const lines = spawnJsonLines(
+    { command: ['sh', '-c', 'sleep 5 & exit 3'], env: { PATH: process.env.PATH ?? '' }, cwd: '/' },
+    () => {},
+    exited.resolve,
+  )
+  expect(await exited.promise).toBe(3)
+  expect(performance.now() - startedAt).toBeLessThan(3_000)
+  lines.close()
 })
