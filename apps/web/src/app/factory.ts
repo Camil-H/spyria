@@ -259,8 +259,7 @@ export const createApp = async (
       ...ssoSettingsCommands,
       confirmSsoSettings: async ({ workspaceId, form }) => {
         const outcome = await submitInPopup(form, '/auth/workspace-sso')
-        const session = outcome.status === 'signed_in' ? await renew(workspaceId) : undefined
-        if (session) await store.signIn(session)
+        if (outcome.status === 'signed_in') await store.renewSession(workspaceId)
         return outcome
       },
       stopSso: async (input) => {
