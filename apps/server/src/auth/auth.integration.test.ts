@@ -327,7 +327,8 @@ test('without test hooks the app ignores the spyria_test cookie, the test routes
   expect(sessions[0]?.expiresAt).toBeLessThan(Date.now() + 2000)
 })
 
-test('signs in through the real Dex form', async () => {
+test('signs in through the real Dex form, the first account of a person bound to their address', async () => {
+  await database.$client`delete from account_identities where user_id = 'member-alice'`
   const dexApp = createApp({ database, ...testAuthSettings })
   const login = await dexApp.request('/auth/login')
   let location = login.headers.get('location') ?? ''
