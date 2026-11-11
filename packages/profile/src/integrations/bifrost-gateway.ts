@@ -12,7 +12,6 @@ export type LlmGatewaySettings = {
   toolServerListMilliseconds?: number
   virtualKeyMilliseconds?: number
 }
-export type ToolServerSetup = { name: string; url: string; oauthConfig?: Record<string, unknown>; isShared?: boolean }
 type McpClient = {
   config: { client_id: string; name: string; auth_type: string; headers?: Record<string, unknown> }
   tools?: { name?: string }[]
@@ -22,7 +21,6 @@ type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: s
 type BifrostGateway = LlmGateway &
   ToolGateway & {
     url: string
-    setUpToolServer(server: ToolServerSetup, logIn?: (authorizeUrl: string) => Promise<void>): Promise<boolean>
     listedModels(): readonly ListedModel[]
     refreshListedModels(): Promise<void>
   }
@@ -130,7 +128,6 @@ export const createLlmGateway = ({
         id: config.client_id,
         name: config.name,
         tools: (tools ?? []).flatMap((tool) => tool.name ?? []),
-        isPersonal: config.auth_type === 'per_user_oauth',
       }),
     )
   const toolServers = () => {
@@ -175,6 +172,27 @@ export const createLlmGateway = ({
     }
     return result?.tools ?? []
   }
+  const listedServerTools = async (name: string) => {
+    const listingKey = virtualKeyOf(
+      (
+        await request('POST', '/api/governance/virtual-keys', {
+          name: `vk_listing_${crypto.randomUUID()}`,
+          is_active: true,
+          mcp_configs: [{ mcp_client_name: name, tools_to_execute: ['*'] }],
+        })
+      ).body,
+    )
+    try {
+      return (await listedToolsOf(listingKey.value)).map(
+        (tool): ConnectionTool => ({
+          name: tool.name.slice(name.length + 1),
+          readOnly: tool.annotations?.readOnlyHint === true,
+        }),
+      )
+    } finally {
+      await request('DELETE', `/api/governance/virtual-keys/${listingKey.id}`)
+    }
+  }
   const readOnlyToolOf = async (virtualKeyValue: string | undefined, server: ToolServer) =>
     (await listedToolsOf(virtualKeyValue)).find(
       (tool) => tool.name.startsWith(`${server.name}-`) && tool.annotations?.readOnlyHint === true,
@@ -199,24 +217,6 @@ export const createLlmGateway = ({
     },
     toolServers,
     finishToolConsent,
-    setUpToolServer: async ({ name, url: endpoint, oauthConfig = {}, isShared }, logIn) => {
-      if (name.includes('-')) throw new Error(`A tool server name cannot contain "-": ${name}`)
-      if ((await freshToolServers()).some((server) => server.name === name)) return false
-      if (!isShared && !logIn) throw new Error(`Setting up ${name} needs an operator to log in to it`)
-      const { body } = await request('POST', '/api/mcp/client', {
-        name,
-        connection_type: 'http',
-        connection_string: endpoint,
-        tools_to_execute: ['*'],
-        ...(isShared ? { auth_type: 'none' } : { auth_type: 'per_user_oauth', oauth_config: oauthConfig }),
-      })
-      if (logIn && !isShared) {
-        await logIn(String(body.authorize_url))
-        await request('POST', `/api/mcp/client/${body.oauth_config_id}/complete-oauth`)
-      }
-      toolServerList = undefined
-      return true
-    },
     addToolServer: async ({ name, url: endpoint, secretHeader }) => {
       await request('POST', '/api/mcp/client', {
         name,
@@ -227,25 +227,28 @@ export const createLlmGateway = ({
         ...(secretHeader && { headers: { [secretHeader.name]: secretHeader.value } }),
       })
       toolServerList = undefined
-      const listingKey = virtualKeyOf(
-        (
-          await request('POST', '/api/governance/virtual-keys', {
-            name: `vk_listing_${crypto.randomUUID()}`,
-            is_active: true,
-            mcp_configs: [{ mcp_client_name: name, tools_to_execute: ['*'] }],
-          })
-        ).body,
+      return listedServerTools(name)
+    },
+    startMemberToolServer: async ({ name, url: endpoint }) => {
+      const { body } = await request('POST', '/api/mcp/client', {
+        name,
+        connection_type: 'http',
+        connection_string: endpoint,
+        tools_to_execute: ['*'],
+        auth_type: 'per_user_oauth',
+        oauth_config: {},
+      })
+      toolServerList = undefined
+      return { setupId: String(body.oauth_config_id), authorizeUrl: String(body.authorize_url) }
+    },
+    finishMemberToolServer: async (name, setupId) => {
+      await request('POST', `/api/mcp/client/${setupId}/complete-oauth`)
+      toolServerList = undefined
+      const listed = await listedServerTools(name)
+      if (listed.length > 0) return listed
+      return ((await clientNamed(name))?.tools ?? []).flatMap((tool) =>
+        tool.name ? [{ name: tool.name, readOnly: false }] : [],
       )
-      try {
-        return (await listedToolsOf(listingKey.value)).map(
-          (tool): ConnectionTool => ({
-            name: tool.name.slice(name.length + 1),
-            readOnly: tool.annotations?.readOnlyHint === true,
-          }),
-        )
-      } finally {
-        await request('DELETE', `/api/governance/virtual-keys/${listingKey.id}`)
-      }
     },
     replaceToolServerHeader: async (name, secretHeader) => {
       const client = await clientNamed(name)
@@ -262,9 +265,9 @@ export const createLlmGateway = ({
     },
     setToolGrants: async (virtualKeyId, workspaceGrants) => {
       const [servers, configs] = await Promise.all([toolServers(), toolConfigsOf(virtualKeyId)])
-      const granted = servers.flatMap(({ name, isPersonal }) => {
+      const granted = servers.flatMap(({ name }) => {
         const config = configs.find(({ mcp_client_name }) => mcp_client_name === name)
-        const tools = isPersonal ? (config?.tools_to_execute ?? ['*']) : (workspaceGrants[name] ?? [])
+        const tools = workspaceGrants[name] ?? []
         return tools.length > 0
           ? [{ ...(config && { id: config.id }), mcp_client_name: name, tools_to_execute: tools }]
           : []
