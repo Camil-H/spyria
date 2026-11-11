@@ -18,7 +18,7 @@ import {
   workspaceEventsOf,
 } from '../testing/testing.ts'
 import { createSmtpMailer } from './mail.ts'
-import { createSecretBox } from './secret-box.ts'
+import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 import { assertInstanceAppsConfigured, verifyDomainByOperator } from './sso.ts'
@@ -27,7 +27,7 @@ const testDatabase = await createTestDatabase()
 const { database } = testDatabase
 const emptyInstance = await createTestDatabase()
 await emptyInstance.database.$client`truncate workspaces, users cascade`
-const secretsKey = 'sso-integration-secrets-key-0123456789'
+const secretsKeyring = secretsKeyringOf('sso-integration-secrets-key-0123456789')
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
 const startFakeIdp = async (issuerPath = '', { confirmsEmail = true } = {}) => {
@@ -84,7 +84,12 @@ const otherIdp = await startFakeIdp()
 const entraIdp = await startFakeIdp('/tenant-1/v2.0', { confirmsEmail: false })
 const firstWorkspaceIdp = Object.assign(await startFakeIdp(), { clientSecret: 'umbrella-secret' })
 const smtp = startFakeSmtp()
-const ssoSettings = { ...testAuthSettings, authMode: 'sso' as const, secretsKey, microsoftLoginOrigin: entraIdp.origin }
+const ssoSettings = {
+  ...testAuthSettings,
+  authMode: 'sso' as const,
+  secretsKeyring,
+  microsoftLoginOrigin: entraIdp.origin,
+}
 const app = createApp({ database, ...ssoSettings, mail: { smtpUrl: smtp.url, from: 'Spyria <spyria@test.local>' } })
 const appWithoutMail = createApp({ database, ...ssoSettings })
 const emptyInstanceApp = createApp({ database: emptyInstance.database, ...ssoSettings })
@@ -244,7 +249,7 @@ test('an admin saves the SSO settings: the secret is encrypted at rest, never re
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = ${acme}`
   expect(stored?.encryptedClientSecret).not.toContain('acme-secret-1')
-  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('acme-secret-1')
+  expect(await createSecretBox(secretsKeyring).open(stored?.encryptedClientSecret ?? '')).toBe('acme-secret-1')
 
   expect((await saveSso(acme, { ...view, clientId: `spyria-${acme}-2` })).status).toBe(200)
   expect((await saveSso(acme, { ...view, clientSecret: 'acme-secret-2' })).status).toBe(200)
@@ -791,7 +796,7 @@ test('the first person completing sign-in becomes the Admin of an unverified wor
     domain: 'umbrella.com',
     verifiedAt: null,
   })
-  expect(await createSecretBox(secretsKey).open(stored?.encryptedClientSecret ?? '')).toBe('umbrella-secret')
+  expect(await createSecretBox(secretsKeyring).open(stored?.encryptedClientSecret ?? '')).toBe('umbrella-secret')
   expect([...(await emptyInstance.database.$client`select subject, user_id as "userId" from identities`)]).toEqual([
     { subject: winner === carol ? 'carol-subject' : 'dave-subject', userId },
   ])

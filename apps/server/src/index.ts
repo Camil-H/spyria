@@ -8,7 +8,7 @@ import { joinByOf } from '@spyria/workspace/server'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp, sessionClassifierOf } from './app.ts'
 import { isSameSecret } from './auth/same-secret.ts'
-import { createSecretBox } from './auth/secret-box.ts'
+import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { applyConfiguredSignInApp, assertInstanceAppsConfigured, hasNoWorkspace } from './auth/sso.ts'
 import { createGitHubCheckouts } from './github/github.ts'
@@ -53,7 +53,8 @@ const gatewaySettings = {
 }
 const llmGateway = createLlmGateway(gatewaySettings)
 const tokenSecret = requiredEnvironment('SPYRIA_TOKEN_SECRET')
-const secretsKey = requiredEnvironment('SPYRIA_SECRETS_KEY')
+const secretsKeyring = secretsKeyringFrom(process.env)
+const secretBox = createSecretBox(secretsKeyring)
 const spyriaAgentImage = await readSpyriaAgentImage()
 const appOrigin = requiredEnvironment('SPYRIA_APP_ORIGIN')
 const version = process.env.SPYRIA_VERSION || undefined
@@ -64,7 +65,7 @@ const runtimeHosts = createRuntimeHostGateway({
   spyriaAgentImage,
   awaitsFirstWorkspace: async (claimCode) =>
     isSameSecret(installHostToken, claimCode) && (await hasNoWorkspace(database.$client)),
-  runtimeKeySecret: secretsKey,
+  secretsKeyring,
   hostUpdateCommandOf: hostUpdateCommandOf({ deployment, origin: appOrigin, image: hostImage }),
   databases: () => [database],
   afterHello: (helloDatabase, host) => agentBridge.forDatabase(helloDatabase).resumeHost(host),
@@ -72,7 +73,7 @@ const runtimeHosts = createRuntimeHostGateway({
 })
 const github = {
   api: createGitHubApi(githubDotCom),
-  secretBox: createSecretBox(secretsKey),
+  secretBox,
 }
 const agentBridge = createAgentBridge({
   sandboxProvider: runtimeHosts.sandboxProvider,
@@ -91,7 +92,7 @@ const configuredSignInApp = {
   clientSecret: process.env.SPYRIA_SIGN_IN_APP_CLIENT_SECRET?.trim() ?? '',
 }
 if (configuredSignInApp.clientId && configuredSignInApp.clientSecret) {
-  const changedWorkspaces = await applyConfiguredSignInApp(database, createSecretBox(secretsKey), configuredSignInApp)
+  const changedWorkspaces = await applyConfiguredSignInApp(database, secretBox, configuredSignInApp)
   if (changedWorkspaces > 0)
     log.info({
       event: 'sso.sign_in_app_applied',
@@ -108,7 +109,7 @@ const app = createApp({
     redirectUri: requiredEnvironment('SPYRIA_OIDC_REDIRECT_URI'),
   },
   authMode,
-  secretsKey,
+  secretsKeyring,
   instanceSignInApps,
   github,
   mail: process.env.SPYRIA_SMTP_URL

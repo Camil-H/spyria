@@ -16,7 +16,7 @@ import {
   globex,
   sessionTokenOf,
   testAuthSettings,
-  testSecretsKey,
+  testSecretsKeyring,
   workspaceEventsOf,
 } from '../testing/testing.ts'
 import { createGitHubApi } from './github-api.ts'
@@ -24,7 +24,7 @@ import { createGitHubApi } from './github-api.ts'
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
 const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKey)
+const secretBox = createSecretBox(testSecretsKeyring)
 const app = createApp({
   database,
   ...testAuthSettings,

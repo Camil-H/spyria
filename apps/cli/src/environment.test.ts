@@ -84,6 +84,56 @@ test('the environment file round-trips, drops empty values and refuses a value s
   expect(() => serializeEnvironment({ A: "it's" })).toThrow('A cannot hold a quote or span lines')
 })
 
+test('an edited environment file reads its export prefixes and inline comments, and is rewritten keeping its comments, prefixes and order', () => {
+  const edited = [
+    '# Spyria settings',
+    'export SPYRIA_DEPLOYMENT=spyria # the Compose project',
+    "SPYRIA_SMTP_URL='smtps://user:p#ss@smtp.example.com:465' # mail",
+    'SPYRIA_MAIL_FROM="Spyria <spyria@example.com>"',
+    'SPYRIA_GOOGLE_CLIENT_ID=old.apps.googleusercontent.com',
+    '',
+    '# proxy of this network',
+    'HTTPS_PROXY=http://proxy.internal:3128',
+    '',
+  ].join('\r\n')
+  expect(parseEnvironment(edited)).toEqual({
+    SPYRIA_DEPLOYMENT: 'spyria',
+    SPYRIA_SMTP_URL: 'smtps://user:p#ss@smtp.example.com:465',
+    SPYRIA_MAIL_FROM: 'Spyria <spyria@example.com>',
+    SPYRIA_GOOGLE_CLIENT_ID: 'old.apps.googleusercontent.com',
+    HTTPS_PROXY: 'http://proxy.internal:3128',
+  })
+  const rewritten = serializeEnvironment(
+    {
+      ...parseEnvironment(edited),
+      SPYRIA_DEPLOYMENT: 'garage',
+      SPYRIA_GOOGLE_CLIENT_ID: '',
+      SPYRIA_VERSION: '1.3.0',
+    },
+    edited,
+  )
+  expect(rewritten).toBe(
+    [
+      '# Spyria settings',
+      "export SPYRIA_DEPLOYMENT='garage' # the Compose project",
+      "SPYRIA_SMTP_URL='smtps://user:p#ss@smtp.example.com:465' # mail",
+      "SPYRIA_MAIL_FROM='Spyria <spyria@example.com>'",
+      '',
+      '# proxy of this network',
+      "HTTPS_PROXY='http://proxy.internal:3128'",
+      "SPYRIA_VERSION='1.3.0'",
+      '',
+    ].join('\n'),
+  )
+  expect(parseEnvironment(rewritten)).toEqual({
+    SPYRIA_DEPLOYMENT: 'garage',
+    SPYRIA_SMTP_URL: 'smtps://user:p#ss@smtp.example.com:465',
+    SPYRIA_MAIL_FROM: 'Spyria <spyria@example.com>',
+    HTTPS_PROXY: 'http://proxy.internal:3128',
+    SPYRIA_VERSION: '1.3.0',
+  })
+})
+
 test('answers are checked: a deployment name Docker accepts and an https address', () => {
   expect(() => environmentOf({ ...answers, deployment: 'Spyria Prod' })).toThrow('lowercase letters, digits and dashes')
   expect(() => environmentOf({ ...answers, origin: 'http://localhost' })).toThrow('must start with https://')
