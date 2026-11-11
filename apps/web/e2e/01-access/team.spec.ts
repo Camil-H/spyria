@@ -2,6 +2,7 @@ import { openPageAs, type WorkerStack } from '../stack'
 import {
   agentReplyText,
   composerOf,
+  creationFormOf,
   expect,
   type FileChooser,
   giveWorkspaceRole,
@@ -76,14 +77,14 @@ test.describe('Team', () => {
     const ninaPage = await openPageAs(browser, workerStack, null)
     await signInThroughProvider(ninaPage, 'nina@example.com')
     await expect(switcherOf(ninaPage)).toContainText('Acme')
-    await expect(ninaPage.getByText(/No workspace has invited/)).toHaveCount(0)
+    await expect(creationFormOf(ninaPage)).toHaveCount(0)
 
     await expect(pendingInvitesOf(page)).toHaveCount(0)
     await expect(memberRowOf(page, 'nina@example.com')).toContainText('nina')
     await ninaPage.context().close()
   })
 
-  test('As a member who can invite, I revoke a pending invite and its email is told no workspace invited it', {
+  test('As a member who can invite, I revoke a pending invite and that person, signing in, reaches no workspace and is offered to create one', {
     tag: ['@spec-36'],
   }, async ({ page, browser, workerStack }) => {
     await invite(page, 'nina@example.com')
@@ -93,7 +94,7 @@ test.describe('Team', () => {
 
     const ninaPage = await openPageAs(browser, workerStack, null)
     await signInThroughProvider(ninaPage, 'nina@example.com')
-    await expect(ninaPage.getByText('No workspace has invited nina@example.com')).toBeVisible()
+    await expect(creationFormOf(ninaPage)).toBeVisible()
     await expect(sidebarOf(ninaPage)).toHaveCount(0)
     await expect(ninaPage.getByText(/Acme|Globex/)).toHaveCount(0)
     await ninaPage.context().close()

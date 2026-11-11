@@ -1,5 +1,6 @@
 import {
   anySignedOutScreenOf,
+  creationFormOf,
   expect,
   type Locator,
   logOutOf,
@@ -46,6 +47,41 @@ test.describe('Workspaces', () => {
       await expect(page.getByText("You don't have access to this workspace")).toBeVisible()
       await expect(sidebarOf(page)).toHaveCount(0)
       await expect(page.getByText(/Globex|Launch plan/)).toHaveCount(0)
+    })
+
+    test('As a person signed in without a workspace, I create one and land in it as its Admin, and a blank name is refused', {
+      tag: ['@spec-05'],
+    }, async ({ page, workerStack }) => {
+      await signInThroughProvider(page, 'olive@example.com')
+      await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
+      await expect(
+        page.getByText(
+          'You are signed in, but no workspace of yours opens with this account. Create one, or ask an Admin to invite this address.',
+        ),
+      ).toBeVisible()
+      const form = creationFormOf(page)
+
+      await test.step('a blank name is refused with its reason and creates nothing', async () => {
+        await form.getByRole('textbox', { name: 'Workspace name' }).fill('   ')
+        await form.getByRole('button', { name: 'Create workspace' }).click()
+        await expect(page.getByText('A name must contain at least one non-blank character')).toBeVisible()
+        expect(
+          await workerStack.database.$client`
+            select 1 from workspaces join users on users.id = workspaces.created_by
+            where users.email = 'olive@example.com'`,
+        ).toHaveLength(0)
+      })
+
+      await test.step('a name creates the workspace and opens it, with me as its Admin, even after a reload', async () => {
+        await form.getByRole('textbox', { name: 'Workspace name' }).fill('Olive lab')
+        await form.getByRole('button', { name: 'Create workspace' }).click()
+        await expect(switcherOf(page)).toContainText('Olive lab')
+        expect(await menuItemNamesOf(page)).toEqual(['New workspace', 'Olive lab', 'Log out of Olive lab'])
+        await expect(sidebarOf(page).getByRole('link', { name: /^Workspace settings/ })).toBeVisible()
+        await page.reload()
+        await expect(switcherOf(page)).toContainText('Olive lab')
+        await expect(page.getByText(/Acme|Globex/)).toHaveCount(0)
+      })
     })
   })
 
