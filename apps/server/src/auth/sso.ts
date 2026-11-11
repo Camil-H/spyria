@@ -16,6 +16,7 @@ import {
   type AccountProvider,
   displayNameFrom,
   type InstanceApps,
+  InstanceBeingSetUp,
   InvalidSsoSettings,
   instanceAppFor,
   Name,
@@ -162,7 +163,7 @@ const storeSsoSettings = async (sql: Sql, workspaceId: string, actor: Actor, pro
       clientId,
       ...(usesInstanceApp && { usesInstanceApp }),
     })
-  if (previous && provider.encryptedClientSecret)
+  if (previous && provider.encryptedClientSecret && provider.encryptedClientSecret !== previous.encryptedClientSecret)
     await recordWorkspaceEvent(sql, workspaceId, 'sso.secret_rotated', actor, {})
 }
 
@@ -191,13 +192,17 @@ export const prepareSsoSettings = async (
 ): Promise<PendingSso> => {
   const [user] = await database.$client.begin(async (sql) => {
     await requireMemberPermission(sql, member, 'sso.manage')
-    return sql<{ email: string; hasSecret: boolean }[]>`
-      select email, exists(select 1 from workspace_sso where workspace_id = ${member.workspaceId}
-        and encrypted_client_secret <> '') as "hasSecret"
+    return sql<{ email: string; storedSecret: string | null }[]>`
+      select email, (select nullif(encrypted_client_secret, '') from workspace_sso
+        where workspace_id = ${member.workspaceId}) as "storedSecret"
       from users where id = ${member.userId}`
   })
-  const provider = await ownProviderFrom(form, dependencies, { isSecretKept: user?.hasSecret })
-  return { ...member, email: user?.email ?? '', provider }
+  const provider = await ownProviderFrom(form, dependencies, { isSecretKept: !!user?.storedSecret })
+  const encryptedClientSecret =
+    provider.usesInstanceApp || provider.encryptedClientSecret
+      ? provider.encryptedClientSecret
+      : (user?.storedSecret ?? '')
+  return { ...member, email: user?.email ?? '', provider: { ...provider, encryptedClientSecret } }
 }
 
 export const confirmSsoSettings = (database: Database, pending: PendingSso, identity: VerifiedIdentity) =>
@@ -265,11 +270,11 @@ const insertWorkspace = async (
   return workspaceId
 }
 
-export const createWorkspaceOfAccount = (database: Database, userId: string, name: unknown) => {
+export const createWorkspaceOfAccount = async (database: Database, userId: string, name: unknown) => {
   const workspaceName = Name(String(name ?? '').trim())
   return database.$client.begin(async (sql) => {
     const [user] = await sql<{ email: string }[]>`select email from users where id = ${userId}`
-    if (!user || (await hasNoWorkspace(sql))) throw new WorkspaceCreationClosed()
+    if (!user || (await hasNoWorkspace(sql))) throw new InstanceBeingSetUp()
     return insertWorkspace(sql, { userId, workspaceName, identity: user })
   })
 }

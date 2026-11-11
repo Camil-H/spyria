@@ -6,6 +6,7 @@ import {
   accountProvidersOf,
   EmailNotConfirmed,
   entraObjectIdPattern,
+  InstanceBeingSetUp,
   instanceAppFor,
   instanceAppPresets,
   normalizedEmail,
@@ -88,7 +89,7 @@ const accountCookieSeconds = 15 * 60
 const accountProviderCookieSeconds = 365 * 24 * 60 * 60
 const popupSelfCloseMilliseconds = 10_000
 const workspaceProviderPrefix = 'workspace-'
-export const setupLinkNeededNotice = 'This Spyria is being set up: open the setup link to create its first workspace'
+export const setupLinkNeededNotice = new InstanceBeingSetUp().message
 export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
 

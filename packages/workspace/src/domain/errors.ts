@@ -174,3 +174,8 @@ export const AccountBoundElsewhere = errorKind(
   (email: string) => `${email} already signs in with another account of this provider`,
   WorkspaceError,
 )
+export const InstanceBeingSetUp = errorKind(
+  'instance_being_set_up',
+  () => 'This Spyria is being set up: open the setup link to create its first workspace',
+  WorkspaceError,
+)
