@@ -8,8 +8,8 @@ import type {
 } from '@spyria/kernel'
 import type { LlmCredential } from '../domain/llm-credential.ts'
 import type { Member } from '../domain/member.ts'
-import type { PersonalConnection } from '../domain/personal-connection.ts'
 import type { Secret } from '../domain/secret.ts'
+import type { ToolConnection } from '../domain/tool-connection.ts'
 import type {
   ConnectionRestriction,
   ConnectionTool,
@@ -57,11 +57,11 @@ export type LlmGateway = {
   virtualKeyValue(id: string): Promise<string | undefined>
 }
 
-export type PersonalConnectionRepository = {
-  connect(connection: PersonalConnection): Promise<void>
-  disconnect(tool: string): Promise<void>
-  statusOf(tool: string): Promise<string | undefined>
-  tools(): Promise<string[]>
+export type ToolConnectionRepository = {
+  connect(connection: ToolConnection): Promise<void>
+  disconnect(connectionId: string): Promise<void>
+  statusOf(connectionId: string): Promise<string | undefined>
+  connectionIds(): Promise<string[]>
   removeAll(): Promise<void>
 }
 
@@ -69,6 +69,7 @@ export type WorkspaceConnectionRepository = {
   list(workspaceId: WorkspaceId): Promise<WorkspaceConnection[]>
   get(workspaceId: WorkspaceId, connectionId: string): Promise<WorkspaceConnection>
   findByGatewayName(workspaceId: WorkspaceId, gatewayName: string): Promise<WorkspaceConnection | undefined>
+  findByName(workspaceId: WorkspaceId, name: string): Promise<WorkspaceConnection | undefined>
   add(connection: WorkspaceConnection): Promise<void>
   save(connection: WorkspaceConnection): Promise<void>
   remove(workspaceId: WorkspaceId, connectionId: string): Promise<void>
@@ -82,10 +83,12 @@ export type WorkspaceEventLog = {
   record(event: { workspaceId: WorkspaceId; type: string; payload: object }): Promise<void>
 }
 
-export type ToolServer = { id: string; name: string; tools: string[]; isPersonal: boolean }
+export type ToolServer = { id: string; name: string; tools: string[] }
 export type ToolGateway = {
   toolServers(): Promise<ToolServer[]>
   addToolServer(server: { name: string; url: string; secretHeader?: SecretHeader | null }): Promise<ConnectionTool[]>
+  startMemberToolServer(server: { name: string; url: string }): Promise<{ setupId: string; authorizeUrl: string }>
+  finishMemberToolServer(name: string, setupId: string): Promise<ConnectionTool[]>
   replaceToolServerHeader(name: string, secretHeader: SecretHeader | null): Promise<void>
   removeToolServer(name: string): Promise<void>
   setToolGrants(virtualKeyId: string, workspaceGrants: Record<string, string[]>): Promise<void>
