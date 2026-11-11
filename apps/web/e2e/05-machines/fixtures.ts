@@ -20,7 +20,7 @@ export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([
 
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 export const gibibyte = 1024 ** 3
-export const fakeHostVersions = { hostVersion: 'e2e', protocolVersion: 2 }
+export const fakeHostVersions = { hostVersion: 'e2e', protocolVersion: 3 }
 
 type HostSystem = { cpus: number; memoryBytes: number; rootless: boolean; limitsEnforced: boolean }
 type HostProcess = { output: () => string; exited: Promise<number | null>; stop: () => Promise<void> }
@@ -120,7 +120,8 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
         const frame = JSON.parse(String(message.data))
         if (frame.type === 'ping') send({ type: 'pong' })
         if (frame.type === 'refused') refusedReason = String(frame.reason)
-        if (frame.type === 'cmd') send({ type: 'res', id: frame.id, data: frame.op === 'status' ? 'missing' : null })
+        if (frame.type === 'cmd')
+          send({ type: 'res', id: frame.id, data: { status: 'missing', list: [] }[String(frame.op)] ?? null })
         if (frame.type === 'token')
           send({
             type: 'hello',

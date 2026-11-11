@@ -862,7 +862,7 @@ const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export const fakeHostVersion = 'test'
-export const fakeHostProtocolVersion = 2
+export const fakeHostProtocolVersion = 3
 export const fakeAgentProtocolVersion = 1
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
@@ -928,6 +928,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       }
       if (op === 'remove') containers.delete(runtimeId)
       if (op === 'status') return container ? (container.running ? 'running' : 'stopped') : 'missing'
+      if (op === 'list') return [...containers.keys()]
       return null
     }
     let socket: WebSocket | undefined

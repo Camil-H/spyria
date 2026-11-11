@@ -7,7 +7,7 @@ const image = `sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
 
-test('accepts exactly create, prepare, start, stop, remove, status, installed and install with their arguments', () => {
+test('accepts exactly create, prepare, start, stop, remove, status, installed, install and list with their arguments', () => {
   expect(parseCommand('create', create)).toEqual({ op: 'create', ...create })
   for (const op of ['installed', 'install'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1', harness: 'codex' })).toEqual({
@@ -16,6 +16,8 @@ test('accepts exactly create, prepare, start, stop, remove, status, installed an
       harness: 'codex',
     })
   expect(parseCommand('prepare', { image })).toEqual({ op: 'prepare', image })
+  expect(parseCommand('list', {})).toEqual({ op: 'list' })
+  expect(() => parseCommand('list', { runtimeId: 'runtime-1' })).toThrow('unexpected fields runtimeId')
   for (const op of ['start', 'stop', 'remove', 'status'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1' })).toEqual({ op, runtimeId: 'runtime-1' })
 })
@@ -298,6 +300,7 @@ test('stop and remove of a runtime whose container is gone still release its net
     'DELETE /volumes/spyria-rt-runtime-1-home',
     'DELETE /volumes/spyria-rt-runtime-1-tmp',
     'DELETE /networks/spyria-rt-runtime-1-net',
+    `GET /volumes?filters=${encodeURIComponent(JSON.stringify({ name: ['spyria-cache-'], dangling: ['true'] }))}`,
   ])
   const { docker: unmanagedDocker, calls: unmanagedCalls } = recordingDocker()
   for (const op of ['start', 'stop', 'remove'] as const)
@@ -322,9 +325,52 @@ test("two deployments on one Docker daemon never count or manage each other's ru
   const runnerOf = (deployment: string) => createCommandRunner({ docker, prefix: `${deployment}-` })
   for (const deployment of ['spyria', 'spyria-rt', 'spyria-prod'])
     expect(await runnerOf(deployment).runningCount()).toBe(1)
+  expect(await runnerOf('spyria').run({ op: 'list' })).toEqual(['a'])
+  expect(await runnerOf('spyria-rt').run({ op: 'list' })).toEqual(['b'])
   await expect(runnerOf('spyria').run({ op: 'status', runtimeId: 'rt-b' })).rejects.toThrow('not a managed runtime')
   expect(await runnerOf('spyria-rt').run({ op: 'status', runtimeId: 'b' })).toBe('running')
   expect(await runnerOf('spyria').run({ op: 'status', runtimeId: 'c' })).toBe('missing')
+})
+
+test('list names the runtimes of stopped containers too, while the running count counts running ones only', async () => {
+  const paths: string[] = []
+  const docker = (async (_method: string, path: string) => {
+    paths.push(path)
+    return []
+  }) as Docker
+  const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  await runner.run({ op: 'list' })
+  await runner.runningCount()
+  expect(paths.map((path) => path.split('&')[0])).toEqual(['/containers/json?all=true', '/containers/json?all=false'])
+})
+
+test("removing a runtime deletes this deployment's package caches no container uses, keeps one a container took meanwhile, and never another deployment's volumes", async () => {
+  const deleted: string[] = []
+  const docker = (async (method: string, path: string) => {
+    if (path.startsWith('/containers/') && path.endsWith('/json'))
+      return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    if (method === 'GET' && path.startsWith('/volumes?'))
+      return {
+        Volumes: [
+          { Name: `spyria-cache-${'a'.repeat(32)}` },
+          { Name: `spyria-cache-${'b'.repeat(32)}` },
+          { Name: `other-spyria-cache-${'c'.repeat(32)}` },
+          { Name: 'spyria-cache-cred-codex' },
+          { Name: `spyria-cache-cache-${'d'.repeat(32)}` },
+        ],
+      }
+    if (method === 'DELETE' && path === `/volumes/spyria-cache-${'b'.repeat(32)}`)
+      throw new DockerError(409, 'volume is in use')
+    if (method === 'DELETE' && path.startsWith('/volumes/')) deleted.push(path)
+    return {}
+  }) as Docker
+  await createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'remove', runtimeId: 'runtime-1' })
+  expect(deleted).toEqual([
+    '/volumes/spyria-rt-runtime-1-ws',
+    '/volumes/spyria-rt-runtime-1-home',
+    '/volumes/spyria-rt-runtime-1-tmp',
+    `/volumes/spyria-cache-${'a'.repeat(32)}`,
+  ])
 })
 
 const images = 'ghcr.io/camil-h'
