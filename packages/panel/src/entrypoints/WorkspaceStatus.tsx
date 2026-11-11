@@ -5,29 +5,39 @@ import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { usePanelCommands } from './providers.tsx'
 import type { TabProps } from './TabProps.ts'
 
-export const WorkspaceStatus = ({ workspaceId, chatId }: Pick<TabProps, 'workspaceId' | 'chatId'>) => {
-  const { isAsleep } = useQuery(getDevWorkspace, workspaceId, chatId)
+type StatusProps = Pick<TabProps, 'workspaceId' | 'chatId'>
+
+const AsleepStatus = ({ workspaceId, chatId, canWake }: StatusProps & { canWake: boolean }) => {
   const { wakeWorkspace } = usePanelCommands()
   const [wakeState, setWakeState] = useState<'idle' | 'waking' | 'failed'>('idle')
-  if (!isAsleep) return null
   const wake = () => {
     setWakeState('waking')
-    wakeWorkspace({ workspaceId, chatId }).catch(() => setWakeState('failed'))
+    wakeWorkspace({ workspaceId, chatId }).then(
+      () => setWakeState('idle'),
+      () => setWakeState('failed'),
+    )
   }
   return (
     <p
       role="status"
       className="mb-3 flex flex-wrap items-center gap-2 rounded-md bg-hover px-2 py-1 text-xs text-muted"
     >
-      Runtime asleep · showing the last snapshot
+      {canWake ? 'Runtime asleep' : 'Runtime going to sleep'} · showing the last snapshot
       {wakeState === 'waking' ? (
         <Spinner />
       ) : (
-        <button type="button" onClick={wake} className={`font-medium text-ink hover:underline ${focusRing}`}>
-          Wake
-        </button>
+        canWake && (
+          <button type="button" onClick={wake} className={`font-medium text-ink hover:underline ${focusRing}`}>
+            Wake
+          </button>
+        )
       )}
       {wakeState === 'failed' && <span className="text-ink">Could not wake the runtime</span>}
     </p>
   )
+}
+
+export const WorkspaceStatus = ({ workspaceId, chatId }: StatusProps) => {
+  const { isAsleep, canWake } = useQuery(getDevWorkspace, workspaceId, chatId)
+  return isAsleep ? <AsleepStatus workspaceId={workspaceId} chatId={chatId} canWake={canWake} /> : null
 }
