@@ -3,7 +3,7 @@ import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
-import { hasNoWorkspace } from './auth/sso.ts'
+import { hasNoWorkspace, stopWorkspaceSsoByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
 import { abandonFailedCleanup, purgeWorkspaceNow, restoreWorkspace } from './workspace-deletion.ts'
 
@@ -63,6 +63,16 @@ const commands: Record<string, () => Promise<void>> = {
       throw new Error('A workspace already exists: the setup link is spent')
     const origin = requiredEnvironment('SPYRIA_APP_ORIGIN')
     console.log(`${origin}/?${new URLSearchParams({ setup: requiredEnvironment('SPYRIA_SETUP_TOKEN') })}`)
+  },
+  'workspace:stop-sso': async () => {
+    const [workspaceId] = options
+    if (!workspaceId) throw new Error('Usage: bun run operator workspace:stop-sso <id>')
+    const isStopped = await stopWorkspaceSsoByOperator(database, workspaceId)
+    console.log(
+      isStopped
+        ? `Workspace ${workspaceId} no longer enforces SSO: its members sign in with their own accounts`
+        : `Workspace ${workspaceId} does not enforce SSO`,
+    )
   },
   'workspace:restore': async () => {
     const [workspaceId] = options

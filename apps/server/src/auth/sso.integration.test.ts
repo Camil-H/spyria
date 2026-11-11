@@ -5,6 +5,7 @@ import { microsoftPersonalAccountsTenantId } from '@spyria/workspace/server'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
+import { runOperator } from '../testing/operator.ts'
 import {
   acme,
   alice,
@@ -868,6 +869,23 @@ test('stopping SSO takes the workspace back to account sign-in and ends every se
   expect((await ssoEventsOf('stark')).at(-1)).toEqual(['sso.removed', alice])
   const back = await signInThrough(accountIdp, 'provider=oidc', { sub: 'alice-account', email: 'alice@example.com' })
   expect(workspaceIdsOf(back)).toContain('stark')
+})
+
+test('an operator stops the SSO of a workspace whose provider no longer signs anyone in, ending its sessions', async () => {
+  await addWorkspace('dunder')
+  await enforceSso('dunder', hooliIdp)
+  const aliceCookie = await sessionCookieOf('dunder', alice, 'workspace sso')
+  const stopped = await runOperator(testDatabase.name, ['workspace:stop-sso', 'dunder'])
+  expect(stopped).toMatchObject({
+    exitCode: 0,
+    stdout: 'Workspace dunder no longer enforces SSO: its members sign in with their own accounts\n',
+  })
+  expect(await database.$client`select 1 from workspace_sso where workspace_id = 'dunder'`).toHaveLength(0)
+  expect(await renewStatus('dunder', aliceCookie)).toBe(401)
+  expect((await ssoEventsOf('dunder')).at(-1)).toEqual(['sso.removed', 'operator'])
+  expect((await runOperator(testDatabase.name, ['workspace:stop-sso', 'dunder'])).stdout).toBe(
+    'Workspace dunder does not enforce SSO\n',
+  )
 })
 
 test('the test sign-in hook works in sso mode', async () => {
