@@ -141,7 +141,7 @@ test('a login for one workspace opens only that session', async () => {
   expect((await sessionsOf(signIn.cookie)).sessions.map((session) => session.workspaceId)).toEqual([globex])
 })
 
-test('an email without any membership gets an account that opens no workspace and may create one', async () => {
+test('an email without any membership gets an account that opens no workspace, with the cookie to create one', async () => {
   const signIn = await signInAs('nina@example.com')
   expect(signIn.status).toBe(200)
   expect(signIn.page).toContain('"status":"no_workspace"')
