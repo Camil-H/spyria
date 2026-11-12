@@ -42,7 +42,7 @@ export const authorizeToolCall = async (
 ): Promise<Authorization> => {
   const { tool } = toolNamePartsOf(toolName)
   const { chat, promptId, ownerId, ownerName } = turn
-  const prompterName = turn.prompterName ?? ''
+  const prompterName = turn.prompterName ?? ownerName
   const guestId = guestPrompterOf(turn)
   const policy = await policyOf(turn.prompterId ?? ownerId).catch(() => null)
   if (!policy) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }

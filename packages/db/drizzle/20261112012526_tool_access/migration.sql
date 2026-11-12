@@ -22,7 +22,7 @@ CREATE TABLE "tool_approvals" (
 );
 --> statement-breakpoint
 DROP TABLE "connection_restrictions";--> statement-breakpoint
-ALTER TABLE "workspace_connections" ADD COLUMN "is_reviewed" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_connections" ADD COLUMN "is_reviewed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "workspace_connections" ALTER COLUMN "is_reviewed" DROP DEFAULT;--> statement-breakpoint
 ALTER TABLE "workspace_connections" DROP COLUMN "allowed_tools";--> statement-breakpoint
 CREATE INDEX "connection_access_workspace_id_user_id_index" ON "connection_access" ("workspace_id","user_id");--> statement-breakpoint
