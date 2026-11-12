@@ -22,7 +22,7 @@ afterAll(async () => {
 
 const app = createApp({ database: testDatabase.database, ...testAuthSettings })
 const memberPrivateTables = ['read_markers', 'thread_read_markers', 'llm_credentials', 'tool_approvals']
-const chatOwnerConnectionTables = ['tool_connections', 'connection_access']
+const ownConnectionTables = ['tool_connections', 'connection_access']
 type ReplicatedTable = {
   name: string
   serverName?: string
@@ -143,8 +143,8 @@ const expectedCount = async (table: string, workspace: string, user: string) => 
       ? `and id in (${readableChats})`
       : serverSchema[table]?.chat_id
         ? `and chat_id in (${readableChats})`
-        : chatOwnerConnectionTables.includes(table)
-          ? `and (user_id = '${user}' or user_id in (select owner_user_id from chats where id in (${participatedChats}))
+        : ownConnectionTables.includes(table)
+          ? `and (user_id = '${user}'
               ${table === 'connection_access' ? `or user_id is null ${adminCondition}` : ''})`
           : ''
   const [{ count }] = await testDatabase.database.$client.unsafe<[{ count: number }]>(
@@ -204,6 +204,7 @@ test('there is one synced query per replicated table, messages, usage and pages 
       'chatMessages',
       'chatEarlierRoot',
       'chatPinnedSteps',
+      'chatOwnPrompt',
       'chatBrowserPages',
       'chatUsage',
       'monthUsage',
@@ -235,6 +236,28 @@ test.each(readers)(
     expect(monthUsage).toEqual(
       (rowsByReader.get(reader.name)?.get('usage_entries') ?? []).filter((row) => row.month === month),
     )
+  },
+)
+
+test.each(readers)(
+  '$name reads only its own prompts of the chats it may read when it asks whether it prompted a chat',
+  async (reader) => {
+    const readableChatIds = new Set(
+      rowsByReader
+        .get(reader.name)
+        ?.get('chats')
+        ?.map((row) => row.id),
+    )
+    const ownPrompts = await readPerChat(await tokenOf(reader.workspace, reader.user), (chatId) => [
+      'chatOwnPrompt',
+      { chatId },
+    ])
+    for (const row of ownPrompts) {
+      expect(readableChatIds.has(row.chat_id)).toBe(true)
+      expect({ author: row.author_id, kind: row.kind }).toEqual({ author: reader.user, kind: 'member' })
+    }
+    expect(new Set(ownPrompts.map((row) => row.chat_id)).size).toBe(ownPrompts.length)
+    if (reader.name === 'Alice in Acme') expect(ownPrompts.length).toBeGreaterThan(0)
   },
 )
 
@@ -304,7 +327,7 @@ test('the member-private rows of Bob are not visible to Alice', () => {
   }
 })
 
-test('workspace connections and the access of roles are visible to every member of their workspace, a member’s own access to them, to participants of their chats and to admins', () => {
+test('workspace connections and the access of roles are visible to every member of their workspace, a member’s own access to them and to admins', () => {
   const columnOf = (reader: string, table: string, column: string) =>
     rowsByReader
       .get(reader)
@@ -320,7 +343,7 @@ test('workspace connections and the access of roles are visible to every member 
   expect(accessIdsOf('Alice in Globex')).toEqual([])
 })
 
-test('a member’s tool sign-ins are visible to them and to participants of the chats they own, not to every reader of a public channel', () => {
+test('a member’s tool sign-ins are visible to them only, never to the participants of the chats they own', () => {
   const ownersOf = (reader: string) => [
     ...new Set(
       rowsByReader
@@ -329,9 +352,9 @@ test('a member’s tool sign-ins are visible to them and to participants of the 
         ?.map((row) => row.user_id),
     ),
   ]
-  expect(ownersOf('Alice in Acme').toSorted()).toEqual([alice, bob].toSorted())
-  expect(ownersOf('Bob in Acme').toSorted()).toEqual([alice, bob].toSorted())
-  expect(ownersOf('Lee in Acme')).toEqual([alice])
+  expect(ownersOf('Alice in Acme')).toEqual([alice])
+  expect(ownersOf('Bob in Acme')).toEqual([bob])
+  expect(ownersOf('Lee in Acme')).toEqual([])
 })
 
 test('workspaces lists every workspace of the member and users lists the members of the current workspace', () => {
@@ -362,14 +385,14 @@ test("workspaces lists only the current workspace to a session opened through th
   }
 })
 
-test('an ownership change shows the access of Bob to the participants of a chat he takes over, and hides it once he no longer owns one they take part in', async () => {
+test('an ownership change never shows the access of Bob to the participants of a chat he takes over', async () => {
   const restrictedOf = async (workspace: string, user: string) =>
     ((await readAll(workspace, user)).get('connection_access') ?? [])
       .flatMap((row) => (row.user_id === null ? [] : [row.user_id]))
       .toSorted()
   expect(await restrictedOf(acme, lee)).toEqual([lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${bob} where id = 'chat-invoice-bug'`
-  expect(await restrictedOf(acme, lee)).toEqual([bob, lee])
+  expect(await restrictedOf(acme, lee)).toEqual([lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
   expect(await restrictedOf(acme, lee)).toEqual([lee])
   expect(await restrictedOf(acme, bob)).toEqual([bob])
