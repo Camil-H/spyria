@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { doctor, restore, upgrade } from './commands.ts'
-import { parseEnvironment, serializeEnvironment } from './environment.ts'
+import { parseEnvironment, serializeEnvironment, withSecrets } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
 
@@ -206,6 +206,7 @@ test('spyria doctor is satisfied when every expected service runs and names the 
       join(fakeDocker, 'ps.json'),
       services.map((service) => JSON.stringify({ Service: service, State: stateOf(service) })).join('\n'),
     )
+  writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, ...withSecrets({}) }))
   psOf(() => 'running')
   expect(doctor(install)).toBe(true)
   psOf((service) => (service === 'zero-cache' ? 'exited' : 'running'))
@@ -217,6 +218,39 @@ test('spyria doctor is satisfied when every expected service runs and names the 
     quiet.mockImplementation(() => undefined)
   }
   expect(printed).toContain('✗ zero-cache is exited')
+})
+
+test('spyria doctor names a .env others can read, a default credential and a port published beyond this machine', () => {
+  writeFileSync(
+    join(install, '.env'),
+    serializeEnvironment({ ...installed, ...withSecrets({}), SPYRIA_POSTGRES_PASSWORD: 'spyria' }),
+  )
+  chmodSync(join(install, '.env'), 0o644)
+  writeFileSync(
+    join(fakeDocker, 'ps.json'),
+    ['postgres', 'server', 'zero-cache', 'gateway', 'host', 'cloudflared']
+      .map((service) =>
+        JSON.stringify({
+          Service: service,
+          State: 'running',
+          Publishers: service === 'server' ? [{ URL: '0.0.0.0', TargetPort: 3000, PublishedPort: 3300 }] : [],
+        }),
+      )
+      .join('\n'),
+  )
+  const printed: string[] = []
+  quiet.mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  try {
+    expect(doctor(install)).toBe(false)
+  } finally {
+    quiet.mockImplementation(() => undefined)
+    chmodSync(join(install, '.env'), 0o600)
+  }
+  expect(printed.filter((line) => line.startsWith('✗'))).toEqual([
+    '✗ SPYRIA_POSTGRES_PASSWORD is a default or short value: give it a random one of at least 32 characters',
+    '✗ .env is readable by other users of this machine (mode 644): run chmod 600 on it',
+    '✗ server publishes port 3300 on 0.0.0.0, reachable from other machines: publish it on 127.0.0.1 only',
+  ])
 })
 
 test('setting up again without a runtime host removes the host container this machine runs and stops its runtimes, touches nothing when there was none, and turning the host back on forgets the pairing a leftover host kept', async () => {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 export type Environment = Record<string, string>
 
-const secretNames = [
+export const secretNames = [
   'SPYRIA_TOKEN_SECRET',
   'SPYRIA_SECRETS_KEY',
   'SPYRIA_SETUP_TOKEN',

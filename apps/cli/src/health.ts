@@ -1,7 +1,13 @@
-type ServiceState = { Service: string; State: string; Health?: string }
+import { type Environment, secretNames } from './environment.ts'
+
+type Publisher = { URL?: string; PublishedPort?: number }
+type ServiceState = { Service: string; State: string; Health?: string; Publishers?: Publisher[] | null }
 type Problem = string
 
 const expectedServices = ['postgres', 'server', 'zero-cache', 'gateway']
+const loopbackAddresses = ['127.0.0.1', '::1']
+const minimumSecretLength = 32
+const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 
 export const serviceStatesOf = (psOutput: string): ServiceState[] => {
   const text = psOutput.trim()
@@ -24,6 +30,37 @@ export const serviceProblemsOf = (states: readonly ServiceState[], profiles: rea
     return []
   })
 }
+
+export const publishedPortProblemsOf = (states: readonly ServiceState[]): Problem[] => [
+  ...new Set(
+    states.flatMap(({ Service, Publishers }) =>
+      (Publishers ?? [])
+        .filter(({ URL = '', PublishedPort = 0 }) => PublishedPort > 0 && !loopbackAddresses.includes(URL))
+        .map(
+          ({ URL, PublishedPort }) =>
+            `${Service} publishes port ${PublishedPort} on ${URL || 'every address'}, reachable from other machines: publish it on 127.0.0.1 only`,
+        ),
+    ),
+  ),
+]
+
+export const environmentFileModeProblemOf = (mode: number): Problem | undefined =>
+  (mode & 0o077) !== 0
+    ? `.env is readable by other users of this machine (mode ${(mode & 0o777).toString(8)}): run chmod 600 on it`
+    : undefined
+
+export const credentialProblemsOf = (environment: Environment): Problem[] => [
+  ...secretNames.flatMap((name) => {
+    const value = environment[name] ?? ''
+    if (value === '') return [`${name} is missing from .env: run spyria setup again, which generates it`]
+    if (value.length < minimumSecretLength || isDevelopmentDefault(value))
+      return [`${name} is a default or short value: give it a random one of at least ${minimumSecretLength} characters`]
+    return []
+  }),
+  ...(isDevelopmentDefault(environment.SPYRIA_GATEWAY_ADMIN_USER ?? '')
+    ? ['SPYRIA_GATEWAY_ADMIN_USER is a development default: give it another name']
+    : []),
+]
 
 export const productionProblemsIn = (serverLogs: string): Problem[] => {
   const lines = serverLogs.split('\n').map((line) => line.replace(/^\S+\s+\|\s?/, ''))
