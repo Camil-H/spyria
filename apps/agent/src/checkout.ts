@@ -157,12 +157,24 @@ export const checkOut = async (
   return { failure: 'The commit author could not be set in the repository' }
 }
 
-const refreshed = async (cwd: string, token: string, environment: Environment) => {
-  const branch = await currentBranchOf(cwd, environment)
-  const fetched = await fetchBranch(cwd, branch, token, environment)
-  if (fetched.exitCode !== 0) return `The default branch could not be fetched: ${lastLinesOf(fetched.output)}`
-  const reset = await run(['git', 'reset', '--quiet', '--hard', remoteBranchOf(branch)], cwd, environment)
-  return reset.exitCode === 0 ? undefined : `The default branch could not be checked out: ${lastLinesOf(reset.output)}`
+const isRefreshedToRemoteDefault = async (cwd: string, preparation: Preparation, environment: Environment) => {
+  const steps = [
+    () => run(['git', 'remote', 'set-url', 'origin', preparation.url], cwd, environment),
+    () =>
+      run(['git', 'remote', 'set-head', 'origin', '--auto'], cwd, cloneEnvironmentOf(environment, preparation.token)),
+  ]
+  for (const step of steps) if ((await step()).exitCode !== 0) return false
+  const remoteHead = await run(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], cwd, environment)
+  const branch = remoteHead.stdout.replace(/^origin\//, '')
+  if (remoteHead.exitCode !== 0 || branch === '') return false
+  const fetched = await fetchBranch(cwd, branch, preparation.token, environment)
+  if (fetched.exitCode !== 0) return false
+  const checkout = await run(
+    ['git', 'checkout', '--quiet', '--force', '--no-track', '-B', branch, remoteBranchOf(branch)],
+    cwd,
+    environment,
+  )
+  return checkout.exitCode === 0
 }
 
 export const prepare = async (
@@ -171,11 +183,13 @@ export const prepare = async (
   environment: Environment,
   directories: CheckoutDirectories,
 ): Promise<Prepared> => {
-  const isRestored = !hasClone(cwd) && (await restored(cwd, directories, environment))
-  const failure = isRestored
-    ? await refreshed(cwd, preparation.token, environment)
-    : await clone(cwd, preparation.url, preparation.token, environment)
-  if (failure) return { failure }
+  const isCopied = !hasClone(cwd) && (await restored(cwd, directories, environment))
+  const isRestored = isCopied && (await isRefreshedToRemoteDefault(cwd, preparation, environment))
+  if (isCopied && !isRestored) rmSync(cwd, { recursive: true, force: true })
+  if (!hasClone(cwd)) {
+    const failure = await clone(cwd, preparation.url, preparation.token, environment)
+    if (failure) return { failure }
+  }
   markAwaitingBranch(cwd)
   return { branch: await currentBranchOf(cwd, environment), head: await headOf(cwd, environment), isRestored }
 }
