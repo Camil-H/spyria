@@ -630,3 +630,56 @@ test('a chat’s existing clone is kept as it is, uncommitted edits included, ev
   expect(branchOf(workingDirectory)).toBe('renamed-by-the-agent')
   expect(readFileSync(join(workingDirectory, 'README.md'), 'utf8')).toBe('# edited\n')
 })
+
+test('a clone that still awaits its working branch gets it on the next try: after a failed fetch of a restored snapshot, and after spyria-agent restarts between preparing and the chat', async () => {
+  const { url } = warmRepository('retried')
+  const source = warmAgent('retried-source')
+  await source.call('POST', '/api/prepare', { repository: { url, token } })
+  await preparedOf(source.call)
+  const snapshot = join(directory, 'retried-snapshot')
+  mkdirSync(join(snapshot, 'home'), { recursive: true })
+  git(directory, 'clone', '-q', '--no-hardlinks', source.workspaceDirectory, join(snapshot, 'project'))
+  git(join(snapshot, 'project'), 'remote', 'set-url', 'origin', `file://${directory}/unreachable.git`)
+  writeFileSync(join(snapshot, 'complete'), '')
+
+  const chat = warmAgent('retried-chat', snapshot)
+  const chatLaunch = { ...launchIn('retried-chat', url).launch, workspace: { working_dir: chat.workspaceDirectory } }
+  const failed = await chat.call('POST', '/api/conversations', { ...chatLaunch, id: 'unreachable' })
+  expect(String(failed.body.error)).toStartWith('The base branch could not be fetched: ')
+  git(chat.workspaceDirectory, 'remote', 'set-url', 'origin', url)
+  await chat.create({ ...chatLaunch, id: 'reachable' })
+  expect(branchOf(chat.workspaceDirectory)).toBe('spyria/fix-totals-1a2b3c')
+
+  source.agent.stop()
+  const restarted = started({
+    workspaceDirectory: source.workspaceDirectory,
+    homeDirectory: source.homeDirectory,
+    snapshotDirectory: join(directory, 'retried-no-snapshot'),
+  })
+  await restarted.create({
+    ...launchIn('retried-source', url).launch,
+    workspace: { working_dir: source.workspaceDirectory },
+  })
+  expect(branchOf(source.workspaceDirectory)).toBe('spyria/fix-totals-1a2b3c')
+})
+
+test('a fork that takes a prepared clone starts from the base when its start branch is gone from the remote, even if the clone still holds an old copy of it', async () => {
+  const { url } = warmRepository('stale-fork')
+  const prepared = warmAgent('stale-fork')
+  await prepared.call('POST', '/api/prepare', { repository: { url, token } })
+  await preparedOf(prepared.call)
+  const cwd = prepared.workspaceDirectory
+  writeFileSync(join(cwd, 'old-work.txt'), 'old\n')
+  git(cwd, 'add', 'old-work.txt')
+  git(cwd, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'Old work')
+  git(cwd, 'update-ref', 'refs/remotes/origin/spyria/deleted-1a2b3c', 'HEAD')
+  git(cwd, 'reset', '-q', '--hard', 'HEAD~1')
+  const { launch } = launchIn('stale-fork', url)
+  await prepared.create({
+    ...launch,
+    workspace: { working_dir: cwd },
+    repository: { ...launch.repository, working_branch: 'spyria/fork-4d5e6f', start_branch: 'spyria/deleted-1a2b3c' },
+  })
+  expect(branchOf(cwd)).toBe('spyria/fork-4d5e6f')
+  expect(existsSync(join(cwd, 'old-work.txt'))).toBe(false)
+})
