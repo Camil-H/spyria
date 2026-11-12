@@ -29,8 +29,11 @@ export const recordToolListing = (chatId: ChatId, memberId: MemberId) => {
   if (listenersOf(chatId).length > 0) listedForByChat.set(chatId, memberId)
 }
 
-export const announcePrompter = (workspaceId: WorkspaceId, chatId: ChatId, prompterId: MemberId) => {
-  if (listedForByChat.get(chatId) === prompterId) return
+export const announceChatToolListChange = (workspaceId: WorkspaceId, chatId: ChatId) => {
   for (const listener of listenersByWorkspace.get(workspaceId) ?? [])
     if (listener.chatId === chatId) listener.onChange()
+}
+
+export const announcePrompter = (workspaceId: WorkspaceId, chatId: ChatId, prompterId: MemberId) => {
+  if (listedForByChat.get(chatId) !== prompterId) announceChatToolListChange(workspaceId, chatId)
 }

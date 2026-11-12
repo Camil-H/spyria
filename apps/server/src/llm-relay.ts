@@ -6,6 +6,7 @@ import {
   genericModelCallNoticeOf,
   githubToolsPath,
   guestPrompterOf,
+  includedToolServersOf,
   isDevLoopTool,
   isGuestToolMethod,
   isSpyriaTool,
@@ -20,6 +21,7 @@ import {
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
+  toolServerOffNoticeOf,
   webSearchAnswerOf,
   webSearchFailedOf,
   webSearchMilliseconds,
@@ -465,7 +467,7 @@ export const createModelCallRelay = ({
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
       const { server, tool } = toolNamePartsOf(toolName)
-      const { ownerId, prompterId, ownerName, prompterName } = turn
+      const { ownerId, prompterId, ownerName, prompterName, toolServersOff } = turn
       const accountId = prompterId ?? ownerId
       const serverName = isToolCall
         ? await tools.serverNameOf(host.workspaceId, ownerId, server).catch(() => server)
@@ -486,6 +488,7 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
+        if (isToolCall && toolServersOff.includes(server)) return toolError(toolServerOffNoticeOf(serverName))
         const virtualKey = await tools.keyOf(host.workspaceId, accountId).then(
           (key) => key ?? undefined,
           () => null,
@@ -496,6 +499,11 @@ export const createModelCallRelay = ({
         if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : noTools()
         if (rpc?.method === 'initialize')
           await tools.grantMemberTools(host.workspaceId, accountId).catch(() => undefined)
+        const includedServers = isGuestCall
+          ? [server]
+          : toolServersOff.length > 0
+            ? includedToolServersOf(await tools.catalogueServersOf(host.workspaceId, accountId), toolServersOff)
+            : undefined
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,
@@ -503,7 +511,7 @@ export const createModelCallRelay = ({
           'x-bf-dim-prompter': prompterId ?? '',
           'x-bf-dim-owner': ownerId,
           'x-bf-dim-workspace': host.workspaceId,
-          ...(isGuestCall && { 'x-bf-mcp-include-clients': server }),
+          ...(includedServers && { 'x-bf-mcp-include-clients': includedServers.join(',') }),
         }
         if (isToolCall) {
           const { refusal, ...authorization } = await handlers.authorizeToolCall(

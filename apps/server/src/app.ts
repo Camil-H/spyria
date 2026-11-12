@@ -145,7 +145,7 @@ import {
 } from './rate-limits.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { contextOf, withSpan } from './telemetry.ts'
-import { announceToolListChange } from './tool-list-changes.ts'
+import { announceChatToolListChange, announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
 import { createZeroForwarding, isWebSocketUpgrade, zeroPathPrefix } from './zero-forwarding.ts'
@@ -522,6 +522,8 @@ export const createApp = ({
                 select id from runtime_hosts where workspace_id = ${ctx.workspaceId} and owner_id = ${memberId}`)
                 runtimeHosts.disconnect(ctx.workspaceId, id)
             }
+            if (mutation.name === 'conversation.switchChatToolServer')
+              announceChatToolListChange(ctx.workspaceId, chatId((mutation.args[0] as { chatId: string }).chatId))
             if (mutation.name === 'workspace.deleteWorkspace')
               agentBridge.forDatabase(context.get('database')).closeWorkspaceStreams(ctx.workspaceId)
             if (readRevokingMutations.has(mutation.name))

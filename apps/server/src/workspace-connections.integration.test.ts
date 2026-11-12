@@ -554,6 +554,60 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   await stream
 })
 
+test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
+  const host = await fakeHost('Chat tool switch host')
+  const { chatId, token } = await runtimeTurn(host, alice)
+  const [ledger, billing] = [await register('Ledger'), await register('Billing')]
+  await openToEveryRole(ledger.connectionId)
+  await openToEveryRole(billing.connectionId)
+  const ledgerName = (await connectionRow(ledger.connectionId))?.gatewayName ?? ''
+  const billingName = (await connectionRow(billing.connectionId))?.gatewayName ?? ''
+  const streamed: string[] = []
+  const opened = Promise.withResolvers<number | undefined>()
+  const closing = new AbortController()
+  const stream = host.modelCall({
+    method: 'GET',
+    path: '/mcp',
+    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+    onHead: opened.resolve,
+    onChunk: (data) => streamed.push(data),
+    signal: closing.signal,
+  })
+  expect(await opened.promise).toBe(200)
+  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const listedServers = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(
+      ({ name }) => name.split('-')[0],
+    )
+  const switchLedger = (isOn: boolean) =>
+    resultOf(aliceInAcme, 'conversation.switchChatToolServer', { workspaceId: acme, chatId, server: ledgerName, isOn })
+  expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
+
+  const beforeOff = changeCount()
+  expect(await switchLedger(false)).toEqual(succeeded)
+  await waitFor(() => changeCount() > beforeOff)
+  expect(await listedServers()).not.toContain(ledgerName)
+  expect(await listedServers()).toContain(billingName)
+  const refused = await mcpCall(host, token, rpcOf('tools/call', { name: `${ledgerName}-lookup`, arguments: {} }))
+  expect(refused.result).toMatchObject({ isError: true })
+  expect(textOf(refused.result)).toBe('Ledger is off for this chat')
+  const billed = await mcpCall(host, token, rpcOf('tools/call', { name: `${billingName}-lookup`, arguments: {} }))
+  expect(textOf(billed.result)).toBe('ran lookup')
+  expect([
+    ...(await database.$client`select server, tool, status from tool_calls where chat_id = ${chatId} order by called_at`),
+  ]).toEqual([
+    { server: ledgerName, tool: 'lookup', status: 'refused' },
+    { server: billingName, tool: 'lookup', status: 'succeeded' },
+  ])
+
+  const beforeOn = changeCount()
+  expect(await switchLedger(true)).toEqual(succeeded)
+  await waitFor(() => changeCount() > beforeOn)
+  expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
+  closing.abort()
+  await stream
+})
+
 test('the agent lists the tools of the member who prompted, so a guest’s turn lists their own access and not the owner’s', async () => {
   const { connectionId } = await register('Tickets')
   await openToEveryRole(connectionId)
