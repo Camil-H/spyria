@@ -9,7 +9,6 @@ export const chatDropTargetClass = 'rounded-md data-[drop-target]:bg-hover'
 
 export const startChatDrag = (draggedChatId: ChatId) => (event: DragEvent) => {
   event.dataTransfer.setData(chatDragType, draggedChatId)
-  event.dataTransfer.effectAllowed = 'move'
 }
 
 export const useChatDrop = ({
