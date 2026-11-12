@@ -13,7 +13,6 @@ import type { PullRequestChange } from '../domain/github-tools.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import {
-  githubAccessRefusalOf,
   githubConnectionNoticeOf,
   isOpenPullRequest,
   noGitHubConnection,
@@ -24,7 +23,7 @@ import {
   publishToolOf,
 } from '../domain/pull-requests.ts'
 import type { AgentDependencies } from './agent-turn.ts'
-import { githubToolsInChatOf } from './github-access.ts'
+import { githubRefusalOf } from './github-access.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>
 type Input = { chat: AgentChat; actor: Actor; action: PublishAction; draft: PullRequestDraft }
@@ -110,11 +109,10 @@ const publishingChatOf = (
     const { chats, members, messages } = unitOfWork
     await requireChatPermission(chats, chat.chatId, memberId, 'chat.read')
     const stored = await chats.get(chat.chatId)
-    const tools = await githubToolsInChatOf(unitOfWork, chat.chatId, memberId)
     return {
       ...stored,
       memberName: await members.displayNameOf(memberId),
-      mayUse: tools.includes(tool),
+      refusal: await githubRefusalOf(unitOfWork, chat.chatId, memberId, tool),
       card: await messages.pullRequestCard(chat.chatId),
     }
   })
@@ -129,9 +127,9 @@ export const publishBranch = async (dependencies: Dependencies, { chat, actor, a
   const memberId = memberBehind(actor)
   if (!memberId) return refused(noPublisher)
   const tool = publishToolOf(action)
-  const { mayUse, memberName, baseBranch, name, card } = await publishingChatOf(dependencies, chat, memberId, tool)
+  const { refusal, memberName, baseBranch, name, card } = await publishingChatOf(dependencies, chat, memberId, tool)
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
-  if (!mayUse) return refused(githubAccessRefusalOf(memberName, tool))
+  if (refusal) return refused(refusal)
   return pushAndRecord(
     { ...dependencies, checkouts },
     {
@@ -154,9 +152,9 @@ export const updatePullRequest = async (
   const memberId = memberBehind(actor)
   if (!memberId) return refused(noPublisher)
   const tool = 'update_pull_request'
-  const { mayUse, memberName, baseBranch, card } = await publishingChatOf(dependencies, chat, memberId, tool)
+  const { refusal, baseBranch, card } = await publishingChatOf(dependencies, chat, memberId, tool)
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
-  if (!mayUse) return refused(githubAccessRefusalOf(memberName, tool))
+  if (refusal) return refused(refusal)
   const pullRequest = card?.step?.type === 'pull_request' && isOpenPullRequest(card.step) ? card.step : undefined
   if (!card || !pullRequest) return refused('This chat has no open pull request: open one first')
   try {
