@@ -189,19 +189,30 @@ test('/mcp for a chat owner without an LLM key runs the workspace tools on a key
   expect(textOf(called.result)).toBe('Bob needs to connect fake')
 })
 
-test('a member signs in only to a finished server of their workspace they may use a tool of, never to a shared-login one', async () => {
+test('a member signs in only to a finished, reviewed server of their workspace they may use a tool of, never to a shared-login one', async () => {
   expect(await asMember(alice, 'POST', `/api/tool-connections/${sharedToolServer}/connect`)).toMatchObject({
     status: 400,
   })
   expect(await asMember(alice, 'POST', '/api/tool-connections/CRM/connect')).toMatchObject({ status: 400 })
-  const restrictBob = (allowedTools: string[] | null) =>
-    asMember(alice, 'POST', '/api/workspace-connections/connection-fake/restrict', { memberId: bob, allowedTools })
-  expect((await restrictBob([])).status).toBe(200)
+  const setBobLevel = (level: string | null) =>
+    asMember(alice, 'POST', '/api/workspace-connections/connection-fake/access', {
+      memberId: bob,
+      level,
+      toolChanges: {},
+    })
+  expect((await setBobLevel('none')).status).toBe(200)
   try {
     expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
   } finally {
-    await restrictBob(null)
+    await setBobLevel(null)
   }
+  await database.$client`update workspace_connections set is_reviewed = false where id = 'connection-fake'`
+  try {
+    expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
+  } finally {
+    await database.$client`update workspace_connections set is_reviewed = true where id = 'connection-fake'`
+  }
+
   await database.$client`update workspace_connections set setup_id = 'setup-pending' where id = 'connection-fake'`
   try {
     expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
