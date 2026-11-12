@@ -67,21 +67,30 @@ const answerWithChoice = {
 
 const answerInFreeText = {
   Pi: async (page: Page, question: Locator) => {
+    const choice = question.getByRole('radio', { name: 'SQLite', exact: true })
+    await choice.check()
     await question.getByRole('textbox', { name: 'Other answer to Which database should we use?' }).fill('MySQL')
+    await expect(choice).not.toBeChecked()
     await question.getByRole('button', { name: 'Submit' }).click()
     await expect(messageContaining(page, 'answer:The member answered: MySQL')).toHaveCount(1)
     return 'MySQL'
   },
   'Claude Code': async (page: Page, question: Locator) => {
+    const choice = question.getByRole('radio', { name: 'SQLite Embedded' })
+    await choice.check()
     await question.getByRole('textbox', { name: 'Other answer to Which database should we use?' }).fill('MySQL')
+    await expect(choice).not.toBeChecked()
     await question.getByRole('button', { name: 'Submit' }).click()
     await expect(messageContaining(page, '"question_0_custom":"MySQL"')).toHaveCount(1)
     return 'MySQL'
   },
   Codex: async (page: Page, question: Locator) => {
+    const choice = question.getByRole('radio', { name: 'GitHub Actions' })
     await question.getByRole('radio', { name: 'Postgres Relational' }).check()
     await question.getByRole('radio', { name: 'Go' }).check()
+    await choice.check()
     await question.getByRole('textbox', { name: 'Other answer to Which CI?' }).fill('Buildkite')
+    await expect(choice).not.toBeChecked()
     await question.getByRole('button', { name: 'Submit' }).click()
     await expect(
       messageContaining(

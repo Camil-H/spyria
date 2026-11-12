@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test'
+import { withSecrets } from './environment.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
+  credentialProblemsOf,
   diskProblemOf,
+  environmentFileModeProblemOf,
   productionProblemsIn,
+  publishedPortProblemsOf,
   serviceProblemsOf,
   serviceStatesOf,
 } from './health.ts'
@@ -63,5 +67,65 @@ test('backups are named by database and time, and only the newest of each databa
   expect(backupsToRemoveOf(files, 1).toSorted()).toEqual([
     'spyria-20261101T000000Z.dump',
     'spyria-20261102T000000Z.dump',
+  ])
+})
+
+test('a port published beyond this machine is a problem, once per service and port, while loopback and unpublished ports are not', () => {
+  const states = serviceStatesOf(
+    [
+      {
+        ...healthy('server'),
+        Publishers: [
+          { URL: '127.0.0.1', TargetPort: 3000, PublishedPort: 3300 },
+          { URL: '::1', TargetPort: 3000, PublishedPort: 3300 },
+        ],
+      },
+      {
+        ...healthy('postgres'),
+        Publishers: [
+          { URL: '0.0.0.0', TargetPort: 5432, PublishedPort: 5432 },
+          { URL: '::', TargetPort: 5432, PublishedPort: 5432 },
+          { URL: '', TargetPort: 5433, PublishedPort: 0 },
+        ],
+      },
+      { ...healthy('gateway'), Publishers: null },
+      { ...healthy('zero-cache'), Publishers: [{ URL: '192.168.1.5', TargetPort: 4848, PublishedPort: 4848 }] },
+    ]
+      .map((state) => JSON.stringify(state))
+      .join('\n'),
+  )
+  expect(publishedPortProblemsOf(states)).toEqual([
+    'postgres publishes port 5432 on every address, reachable from other machines: publish it on 127.0.0.1 only',
+    'zero-cache publishes port 4848 on 192.168.1.5, reachable from other machines: publish it on 127.0.0.1 only',
+  ])
+})
+
+test('.env open to anyone but its owner is a problem', () => {
+  expect(environmentFileModeProblemOf(0o100600)).toBeUndefined()
+  expect(environmentFileModeProblemOf(0o100400)).toBeUndefined()
+  expect(environmentFileModeProblemOf(0o100644)).toBe(
+    '.env is open to other users of this machine (mode 644): run chmod 600 on it',
+  )
+  expect(environmentFileModeProblemOf(0o100640)).toBeDefined()
+})
+
+test('a missing, short or development default secret, or a default gateway admin, is a problem', () => {
+  const generated = withSecrets({})
+  expect(credentialProblemsOf(generated)).toEqual([])
+  expect(
+    credentialProblemsOf({
+      ...generated,
+      SPYRIA_POSTGRES_PASSWORD: 'spyria',
+      SPYRIA_GATEWAY_ADMIN_PASSWORD: 'spyria-dev-gateway-with-a-long-enough-suffix',
+      SPYRIA_ZERO_ADMIN_PASSWORD: 'short',
+      SPYRIA_SECRETS_KEY: '',
+      SPYRIA_GATEWAY_ADMIN_USER: 'spyria',
+    }),
+  ).toEqual([
+    'SPYRIA_SECRETS_KEY is missing from .env: run spyria setup again, which generates it',
+    'SPYRIA_GATEWAY_ADMIN_PASSWORD is a default or short value: replace it as the troubleshooting guide shows',
+    'SPYRIA_POSTGRES_PASSWORD is a default or short value: replace it as the troubleshooting guide shows',
+    'SPYRIA_ZERO_ADMIN_PASSWORD is a default or short value: replace it as the troubleshooting guide shows',
+    'SPYRIA_GATEWAY_ADMIN_USER is a development default: give it another name',
   ])
 })

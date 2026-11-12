@@ -48,6 +48,8 @@ type IncomingBody = { head: Frame; parts: Buffer[]; size: number }
 
 const refusedCloseCode = 4001
 const replacedCloseCode = 4002
+const invalidFrameCloseCode = 1008
+const maximumLoggedFrameTypeLength = 32
 const maximumCloseReasonBytes = 123
 const tryAgainLaterCloseCode = 1013
 const requestTimeoutMilliseconds = 180_000
@@ -77,11 +79,40 @@ const bodyFramesOf = (sid: number, body: string) => {
 const hostAttributesOf = (host: ConnectedHost) => ({ 'workspace.id': host.workspaceId, 'runtime_host.id': host.hostId })
 const frameOf = (text: string): Frame => {
   try {
-    return JSON.parse(text)
+    const frame = JSON.parse(text)
+    return typeof frame === 'object' && frame !== null && !Array.isArray(frame) ? frame : {}
   } catch {
     return {}
   }
 }
+
+const sandboxStatuses: unknown[] = ['running', 'stopped', 'missing'] satisfies SandboxStatus[]
+const isRequestId = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0
+const isText = (value: unknown) => typeof value === 'string'
+const isOptionalText = (value: unknown) => value === undefined || isText(value)
+const isTextRecord = (value: unknown) =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) && Object.values(value).every(isText)
+const isHttpStatus = (value: unknown) => Number.isInteger(value) && (value as number) >= 100 && (value as number) <= 599
+const isHttpAnswer = (frame: Frame) =>
+  isText(frame.error) ||
+  (isHttpStatus(frame.status) && isTextRecord(frame.headers) && (frame.chunked === true || isText(frame.body)))
+const relayFrameChecks: Record<string, (frame: Frame) => boolean> = {
+  res: (frame) => isRequestId(frame.id) && isOptionalText(frame.error),
+  http_res: (frame) => isRequestId(frame.sid) && isHttpAnswer(frame),
+  http_body: (frame) => isRequestId(frame.sid) && isText(frame.data),
+  http_end: (frame) => isRequestId(frame.sid),
+  ws_open: (frame) => isRequestId(frame.sid),
+  ws_msg: (frame) => isRequestId(frame.sid) && isText(frame.data),
+  ws_close: (frame) => isRequestId(frame.sid) && isOptionalText(frame.error),
+  gw_req: (frame) =>
+    isRequestId(frame.sid) &&
+    isText(frame.method) &&
+    isText(frame.path) &&
+    (frame.headers === undefined || isTextRecord(frame.headers)) &&
+    isOptionalText(frame.body),
+  gw_cancel: (frame) => isRequestId(frame.sid),
+}
+const isValidRelayFrame = (frame: Frame) => relayFrameChecks[String(frame.type)]?.(frame) === true
 
 export const createRuntimeHostGateway = ({
   databases,
@@ -157,10 +188,11 @@ export const createRuntimeHostGateway = ({
 
   const identify = async (connection: Connection, frame: HostSessionFrame) => {
     if (frame.type === 'claim') {
-      const claimed = await firstAccepted((handlers) => handlers.claim(frame.code)).catch(async (error: unknown) => {
-        const isWaiting =
-          error instanceof HostRefused && error.code === 'code_not_valid' && (await awaitsFirstWorkspace(frame.code))
-        if (!isWaiting) throw error
+      const claim = () => firstAccepted((handlers) => handlers.claim(frame.code))
+      const claimed = await claim().catch(async (error: unknown) => {
+        if (!(error instanceof HostRefused && error.code === 'code_not_valid')) throw error
+        if (await awaitsFirstWorkspace(frame.code)) return
+        return claim()
       })
       if (!claimed)
         return connection.socket.close(tryAgainLaterCloseCode, 'Waiting for the first workspace of this Spyria')
@@ -277,13 +309,27 @@ export const createRuntimeHostGateway = ({
     }
   }
 
+  const refuseFrame = (connection: Connection, frame: Frame) => {
+    log.warn({
+      event: 'runtime_host.frame_refused',
+      body: 'A runtime host sent an invalid frame, so its connection was closed',
+      attributes: {
+        ...(connection.identified && hostAttributesOf(connection.identified.host)),
+        'runtime_host.frame_type': String(frame.type).slice(0, maximumLoggedFrameTypeLength),
+      },
+    })
+    connection.socket.close(invalidFrameCloseCode, 'Invalid frame')
+  }
+
   const receive = async (connection: Connection, text: string) => {
     const frame = frameOf(text)
     if (frame.type === 'pong') {
       connection.missedPings = 0
       return
     }
+    const isRelayFrame = isValidRelayFrame(frame)
     if (frame.type === 'gw_req' || frame.type === 'gw_cancel') {
+      if (!isRelayFrame) return refuseFrame(connection, frame)
       await connection.identifying.promise
       return relayModelCallOf(connection, frame)
     }
@@ -295,6 +341,7 @@ export const createRuntimeHostGateway = ({
     }
     if (sessionFrame?.type === 'heartbeat')
       return inOrder(identified.token, () => identified.handlers.heartbeat(identified.host, sessionFrame))
+    if (!isRelayFrame) return refuseFrame(connection, frame)
     settle(connection, frame)
   }
 
@@ -420,7 +467,12 @@ export const createRuntimeHostGateway = ({
     start: commandWithoutResult('start'),
     stop: commandWithoutResult('stop'),
     remove: commandWithoutResult('remove'),
-    status: async (sandbox) => (await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })) as SandboxStatus,
+    status: async (sandbox) => {
+      const status = await command(sandbox, 'status', { runtimeId: sandbox.runtimeId })
+      if (!sandboxStatuses.includes(status))
+        throw new Error(`Runtime host ${sandbox.hostId} answered an unknown status`)
+      return status as SandboxStatus
+    },
     runtimeIdsOn: async (host) => {
       const runtimeIds = await command(host, 'list', {})
       return Array.isArray(runtimeIds) ? runtimeIds.filter((runtimeId) => typeof runtimeId === 'string') : []

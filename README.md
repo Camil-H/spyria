@@ -33,6 +33,7 @@ Then open the setup link it prints and create the first workspace. The steps are
 - Guides: [development](docs/guides/development.md), [testing](docs/guides/testing.md), [install on one machine](docs/guides/install.md), [AWS, Azure or Google Cloud](docs/guides/cloud.md), [manual install](docs/guides/self-hosting.md), [operations](docs/guides/operations.md), [troubleshooting](docs/guides/troubleshooting.md)
 - Features: [chats and sharing](docs/features/chats-and-sharing.md), [agents](docs/features/agents.md), [machines](docs/features/machines.md), [dev mode](docs/features/dev-mode.md), [administration](docs/features/admin.md)
 - Contributing: [AGENTS.md](AGENTS.md) (project rules, for people and coding agents) and [CONTRIBUTING.md](CONTRIBUTING.md)
+- Reporting a vulnerability: [SECURITY.md](SECURITY.md)
 
 ## License
 

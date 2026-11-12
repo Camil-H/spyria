@@ -1,8 +1,10 @@
 import {
+  answerNewAiChat,
   configureGitHubApp,
   expect,
   mainOf,
   messageContaining,
+  newChatDialogOf,
   newDevChat,
   type Page,
   sendMessage,
@@ -37,6 +39,25 @@ test.describe('Dev chats', () => {
     await expect(messageContaining(page, 'only-in-acme-app.txt')).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(branchOf(page)).toHaveText(workingBranch)
+  })
+
+  test('As a member with access to a single repository, I find it already chosen with its default branch when I start a dev chat', {
+    tag: ['@spec-39'],
+  }, async ({ page }) => {
+    await configureGitHubApp(page)
+    await page.route('**/api/github/repositories', async (route) => {
+      const response = await route.fetch()
+      const { repositories } = (await response.json()) as { repositories: { fullName: string }[] }
+      await route.fulfill({
+        response,
+        json: { repositories: repositories.filter(({ fullName }) => fullName === 'acme/app') },
+      })
+    })
+    await page.getByRole('button', { name: 'New chat' }).click()
+    const dialog = newChatDialogOf(page)
+    await answerNewAiChat(dialog, { needsGitHub: true })
+    await expect(dialog.getByLabel('Repository')).toHaveValue('acme/app')
+    await expect(dialog.getByLabel('Base branch')).toHaveValue('main')
   })
 
   test('As a member, I see a failing setup command as a notice with its last output lines, and the session still answers', {

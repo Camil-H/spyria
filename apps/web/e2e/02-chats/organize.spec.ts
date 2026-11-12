@@ -182,6 +182,28 @@ test.describe('Organize', () => {
     })
   })
 
+  test('As a member, I drag a chat onto a project to move it there, and onto the loose chats to take it out', async ({
+    page,
+  }) => {
+    await test.step('drops a loose chat on a project', async () => {
+      await chatRowIn(looseChatsOf(page), 'Research').dragTo(projectGroupOf(page, 'Billing'))
+      await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Research')).toBeVisible()
+      await expect(chatRowIn(looseChatsOf(page), 'Research')).toHaveCount(0)
+    })
+
+    await test.step('drops a chat of a project on another project', async () => {
+      await chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome').dragTo(projectGroupOf(page, 'Billing'))
+      await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Welcome')).toBeVisible()
+      await expect(chatRowIn(projectGroupOf(page, 'Onboarding'), 'Welcome')).toHaveCount(0)
+    })
+
+    await test.step('drops a chat of a project on the loose chats', async () => {
+      await chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug').dragTo(looseChatsOf(page))
+      await expect(chatRowIn(looseChatsOf(page), 'Invoice bug')).toBeVisible()
+      await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toHaveCount(0)
+    })
+  })
+
   test('As a member, I create projects, channels and runtime chats', { tag: ['@smoke'] }, async ({ page }) => {
     await test.step('adds an empty project to the list', async () => {
       await createProjectNamed(page, 'Marketing')
