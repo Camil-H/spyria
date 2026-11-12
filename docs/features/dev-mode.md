@@ -1,6 +1,6 @@
 # Dev mode
 
-A dev chat is a runtime chat attached to a GitHub repository: the agent works in a clone of the repository inside the chat's runtime, the side panel shows the files, changes and commits of the working branch, and the chat owner pushes the branch and opens a pull request from the chat. This page is for members who use dev chats and for admins who connect GitHub. Setting up the GitHub App on a deployment is described in [Manual install](../guides/self-hosting.md).
+A dev chat is a runtime chat attached to a GitHub repository: the agent works in a clone of the repository inside the chat's runtime, the side panel shows the files, changes and commits of the working branch, and members whose GitHub access allows it push the branch and open a pull request from the chat with their own GitHub account. This page is for members who use dev chats and for admins who connect GitHub. Setting up the GitHub App on a deployment is described in [Manual install](../guides/self-hosting.md).
 
 ## How the pieces fit
 
