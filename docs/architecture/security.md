@@ -1,6 +1,6 @@
 # Security
 
-This page describes who can do what in Spyria and where each credential lives. It is for operators deciding whether to trust a deployment and for contributors changing anything near sign-in, permissions, credentials or logs. The overall picture is in the [overview](overview.md).
+This page describes who can do what in Spyria and where each credential lives. It is for operators deciding whether to trust a deployment and for contributors changing anything near sign-in, permissions, credentials or logs. The overall picture is in the [overview](overview.md). To report a vulnerability, see [SECURITY.md](../../SECURITY.md); every Spyria serves the same contact at `/.well-known/security.txt`.
 
 ## Principles
 
