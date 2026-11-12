@@ -22,6 +22,7 @@ import {
   runtimeTurn,
   sessionTokenOf,
   startAgentStack,
+  succeeded,
   textOf,
   waitFor,
   whoami,
@@ -54,12 +55,13 @@ const toolCallRows = async (chatId: string, count: number) => {
   await waitFor(async () => (await rows()).length >= count)
   return rows()
 }
-const restrictSharedTools = async (memberId: string, allowedTools: string[] | null) => {
-  const answer = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/restrict', {
+const allowOnlySharedTools = async (memberId: string, allowedTools: string[] | null) => {
+  const answer = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/access', {
     memberId,
-    allowedTools,
+    level: allowedTools === null ? null : 'none',
+    toolChanges: Object.fromEntries((allowedTools ?? []).map((tool) => [tool, true])),
   })
-  if (answer.status !== 200) throw new Error(`Restricting ${memberId} answered ${answer.status}`)
+  if (answer.status !== 200) throw new Error(`Setting the access of ${memberId} answered ${answer.status}`)
 }
 const refused = (answer: { status: number | undefined; result: { content?: { text: string }[] } }) => ({
   status: answer.status,
@@ -87,7 +89,7 @@ test('on a guest’s prompt a server the owner signed in to with their own accou
   ])
 })
 
-test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s restrictions to allow it, and the gateway only sees that server', async () => {
+test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s access to allow it, and the gateway only sees that server', async () => {
   await addLlmKey(bob, 'Mistral')
   const host = await fakeHost('Guest workspace host')
   const { chatId, token } = await runtimeTurn(host, bob)
@@ -95,20 +97,20 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
   try {
     expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
 
-    await restrictSharedTools(bob, ['update'])
+    await allowOnlySharedTools(bob, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
     })
-    await restrictSharedTools(bob, null)
-    await restrictSharedTools(alice, ['update'])
+    await allowOnlySharedTools(bob, null)
+    await allowOnlySharedTools(alice, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
     })
   } finally {
-    await restrictSharedTools(alice, null)
-    await restrictSharedTools(bob, null)
+    await allowOnlySharedTools(alice, null)
+    await allowOnlySharedTools(bob, null)
   }
   expect(fakeMcp.records.slice(callsBefore)).toEqual([{ tool: 'lookup', user: 'shared' }])
   const audited = {
@@ -318,4 +320,42 @@ test('a pending approval is cancelled when its request aborts or its turn ends, 
     { ...cancelled, decision: 'cancelled', decided_by: null, status: 'refused' },
     { ...cancelled, decision: 'cancelled', decided_by: null, status: 'refused' },
   ])
+})
+
+test('the owner’s approval choices decide which calls wait: Always asks on their own prompt, and Never lets a guest’s write run', async () => {
+  const chooseApproval = async (tool: string | null, approval: string | null) =>
+    expect(
+      await approvals.mutate(aliceInAcme, 'profile.setToolApproval', {
+        workspaceId: acme,
+        connectionId: testCrmConnection.id,
+        tool,
+        approval,
+      }),
+    ).toEqual(succeeded)
+  try {
+    await chooseApproval('update', 'always')
+    const host = await approvals.fakeHost('Approval choices host')
+    const ownerTurn = await runtimeTurn(host, alice)
+    const { frames } = await approvals.openStream(toChatId(ownerTurn.chatId))
+    const ownerCall = mcpCall(host, ownerTurn.token, update)
+    const asked = await approvalOf(frames, 1)
+    expect(asked).toMatchObject({ approval: { tool: 'update', prompterName: 'Alice', ownerName: 'Alice' } })
+    expect(await answerAs(alice, ownerTurn.chatId, asked.questionId, true)).toBe(200)
+    expect(textOf((await ownerCall).result)).toBe('ran update')
+
+    await chooseApproval('update', null)
+    await chooseApproval(null, 'never')
+    const guestTurn = await runtimeTurn(host, bob)
+    expect(textOf((await mcpCall(host, guestTurn.token, update)).result)).toBe('ran update')
+    const audited = { owner_id: alice, server: sharedToolServer, tool: 'update', read_only: false, status: 'succeeded' }
+    expect(await toolCallRows(ownerTurn.chatId, 1)).toEqual([
+      { ...audited, prompter_id: alice, decision: 'approved', decided_by: alice },
+    ])
+    expect(await toolCallRows(guestTurn.chatId, 1)).toEqual([
+      { ...audited, prompter_id: bob, decision: 'not_needed', decided_by: null },
+    ])
+  } finally {
+    await chooseApproval('update', null)
+    await chooseApproval(null, null)
+  }
 })

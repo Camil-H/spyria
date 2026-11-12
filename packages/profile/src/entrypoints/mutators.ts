@@ -12,6 +12,8 @@ import { releaseWorkspaceConnections } from '../operations/release-workspace-con
 import { removeLlmCredential } from '../operations/remove-llm-credential.ts'
 import { removeMemberProfile } from '../operations/remove-member-profile.ts'
 import { renameMember } from '../operations/rename-member.ts'
+import { syncMemberGatewayKeyLater } from '../operations/sync-member-gateway-key.ts'
+import { setToolApproval } from '../operations/tool-approvals.ts'
 
 const workspaceArguments = z.object({ workspaceId: z.string().check(z.minLength(1)) })
 
@@ -37,6 +39,14 @@ export const profileMutators = defineMutators({
       }),
       ({ tx, ctx, args }) => removeLlmCredential(dependenciesOf(tx, ctx, args), args),
     ),
+    setToolApproval: defineMutator(
+      z.extend(workspaceArguments, {
+        connectionId: z.string().check(z.minLength(1)),
+        tool: z.nullable(z.string()),
+        approval: z.nullable(z.enum(['never', 'always', 'guest'])),
+      }),
+      ({ tx, ctx, args }) => setToolApproval(dependenciesOf(tx, ctx, args), args),
+    ),
     setAiProviders: defineMutator(
       z.extend(workspaceArguments, {
         allowList: z.nullable(z.array(z.string())),
@@ -61,4 +71,9 @@ export const releaseWorkspaceConnectionsOnServer = async (
       { transactor: createZeroTransactor(tx, memberContext(workspaceId, actorId)) },
       { workspaceId },
     )
+}
+
+export const regrantMemberToolsOnServer = async (tx: Transaction, workspaceId: WorkspaceId, memberId: MemberId) => {
+  if (tx.location === 'server')
+    await syncMemberGatewayKeyLater({ transactor: createZeroTransactor(tx, memberContext(workspaceId, memberId)) })
 }

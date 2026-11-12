@@ -66,7 +66,7 @@ A repository's own setup command, in **Workspace settings > Connect runtime > Se
 - Each runtime kept ready counts as a runtime on its host, and never takes a host's last place, so a chat always finds room. Spyria replaces one after a day, or when its setup command or Spyria's runtime image changes, and removes them all when the count goes back to 0, then the snapshots too. A runtime that could not be prepared, for example because the clone was refused, is removed and tried again an hour later. A host going offline drops its runtimes kept ready; they start again when it is back.
 - Keep secrets out of what setup writes to disk: the snapshot hands it to every chat of the repository on that host.
 
-See [decision 0031](../decisions/0031-runtimes-kept-ready-and-setup-snapshots.md).
+See [decision 0032](../decisions/0032-runtimes-kept-ready-and-setup-snapshots.md).
 
 ## The side panel
 
