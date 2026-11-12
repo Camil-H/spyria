@@ -48,7 +48,14 @@ export type AgentStep =
       answeredBy?: string
       closed?: 'stopped' | 'cancelled' | 'turn_end' | 'expired'
     }
-export type ToolApproval = { server: string; tool: string; arguments: string; prompterName: string; ownerName: string }
+export type ToolApproval = {
+  server: string
+  tool: string
+  arguments: string
+  prompterName: string
+  answererId: string
+  answererName: string
+}
 export type AgentQuestion = {
   id: string
   header?: string

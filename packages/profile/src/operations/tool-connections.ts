@@ -22,12 +22,13 @@ import { ensureMemberGatewayKey } from './sync-member-gateway-key.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type Input = { tool: string }
-type ToolCall = { prompterId: MemberId; toolName: string }
+type ToolCall = { ownerId: MemberId; prompterId: MemberId; toolName: string }
 
 type ToolCallPolicy = {
-  access: 'allowed' | 'owner_account' | 'not_allowed'
+  access: 'allowed' | 'not_granted' | 'not_shared'
   readOnly: boolean | null
   approval: ToolApproval
+  answerer: 'prompter' | 'owner'
 }
 
 const holderIn = (holders: readonly ToolHolder[], memberId: MemberId) =>
@@ -147,29 +148,28 @@ export const toolServerNameOf = ({ transactor }: Pick<Dependencies, 'transactor'
 
 export const toolCallPolicy = async (
   { transactor }: Pick<Dependencies, 'transactor'>,
-  { prompterId, toolName }: ToolCall,
+  { ownerId, prompterId, toolName }: ToolCall,
 ): Promise<ToolCallPolicy> => {
-  const { workspaceId, memberId: ownerId } = transactor.member
+  const { workspaceId } = transactor.member
   const { server, tool: toolOnServer } = toolNamePartsOf(toolName)
-  const { connection, accessRows, holders, preference } = await transactor.run(
-    async ({ workspaceConnections, members, toolApprovals }) => {
-      const found = await workspaceConnections.findByGatewayName(workspaceId, server)
-      return {
-        connection: found,
-        accessRows: found ? await workspaceConnections.accessOf(workspaceId) : [],
-        holders: found ? await members.holders(workspaceId) : [],
-        preference: found && (await toolApprovals.get(found.id)),
-      }
-    },
-  )
-  const tool: ConnectionTool | undefined = connection?.tools.find(({ name }) => name === toolOnServer)
-  if (!connection || !tool) return { access: 'not_allowed', readOnly: null, approval: 'never' }
-  const policy = { readOnly: tool.readOnly, approval: toolApprovalOf(connection, tool, preference) }
-  if (connection.signIn === connectionSignIns.member && prompterId !== ownerId)
-    return { access: 'owner_account', ...policy }
-  const isAllowed = [ownerId, prompterId].every((memberId) => {
-    const holder = holderIn(holders, memberId)
-    return holder !== undefined && grantedToolsOf(connection, accessRows, holder).includes(tool.name)
+  return transactor.run(async ({ workspaceConnections, members, toolApprovals }) => {
+    const connection = await workspaceConnections.findByGatewayName(workspaceId, server)
+    const tool: ConnectionTool | undefined = connection?.tools.find(({ name }) => name === toolOnServer)
+    if (!connection || !tool) return { access: 'not_granted', readOnly: null, approval: 'never', answerer: 'prompter' }
+    const accessRows = await workspaceConnections.accessOf(workspaceId)
+    const holders = await members.holders(workspaceId)
+    const isShared = connection.signIn === connectionSignIns.shared
+    const preference = await toolApprovals.ofMember(isShared ? ownerId : prompterId, connection.id)
+    const isGranted = (memberId: MemberId) => {
+      const holder = holderIn(holders, memberId)
+      return holder !== undefined && grantedToolsOf(connection, accessRows, holder).includes(tool.name)
+    }
+    const access = !isGranted(prompterId) ? 'not_granted' : isShared && !isGranted(ownerId) ? 'not_shared' : 'allowed'
+    return {
+      access,
+      readOnly: tool.readOnly,
+      approval: toolApprovalOf(connection, tool, preference),
+      answerer: isShared ? 'owner' : 'prompter',
+    }
   })
-  return { access: isAllowed ? 'allowed' : 'not_allowed', ...policy }
 }

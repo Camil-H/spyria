@@ -6,6 +6,7 @@ import {
   addParticipant,
   connectionsOf,
   expect,
+  githubSectionOf,
   inPopup,
   type Locator,
   llmSectionOf,
@@ -193,7 +194,9 @@ test.describe('Tools catalogue', () => {
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(notOffered('CRM', 'update'))
+    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(
+      "CRM isn't available on Bob's prompts in this chat",
+    )
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
     await expect(await promptIn(bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
     await bobPage.context().close()
@@ -271,5 +274,52 @@ test.describe('Tools catalogue', () => {
     await expect(docsRow).toContainText('Connected')
     await expect(docsRow.getByRole('button', { name: 'Disconnect Docs' })).toBeVisible()
     await bobPage.context().close()
+  })
+
+  test('As a member who can manage the tools catalogue, I find Spyria’s built-in tools with what they do and nothing to edit, and GitHub as a server with a level per role, linked both ways with Connect GitHub', {
+    tag: ['@spec-58'],
+  }, async ({ page, browser, workerStack }) => {
+    await openSettings(page, 'Tools')
+
+    await test.step('lists the built-in tools with what they do, nothing to edit, and the quality gates’ tools set in Quality gates', async () => {
+      const builtIn = mainOf(page).getByRole('region', { name: 'Built in' })
+      await expect(builtIn.getByRole('list', { name: 'Built-in tools' }).getByRole('listitem')).toHaveCount(8)
+      await expect(builtIn).toContainText(
+        "open_pageOpens a web page or a file of the project in the chat's Browser tab",
+      )
+      await expect(builtIn.getByRole('button')).toHaveCount(0)
+      await expect(builtIn.getByRole('combobox')).toHaveCount(0)
+      await builtIn.getByRole('link', { name: 'Set in Quality gates' }).first().click()
+      await expect(page).toHaveURL(/\/settings\/quality-gates$/)
+    })
+
+    await openSettings(page, 'Tools')
+    const github = serverCardOf(page, 'GitHub')
+    await test.step('shows GitHub among the servers, every role on Read and write until set, with nothing to edit or remove', async () => {
+      await expect(github).toContainText('8 tools · 5 read · 3 write')
+      await expect(github.getByRole('combobox', { name: 'Access of Member' }).locator('option:checked')).toHaveText(
+        'Read and write',
+      )
+      await expect(github.getByRole('button', { name: 'Edit' })).toHaveCount(0)
+      await expect(github.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+    })
+
+    await test.step('gives the Member role Read on GitHub, so a member chooses approvals for its read tools only', async () => {
+      await setLevel(page, 'Member', 'Read', 'GitHub')
+      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+      await openProfile(bobPage)
+      await connectionsOf(bobPage).getByRole('button', { name: 'Approvals for GitHub' }).click()
+      const approvals = connectionsOf(bobPage).getByRole('region', { name: 'Approvals for GitHub' })
+      await expect(approvals.getByRole('combobox', { name: 'Approval for read_checks' })).toBeVisible()
+      await expect(approvals.getByRole('combobox', { name: 'Approval for push_branch' })).toHaveCount(0)
+      await bobPage.context().close()
+    })
+
+    await test.step('links to Connect GitHub for its setup, which links back to Tools', async () => {
+      await github.getByRole('link', { name: 'Set up in Connect GitHub' }).click()
+      await expect(page).toHaveURL(/\/settings\/github$/)
+      await githubSectionOf(page).getByRole('link', { name: 'Tools', exact: true }).click()
+      await expect(page).toHaveURL(/\/settings\/tools$/)
+    })
   })
 })

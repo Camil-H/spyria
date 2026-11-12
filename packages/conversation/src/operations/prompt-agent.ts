@@ -419,6 +419,7 @@ export const promptAgent = async (
     beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
   )
   if (!prompt) return undefined
+  if (prompt.authorId) dependencies.onTurnPrompter?.(chat, prompt.authorId)
   let conversation: AgentConversation
   try {
     const prepared = await conversationFor(

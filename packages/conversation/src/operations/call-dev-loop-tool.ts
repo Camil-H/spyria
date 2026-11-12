@@ -11,7 +11,7 @@ import {
   reviewFindingsOf,
   unresolvedIdsOf,
 } from '../domain/dev-loop.ts'
-import { githubTools, githubToolsInstructions } from '../domain/github-tools.ts'
+import { githubToolDefinitions, githubToolsInstructions } from '../domain/github-tools.ts'
 import type { ConversationChat } from '../domain/message.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
@@ -113,6 +113,9 @@ export const githubToolsOf = ({ transactor }: Dependencies, chat: AgentChat) =>
   transactor.run(async ({ devLoop, chats }) => {
     const { baseBranch, repository } = await chats.get(chat.chatId)
     return baseBranch && rulesOf(await devLoop.settings(), repository).isOn
-      ? { tools: [...githubTools, ...devLoopTools], instructions: `${githubToolsInstructions} ${devLoopInstructions}` }
-      : { tools: githubTools, instructions: githubToolsInstructions }
+      ? {
+          tools: [...githubToolDefinitions, ...devLoopTools],
+          instructions: `${githubToolsInstructions} ${devLoopInstructions}`,
+        }
+      : { tools: githubToolDefinitions, instructions: githubToolsInstructions }
   })

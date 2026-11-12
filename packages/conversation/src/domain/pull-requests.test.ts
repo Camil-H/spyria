@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test'
-import { checkStateOf, checksOf, publishingRefusalOf, reviewPromptOf } from './pull-requests.ts'
+import {
+  cannotPostRefusalOf,
+  checkStateOf,
+  checksOf,
+  githubAccessRefusalOf,
+  publishToolOf,
+  reviewPromptOf,
+} from './pull-requests.ts'
 
 test('the checks summary is failing if any check fails, pending while any is pending or none ran, else passing', () => {
   expect(checksOf({ checks: {} })).toBe('pending')
@@ -31,6 +38,11 @@ test('the review prompt lists every unresolved comment with file, line, author a
   )
 })
 
-test('the publishing refusal names the owner', () => {
-  expect(publishingRefusalOf('Alice')).toBe('Only Alice can push or open pull requests in this chat')
+test('publishing names the member whose access to GitHub refuses the tool, and the tool each action needs', () => {
+  expect(githubAccessRefusalOf('Bob', 'push_branch')).toBe(
+    "Bob's access to GitHub does not include push_branch in this chat",
+  )
+  expect(cannotPostRefusalOf('Lee')).toBe('Lee cannot post in this chat')
+  expect(publishToolOf('push')).toBe('push_branch')
+  expect(publishToolOf('pull_request')).toBe('open_pull_request')
 })

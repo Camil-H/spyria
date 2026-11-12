@@ -25,6 +25,8 @@ const updateScript = (text: string) => ({
 })
 const approvalCardOf = (page: Page) => messageItemsOf(page).getByRole('region', { name: 'Tool approval' })
 const updateStepOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: 'Used update (CRM)' })
+const sharingNoteOf = (page: Page) =>
+  page.getByRole('note').filter({ hasText: 'everyone in this chat sees what they return' })
 
 const openAsBob = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
   await addParticipant(workerStack, research, 'member-bob', 'prompter')
@@ -40,7 +42,7 @@ test.describe('Guest rights', () => {
     await openChat(page, 'Research')
   })
 
-  test('As a prompter in someone’s chat, I cannot use a server the owner signed in to with their own account: the agent gets a refusal, while the owner’s own prompt uses it', {
+  test('As a prompter in someone’s chat, my prompts use my own account on a server each member signs in to, never the owner’s: unconnected, only I get the Connect link', {
     tag: ['@spec-33', '@smoke'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const account = accountOf('alice-acme')
@@ -48,18 +50,28 @@ test.describe('Guest rights', () => {
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await addLlmKey(bobPage, 'Mistral')
+    await openChat(bobPage, 'Research')
+    await test.step('warns me before my first prompt that everyone here sees what my tools return', async () => {
+      await expect(sharingNoteOf(bobPage)).toBeVisible()
+    })
+
     await promptTool(bobPage, agentScript, 'Bob asks who the agent is', {
       ...toolScript,
-      text: 'I cannot use Alice’s own accounts.',
+      text: 'You need to connect fake first.',
     })
-    await expect(await lastToolResultOf(bobPage)).toContainText(
-      "fake signs in with Alice's own account, so only Alice's prompts can use it",
-    )
-    await expect(messageItemsOf(bobPage).filter({ hasText: 'I cannot use Alice’s own accounts.' })).toHaveCount(1)
-    await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
+    await test.step('names me to connect, with the link for me only', async () => {
+      await expect(await lastToolResultOf(bobPage)).toContainText('Bob needs to connect fake')
+      await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect fake' })).toBeVisible()
+      await openChat(page, 'Research')
+      await expect(messageItemsOf(page).getByText('Bob needs to connect fake').first()).toBeVisible()
+      await expect(messageItemsOf(page).getByRole('button', { name: 'Connect fake' })).toHaveCount(0)
+      await expect(sharingNoteOf(bobPage)).toHaveCount(0)
+    })
 
-    await promptTool(page, agentScript, 'Alice asks who the agent is')
-    await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
+    await test.step('the owner’s own prompt uses the owner’s account', async () => {
+      await promptTool(page, agentScript, 'Alice asks who the agent is')
+      await expect(await lastToolResultOf(page)).toContainText(`you are ${account}`)
+    })
     await bobPage.context().close()
   })
 

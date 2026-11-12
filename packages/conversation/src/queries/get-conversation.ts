@@ -1,5 +1,6 @@
 import {
   type ChatRow,
+  chatParticipantsIn,
   chatPermissionsIn,
   inChat,
   type MessageRow,
@@ -41,6 +42,7 @@ export type ConversationMessage = Readonly<{
   attachments: readonly Attachment[]
   step: AgentStep | null
   replyToId: MessageId | null
+  isOnViewersPrompt: boolean
   canEdit: boolean
   isDeleted: boolean
   isEdited: boolean
@@ -88,6 +90,7 @@ export type Conversation = Readonly<{
   isFrozen: boolean
   canPost: boolean
   canJoin: boolean
+  isShared: boolean
   canConfigure: boolean
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
@@ -360,6 +363,7 @@ export const getConversation =
         attachments: message.attachments,
         step,
         replyToId: message.replyToId,
+        isOnViewersPrompt: message.replyToId !== null && chatMessageById.get(message.replyToId)?.authorId === viewerId,
         canEdit: canPost && message.authorId === viewerId && !isDevLoopPrompt(message),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
@@ -419,6 +423,7 @@ export const getConversation =
       }),
       canPost,
       canJoin: chat.visibility === 'public' && !participantIn(snapshot, workspaceId, viewerId)(chat),
+      isShared: chat.visibility === 'public' || chatParticipantsIn(snapshot, workspaceId, chat.id).length > 1,
       canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,

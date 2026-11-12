@@ -6,6 +6,7 @@ import {
   type AgentChat,
   chatAttachmentPathOf,
   chatAttachmentsPathOf,
+  chatGitHubToolsPathOf,
   chatGitPathOf,
   chatMediaPathOf,
   chatPublishPathOf,
@@ -624,6 +625,13 @@ export const createApp = ({
         draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
       })
       return context.json(publication, publication.isRefused ? 403 : 200)
+    })
+    .get(chatGitHubToolsPathOf(':chatId'), async (context) => {
+      const { workspaceId, userId } = context.get('zeroContext')
+      const tools = await agentBridge
+        .forDatabase(context.get('database'))
+        .githubToolsInChat({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId)
+      return context.json({ tools })
     })
     .post(chatGitPathOf(':chatId', ':action'), async (context) => {
       const action = context.req.param('action') ?? ''

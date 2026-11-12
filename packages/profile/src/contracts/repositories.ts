@@ -91,6 +91,7 @@ export type WorkspaceConnectionRepository = {
 
 export type ToolApprovalRepository = {
   get(connectionId: string): Promise<ToolApprovalPreference | undefined>
+  ofMember(memberId: MemberId, connectionId: string): Promise<ToolApprovalPreference | undefined>
   save(preference: ToolApprovalPreference): Promise<void>
   removeAll(): Promise<void>
 }

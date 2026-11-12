@@ -6,7 +6,7 @@ import { Link, useOutletContext, useParams } from 'react-router'
 import type { AgentStep as Step } from '../domain/agent-steps.ts'
 import { type ConversationMessage, durationLabelOf } from '../queries/get-conversation.ts'
 import { Disclosure, ThoughtStep } from './Disclosure.tsx'
-import { QuestionAnswererContext, ToolsAwaitingApprovalContext, useConversationCommands } from './providers.tsx'
+import { ToolsAwaitingApprovalContext, useConversationCommands } from './providers.tsx'
 
 const QuestionCard = lazy(() => import('./QuestionCard.tsx'))
 const DelegationStep = lazy(() => import('./DelegationStep.tsx'))
@@ -95,7 +95,7 @@ const FileStep = ({ step }: { step: StepOf<'file'> }) =>
     </Disclosure>
   )
 
-const ToolStep = ({ step }: { step: StepOf<'tool'> }) => {
+const ToolStep = ({ step, isOnViewersPrompt }: { step: StepOf<'tool'>; isOnViewersPrompt: boolean }) => {
   const commands = useConversationCommands()
   const workspaceId = useOutletContext<WorkspaceId>()
   const { connection } = step
@@ -120,7 +120,7 @@ const ToolStep = ({ step }: { step: StepOf<'tool'> }) => {
         </Disclosure>
       )}
       {connection &&
-        (use(QuestionAnswererContext).isOwner ? (
+        (isOnViewersPrompt ? (
           <button
             type="button"
             onClick={() => commands.connectTool({ workspaceId, tool: connection.server }).catch(console.error)}
@@ -167,7 +167,7 @@ export const AgentStep = ({ message }: { message: ConversationMessage }) => {
         </DelegationStep>
       </Suspense>
     )
-  if (step?.type === 'tool') return <ToolStep step={step} />
+  if (step?.type === 'tool') return <ToolStep step={step} isOnViewersPrompt={message.isOnViewersPrompt} />
   if (step?.type === 'question')
     return (
       <Suspense>

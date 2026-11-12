@@ -1,5 +1,5 @@
 import { Provider } from '@radix-ui/react-tooltip'
-import { useChatMessages, useIsWorkspaceLoaded, useQuery } from '@spyria/db/react'
+import { useChatMessages, useIsWorkspaceLoaded, useQuery, useScoped } from '@spyria/db/react'
 import { type ChatId, type MessageId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import {
@@ -88,6 +88,7 @@ export const ChatView = ({
   const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
   const [loadedRemoteImages, setLoadedRemoteImages] = useState<{ chatId: ChatId; sources: ReadonlySet<string> }>()
   const [quoting, setQuoting] = useState<{ chatId: ChatId; threadRootId: MessageId | null; quote: ComposerQuote }>()
+  const [githubTools, setGitHubTools] = useState<{ chatId: ChatId; tools: readonly string[] }>()
   const conversation = useQuery(
     getConversation,
     workspaceId,
@@ -119,6 +120,16 @@ export const ChatView = ({
         () => setSpyriaRuntime({ chatId, isAvailable: true }),
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
+  const mayUseGitHub = conversation?.repository != null && conversation.canPost
+  useEffect(() => {
+    if (mayUseGitHub)
+      commands.githubToolsInChat({ workspaceId, chatId }).then(
+        (tools) => setGitHubTools({ chatId, tools }),
+        () => setGitHubTools({ chatId, tools: [] }),
+      )
+  }, [commands, workspaceId, chatId, mayUseGitHub])
+  const isSharedRuntime = conversation?.type === 'runtime' && !conversation.localSession && conversation.isShared
+  const ownPrompt = useScoped(workspaceId, 'chatOwnPrompt', isSharedRuntime ? { chatId } : null)
   const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
   const isReadMarkerBehind = conversation?.isReadMarkerBehind === true
   useEffect(() => {
@@ -230,7 +241,12 @@ export const ChatView = ({
         )}
       </Provider>
       <QuestionAnswererContext
-        value={{ answer: answerQuestion, mayAnswerAsPrompter: mayPrompt, isOwner: conversation.isOwner }}
+        value={{
+          answer: answerQuestion,
+          mayAnswerAsPrompter: mayPrompt,
+          viewerId: memberId,
+          githubTools: mayUseGitHub && githubTools?.chatId === chatId ? githubTools.tools : [],
+        }}
       >
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>
@@ -308,6 +324,11 @@ export const ChatView = ({
           aboveBox={
             <>
               {conversation.type === 'runtime' && budgetNotice}
+              {mayPrompt && isSharedRuntime && ownPrompt?.isComplete && ownPrompt.rows.length === 0 && (
+                <p role="note" className="text-xs text-muted">
+                  Your prompts here use your own tool connections, and everyone in this chat sees what they return.
+                </p>
+              )}
               {(live.workspace || branch !== null || conversation.repository !== null) && (
                 <div className="flex min-w-0 gap-2">
                   {(live.workspace || conversation.repository !== null) && (
