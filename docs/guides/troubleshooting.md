@@ -1,9 +1,12 @@
 # Troubleshooting
 
-Start with `spyria doctor`: it checks Docker, each service and its healthcheck, the server's start check (the list of settings it refuses), the disk and the image versions. `spyria compose logs <service>` shows a service's logs, for example `server`, `zero-cache`, `gateway` or `host`.
+Start with `spyria doctor`: it checks Docker, each service and its healthcheck, the server's start check (the list of settings it refuses), the disk and the image versions, and what exposes the install: a `.env` other users of the machine can read, a missing, default or short credential in it, and a port a service publishes beyond the machine. `spyria compose logs <service>` shows a service's logs, for example `server`, `zero-cache`, `gateway` or `host`.
 
 | Symptom | Cause and fix |
 |---|---|
+| `spyria doctor` says `.env` is readable by other users | Something rewrote it with a wider mode: `chmod 600 .env` in the install folder. Setup and `spyria upgrade` write it readable by you only. |
+| `spyria doctor` names a default or short credential | Replace it in `.env` with `openssl rand -hex 32`. For `SPYRIA_POSTGRES_PASSWORD` or `SPYRIA_GATEWAY_DB_PASSWORD`, change the role's password in Postgres first (`spyria compose exec postgres psql -U spyria -c "alter role … password '…'"`), since Postgres keeps the one it started with. |
+| `spyria doctor` says a service publishes a port | A `compose.yml` edited by hand publishes it on every address: publish it on `127.0.0.1` only, or remove it; Cloudflare's tunnel reaches the server without any published port. |
 | The server keeps restarting | The production check failed: `spyria compose logs server` lists every problem, and `spyria doctor` shows them too. |
 | `502` from the proxy | The proxy forwards to `https://`. The server speaks plain HTTP on the Compose network: use `http://server:3000`. |
 | The app loads but never syncs | The proxy drops WebSocket upgrades on `/zero/`, or zero-cache is down: `/health` answers `503` naming `zero`, and the server logs `zero.unreachable`. |
