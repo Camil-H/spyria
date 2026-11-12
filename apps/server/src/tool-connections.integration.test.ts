@@ -127,7 +127,7 @@ test('a member acts only on their own key: unknown servers are refused, a member
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
 })
 
-test('/mcp runs on the prompter’s key with Spyria’s attribution, lists Spyria’s own tools first then the gateway’s outside a turn but calls them only during one, and refuses another host’s token', async () => {
+test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only the gateway’s tools outside a turn but calls them only during one, Spyria’s own tools list on /mcp/spyria alone, and both refuse another host’s token', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -142,8 +142,11 @@ test('/mcp runs on the prompter’s key with Spyria’s attribution, lists Spyri
   expect(initialized.status).toBe(200)
   const listed = await mcpCall(host, token, rpcOf('tools/list'))
   const listedNames = listed.result.tools.map((tool: { name: string }) => tool.name)
-  expect(listedNames[0]).toBe('open_page')
   expect(listedNames).toContain('fake-whoami')
+  expect(listedNames).not.toContain('open_page')
+  const spyriaListed = await mcpCall(host, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')
+  expect(spyriaListed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(['open_page', 'take_screenshot'])
+  expect((await mcpCall(otherHost, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')).status).toBe(401)
   const duringTurn = await mcpCall(host, token, whoami)
   expect(textOf(duringTurn.result)).toBe(`you are ${aliceAccount}`)
 
@@ -263,7 +266,7 @@ test('checking the connections, as the profile does when it opens, follows the g
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
 })
 
-test('session headers pass through, Spyria’s tools join the gateway’s list whether it answers in JSON or as an event stream and stay listed while the gateway is down, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
+test('session headers pass through, the gateway’s list passes through whether it answers in JSON or as an event stream and is empty while the gateway is down, gateway failures become error results instead of 5xx, model calls carry an empty include-clients header and guest calls their server only', async () => {
   const seen: { path: string; headers: Record<string, string> }[] = []
   const readOnlyLookup = { name: `${sharedToolServer}-lookup`, annotations: { readOnlyHint: true } }
   let gatewayAnswer = 200
@@ -319,19 +322,25 @@ test('session headers pass through, Spyria’s tools join the gateway’s list w
     expect(Object.keys(forwarded).filter((name) => /x-bf-vk|x-api-key/.test(name))).toEqual([])
     expect(host.receivedFrames.join('\n')).toContain('gateway-session')
     expect(host.receivedFrames.join('\n')).not.toContain(ownerKey.value)
-    const allTools = ['open_page', 'take_screenshot', readOnlyLookup.name]
-    expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(allTools)
+    expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([readOnlyLookup.name])
     isEventStream = true
-    expect(await listedNamesOf(host, token)).toEqual(allTools)
+    const streamed = await host.modelCall({
+      path: '/mcp',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: rpcOf('tools/list'),
+    })
+    expect(streamed.body).toContain(
+      `data: {"jsonrpc":"2.0","id":7,"result":{"tools":[${JSON.stringify(readOnlyLookup)}]}}`,
+    )
     isEventStream = false
 
     gatewayAnswer = 503
-    expect(await listedNamesOf(host, token)).toEqual(['open_page', 'take_screenshot'])
+    expect(await listedNamesOf(host, token)).toEqual([])
     const failed = await mcpCall(host, token, whoami)
     expect(failed).toMatchObject({ status: 200, result: { isError: true } })
     expect(textOf(failed.result)).toBe('The tool gateway is unreachable, try again shortly')
     gatewayUrl = 'http://127.0.0.1:9'
-    expect(await listedNamesOf(host, token)).toEqual(['open_page', 'take_screenshot'])
+    expect(await listedNamesOf(host, token)).toEqual([])
     const unreachable = await mcpCall(host, token, whoami)
     expect(unreachable).toMatchObject({ status: 200, result: { isError: true } })
     expect(textOf(unreachable.result)).toBe('The tool gateway is unreachable, try again shortly')

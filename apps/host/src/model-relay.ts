@@ -28,7 +28,7 @@ export const createModelRelay = ({
       const url = new URL(request.url)
       if (
         !url.pathname.startsWith('/v1/') &&
-        !['/mcp', '/mcp/router', '/mcp/github', '/mcp/web'].includes(url.pathname)
+        !['/mcp', '/mcp/router', '/mcp/github', '/mcp/web', '/mcp/spyria'].includes(url.pathname)
       )
         return new Response('Not found', { status: 404 })
       const sid = nextSid++

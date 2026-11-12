@@ -85,7 +85,7 @@ test('relays spyria-agent’s MCP calls on /mcp with their session headers', asy
     path: '/mcp',
     headers: { authorization: 'Bearer runtime-token', 'mcp-session-id': 'session-1' },
   })
-  for (const path of ['/mcp/github', '/mcp/web']) {
+  for (const path of ['/mcp/github', '/mcp/web', '/mcp/spyria']) {
     void relay.fetch(new Request(`http://spyria-gateway-relay:4000${path}`, { method: 'POST', body: '{}' }))
     expect(await nextOf('gw_req')).toMatchObject({ path })
   }

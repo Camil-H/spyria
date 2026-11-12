@@ -14,6 +14,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { githubToolsPath } from '../domain/github-tools.ts'
 import { piModelOf } from '../domain/session-routing.ts'
+import { catalogueToolsPath, spyriaToolsPath } from '../domain/spyria-tools.ts'
 import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
 import { webSearchTimeoutSeconds, webToolsPath } from '../domain/web-search.ts'
 
@@ -97,7 +98,8 @@ const harnessConversationOf = (
   agent: {
     acp_command: harnesses[harness].launch,
     mcp_config: {
-      spyria: mcpServerOf(endpoint, '/mcp', llmToken),
+      spyria: mcpServerOf(endpoint, spyriaToolsPath, llmToken),
+      tools: mcpServerOf(endpoint, catalogueToolsPath, llmToken),
       ...(hasRepository && { github: mcpServerOf(endpoint, githubToolsPath, llmToken) }),
     },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
@@ -155,7 +157,8 @@ export const piCommandOf = (
     }),
   }
   const mcpServers = {
-    spyria: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
+    spyria: { ...piMcpServerOf(gatewayUrl, spyriaToolsPath), timeout: spyriaToolTimeoutSeconds },
+    tools: { ...piMcpServerOf(gatewayUrl, catalogueToolsPath), timeout: spyriaToolTimeoutSeconds },
     web: { ...piMcpServerOf(gatewayUrl, webToolsPath), timeout: webSearchTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
