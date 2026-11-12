@@ -279,10 +279,11 @@ const watchToolList = async (server, onChange) => {
       headers: { authorization: withEnvironment(headers.Authorization), accept: 'text/event-stream' },
       signal: AbortSignal.timeout(toolListStreamMilliseconds),
     }).catch(() => undefined)
-    if (response?.status !== 200 || !response.body) return
-    const decoder = new TextDecoder()
-    await onChange()
+    if (response?.status === 405) return
     try {
+      if (response?.status !== 200 || !response.body) throw new Error('no tool list stream')
+      const decoder = new TextDecoder()
+      await onChange()
       for await (const chunk of response.body)
         if (decoder.decode(chunk, { stream: true }).includes('notifications/tools/list_changed')) await onChange()
     } catch {}
