@@ -9,7 +9,7 @@ export const getConnections =
     return {
       connections: usableConnectionsIn(snapshot, workspaceId, viewerId).map((connection) => ({
         ...connection,
-        isOn: !chat.toolServersOff.includes(connection.gatewayName),
+        isOn: !chat.toolServersOff.includes(connection.id),
       })),
       canSwitch: can(chatPermissionsIn(snapshot, workspaceId, viewerId)(chat), 'tools.manage'),
     }

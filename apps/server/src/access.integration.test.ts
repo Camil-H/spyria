@@ -102,11 +102,11 @@ test.each(chatAccessRows(['owner']))(
   'switchChatToolServer needs tools.manage: $name',
   async ({ member, isAllowed, ...role }) => {
     const chat = await chatAs(role)
-    const switchOff = { workspaceId: acme, chatId: chat, server: 'orders_ab12cd', isOn: false }
+    const switchOff = { workspaceId: acme, chatId: chat, connectionId: 'connection-orders', isOn: false }
     expect(await resultOf(member, 'conversation.switchChatToolServer', switchOff)).toEqual(
       isAllowed ? succeeded : missingPermission('tools.manage'),
     )
-    expect(await chatRow(chat)).toMatchObject({ toolServersOff: isAllowed ? ['orders_ab12cd'] : [] })
+    expect(await chatRow(chat)).toMatchObject({ toolServersOff: isAllowed ? ['connection-orders'] : [] })
   },
 )
 

@@ -605,7 +605,12 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
       ({ name }) => name.split('-')[0],
     )
   const switchLedger = (isOn: boolean) =>
-    resultOf(aliceInAcme, 'conversation.switchChatToolServer', { workspaceId: acme, chatId, server: ledgerName, isOn })
+    resultOf(aliceInAcme, 'conversation.switchChatToolServer', {
+      workspaceId: acme,
+      chatId,
+      connectionId: ledger.connectionId,
+      isOn,
+    })
   expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
 
   const beforeOff = changeCount()

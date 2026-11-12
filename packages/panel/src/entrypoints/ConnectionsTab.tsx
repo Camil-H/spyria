@@ -15,13 +15,13 @@ const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
   return (
     <LabelList
       empty={<p className={emptyClass}>None of your tools in this workspace</p>}
-      rows={usable.connections.map(({ id, name, gatewayName, signIn, tools, status, isOn }) => ({
+      rows={usable.connections.map(({ id, name, signIn, tools, status, isOn }) => ({
         key: id,
         label: usable.canSwitch ? (
           <Switch
             label={name}
             isOn={isOn}
-            onToggle={() => commands.switchChatToolServer({ workspaceId, chatId, server: gatewayName, isOn: !isOn })}
+            onToggle={() => commands.switchChatToolServer({ workspaceId, chatId, connectionId: id, isOn: !isOn })}
           />
         ) : (
           name

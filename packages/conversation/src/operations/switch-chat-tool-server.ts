@@ -2,15 +2,15 @@ import { type ChatId, type MemberId, requireChatPermission } from '@spyria/kerne
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { toolServersOffAfter } from '../domain/chat-tool-servers.ts'
 
-type Input = { chatId: ChatId; memberId: MemberId; server: string; isOn: boolean }
+type Input = { chatId: ChatId; memberId: MemberId; connectionId: string; isOn: boolean }
 
 export const switchChatToolServer = (
   { transactor }: { transactor: ConversationTransactor },
-  { chatId, memberId, server, isOn }: Input,
+  { chatId, memberId, connectionId, isOn }: Input,
 ) =>
   transactor.run(async ({ chats }) => {
     await requireChatPermission(chats, chatId, memberId, 'tools.manage')
     const { toolServersOff } = await chats.get(chatId)
-    const switched = toolServersOffAfter(toolServersOff, server, isOn)
+    const switched = toolServersOffAfter(toolServersOff, connectionId, isOn)
     if (switched !== toolServersOff) await chats.setToolServersOff(chatId, switched)
   })
