@@ -319,6 +319,29 @@ test("a role's level and single-tool changes reach every member of the role, a l
   }
 })
 
+test('a member moved to a role without access to a server they signed in to loses that sign-in', async () => {
+  expect(await setAccess('connection-fake', { roleId: 'admin' }, 'none')).toBe(200)
+  try {
+    const started = await asMember(bob, 'POST', '/api/tool-connections/fake/connect')
+    expect(started.status).toBe(200)
+    expect(
+      (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=bob-${crypto.randomUUID()}`))
+        .page,
+    ).toContain('"connected":true')
+    expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(200)
+    expect(await signInsOf('connection-fake')).toEqual([{ user_id: bob, status: 'Connected' }])
+
+    expect(
+      await resultOf(aliceInAcme, 'workspace.changeMemberRole', { workspaceId: acme, memberId: bob, role: 'admin' }),
+    ).toEqual(succeeded)
+    await waitFor(async () => (await signInsOf('connection-fake')).length === 0)
+    expect(await sessionsOf(bob, 'fake')).toEqual([])
+  } finally {
+    await resultOf(aliceInAcme, 'workspace.changeMemberRole', { workspaceId: acme, memberId: bob, role: 'member' })
+    await setAccess('connection-fake', { roleId: 'admin' }, 'write')
+  }
+})
+
 test("a member's own access syncs to them and to admins, not to a member who reads none of their chats, while every member reads the roles' access", async () => {
   await setCrmAccess(lee, 'read')
   const accessOf = async (userId: string, isLeeSynced: boolean) => {

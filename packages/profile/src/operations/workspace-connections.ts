@@ -21,7 +21,7 @@ import {
   type SecretHeader,
   type ToolMarking,
 } from '../domain/workspace-connection.ts'
-import { grantMemberTools, grantWorkspaceTools } from './grant-tools.ts'
+import { grantMemberTools, grantWorkspaceTools, releaseLostSignIns } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type InWorkspace = { workspaceId: WorkspaceId }
@@ -49,31 +49,6 @@ const registeredTools = async (
   if (tools.length > 0) return tools
   await gateway.removeToolServer(server.name)
   throw new ConnectionUnreachable(server.url)
-}
-
-const releaseLostSignIns = async (
-  { transactor, gateway }: Dependencies,
-  { workspaceId, connectionId }: ConnectionTarget,
-) => {
-  const { connection, accessRows, holders, virtualKeys } = await transactor.run(
-    async ({ workspaceConnections, memberGatewayKeys, members }) => ({
-      connection: await workspaceConnections.get(workspaceId, connectionId),
-      accessRows: await workspaceConnections.accessOf(workspaceId),
-      holders: await members.holders(workspaceId),
-      virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
-    }),
-  )
-  if (connection.signIn !== connectionSignIns.member) return
-  const server = (await gateway.toolServers()).find(({ name }) => name === connection.gatewayName)
-  for (const { memberId, virtualKeyId } of virtualKeys) {
-    const holder = holders.find((candidate) => candidate.memberId === memberId)
-    if (holder && grantedToolsOf(connection, accessRows, holder).length > 0) continue
-    for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
-      await gateway.removeToolSession(session.id)
-    await transactor.run(({ workspaceConnections }) =>
-      workspaceConnections.removeSignIn(workspaceId, connectionId, memberId),
-    )
-  }
 }
 
 export const addWorkspaceConnection = async (dependencies: Dependencies, input: InWorkspace & ConnectionInput) => {
@@ -220,7 +195,7 @@ export const reviewConnectionTools = async (
     })
   })
   await grantWorkspaceTools(dependencies, workspaceId)
-  await releaseLostSignIns(dependencies, input)
+  await releaseLostSignIns(dependencies, workspaceId, { connectionId })
 }
 
 export const setConnectionAccess = async (dependencies: Dependencies, input: ConnectionTarget & AccessInput) => {
@@ -247,5 +222,5 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
     })
   })
   await grantWorkspaceTools(dependencies, workspaceId, subject.memberId && [subject.memberId])
-  await releaseLostSignIns(dependencies, input)
+  await releaseLostSignIns(dependencies, workspaceId, { connectionId })
 }
