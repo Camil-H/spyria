@@ -48,14 +48,8 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
   const requireContextMember = (workspace: WorkspaceId, id: MemberId) => {
     if (workspace !== workspaceId || id !== userId) throw new NotOwnProfile()
   }
-  const connectionOf = (
-    row: Omit<WorkspaceConnection, 'workspaceId' | 'codeMode'> & { workspaceId: string; codeMode: boolean | null },
-  ) =>
-    ({
-      ...row,
-      workspaceId: inContextWorkspace(row.workspaceId as WorkspaceId),
-      codeMode: row.codeMode ?? false,
-    }) as WorkspaceConnection
+  const connectionOf = (row: Omit<WorkspaceConnection, 'workspaceId'> & { workspaceId: string }) =>
+    ({ ...row, workspaceId: inContextWorkspace(row.workspaceId as WorkspaceId) }) as WorkspaceConnection
   const connectionRows = (id: WorkspaceId) => zql.workspaceConnections.where('workspaceId', inContextWorkspace(id))
   const ownToolConnections = zql.toolConnections.where('workspaceId', workspaceId).where('userId', userId)
   const ownToolApprovals = zql.toolApprovals.where('workspaceId', workspaceId).where('userId', userId)

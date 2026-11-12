@@ -25,7 +25,6 @@ export const auditKindsByGroup = {
     'connection.removed',
     'connection.reviewed',
     'connection.access_changed',
-    'connection.code_mode_changed',
   ],
   Chats: [
     'chat.transferred',
@@ -77,7 +76,6 @@ const actionByKind: Record<string, string> = {
   'connection.removed': 'Removed a tool server',
   'connection.reviewed': 'Reviewed what the tools of a server do',
   'connection.access_changed': 'Changed who may use a tool server',
-  'connection.code_mode_changed': 'Changed whether agents call a tool server from scripts',
   'chat.transferred': 'Transferred a chat',
   'chat.member.invited': 'Added a member to a chat',
   'chat.member.joined': 'Joined a chat',

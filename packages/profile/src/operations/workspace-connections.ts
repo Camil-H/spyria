@@ -95,7 +95,6 @@ export const addWorkspaceConnection = async (dependencies: Dependencies, input: 
     headerName: secretHeader?.name ?? null,
     tools,
     isReviewed: false,
-    codeMode: false,
   }
   try {
     await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
@@ -214,23 +213,6 @@ export const reviewConnectionTools = async (
   })
   await grantWorkspaceTools(dependencies, workspaceId)
   await releaseLostSignIns(dependencies, workspaceId, { connectionId })
-}
-
-export const setConnectionCodeMode = async (
-  dependencies: Dependencies,
-  input: ConnectionTarget & { isOn: boolean },
-) => {
-  const { workspaceId, connectionId, isOn } = input
-  await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
-    const connection = await workspaceConnections.get(workspaceId, connectionId)
-    if (connection.codeMode === isOn) return
-    await workspaceConnections.save({ ...connection, codeMode: isOn })
-    await workspaceEvents.record({
-      workspaceId,
-      type: 'connection.code_mode_changed',
-      payload: { connectionId, name: connection.name, codeMode: isOn },
-    })
-  })
 }
 
 export const setConnectionAccess = async (dependencies: Dependencies, input: ConnectionTarget & AccessInput) => {

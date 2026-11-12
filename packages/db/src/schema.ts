@@ -209,7 +209,6 @@ type WorkspaceConnectionRow = {
   headerName: string | null
   tools: readonly ConnectionTool[]
   isReviewed: boolean
-  codeMode: boolean
 }
 type ConnectionAccessRow = ToolServerAccess & { workspaceId: WorkspaceId; id: string }
 type ToolApprovalRow = ToolApprovalPreference & { workspaceId: WorkspaceId; memberId: MemberId }

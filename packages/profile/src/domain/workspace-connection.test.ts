@@ -27,7 +27,6 @@ const crm: WorkspaceConnection = {
     { name: 'delete', readOnly: false, destructive: true },
   ],
   isReviewed: true,
-  codeMode: false,
 }
 const bob = memberId('member-bob')
 const bobAsMember = { memberId: bob, roleId: 'member' }

@@ -85,27 +85,6 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(await repliesTo(question)).toEqual([replyOf(1)])
 })
 
-test('a Pi session started after an admin put a catalogue server in code mode reaches its tools from scripts', async () => {
-  const gatewayName = `errors_${crypto.randomUUID().slice(0, 6)}`
-  const connectionId = crypto.randomUUID()
-  await database.$client`
-    insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, is_reviewed, code_mode)
-    values (${acme}, ${connectionId}, ${gatewayName}, ${gatewayName}, 'https://errors.example.com/mcp', 'shared', '[]', true, true)`
-  try {
-    const { launches } = await agentHost()
-    const chat = await newRuntimeChat()
-    await answered(await prompt(chat, 'Find the latest errors'))
-    await turnEnded(chat)
-    const mcp = launches()[0]?.agent.acp_command.find((part) => part.startsWith('SPYRIA_PI_MCP='))
-    expect(JSON.parse(mcp?.slice('SPYRIA_PI_MCP='.length) ?? '{}').mcpServers.tools).toMatchObject({
-      exposure: 'deferred',
-      toolExposure: { [`${gatewayName}-*`]: 'codemode' },
-    })
-  } finally {
-    await database.$client`delete from workspace_connections where workspace_id = ${acme} and id = ${connectionId}`
-  }
-})
-
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
   const secondWorker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,
