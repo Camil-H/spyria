@@ -223,6 +223,34 @@ test.describe('Tools catalogue', () => {
     await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMlookup'])
   })
 
+  test('As the owner of a chat, I switch CRM off in its Connected tools tab: the agent no longer has its tools in that chat until I switch it back on', {
+    tag: ['@spec-59'],
+  }, async ({ page, workerStack, agentScript }) => {
+    const gatewayName = await registerCrm(page, workerStack)
+    await openPanelTab(page, 'Research', 'Connected tools')
+    const crmSwitch = tabPanelOf(page).getByRole('switch', { name: 'CRM' })
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
+    await crmSwitch.click()
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'false')
+    await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMOff in this chat'])
+    await expect(
+      await promptIn(
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.', gatewayName),
+        'Look it up',
+      ),
+    ).toContainText(notOffered(gatewayName, 'lookup'))
+    await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(0)
+
+    await openPanelTab(page, 'Research', 'Connected tools')
+    await crmSwitch.click()
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
+    await expect(
+      await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Looked it up.'), 'Look it up again'),
+    ).toContainText('ran lookup')
+  })
+
   test('As a member who can manage the tools catalogue, I remove CRM: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
