@@ -1,7 +1,14 @@
-import { type MemberId, type MessageId, toolNamePartsOf } from '@spyria/kernel'
+import { type MemberId, type MessageId, type ToolApproval, toolNamePartsOf } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ToolCallDecision } from '../contracts/repositories.ts'
-import { guestPrompterOf, guestToolRefusalOf, notApprovedOf, toolGatewayUnreachable } from '../domain/tool-calls.ts'
+import {
+  guestPrompterOf,
+  guestToolRefusalOf,
+  needsApproval,
+  notApprovedOf,
+  toolGatewayUnreachable,
+} from '../domain/tool-calls.ts'
+
 import type { AgentDependencies } from './agent-turn.ts'
 import { requestToolApproval } from './request-tool-approval.ts'
 
@@ -14,10 +21,12 @@ type Turn = {
   prompterName: string | null
 }
 type Input = { turn: Turn; toolName: string; serverName: string; toolArguments: unknown; signal: AbortSignal }
-type Checks = {
-  accessOf: (prompterId: MemberId) => Promise<'allowed' | 'owner_account' | 'not_allowed'>
-  isReadOnly: () => Promise<boolean>
+type ToolCallPolicy = {
+  access: 'allowed' | 'owner_account' | 'not_allowed'
+  readOnly: boolean | null
+  approval: ToolApproval
 }
+type Checks = { policyOf: (prompterId: MemberId) => Promise<ToolCallPolicy> }
 type Authorization = {
   refusal?: string
   readOnly: boolean | null
@@ -30,22 +39,22 @@ const notNeeded = { decision: 'not_needed', decidedBy: null } as const
 export const authorizeToolCall = async (
   dependencies: AgentDependencies,
   { turn, toolName, serverName, toolArguments, signal }: Input,
-  { accessOf, isReadOnly }: Checks,
+  { policyOf }: Checks,
 ): Promise<Authorization> => {
   const { tool } = toolNamePartsOf(toolName)
   const { chat, promptId, ownerId, ownerName } = turn
   const prompterName = turn.prompterName ?? ''
   const guestId = guestPrompterOf(turn)
-  const access = await accessOf(turn.prompterId ?? ownerId).catch(() => null)
-  if (!access) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }
+  const policy = await policyOf(turn.prompterId ?? ownerId).catch(() => null)
+  if (!policy) return { refusal: toolGatewayUnreachable, readOnly: null, ...notNeeded }
+  const { access, readOnly, approval } = policy
   if (access !== 'allowed')
     return {
       refusal: guestToolRefusalOf(access, { ownerName, prompterName, server: serverName }),
-      readOnly: null,
+      readOnly,
       ...notNeeded,
     }
-  const readOnly = await isReadOnly()
-  if (!guestId || readOnly) return { readOnly, ...notNeeded }
+  if (!needsApproval(approval, guestId !== null)) return { readOnly, ...notNeeded }
   const decided = await requestToolApproval(dependencies, {
     chat,
     promptId,

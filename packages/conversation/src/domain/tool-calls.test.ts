@@ -2,7 +2,13 @@ import { expect, test } from 'bun:test'
 import { agentProjectionOf } from './agent-events.ts'
 import { observedStep, type StoredStep, toolServerNamerOf } from './agent-steps.ts'
 import { acpUpdate } from './testing.ts'
-import { toolCallFailureOf, toolCallNoticeOf, toolConnectionOf, toolDisplayNameOf } from './tool-calls.ts'
+import {
+  needsApproval,
+  toolCallFailureOf,
+  toolCallNoticeOf,
+  toolConnectionOf,
+  toolDisplayNameOf,
+} from './tool-calls.ts'
 
 const authenticationRequired =
   'Authentication required for fake. Open this URL to connect your account: http://localhost:5190/gateway-oauth/workspace/mcp-sessions/auth?flow=c9b2227c-ecb2-4ece-864b-59fcdfa1cd88'
@@ -116,4 +122,11 @@ test('an MCP tool call becomes a "Used <tool> (<server>)" step with its result, 
     isError: true,
     connection: { server: 'fake', isReconnect: true },
   })
+})
+
+test("a call waits for approval when its tool is set to Always, or to On a guest's prompt and a guest prompted", () => {
+  expect(needsApproval('always', false)).toBe(true)
+  expect(needsApproval('guest', true)).toBe(true)
+  expect(needsApproval('guest', false)).toBe(false)
+  expect(needsApproval('never', true)).toBe(false)
 })

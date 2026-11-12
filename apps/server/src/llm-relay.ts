@@ -57,7 +57,6 @@ import { watchToolLists } from './tool-list-changes.ts'
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
 type ToolResult = { content?: { text?: string }[]; isError?: boolean }
-type ListedTool = { name?: string; annotations?: { readOnlyHint?: boolean } }
 type ToolCallStatus = 'succeeded' | 'failed' | 'refused'
 type ModelCallTurn = Exclude<
   Awaited<ReturnType<ReturnType<AgentBridge['forDatabase']>['modelCallTurn']>>,
@@ -77,7 +76,6 @@ const forwardedHeaders = [
 const toolHeaders = [...forwardedHeaders, 'mcp-session-id', 'mcp-protocol-version', 'last-event-id']
 const answeredHeaders = ['content-type', 'x-request-id', 'mcp-session-id']
 const headTimeoutMilliseconds = 300_000
-const readOnlyHintMilliseconds = 10_000
 const toolStreamHeartbeatMilliseconds = 15_000
 const toolListChanged = { jsonrpc: '2.0', method: 'notifications/tools/list_changed' }
 const unreachable = { error: { message: 'The model gateway is unreachable', type: 'gateway_unavailable' } }
@@ -170,7 +168,6 @@ export const createModelCallRelay = ({
       usedUpBudgetOf: createBudgetGuard(transact),
       isModelAllowed: createModelGuard(transact),
       tools: createToolCallOwnerAccess(transact, llmGateway),
-      readOnlyHints: new Map<string, { isReadOnly: boolean; listedAt: number }>(),
     }
   }
   const databaseAccess = (database: Database) => {
@@ -351,7 +348,7 @@ export const createModelCallRelay = ({
             : await handlers.delegate({ chat: turn.chat, turn, task: String(task ?? ''), effort, model })
       return reply({ content: [{ type: 'text', text }], isError })
     }
-    const { keyOf, usedUpBudgetOf, isModelAllowed, tools, readOnlyHints } = databaseAccess(database)
+    const { keyOf, usedUpBudgetOf, isModelAllowed, tools } = databaseAccess(database)
 
     const searchWeb = async (
       turn: ModelCallTurn,
@@ -417,24 +414,6 @@ export const createModelCallRelay = ({
     }
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
-    const isReadOnly = async (callHeaders: Record<string, string>, toolName: string) => {
-      const hint = readOnlyHints.get(toolName)
-      if (hint && Date.now() - hint.listedAt <= readOnlyHintMilliseconds) return hint.isReadOnly
-      const listed = await fetch(`${gatewayUrlOf(database)}/mcp`, {
-        method: 'POST',
-        headers: { ...callHeaders, 'x-bf-mcp-include-tools': toolName },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-        signal: AbortSignal.any([signal, AbortSignal.timeout(headTimeoutMilliseconds)]),
-      })
-        .then((response) => response.text())
-        .catch(() => '')
-      const { tools: listedTools = [] } = (jsonOf(listed) as { result?: { tools?: ListedTool[] } })?.result ?? {}
-      const listedTool = listedTools.find((tool) => tool.name === toolName)
-      if (!listedTool) return false
-      const isListedReadOnly = listedTool.annotations?.readOnlyHint === true
-      readOnlyHints.set(toolName, { isReadOnly: isListedReadOnly, listedAt: Date.now() })
-      return isListedReadOnly
-    }
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
       fetch(`${gatewayUrlOf(database)}${isAnthropicPath ? '/anthropic' : ''}${path}`, {
         method,
@@ -509,10 +488,7 @@ export const createModelCallRelay = ({
         if (isToolCall) {
           const { refusal, ...authorization } = await handlers.authorizeToolCall(
             { turn, toolName, serverName, toolArguments: rpc?.params?.arguments, signal },
-            {
-              accessOf: (prompter) => tools.toolCallAccess(host.workspaceId, ownerId, prompter, toolName),
-              isReadOnly: () => isReadOnly(callHeaders, toolName),
-            },
+            { policyOf: (prompter) => tools.toolCallPolicy(host.workspaceId, ownerId, prompter, toolName) },
           )
           Object.assign(call, authorization)
           if (refusal) return toolError(refusal)
