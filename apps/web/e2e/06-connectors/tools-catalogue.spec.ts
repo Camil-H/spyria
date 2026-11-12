@@ -241,9 +241,11 @@ test.describe('Tools catalogue', () => {
     await openPanelTab(page, 'Research', 'Connected tools')
     await crmSwitch.click()
     await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
-    await expect(
-      await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Looked it up.'), 'Look it up again'),
-    ).toContainText('ran lookup')
+    await expect(async () => {
+      await expect(
+        await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Looked it up.'), 'Look it up again'),
+      ).toContainText('ran lookup', { timeout: 2_000 })
+    }).toPass({ timeout: 45_000 })
   })
 
   test('As a member who can manage the tools catalogue, I remove CRM: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {

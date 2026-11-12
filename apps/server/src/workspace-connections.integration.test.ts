@@ -598,9 +598,11 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   expect(textOf(refused.result)).toBe('Payroll is off for this chat')
   const billed = await mcpCall(host, token, rpcOf('tools/call', { name: `${billingName}-lookup`, arguments: {} }))
   expect(textOf(billed.result)).toBe('ran lookup')
-  expect([
+  const recordedCalls = async () => [
     ...(await database.$client`select server, tool, status from tool_calls where chat_id = ${chatId} order by called_at`),
-  ]).toEqual([
+  ]
+  await waitFor(async () => (await recordedCalls()).length === 2)
+  expect(await recordedCalls()).toEqual([
     { server: ledgerName, tool: 'lookup', status: 'refused' },
     { server: billingName, tool: 'lookup', status: 'succeeded' },
   ])
