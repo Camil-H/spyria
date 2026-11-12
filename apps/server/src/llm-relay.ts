@@ -506,6 +506,7 @@ export const createModelCallRelay = ({
         if (rpc?.method === 'initialize')
           await tools.grantMemberTools(host.workspaceId, accountId).catch(() => undefined)
         const includedServers = isGuestCall ? [server] : switched?.on
+        if (rpc?.method === 'tools/list' && includedServers?.length === 0) return noTools()
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,
