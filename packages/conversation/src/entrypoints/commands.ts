@@ -45,6 +45,7 @@ export type ConversationCommands = {
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>
   joinChat: Command<{ chatId: ChatId }>
   leaveChat: Command<{ chatId: ChatId }>
+  switchChatToolServer: Command<{ chatId: ChatId; connectionId: string; isOn: boolean }>
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>
   connectTool: Command<{ tool: string }, unknown>

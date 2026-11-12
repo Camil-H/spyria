@@ -472,10 +472,13 @@ export const startTestGateway = async ({
   }
   const running = docker('inspect', '-f', '{{.State.Running}} {{index .Config.Labels "spyria.setup"}}', containerName)
   if (running.stdout.toString().trim() === `true ${setupHash}` && (await isReady()) && (await isSetUp())) {
-    const { clients } = await gateway.call<{ clients: { config: { client_id: string } }[] | null }>('/api/mcp/clients')
-    for (const { config } of clients ?? [])
-      await gateway.call(`/api/mcp/client/${config.client_id}`, { method: 'DELETE' })
-    return gateway
+    for (;;) {
+      const { clients } = await gateway.call<{ clients: { config: { client_id: string } }[] | null }>(
+        '/api/mcp/clients?limit=100',
+      )
+      if (!clients?.length) return gateway
+      for (const { config } of clients) await gateway.call(`/api/mcp/client/${config.client_id}`, { method: 'DELETE' })
+    }
   }
   const postgresUrl = new URL(testPostgresUrl)
   const store = {

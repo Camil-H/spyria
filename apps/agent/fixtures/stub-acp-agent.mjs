@@ -268,7 +268,21 @@ const mcpCall = async (server, method, params = {}, signal = undefined) => {
     if (signal?.aborted || !timedOut.aborted) throw error
   })
   if (!response) return { isError: true, content: [{ text: `MCP request timed out after ${timeout * 1000}ms` }] }
-  return response.status === 200 ? JSON.parse((await response.text()) || '{}').result : undefined
+  return response.status === 200 ? rpcAnswerOf(await response.text()).result : undefined
+}
+const rpcAnswerOf = (text) => {
+  const events = text
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice('data:'.length).trim())
+  const messages = (events.length > 0 ? events : [text || '{}']).flatMap((part) => {
+    try {
+      return [JSON.parse(part)]
+    } catch {
+      return []
+    }
+  })
+  return messages.find((message) => 'result' in message || 'error' in message) ?? {}
 }
 const toolListStreamMilliseconds = 60_000
 const toolListChangeRetryMilliseconds = 1_000
@@ -281,8 +295,8 @@ const watchToolList = async (server, onChange) => {
     }).catch(() => undefined)
     if (response?.status !== 200 || !response.body) return
     const decoder = new TextDecoder()
-    await onChange()
     try {
+      await onChange()
       for await (const chunk of response.body)
         if (decoder.decode(chunk, { stream: true }).includes('notifications/tools/list_changed')) await onChange()
     } catch {}

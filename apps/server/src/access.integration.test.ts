@@ -98,6 +98,18 @@ test.each(chatAccessRows(configurers))(
   },
 )
 
+test.each(chatAccessRows(['owner']))(
+  'switchChatToolServer needs tools.manage: $name',
+  async ({ member, isAllowed, ...role }) => {
+    const chat = await chatAs(role)
+    const switchOff = { workspaceId: acme, chatId: chat, connectionId: 'connection-orders', isOn: false }
+    expect(await resultOf(member, 'conversation.switchChatToolServer', switchOff)).toEqual(
+      isAllowed ? succeeded : missingPermission('tools.manage'),
+    )
+    expect(await chatRow(chat)).toMatchObject({ toolServersOff: isAllowed ? ['connection-orders'] : [] })
+  },
+)
+
 test('an editor configures the session but where it runs stays the owner’s choice', async () => {
   const chat = await chatAs({ isPublic: false, roleId: 'editor', userId: bob })
   expect(

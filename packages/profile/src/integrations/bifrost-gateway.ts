@@ -26,6 +26,7 @@ type BifrostGateway = LlmGateway &
   }
 
 const notFound = 404
+const mcpClientPageSize = 100
 const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
 const openAiCompatibleProviderAt = (baseUrl: string) => ({
   network_config: { base_url: baseUrl },
@@ -120,7 +121,15 @@ export const createLlmGateway = ({
     })),
   })
   let toolServerList: { servers: Promise<ToolServer[]>; loadedAt: number } | undefined
-  const mcpClients = async () => (await request('GET', '/api/mcp/clients')).body.clients as McpClient[]
+  const mcpClients = async () => {
+    const clients: McpClient[] = []
+    for (;;) {
+      const { body } = await request('GET', `/api/mcp/clients?limit=${mcpClientPageSize}&offset=${clients.length}`)
+      const page = (body.clients as McpClient[] | null) ?? []
+      clients.push(...page)
+      if (page.length === 0 || clients.length >= Number(body.total_count ?? clients.length)) return clients
+    }
+  }
   const clientNamed = async (name: string) => (await mcpClients()).find(({ config }) => config.name === name)
   const freshToolServers = async () =>
     (await mcpClients()).map(
@@ -155,6 +164,20 @@ export const createLlmGateway = ({
     })
     return /auth-success|status=success/.test(response.headers.get('location') ?? '')
   }
+  const mcpAnswerOf = (text: string): object => {
+    const events = text
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trim())
+    const messages = (events.length > 0 ? events : [text]).flatMap((part) => {
+      try {
+        return [JSON.parse(part) as object]
+      } catch {
+        return []
+      }
+    })
+    return messages.find((message) => 'result' in message || 'error' in message) ?? {}
+  }
   const mcpRequest = (virtualKeyValue: string | undefined, method: string, params?: object) =>
     fetch(`${url}/mcp`, {
       method: 'POST',
@@ -167,7 +190,7 @@ export const createLlmGateway = ({
       signal: AbortSignal.timeout(timeoutMilliseconds),
     })
   const listedToolsOf = async (virtualKeyValue: string | undefined) => {
-    const { result } = (await (await mcpRequest(virtualKeyValue, 'tools/list')).json()) as {
+    const { result } = mcpAnswerOf(await (await mcpRequest(virtualKeyValue, 'tools/list')).text()) as {
       result?: { tools?: ListedTool[] }
     }
     return result?.tools ?? []

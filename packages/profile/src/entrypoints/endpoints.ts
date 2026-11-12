@@ -10,6 +10,7 @@ import { isModelAllowed } from '../operations/ai-providers.ts'
 import { grantMemberTools } from '../operations/grant-tools.ts'
 import { toolKeyValueOf, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 import {
+  catalogueServersOf,
   checkToolConnections,
   disconnectTool,
   flagToolConnection,
@@ -91,6 +92,8 @@ export const createToolCallAccess = (transact: Transact, gateway: LlmGateway & T
       toolCallPolicy(dependenciesOf(workspace, prompter), { ownerId: owner, prompterId: prompter, toolName }),
     serverNameOf: (workspace: WorkspaceId, owner: MemberId, server: string) =>
       toolServerNameOf(dependenciesOf(workspace, owner), { tool: server }),
+    catalogueServersOf: (workspace: WorkspaceId, member: MemberId) =>
+      catalogueServersOf(dependenciesOf(workspace, member)),
   }
 }
 

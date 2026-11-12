@@ -1,6 +1,16 @@
-import { type Snapshot, usableConnectionsIn } from '@spyria/db'
-import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
+import { chatPermissionsIn, type Snapshot, usableConnectionsIn } from '@spyria/db'
+import { type ChatId, can, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import { panelChatIn } from './panel-chat.ts'
 
-export const getConnections = (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) =>
-  panelChatIn(snapshot, workspaceId, chatId) ? usableConnectionsIn(snapshot, workspaceId, viewerId) : null
+export const getConnections =
+  (workspaceId: WorkspaceId, chatId: ChatId, viewerId: MemberId) => (snapshot: Snapshot) => {
+    const chat = panelChatIn(snapshot, workspaceId, chatId)
+    if (!chat) return null
+    return {
+      connections: usableConnectionsIn(snapshot, workspaceId, viewerId).map((connection) => ({
+        ...connection,
+        isOn: !chat.toolServersOff.includes(connection.id),
+      })),
+      canSwitch: can(chatPermissionsIn(snapshot, workspaceId, viewerId)(chat), 'tools.manage'),
+    }
+  }

@@ -121,6 +121,7 @@ export type ChatRow = {
   agentTurnMessageId: MessageId | null
   contextTokens: number | null
   contextWindow: number | null
+  toolServersOff: readonly string[]
 }
 export type MessageRow = {
   id: MessageId
@@ -303,6 +304,7 @@ export const usableConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId
       {
         id: connection.id,
         name: connection.name,
+        gatewayName: connection.gatewayName,
         signIn: connection.signIn,
         tools: connection.tools.filter((tool) => granted.includes(tool.name)),
         approvals,

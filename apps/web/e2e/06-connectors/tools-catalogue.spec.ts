@@ -38,13 +38,22 @@ test.describe('Tools catalogue', () => {
   const crmCardOf = (page: Page) => serverCardOf(page, 'CRM')
   const notOffered = (serverName: string, tool: string) => `Tool ${serverName}-${tool} not found`
 
+  const afterSaving = async (page: Page, action: () => Promise<unknown>) => {
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/api\/workspace-connections\/[^/]+\/(access|review)$/.test(new URL(response.url()).pathname),
+    )
+    await action()
+    expect((await saved).ok()).toBe(true)
+  }
   const setLevel = async (page: Page, who: string, level: string, serverName = 'CRM') => {
     const select = serverCardOf(page, serverName).getByRole('combobox', { name: `Access of ${who}` })
-    await select.selectOption({ label: level })
+    await afterSaving(page, () => select.selectOption({ label: level }))
     await expect(select.locator('option:checked')).toHaveText(level)
   }
   const confirmTools = async (page: Page, serverName: string) => {
-    await serverCardOf(page, serverName).getByRole('button', { name: 'Confirm' }).click()
+    await afterSaving(page, () => serverCardOf(page, serverName).getByRole('button', { name: 'Confirm' }).click())
     await expect(serverCardOf(page, serverName).getByRole('region', { name: `Access to ${serverName}` })).toBeVisible()
   }
   const addNamedMember = async (page: Page, who: string) => {
@@ -93,12 +102,23 @@ test.describe('Tools catalogue', () => {
     await addLlmKey(bobPage, 'Mistral')
     return bobPage
   }
+  const toolGrantsSynced = (workerStack: WorkerStack) =>
+    expect
+      .poll(async () => {
+        const [gatewaySync] = await workerStack.database.$client<{ isPending: boolean }[]>`
+          select exists(select 1 from jobs where type = 'profile.gateway-sync' and state in ('queued', 'running'))
+            as "isPending"`
+        return gatewaySync?.isPending
+      })
+      .toBe(false)
   const promptIn = async (
+    workerStack: WorkerStack,
     page: Page,
     agentScript: (chat: string, script: object) => Promise<void>,
     { stepName, ...script }: ReturnType<typeof toolScriptOf>,
     text: string,
   ) => {
+    await toolGrantsSynced(workerStack)
     await agentScript(research, script)
     await openChat(page, 'Research')
     await sendMessage(page, text)
@@ -135,7 +155,13 @@ test.describe('Tools catalogue', () => {
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
     await expect(await profileCrmOf(bobPage)).toContainText('Shared login: 2 tools · 1 read · 1 write')
-    const result = await promptIn(bobPage, agentScript, toolScriptOf(gatewayName, 'lookup', 'Found it.'), 'Look it up')
+    const result = await promptIn(
+      workerStack,
+      bobPage,
+      agentScript,
+      toolScriptOf(gatewayName, 'lookup', 'Found it.'),
+      'Look it up',
+    )
     await expect(result).toContainText('ran lookup')
     await bobPage.context().close()
   })
@@ -149,7 +175,7 @@ test.describe('Tools catalogue', () => {
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     const gatewayName = await registerCrm(page, workerStack)
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
-    await expect(await promptIn(page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
+    await expect(await promptIn(workerStack, page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
   })
 
   test('As a member who can manage the tools catalogue, I give Bob his own Read access and his update is refused, also after he removes his LLM key and adds it again', {
@@ -161,7 +187,9 @@ test.describe('Tools catalogue', () => {
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(notOffered('CRM', 'update'))
+    await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it')).toContainText(
+      notOffered('CRM', 'update'),
+    )
 
     await openProfile(bobPage)
     await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
@@ -177,11 +205,11 @@ test.describe('Tools catalogue', () => {
       })
       .toBe(0)
     await addLlmKey(bobPage, 'Mistral')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it again')).toContainText(
+    await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it again')).toContainText(
       notOffered('CRM', 'update'),
     )
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
-    await expect(await promptIn(bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
+    await expect(await promptIn(workerStack, bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
     await bobPage.context().close()
   })
 
@@ -194,11 +222,11 @@ test.describe('Tools catalogue', () => {
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(bobPage, agentScript, update, 'Update it')).toContainText(
+    await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it')).toContainText(
       "CRM isn't available on Bob's prompts in this chat",
     )
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
-    await expect(await promptIn(bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
+    await expect(await promptIn(workerStack, bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
     await bobPage.context().close()
   })
 
@@ -210,17 +238,67 @@ test.describe('Tools catalogue', () => {
     await adminRow.getByRole('button', { name: 'Single tools' }).click()
     await adminRow.getByRole('searchbox', { name: 'Search tools for Admin' }).fill('upd')
     await expect(adminRow.getByRole('checkbox', { name: 'lookup for Admin' })).toHaveCount(0)
-    await untick(adminRow.getByRole('checkbox', { name: 'update for Admin' }))
+    await afterSaving(page, () => untick(adminRow.getByRole('checkbox', { name: 'update for Admin' })))
     await expect(adminRow.getByRole('button', { name: '1 single change' })).toBeVisible()
     await expect(adminRow.getByRole('switch', { name: 'Allow all write tools' })).toHaveAttribute(
       'aria-checked',
       'false',
     )
     await expect(
-      await promptIn(page, agentScript, toolScriptOf(gatewayName, 'update', 'Tried to update.'), 'Update it'),
+      await promptIn(
+        workerStack,
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'update', 'Tried to update.'),
+        'Update it',
+      ),
     ).toContainText(notOffered('CRM', 'update'))
     await openPanelTab(page, 'Research', 'Connected tools')
     await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMlookup'])
+  })
+
+  test('As the owner of a chat, I switch CRM off in its Connected tools tab: the agent no longer has its tools in that chat until I switch it back on', {
+    tag: ['@spec-59'],
+  }, async ({ page, workerStack, agentScript }) => {
+    const gatewayName = await registerCrm(page, workerStack)
+    await expect(
+      await promptIn(
+        workerStack,
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'lookup', 'Looked it up.'),
+        'Look it up first',
+      ),
+    ).toContainText('ran lookup')
+    await openPanelTab(page, 'Research', 'Connected tools')
+    const crmSwitch = tabPanelOf(page).getByRole('switch', { name: 'CRM' })
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
+    await crmSwitch.click()
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'false')
+    await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMOff in this chat'])
+    await expect(
+      await promptIn(
+        workerStack,
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.'),
+        'Look it up',
+      ),
+    ).toContainText(new RegExp(`CRM is off for this chat|${notOffered('CRM', 'lookup')}`))
+    await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(1)
+
+    await openPanelTab(page, 'Research', 'Connected tools')
+    await crmSwitch.click()
+    await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
+    await expect(
+      await promptIn(
+        workerStack,
+        page,
+        agentScript,
+        toolScriptOf(gatewayName, 'lookup', 'Looked it up.'),
+        'Look it up again',
+      ),
+    ).toContainText('ran lookup')
   })
 
   test('As a member who can manage the tools catalogue, I remove CRM: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {
@@ -239,6 +317,7 @@ test.describe('Tools catalogue', () => {
     await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveCount(0)
     await expect(
       await promptIn(
+        workerStack,
         page,
         agentScript,
         toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.', gatewayName),

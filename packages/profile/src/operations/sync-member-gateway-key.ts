@@ -1,21 +1,12 @@
 import { type GatewayKey, log } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
-import type { ActingMember, ProfileTransactor } from '../contracts/transactor.ts'
+import type { ProfileTransactor } from '../contracts/transactor.ts'
 import type { LlmCredential } from '../domain/llm-credential.ts'
-import { grantMemberTools, releaseLostSignIns } from './grant-tools.ts'
+import { grantMemberTools, inMemberOrderOf, releaseLostSignIns } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }
 
-const syncsByMember = new Map<string, Promise<unknown>>()
-
-const inMemberOrder = <Result>({ workspaceId, memberId }: ActingMember, work: () => Promise<Result>) => {
-  const memberKey = `${workspaceId}/${memberId}`
-  const result = (syncsByMember.get(memberKey) ?? Promise.resolve()).then(work, work)
-  const settled = result.catch(() => {})
-  syncsByMember.set(memberKey, settled)
-  settled.then(() => syncsByMember.get(memberKey) === settled && syncsByMember.delete(memberKey))
-  return result
-}
+const inMemberOrder = inMemberOrderOf()
 
 export const syncMemberGatewayKey = (
   { transactor, gateway }: Dependencies,

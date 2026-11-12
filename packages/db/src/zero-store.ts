@@ -259,6 +259,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       localSession: chat.localSession ?? null,
       contextTokens: chat.contextTokens ?? null,
       contextWindow: chat.contextWindow ?? null,
+      toolServersOff: chat.toolServersOff ?? [],
       ownerId: ownerUserId ?? '',
     }),
   )

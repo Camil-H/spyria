@@ -345,6 +345,7 @@ export const chats = table(
     agentTurnFailure: text(),
     contextTokens: integer(),
     contextWindow: integer(),
+    toolServersOff: jsonb().$type<readonly string[]>().notNull().default([]),
     archived: boolean().notNull(),
     createdAt: instant().notNull(),
   },

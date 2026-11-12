@@ -302,6 +302,22 @@ test('a member given Read is refused update on their own prompts, their key hold
   ])
 })
 
+test('a review and level changes sent together leave every member with the tools of the last change, never an earlier snapshot', async () => {
+  await addLlmKey(bob, 'Mistral')
+  const { connectionId } = await register('Ledger')
+  const { gatewayName } = (await connectionRow(connectionId)) ?? { gatewayName: '' }
+  const answers = await Promise.all([
+    asMember(alice, 'POST', `${connectionsPath}/${connectionId}/review`, { markings: [] }),
+    setAccess(connectionId, { roleId: 'admin' }, 'write'),
+    setAccess(connectionId, { roleId: 'member' }, 'read'),
+  ])
+  expect(answers.map((answer) => (typeof answer === 'number' ? answer : answer.status))).toEqual([200, 200, 200])
+  expect((await grantsOf(alice))[gatewayName]).toEqual(['lookup', 'update'])
+  expect((await grantsOf(bob))[gatewayName]).toEqual(['lookup'])
+  await removeKeysOf(bob)
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)).status).toBe(200)
+})
+
 test("a role's level and single-tool changes reach every member of the role, a later change keeps the earlier ones, and a member whose role changes gets the new role's tools", async () => {
   await addLlmKey(bob, 'openai')
   try {
@@ -550,6 +566,67 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
   await waitFor(() => changeCount() > beforeRemoving)
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
+  closing.abort()
+  await stream
+})
+
+test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
+  const host = await fakeHost('Chat tool switch host')
+  const { chatId, token } = await runtimeTurn(host, alice)
+  const [ledger, billing] = [await register('Payroll'), await register('Invoicing')]
+  await openToEveryRole(ledger.connectionId)
+  await openToEveryRole(billing.connectionId)
+  const ledgerName = (await connectionRow(ledger.connectionId))?.gatewayName ?? ''
+  const billingName = (await connectionRow(billing.connectionId))?.gatewayName ?? ''
+  const streamed: string[] = []
+  const opened = Promise.withResolvers<number | undefined>()
+  const closing = new AbortController()
+  const stream = host.modelCall({
+    method: 'GET',
+    path: '/mcp',
+    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+    onHead: opened.resolve,
+    onChunk: (data) => streamed.push(data),
+    signal: closing.signal,
+  })
+  expect(await opened.promise).toBe(200)
+  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const listedServers = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(
+      ({ name }) => name.split('-')[0],
+    )
+  const switchLedger = (isOn: boolean) =>
+    resultOf(aliceInAcme, 'conversation.switchChatToolServer', {
+      workspaceId: acme,
+      chatId,
+      connectionId: ledger.connectionId,
+      isOn,
+    })
+  expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
+
+  const beforeOff = changeCount()
+  expect(await switchLedger(false)).toEqual(succeeded)
+  await waitFor(() => changeCount() > beforeOff)
+  expect(await listedServers()).not.toContain(ledgerName)
+  expect(await listedServers()).toContain(billingName)
+  const refused = await mcpCall(host, token, rpcOf('tools/call', { name: `${ledgerName}-lookup`, arguments: {} }))
+  expect(refused.result).toMatchObject({ isError: true })
+  expect(textOf(refused.result)).toBe('Payroll is off for this chat')
+  const billed = await mcpCall(host, token, rpcOf('tools/call', { name: `${billingName}-lookup`, arguments: {} }))
+  expect(textOf(billed.result)).toBe('ran lookup')
+  const recordedCalls = async () => [
+    ...(await database.$client`select server, tool, status from tool_calls where chat_id = ${chatId} order by called_at`),
+  ]
+  await waitFor(async () => (await recordedCalls()).length === 2)
+  expect(await recordedCalls()).toEqual([
+    { server: ledgerName, tool: 'lookup', status: 'refused' },
+    { server: billingName, tool: 'lookup', status: 'succeeded' },
+  ])
+
+  const beforeOn = changeCount()
+  expect(await switchLedger(true)).toEqual(succeeded)
+  await waitFor(() => changeCount() > beforeOn)
+  expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
   closing.abort()
   await stream
 })
