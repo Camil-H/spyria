@@ -168,6 +168,7 @@ export type ChatRepository = {
   recordRuntimeOrigin(origin: RuntimeOrigin): Promise<void>
   recordPush(push: { chatId: ChatId; actor: Actor; branch: string; head: string | null }): Promise<void>
   localSessionsAllowed(): Promise<boolean>
+  codeModeServers(): Promise<readonly string[]>
   setupCommandOf(repository: string | null): Promise<string | null>
   hasAgentSession(chatId: ChatId): Promise<boolean>
   isSessionStartPending(chatId: ChatId): Promise<boolean>

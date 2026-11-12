@@ -19,7 +19,7 @@ import {
 import { sessionQuestions } from '../domain/session-routing.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { decide, digestOf, routingUnavailableOf } from './decide.ts'
-import { fixedPiLlmOf, piLlmOf } from './prompt-agent.ts'
+import { fixedPiLlmOf, piLlmOf, withCodeModeServers } from './prompt-agent.ts'
 import { recordAgentEvent } from './record-agent-event.ts'
 import { type DelegationResult, type RunningDelegation, runningDelegations } from './running-delegations.ts'
 
@@ -144,9 +144,12 @@ const runDelegation = async (
     await agentClient.createConversation(
       conversation,
       token,
-      dependencies.fixedLlm
-        ? fixedPiLlmOf(delegation.model)
-        : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
+      await withCodeModeServers(
+        dependencies,
+        dependencies.fixedLlm
+          ? fixedPiLlmOf(delegation.model)
+          : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
+      ),
       { parentConversationId: endpoint.conversationId },
     )
     await transactor.run(({ delegations }) =>
