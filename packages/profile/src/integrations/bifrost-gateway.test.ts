@@ -229,6 +229,44 @@ test('a consent starts on a read-only tool granted to the member, or on the firs
   }
 })
 
+test('a tool listing the gateway answers as an event stream, as it does when a notice reaches the session during the request, is read like a JSON one', async () => {
+  const flowId = crypto.randomUUID()
+  const streamingServer = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const { pathname, origin } = new URL(request.url)
+      if (pathname === '/api/governance/virtual-keys/key-1')
+        return Response.json({ virtual_key: { id: 'key-1', value: 'sk-bf-1' } })
+      if (pathname === `/api/oauth/per-user/flows/${flowId}/start`)
+        return Response.json({ authorize_url: `${origin}/authorize` })
+      const { method } = (await request.json()) as { method: string }
+      if (method !== 'tools/list') return new Response(`Authentication required: ${origin}/auth?flow=${flowId}`)
+      const listed = {
+        jsonrpc: '2.0',
+        id: 1,
+        result: { tools: [{ name: 'docs-get_me', annotations: { readOnlyHint: true } }] },
+      }
+      return new Response(
+        `event: message\ndata: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\nevent: message\ndata: ${JSON.stringify(listed)}\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } },
+      )
+    },
+  })
+  const streamingGateway = createLlmGateway({
+    url: `http://localhost:${streamingServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['get_me'] }
+    expect(await streamingGateway.startToolConsent('key-1', docs)).toBe(
+      `http://localhost:${streamingServer.port}/authorize`,
+    )
+  } finally {
+    streamingServer.stop(true)
+  }
+})
+
 test('a session is checked with a read-only tool only, and reads unauthorized when the provider refuses its token', async () => {
   const calledTools: string[] = []
   let answer = '{"result":{"content":[{"type":"text","text":"you are alice"}]}}'

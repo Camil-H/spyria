@@ -155,6 +155,20 @@ export const createLlmGateway = ({
     })
     return /auth-success|status=success/.test(response.headers.get('location') ?? '')
   }
+  const mcpAnswerOf = (text: string): object => {
+    const events = text
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trim())
+    const messages = (events.length > 0 ? events : [text]).flatMap((part) => {
+      try {
+        return [JSON.parse(part) as object]
+      } catch {
+        return []
+      }
+    })
+    return messages.find((message) => 'result' in message || 'error' in message) ?? {}
+  }
   const mcpRequest = (virtualKeyValue: string | undefined, method: string, params?: object) =>
     fetch(`${url}/mcp`, {
       method: 'POST',
@@ -167,7 +181,7 @@ export const createLlmGateway = ({
       signal: AbortSignal.timeout(timeoutMilliseconds),
     })
   const listedToolsOf = async (virtualKeyValue: string | undefined) => {
-    const { result } = (await (await mcpRequest(virtualKeyValue, 'tools/list')).json()) as {
+    const { result } = mcpAnswerOf(await (await mcpRequest(virtualKeyValue, 'tools/list')).text()) as {
       result?: { tools?: ListedTool[] }
     }
     return result?.tools ?? []
