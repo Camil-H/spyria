@@ -67,10 +67,10 @@ test("only shared-login servers offer approval on a guest's prompt", () => {
 })
 
 test('a tool named like a property every object has is granted and approved by its own settings only', () => {
-  const toString = { name: 'toString', readOnly: false, destructive: true }
-  const server = { ...crm, tools: [toString] }
+  const toStringTool = { name: 'toString', readOnly: false, destructive: true }
+  const server = { ...crm, tools: [toStringTool] }
   expect(grantedToolsOf(server, [accessOf({ level: 'none' })], bobAsMember)).toEqual([])
-  expect(toolApprovalOf(server, toString, { connectionId: 'crm', serverApproval: null, toolApprovals: {} })).toBe(
+  expect(toolApprovalOf(server, toStringTool, { connectionId: 'crm', serverApproval: null, toolApprovals: {} })).toBe(
     'always',
   )
 })
