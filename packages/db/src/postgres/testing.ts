@@ -600,7 +600,7 @@ export const shareTestCrm = async (writer: SeedWriter) => {
 }
 
 export const testSignInServers = [
-  ...['fake', 'Jira', 'Slack', 'Notion', 'Linear'].map((name) => ({
+  ...['fake', 'Figma', 'Slack', 'Notion', 'Linear'].map((name) => ({
     workspaceId: aliceSeededCredential.workspaceId,
     name,
     gatewayName: name,
