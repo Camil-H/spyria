@@ -238,6 +238,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await removeMemberMachineOnServer(tx, context.workspaceId, id)
         await removeMemberProfileOnServer(tx, context.workspaceId, id)
       },
+      endSessions: async (id) => {
+        await deleteMemberSessions(tx, context.workspaceId, id)
+      },
       stopTurnsLater: async (change) => {
         await enqueueJob(tx, {
           workspaceId: context.workspaceId,

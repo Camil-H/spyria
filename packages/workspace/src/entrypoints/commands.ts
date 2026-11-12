@@ -33,6 +33,7 @@ export type WorkspaceCommands = {
   revokeInvite: Command<{ invitationId: string }>
   changeMemberRole: Command<{ memberId: MemberId; role: string }>
   removeMember: Command<{ memberId: MemberId }>
+  endMemberSessions: Command<{ memberId: MemberId }>
   transferChat: Command<{ chatId: ChatId; ownerId: MemberId }>
   createChatRole: Command<{ name: string; permissions: readonly ChatPermission[] }>
   updateChatRole: Command<{ roleId: string; name: string; permissions: readonly ChatPermission[] }>

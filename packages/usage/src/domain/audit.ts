@@ -2,7 +2,14 @@ import type { ActorKind, Integration, MemberId } from '@spyria/kernel'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {
-  Members: ['member.invited', 'invite.revoked', 'member.joined', 'member.role_changed', 'member.removed'],
+  Members: [
+    'member.invited',
+    'invite.revoked',
+    'member.joined',
+    'member.role_changed',
+    'member.removed',
+    'member.sessions_ended',
+  ],
   Workspace: [
     'workspace.deleted',
     'workspace.restored',
@@ -52,6 +59,7 @@ const actionByKind: Record<string, string> = {
   'member.joined': 'Joined the workspace',
   'member.role_changed': "Changed a member's role",
   'member.removed': 'Removed a member',
+  'member.sessions_ended': 'Signed a member out everywhere',
   'sso.configured': 'Configured SSO',
   'sso.secret_rotated': 'Replaced the SSO client secret',
   'sso.removed': 'Stopped enforcing SSO',

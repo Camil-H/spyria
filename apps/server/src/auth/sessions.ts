@@ -14,11 +14,13 @@ export const openSessions = (
   userId: string,
   workspaceId?: string,
   through: SignedInThrough = 'account',
+  userAgent = '',
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
-      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, created_at, expires_at)
-      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, now(),
+      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, user_agent, created_at,
+        expires_at)
+      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, ${userAgent}, now(),
         now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
@@ -50,6 +52,15 @@ export const findLiveSessions = async (database: Database, sessionIdByWorkspace:
 
 export const deleteSession = (database: Database, workspaceId: string, sessionId: string) =>
   database.$client`delete from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
+
+export const findMemberSessions = (database: Database, workspaceId: string, userId: string) =>
+  database.$client<{ sessionId: string; userAgent: string; createdAt: Date }[]>`
+    select id as "sessionId", user_agent as "userAgent", created_at as "createdAt" from sessions
+    where workspace_id = ${workspaceId} and user_id = ${userId} and expires_at > now()
+    order by created_at desc`
+
+export const deleteMemberSessions = (database: Database, workspaceId: string, userId: string) =>
+  database.$client`delete from sessions where workspace_id = ${workspaceId} and user_id = ${userId}`
 
 export const findMemberIn =
   (databaseOf: (databaseName: string | undefined) => Database | undefined): FindMember =>

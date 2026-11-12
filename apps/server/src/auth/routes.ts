@@ -24,8 +24,10 @@ import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
 import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import {
+  deleteMemberSessions,
   deleteSession,
   findLiveSessions,
+  findMemberSessions,
   openSessions,
   type SignedInThrough,
   signInThroughWorkspace,
@@ -63,6 +65,7 @@ type AuthRouteSettings = {
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
   closeSessionStreams: (database: Database, workspaceId: string, sessionId: string) => void
+  closeMemberStreams: (database: Database, workspaceId: string, memberId: string) => void
   rateLimited: (name: RateLimitName) => MiddlewareHandler
 }
 type TestSettings = { db?: string; user?: string; tokenSeconds?: number }
@@ -92,6 +95,7 @@ const workspaceProviderPrefix = 'workspace-'
 export const setupLinkNeededNotice = new InstanceBeingSetUp().message
 export const testCookie = 'spyria_test'
 const loginCookieSeconds = 5 * 60
+const userAgentMaxLength = 512
 
 export const sessionCookieOptions = (appOrigin: string) =>
   ({
@@ -109,6 +113,8 @@ const domainErrorOnly = (error: unknown) => {
   if (error instanceof DomainError) return error
   throw error
 }
+
+const userAgentOf = (context: Context) => (context.req.header('user-agent') ?? '').slice(0, userAgentMaxLength)
 
 const workspaceIdOfBody = async (context: Context) => {
   const body = await context.req.json().catch(() => null)
@@ -131,6 +137,7 @@ export const createAuthRoutes = ({
   authenticate,
   testDatabaseByName,
   closeSessionStreams,
+  closeMemberStreams,
   rateLimited,
 }: AuthRouteSettings) => {
   const isSetupToken = (given: unknown) => isSameSecret(setupToken, given)
@@ -209,7 +216,8 @@ export const createAuthRoutes = ({
       through,
     }: { userId?: string; email: string; workspaceId?: string; through: SignedInThrough },
   ) => {
-    const opened = userId === undefined ? [] : await openSessions(scope.database, userId, workspaceId, through)
+    const opened =
+      userId === undefined ? [] : await openSessions(scope.database, userId, workspaceId, through, userAgentOf(context))
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     if (opened.length > 0) return popup(context, { status: 'signed_in' })
     if (userId === undefined || through !== 'account' || workspaceId !== undefined)
@@ -304,6 +312,17 @@ export const createAuthRoutes = ({
   const isSameOrigin = (context: Context) => context.req.header('origin') === appOrigin
   const isStartedHere = (context: Context) =>
     ['same-origin', 'none', undefined].includes(context.req.header('sec-fetch-site'))
+  const asMember = async (
+    context: Context,
+    act: (
+      member: Extract<Authentication, { status: 200 }> & { scope: ReturnType<typeof scopeOf> },
+    ) => Promise<Response>,
+  ) => {
+    const authentication = await authenticate(context.req.header('authorization'))
+    if (authentication.status !== 200)
+      return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
+    return act({ ...authentication, scope: scopeOf(context, authentication.databaseName) })
+  }
 
   return new Hono()
     .use('/:action{renew|logout|workspaces}', async (context, next) => {
@@ -350,7 +369,7 @@ export const createAuthRoutes = ({
       const body = await context.req.json().catch(() => null)
       const created = await createWorkspaceOfAccount(scope.database, userId, body?.name).catch(domainErrorOnly)
       if (created instanceof DomainError) return context.json({ error: created.code, message: created.message }, 400)
-      const [session] = await openSessions(scope.database, userId, created)
+      const [session] = await openSessions(scope.database, userId, created, 'account', userAgentOf(context))
       if (!session) return context.json({ error: 'forbidden' }, 403)
       setSessionCookie(context, appOrigin, session)
       deleteCookie(context, accountCookie, { path: '/auth/workspaces' })
@@ -459,16 +478,40 @@ export const createAuthRoutes = ({
       deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
       return context.body(null, 204)
     })
-    .post('/sessions', async (context) => {
-      const authentication = await authenticate(context.req.header('authorization'))
-      if (authentication.status !== 200)
-        return context.json({ error: errorByStatus[authentication.status] }, authentication.status)
-      if (authentication.context.signedInThroughWorkspaceSso) return context.json({ error: 'forbidden' }, 403)
-      const workspaceId = await workspaceIdOfBody(context)
-      const scope = scopeOf(context, authentication.databaseName)
-      const [session] = await openSessions(scope.database, authentication.context.userId, workspaceId)
-      if (!session) return context.json({ error: 'forbidden' }, 403)
-      setSessionCookie(context, appOrigin, session)
-      return context.json(await scope.issue(session))
-    })
+    .post('/sessions', (context) =>
+      asMember(context, async ({ context: member, scope }) => {
+        if (member.signedInThroughWorkspaceSso) return context.json({ error: 'forbidden' }, 403)
+        const workspaceId = await workspaceIdOfBody(context)
+        const [session] = await openSessions(
+          scope.database,
+          member.userId,
+          workspaceId,
+          'account',
+          userAgentOf(context),
+        )
+        if (!session) return context.json({ error: 'forbidden' }, 403)
+        setSessionCookie(context, appOrigin, session)
+        return context.json(await scope.issue(session))
+      }),
+    )
+    .get('/active-sessions', (context) =>
+      asMember(context, async ({ context: { workspaceId, userId }, sessionId: currentSessionId, scope }) => {
+        const sessions = await findMemberSessions(scope.database, workspaceId, userId)
+        return context.json({
+          sessions: sessions.map(({ sessionId, userAgent, createdAt }) => ({
+            userAgent,
+            signedInAt: createdAt.getTime(),
+            isCurrent: sessionId === currentSessionId,
+          })),
+        })
+      }),
+    )
+    .post('/sign-out-everywhere', (context) =>
+      asMember(context, async ({ context: { workspaceId, userId }, scope }) => {
+        await deleteMemberSessions(scope.database, workspaceId, userId)
+        closeMemberStreams(scope.database, workspaceId, userId)
+        deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
+        return context.body(null, 204)
+      }),
+    )
 }

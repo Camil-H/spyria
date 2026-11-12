@@ -155,6 +155,30 @@ test('two admins demoting each other at once leave one admin: the last-admin gua
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
 })
 
+test('an admin signs a member out everywhere in the workspace, which is recorded and keeps their membership; a member signs nobody out', async () => {
+  const bobSessions = [await issueTestSession(database, acme, bob), await issueTestSession(database, acme, bob)]
+  const aliceToken = (await issueTestSession(database, acme, alice)).token
+  const endSessionsOf = (member: typeof aliceInAcme, memberId: string) =>
+    resultOf(member, 'workspace.endMemberSessions', { workspaceId: acme, memberId })
+
+  expect(await endSessionsOf(bobInAcme, alice)).toEqual(cannotManageMembers)
+  expect((await queryAs(aliceToken)).status).toBe(200)
+
+  expect(await endSessionsOf(aliceInAcme, bob)).toEqual(succeeded)
+  for (const { token, sessionId } of bobSessions) {
+    expect((await queryAs(token)).status).toBe(401)
+    expect((await renewWith(sessionId)).status).toBe(401)
+  }
+  expect(await membershipOf(bob)).toEqual({ role: 'member', removed_at: null })
+  expect((await workspaceEventsOf(database)).at(-1)).toEqual({
+    type: 'member.sessions_ended',
+    actorId: alice,
+    payload: { memberId: bob },
+  })
+  expect((await queryAs(aliceToken)).status).toBe(200)
+  expect((await queryAs((await issueTestSession(database, acme, bob)).token)).status).toBe(200)
+})
+
 test('removing a member ends their sessions, participations, keys and connections (their GitHub one too); their runtime chat freezes, their channel stays open', async () => {
   await addLlmKey(bob, 'openai')
   const [credential] = await database.$client`select secret_ref from llm_credentials where user_id = ${bob}`

@@ -230,7 +230,14 @@ const app = createApp({
     const testSettings = { db, user, tokenSeconds: tokenSeconds ? Number(tokenSeconds) : undefined }
     setCookie(context, testCookie, JSON.stringify(testSettings), sessionCookieOptions(appOrigin))
     if (user)
-      for (const session of await openSessions(databaseByName(db), user)) setSessionCookie(context, appOrigin, session)
+      for (const session of await openSessions(
+        databaseByName(db),
+        user,
+        undefined,
+        'account',
+        context.req.header('user-agent'),
+      ))
+        setSessionCookie(context, appOrigin, session)
     return context.body(null, 204)
   })
   .post('/test/fake-llm-script', async (context) => {
