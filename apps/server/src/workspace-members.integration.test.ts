@@ -251,6 +251,9 @@ test('removing a member ends their sessions, participations, keys and connection
   )
   expect(await sendTo(aliceInAcme, alicesChat, `message-${crypto.randomUUID()}`, 'Not frozen')).toEqual(succeeded)
   expect(await removeFromAcme(app, database, bob)).toEqual(failedWith(`${bob} is not a member of this workspace`))
+  expect(await resultOf(aliceInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob })).toEqual(
+    failedWith(`${bob} is not a member of this workspace`),
+  )
 })
 
 test("an admin transfers a removed member's chat to an active member, which unfreezes it; a chat of an active owner cannot be transferred", async () => {

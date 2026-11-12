@@ -383,7 +383,8 @@ test("a member sees by device where they are signed in to a workspace, never a s
   })
   const laptopCookie = cookieHeaderOf(signIn)
   const { sessions } = await sessionsOf(laptopCookie)
-  const [laptopInAcme, laptopInGlobex] = sessions
+  const laptopInAcme = sessions.find((session) => session.workspaceId === acme)
+  const laptopInGlobex = sessions.find((session) => session.workspaceId === globex)
   const [phone] = await openSessions(database, alice, acme, 'account', 'phone')
   const [bobSession] = await openSessions(database, bob, acme)
   if (!laptopInAcme || !laptopInGlobex || !phone || !bobSession) throw new Error('missing session')
