@@ -24,11 +24,13 @@ test('changing a member’s tool grants keeps their provider key on their virtua
   const keyIdsBefore = await providerKeyIdsOf(bob)
   expect(keyIdsBefore).toHaveLength(1)
 
-  const restricted = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/restrict', {
+  const readOnly = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/access', {
     memberId: bob,
-    allowedTools: ['lookup'],
+    level: 'read',
+    toolChanges: {},
   })
-  expect(restricted.status).toBe(200)
+  expect(readOnly.status).toBe(200)
+
   expect(
     (await virtualKeyOf(bob)).mcp_configs.find((config) => config.mcp_client.name === 'crm')?.tools_to_execute,
   ).toEqual(['lookup'])
