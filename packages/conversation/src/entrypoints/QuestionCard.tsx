@@ -74,6 +74,7 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
   }
   const choose = (question: AgentQuestion, value: string, isChecked: boolean) => {
     const values = chosen[question.id] ?? []
+    if (!question.multi) setFree({ ...free, [question.id]: '' })
     setChosen({
       ...chosen,
       [question.id]: question.multi
@@ -82,6 +83,10 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
           : values.filter((chosenValue) => chosenValue !== value)
         : [value],
     })
+  }
+  const writeFree = (question: AgentQuestion, text: string) => {
+    setFree({ ...free, [question.id]: text })
+    if (!question.multi && text !== '') setChosen({ ...chosen, [question.id]: [] })
   }
   const outcome = !isPending && <p className="text-xs text-muted">{outcomeOf(step, message.answeredByName)}</p>
   const alert = notice && (
@@ -156,7 +161,7 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
                   aria-label={`Other answer to ${question.text}`}
                   placeholder="Other"
                   value={free[question.id] ?? ''}
-                  onChange={(event) => setFree({ ...free, [question.id]: event.target.value })}
+                  onChange={(event) => writeFree(question, event.target.value)}
                   className={fieldClass}
                 />
               )}

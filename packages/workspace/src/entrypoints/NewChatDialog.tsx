@@ -82,11 +82,17 @@ export const NewChatDialog = ({
   const [isGitHubMissing, setIsGitHubMissing] = useState(false)
   useEffect(() => {
     if (isDev && !repositories)
-      commands.listRepositories({ workspaceId }).then(setRepositories, (error: Error) => {
-        setRepositories([])
-        if (error instanceof GitHubNotConfigured) setIsGitHubMissing(true)
-        else setLoadFailure(error.message)
-      })
+      commands.listRepositories({ workspaceId }).then(
+        (listed) => {
+          setRepositories(listed)
+          if (listed.length === 1) setRepository(listed[0]?.fullName ?? '')
+        },
+        (error: Error) => {
+          setRepositories([])
+          if (error instanceof GitHubNotConfigured) setIsGitHubMissing(true)
+          else setLoadFailure(error.message)
+        },
+      )
   }, [commands, workspaceId, isDev, repositories])
   useEffect(() => {
     setBranches([])
