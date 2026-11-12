@@ -27,7 +27,9 @@ const stack = await startAgentStack({ routing: true, github: { api: createGitHub
 afterAll(() => fakeGitHub.stop())
 const { app, database } = stack
 const webhookSecret = 'whsec-pull-requests-0123'
-const ownerOnly = 'Only Alice can push or open pull requests in this chat'
+const noGitHubAccount = 'Connect your GitHub account in your profile to push'
+const githubReadTools = ['fetch_branch', 'read_review_threads', 'read_checks', 'list_issues', 'read_issue']
+const allGitHubTools = ['push_branch', 'open_pull_request', 'update_pull_request', ...githubReadTools]
 
 const request = async (userId: string, method: string, path: string, body?: object) => {
   const response = await app.request(path, {
@@ -43,6 +45,16 @@ const request = async (userId: string, method: string, path: string, body?: obje
 }
 const publish = (userId: string, chat: ChatId, action: string, draft: object = {}) =>
   request(userId, 'POST', `/api/chats/${chat}/publish/${action}`, draft)
+const githubToolsOf = async (userId: string, chat: ChatId) =>
+  (await request(userId, 'GET', `/api/chats/${chat}/github-tools`)).body.tools
+const setMemberGitHubLevel = async (level: string | null) =>
+  expect(
+    await request(alice, 'POST', '/api/workspace-connections/github/access', {
+      roleId: 'member',
+      level,
+      toolChanges: {},
+    }),
+  ).toMatchObject({ status: 200 })
 const git = (cwd: string, ...command: string[]) => {
   const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
     cwd,
@@ -139,22 +151,41 @@ const committedWorkspace = async (id: ChatId) => {
   return workspace
 }
 
-test('only the owner pushes and opens a pull request, with their own GitHub token passed only to git; guests and an owner without GitHub are refused', async () => {
+test('a member whose GitHub access allows it pushes and opens a pull request with their own GitHub token passed only to git, as the Changes panel’s check shows; a member with Read, a reader and a member without GitHub are refused', async () => {
   const { relay, launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
   const { id, branch } = await newDevChat([
     { memberId: bob, roleId: 'prompter' },
-    { memberId: lee, roleId: 'editor' },
+    { memberId: lee, roleId: 'reader' },
   ])
   const workspace = await committedWorkspace(id)
 
   expect(await publish(alice, id, 'push')).toEqual({
     status: 403,
-    body: { isRefused: true, text: 'Connect your GitHub account in your profile to push' },
+    body: { isRefused: true, text: noGitHubAccount },
   })
   const aliceToken = await connectGitHub(alice)
-  for (const guest of [bob, lee])
-    for (const action of ['push', 'pull_request'])
-      expect(await publish(guest, id, action)).toEqual({ status: 403, body: { isRefused: true, text: ownerOnly } })
+  expect(await githubToolsOf(alice, id)).toEqual(allGitHubTools)
+  expect(await githubToolsOf(lee, id)).toEqual([])
+  expect(await publish(lee, id, 'push')).toEqual({
+    status: 403,
+    body: { isRefused: true, text: "Lee's access to GitHub does not include push_branch in this chat" },
+  })
+  try {
+    await setMemberGitHubLevel('read')
+    expect(await githubToolsOf(bob, id)).toEqual(githubReadTools)
+    for (const [action, tool] of [
+      ['push', 'push_branch'],
+      ['pull_request', 'open_pull_request'],
+    ] as const)
+      expect(await publish(bob, id, action)).toEqual({
+        status: 403,
+        body: { isRefused: true, text: `Bob's access to GitHub does not include ${tool} in this chat` },
+      })
+  } finally {
+    await setMemberGitHubLevel(null)
+  }
+  expect(await githubToolsOf(bob, id)).toEqual(allGitHubTools)
+  expect(await publish(bob, id, 'push')).toEqual({ status: 403, body: { isRefused: true, text: noGitHubAccount } })
   expect(fakeGitHub.commitSubjectsOf('acme/app', branch)).toEqual([])
 
   expect(await publish(alice, id, 'push')).toEqual({
@@ -258,7 +289,7 @@ test('the server pushes the runtime’s bundle itself: a hostile git config in t
   }
 })
 
-test('the agent pushes and opens a pull request with its tools on the owner’s turn; on a guest’s turn the tools are refused and every call is audited', async () => {
+test('the agent pushes and opens a pull request with its tools on the prompter’s GitHub account; a prompter without one is asked to connect, one whose access is Read is refused, and every call is audited', async () => {
   const { host } = await stack.agentHost('Agent tools host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
@@ -303,7 +334,9 @@ test('the agent pushes and opens a pull request with its tools on the owner’s 
   expect((await cardOf(id))?.step).toMatchObject({ title: 'Agent totals, renamed', state: 'open' })
 
   const guest = await runtimeTurn(host, bob)
-  for (const tool of ['push_branch', 'open_pull_request']) {
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest' where id = ${guest.chatId}`
+  const guestCall = async (tool: string) => {
     const answer = await host.modelCall({
       path: '/mcp/github',
       headers: { authorization: `Bearer ${guest.token}`, 'content-type': 'application/json' },
@@ -311,8 +344,18 @@ test('the agent pushes and opens a pull request with its tools on the owner’s 
     })
     const { result } = JSON.parse(answer.body)
     expect(result.isError).toBe(true)
-    expect(textOf(result)).toBe(ownerOnly)
+    return textOf(result)
   }
+  expect(await guestCall('push_branch')).toBe('Bob needs to connect GitHub')
+  try {
+    await setMemberGitHubLevel('read')
+    expect(await guestCall('open_pull_request')).toBe(
+      "Bob's access to GitHub does not include open_pull_request in this chat",
+    )
+  } finally {
+    await setMemberGitHubLevel(null)
+  }
+  expect(fakeGitHub.commitSubjectsOf('acme/app', 'spyria/guest')).toEqual([])
   expect(
     (await toolCallRows(guest.chatId)).map(({ prompter_id, tool, status }) => ({ prompter_id, tool, status })),
   ).toEqual([
@@ -430,7 +473,7 @@ const guestToolCall = async (host: AgentHost, token: string, name: string, input
   return { isError: result.isError, text: textOf(result) }
 }
 
-test('the owner’s agent changes the title and description of the open pull request and the card follows; with no open pull request, or on a guest’s turn, the change is refused', async () => {
+test('the agent changes the title and description of the open pull request and the card follows; with no open pull request, or for a prompter whose GitHub access is Read, the change is refused', async () => {
   const { host } = await stack.agentHost('Pull request update host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
@@ -460,10 +503,17 @@ test('the owner’s agent changes the title and description of the open pull req
   ])
 
   const guest = await runtimeTurn(host, bob)
-  expect(await guestToolCall(host, guest.token, 'update_pull_request', { title: 'Guest' })).toEqual({
-    isError: true,
-    text: ownerOnly,
-  })
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest' where id = ${guest.chatId}`
+  try {
+    await setMemberGitHubLevel('read')
+    expect(await guestToolCall(host, guest.token, 'update_pull_request', { title: 'Guest' })).toEqual({
+      isError: true,
+      text: "Bob's access to GitHub does not include update_pull_request in this chat",
+    })
+  } finally {
+    await setMemberGitHubLevel(null)
+  }
 })
 
 test('any prompter’s agent reads review threads and issues of the chat’s repository with a read-only installation token, never the owner’s; a missing Issues permission is named', async () => {

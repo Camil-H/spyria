@@ -229,7 +229,7 @@ test.describe('Side panel', () => {
       await expect(tabPanelOf(page)).toContainText('No sources')
     })
 
-    await test.step('shows the owner’s tools: a shared login with its tools, a server the owner has not signed in to as not connected', async () => {
+    await test.step('shows my own tools, which my prompts use: a shared login with its tools, a server I have not signed in to as not connected', async () => {
       await openPanelTab(page, 'Setup helper', 'Connected tools')
       await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
       await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText('CRMlookup, update')
