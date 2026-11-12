@@ -1,5 +1,6 @@
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
-import { type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
+import { type AccessLevel, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
+
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
 import type { ConnectionSignIn } from '../domain/workspace-connection.ts'
@@ -15,16 +16,16 @@ import {
   flagToolConnection,
   refreshToolConnection,
   startToolConnection,
-  toolCallAccess,
+  toolCallPolicy,
   toolServerNameOf,
 } from '../operations/tool-connections.ts'
 import {
   addWorkspaceConnection,
-  allowConnectionTools,
   editWorkspaceConnection,
   finishWorkspaceConnection,
   removeWorkspaceConnection,
-  restrictConnectionMember,
+  reviewConnectionTools,
+  setConnectionAccess,
 } from '../operations/workspace-connections.ts'
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -87,15 +88,23 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGatewa
       grantMemberTools(dependenciesOf(workspace, member), { workspaceId: workspace, memberId: member }),
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>
       flagToolConnection(dependenciesOf(workspace, member), { tool }),
-    toolCallAccess: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
-      toolCallAccess(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
+    toolCallPolicy: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
+      toolCallPolicy(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
     serverNameOf: (workspace: WorkspaceId, owner: MemberId, server: string) =>
       toolServerNameOf(dependenciesOf(workspace, owner), { tool: server }),
   }
 }
 
-const textListOf = (value: unknown) =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+const recordOf = (value: unknown) => (typeof value === 'object' && value !== null ? value : {})
+const markingsOf = (value: unknown) =>
+  (Array.isArray(value) ? value : []).map((marking) => {
+    const { name, readOnly } = recordOf(marking) as Record<string, unknown>
+    return { name: textOf(name), readOnly: readOnly === true }
+  })
+const toolChangesOf = (value: unknown) =>
+  Object.fromEntries(Object.entries(recordOf(value)).filter(([, isAllowed]) => typeof isAllowed === 'boolean'))
+const accessSubjectOf = ({ roleId, memberId: member }: Record<string, unknown>) =>
+  typeof roleId === 'string' ? { roleId } : { memberId: memberId(textOf(member)) }
 const secretHeaderOf = (value: unknown) => {
   if (value === null) return null
   const { name, value: secret } = (value ?? {}) as Record<string, unknown>
@@ -124,12 +133,13 @@ export const workspaceConnectionFromRequest = (
     finish: () => finishWorkspaceConnection(dependencies, target),
     edit: () => editWorkspaceConnection(dependencies, { ...target, ...connection }),
     remove: () => removeWorkspaceConnection(dependencies, target),
-    tools: () => allowConnectionTools(dependencies, { ...target, allowedTools: textListOf(fields.allowedTools) }),
-    restrict: () =>
-      restrictConnectionMember(dependencies, {
+    review: () => reviewConnectionTools(dependencies, { ...target, markings: markingsOf(fields.markings) }),
+    access: () =>
+      setConnectionAccess(dependencies, {
         ...target,
-        memberId: memberId(textOf(fields.memberId)),
-        allowedTools: fields.allowedTools === null ? null : textListOf(fields.allowedTools),
+        ...accessSubjectOf(fields),
+        level: fields.level === null ? null : (textOf(fields.level) as AccessLevel),
+        toolChanges: toolChangesOf(fields.toolChanges),
       }),
   }
   return actions[action]?.() ?? Promise.resolve()

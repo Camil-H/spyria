@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test'
 import { memberId, workspaceId } from '@spyria/kernel'
 import {
-  allowedAfterRelisting,
+  accessOf,
   canSignIn,
   connectionInputOf,
   editedInputOf,
   gatewayNameOf,
-  knownToolsOf,
-  memberToolsOf,
+  markedToolsOf,
+  relistedToolsOf,
   type WorkspaceConnection,
 } from './workspace-connection.ts'
 
@@ -21,13 +21,21 @@ const crm: WorkspaceConnection = {
   setupId: null,
   headerName: null,
   tools: [
-    { name: 'lookup', readOnly: true },
-    { name: 'update', readOnly: false },
-    { name: 'delete', readOnly: false },
+    { name: 'lookup', readOnly: true, destructive: false },
+    { name: 'update', readOnly: false, destructive: false },
+    { name: 'delete', readOnly: false, destructive: true },
   ],
-  allowedTools: ['lookup', 'update'],
+  isReviewed: true,
 }
 const bob = memberId('member-bob')
+const bobAsMember = { memberId: bob, roleId: 'member' }
+const memberRoleReads = {
+  connectionId: crm.id,
+  roleId: 'member',
+  memberId: null,
+  level: 'read',
+  toolChanges: {},
+} as const
 
 const shared = { url: 'https://crm.example/mcp', signIn: 'shared' } as const
 
@@ -62,12 +70,13 @@ test('a server each member signs in to takes no shared secret, and keeps its add
   expect(editedInputOf(crm, { name: 'CRM', url: 'https://crm2.example/mcp' })).toMatchObject({ signIn: 'shared' })
 })
 
-test('a member signs in only to a finished server they may use at least one tool of', () => {
+test('a member signs in only to a finished, reviewed server they may use at least one tool of', () => {
   const docs = { ...crm, signIn: 'member' } as const
-  expect(canSignIn(docs, [], bob)).toBe(true)
-  expect(canSignIn(crm, [], bob)).toBe(false)
-  expect(canSignIn({ ...docs, setupId: 'setup-1' }, [], bob)).toBe(false)
-  expect(canSignIn(docs, [{ connectionId: crm.id, memberId: bob, allowedTools: [] }], bob)).toBe(false)
+  expect(canSignIn(docs, [memberRoleReads], bobAsMember)).toBe(true)
+  expect(canSignIn(crm, [memberRoleReads], bobAsMember)).toBe(false)
+  expect(canSignIn({ ...docs, setupId: 'setup-1' }, [memberRoleReads], bobAsMember)).toBe(false)
+  expect(canSignIn({ ...docs, isReviewed: false }, [memberRoleReads], bobAsMember)).toBe(false)
+  expect(canSignIn(docs, [], bobAsMember)).toBe(false)
 })
 
 test('a gateway name is the slug of the name with a random suffix and never contains "-"', () => {
@@ -76,25 +85,38 @@ test('a gateway name is the slug of the name with a random suffix and never cont
   expect(gatewayNameOf('CRM')).not.toBe(gatewayNameOf('CRM'))
 })
 
-test('a member gets the allowed tools, narrowed by their restriction', () => {
-  expect(memberToolsOf(crm, [], bob)).toEqual(['lookup', 'update'])
+test('access keeps only the single changes that differ from its level, on tools the server lists', () => {
   expect(
-    memberToolsOf(crm, [{ connectionId: crm.id, memberId: bob, allowedTools: ['update', 'delete'] }], bob),
-  ).toEqual(['update'])
-  expect(memberToolsOf(crm, [{ connectionId: crm.id, memberId: bob, allowedTools: [] }], bob)).toEqual([])
+    accessOf(crm, { roleId: 'member', level: 'read', toolChanges: { lookup: true, update: true, delete: false } }),
+  ).toEqual({ ...memberRoleReads, toolChanges: { update: true } })
+  expect(accessOf(crm, { memberId: bob, level: 'none', toolChanges: {} })).toMatchObject({
+    roleId: null,
+    memberId: bob,
+  })
+  expect(accessOf(crm, { memberId: bob, level: null, toolChanges: {} })).toBeNull()
+  expect(() => accessOf(crm, { roleId: 'member', level: 'read', toolChanges: { drop: true } })).toThrow(
+    'CRM has no tool drop',
+  )
+  expect(() => accessOf(crm, { roleId: 'member', level: 'all' as never, toolChanges: {} })).toThrow('Choose None')
 })
 
-test('only tools the server lists can be allowed, in the server’s order', () => {
-  expect(knownToolsOf(crm, ['update', 'lookup'])).toEqual(['lookup', 'update'])
-  expect(() => knownToolsOf(crm, ['drop'])).toThrow('CRM has no tool drop')
+test('the admin corrects read and write markings only for tools the server lists', () => {
+  expect(markedToolsOf(crm, [{ name: 'update', readOnly: true }]).map(({ readOnly }) => readOnly)).toEqual([
+    true,
+    true,
+    false,
+  ])
+  expect(() => markedToolsOf(crm, [{ name: 'drop', readOnly: true }])).toThrow('CRM has no tool drop')
 })
 
-test('after a new listing, unticked tools stay unticked and new tools are allowed', () => {
+test('after a new listing, known tools keep their marking and new tools count as writes', () => {
   expect(
-    allowedAfterRelisting(crm, [
-      { name: 'lookup', readOnly: true },
-      { name: 'delete', readOnly: false },
-      { name: 'export', readOnly: true },
+    relistedToolsOf(crm, [
+      { name: 'lookup', readOnly: false, destructive: false },
+      { name: 'export', readOnly: true, destructive: false },
     ]),
-  ).toEqual(['lookup', 'export'])
+  ).toEqual([
+    { name: 'lookup', readOnly: true, destructive: false },
+    { name: 'export', readOnly: false, destructive: false },
+  ])
 })

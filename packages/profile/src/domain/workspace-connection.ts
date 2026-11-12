@@ -1,9 +1,20 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import {
+  type AccessLevel,
+  accessLevels,
+  type ConnectionTool,
+  grantedToolsOf,
+  isAllowedAtLevel,
+  type MemberId,
+  type ToolHolder,
+  type ToolServerAccess,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import { InvalidConnection } from './errors.ts'
+
+export type { ConnectionTool, ToolHolder, ToolServerAccess }
 
 export const connectionSignIns = { member: 'member', shared: 'shared' } as const
 export type ConnectionSignIn = (typeof connectionSignIns)[keyof typeof connectionSignIns]
-export type ConnectionTool = { name: string; readOnly: boolean }
 export type SecretHeader = { name: string; value: string }
 export type WorkspaceConnection = {
   workspaceId: WorkspaceId
@@ -15,9 +26,11 @@ export type WorkspaceConnection = {
   setupId: string | null
   headerName: string | null
   tools: ConnectionTool[]
-  allowedTools: string[]
+  isReviewed: boolean
 }
-export type ConnectionRestriction = { connectionId: string; memberId: MemberId; allowedTools: string[] }
+export type AccessSubject = { roleId: string; memberId?: undefined } | { memberId: MemberId; roleId?: undefined }
+export type AccessInput = AccessSubject & { level: AccessLevel | null; toolChanges: Record<string, boolean> }
+export type ToolMarking = { name: string; readOnly: boolean }
 export type ConnectionInput = {
   name: string
   url: string
@@ -50,25 +63,52 @@ export const gatewayNameOf = (name: string) =>
       .slice(0, gatewaySlugLength) || 'tools'
   }_${crypto.randomUUID().slice(0, 6)}`
 
-export const memberToolsOf = (
-  connection: WorkspaceConnection,
-  restrictions: readonly ConnectionRestriction[],
-  memberId: MemberId,
-) => {
-  const restriction = restrictions.find((row) => row.connectionId === connection.id && row.memberId === memberId)
-  return connection.allowedTools.filter((tool) => restriction?.allowedTools.includes(tool) ?? true)
-}
+export const memberToolsOf = grantedToolsOf
 
-export const knownToolsOf = (connection: WorkspaceConnection, tools: readonly string[]) => {
+const requireKnownTools = (connection: WorkspaceConnection, tools: readonly string[]) => {
   const unknown = tools.find((tool) => !connection.tools.some(({ name }) => name === tool))
   if (unknown !== undefined) throw new InvalidConnection(`${connection.name} has no tool ${unknown}`)
-  return connection.tools.flatMap(({ name }) => (tools.includes(name) ? [name] : []))
 }
 
-export const allowedAfterRelisting = (connection: WorkspaceConnection, tools: readonly ConnectionTool[]) =>
-  tools.flatMap(({ name }) =>
-    connection.allowedTools.includes(name) || !connection.tools.some((tool) => tool.name === name) ? [name] : [],
+export const markedToolsOf = (connection: WorkspaceConnection, markings: readonly ToolMarking[]) => {
+  requireKnownTools(
+    connection,
+    markings.map(({ name }) => name),
   )
+  return connection.tools.map((tool) => ({
+    ...tool,
+    readOnly: markings.find(({ name }) => name === tool.name)?.readOnly ?? tool.readOnly,
+  }))
+}
+
+export const relistedToolsOf = (connection: WorkspaceConnection, tools: readonly ConnectionTool[]) =>
+  tools.map((tool) => {
+    const known = connection.tools.find(({ name }) => name === tool.name)
+    return { ...tool, readOnly: known?.readOnly ?? false }
+  })
+
+export const accessOf = (connection: WorkspaceConnection, input: AccessInput): ToolServerAccess | null => {
+  if (input.level === null) return null
+  if (!Object.values(accessLevels).includes(input.level))
+    throw new InvalidConnection('Choose None, Read or Read and write')
+  requireKnownTools(connection, Object.keys(input.toolChanges))
+  const level = input.level
+  const toolChanges = Object.fromEntries(
+    connection.tools.flatMap((tool) => {
+      const isAllowed = input.toolChanges[tool.name]
+      return typeof isAllowed === 'boolean' && isAllowed !== isAllowedAtLevel(level, tool)
+        ? [[tool.name, isAllowed]]
+        : []
+    }),
+  )
+  return {
+    connectionId: connection.id,
+    roleId: input.roleId ?? null,
+    memberId: input.memberId ?? null,
+    level,
+    toolChanges,
+  }
+}
 
 export const editedInputOf = (previous: WorkspaceConnection, input: Omit<ConnectionInput, 'signIn'>) => {
   const edited = connectionInputOf({ ...input, signIn: previous.signIn })
@@ -81,9 +121,6 @@ export const editedInputOf = (previous: WorkspaceConnection, input: Omit<Connect
 
 export const canSignIn = (
   connection: WorkspaceConnection,
-  restrictions: readonly ConnectionRestriction[],
-  memberId: MemberId,
-) =>
-  connection.signIn === connectionSignIns.member &&
-  connection.setupId === null &&
-  memberToolsOf(connection, restrictions, memberId).length > 0
+  accessRows: readonly ToolServerAccess[],
+  holder: ToolHolder,
+) => connection.signIn === connectionSignIns.member && memberToolsOf(connection, accessRows, holder).length > 0
