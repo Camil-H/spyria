@@ -1,4 +1,4 @@
-import { MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import { grantedToolsOf, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -17,7 +17,6 @@ import {
   editedInputOf,
   gatewayNameOf,
   markedToolsOf,
-  memberToolsOf,
   relistedToolsOf,
   type SecretHeader,
   type ToolMarking,
@@ -68,7 +67,7 @@ const releaseLostSignIns = async (
   const server = (await gateway.toolServers()).find(({ name }) => name === connection.gatewayName)
   for (const { memberId, virtualKeyId } of virtualKeys) {
     const holder = holders.find((candidate) => candidate.memberId === memberId)
-    if (holder && memberToolsOf(connection, accessRows, holder).length > 0) continue
+    if (holder && grantedToolsOf(connection, accessRows, holder).length > 0) continue
     for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
       await gateway.removeToolSession(session.id)
     await transactor.run(({ workspaceConnections }) =>
@@ -233,7 +232,13 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
     if (subject.roleId !== undefined && !(await members.roleIds(workspaceId)).includes(subject.roleId))
       throw new InvalidConnection(`The workspace has no role ${subject.roleId}`)
     const connection = await workspaceConnections.get(workspaceId, connectionId)
-    const access = accessOf(connection, input)
+    const previous = (await workspaceConnections.accessOf(workspaceId)).find(
+      (row) =>
+        row.connectionId === connectionId &&
+        (subject.roleId === undefined ? row.memberId === subject.memberId : row.roleId === subject.roleId),
+    )
+    const access = accessOf(connection, input, previous)
+
     await workspaceConnections.setAccess(workspaceId, connectionId, subject, access)
     await workspaceEvents.record({
       workspaceId,

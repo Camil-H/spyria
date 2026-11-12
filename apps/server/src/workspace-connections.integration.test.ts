@@ -296,13 +296,16 @@ test('a member given Read is refused update on their own prompts, their key hold
   ])
 })
 
-test("a role's level and single-tool changes reach every member of the role, and a member whose role changes gets the new role's tools", async () => {
+test("a role's level and single-tool changes reach every member of the role, a later change keeps the earlier ones, and a member whose role changes gets the new role's tools", async () => {
   await addLlmKey(bob, 'openai')
   try {
     expect(await setAccess('connection-crm', { roleId: 'member' }, 'none', { update: true })).toBe(200)
     expect((await grantsOf(bob))[sharedToolServer]).toEqual(['update'])
     expect(await setAccess('connection-crm', { roleId: 'member' }, 'read')).toBe(200)
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+    expect(await setAccess('connection-crm', { roleId: 'member' }, 'read', { update: false })).toBe(200)
     expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
+
     expect(await setAccess('connection-crm', { roleId: 'nobody' }, 'read')).toBe(400)
 
     expect(
