@@ -138,6 +138,36 @@ test('the tool server list is read once per short window, and again after a serv
   }
 })
 
+test('the tool server list reads every page the gateway answers, so a server past the first page is not lost', async () => {
+  const clients = Array.from({ length: 5 }, (_, index) => ({
+    config: { client_id: `c${index}`, name: `server_${index}` },
+  }))
+  const pageSize = 2
+  const listings: string[] = []
+  const pagedServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname, searchParams } = new URL(request.url)
+      if (pathname !== '/api/mcp/clients') return Response.json({})
+      listings.push(searchParams.get('offset') ?? '')
+      const offset = Number(searchParams.get('offset') ?? 0)
+      const page = clients.slice(offset, offset + Math.min(pageSize, Number(searchParams.get('limit') ?? pageSize)))
+      return Response.json({ clients: page, count: page.length, limit: pageSize, offset, total_count: clients.length })
+    },
+  })
+  const pagedGateway = createLlmGateway({
+    url: `http://localhost:${pagedServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    expect((await pagedGateway.toolServers()).map(({ name }) => name)).toEqual(clients.map(({ config }) => config.name))
+    expect(listings).toEqual(['0', '2', '4'])
+  } finally {
+    pagedServer.stop(true)
+  }
+})
+
 test('an admin read answering 503 once is retried; a 400 and a failing creation are not', async () => {
   const requests: string[] = []
   const flakyServer = Bun.serve({
@@ -226,6 +256,44 @@ test('a consent starts on a read-only tool granted to the member, or on the firs
     expect(calledTools).toEqual(['docs-get_me', 'wiki-update', 'notes-append'])
   } finally {
     consentServer.stop(true)
+  }
+})
+
+test('a tool listing the gateway answers as an event stream, as it does when a notice reaches the session during the request, is read like a JSON one', async () => {
+  const flowId = crypto.randomUUID()
+  const streamingServer = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const { pathname, origin } = new URL(request.url)
+      if (pathname === '/api/governance/virtual-keys/key-1')
+        return Response.json({ virtual_key: { id: 'key-1', value: 'sk-bf-1' } })
+      if (pathname === `/api/oauth/per-user/flows/${flowId}/start`)
+        return Response.json({ authorize_url: `${origin}/authorize` })
+      const { method } = (await request.json()) as { method: string }
+      if (method !== 'tools/list') return new Response(`Authentication required: ${origin}/auth?flow=${flowId}`)
+      const listed = {
+        jsonrpc: '2.0',
+        id: 1,
+        result: { tools: [{ name: 'docs-get_me', annotations: { readOnlyHint: true } }] },
+      }
+      return new Response(
+        `event: message\ndata: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\nevent: message\ndata: ${JSON.stringify(listed)}\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } },
+      )
+    },
+  })
+  const streamingGateway = createLlmGateway({
+    url: `http://localhost:${streamingServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const docs = { id: 'docs', name: 'docs', tools: ['get_me'] }
+    expect(await streamingGateway.startToolConsent('key-1', docs)).toBe(
+      `http://localhost:${streamingServer.port}/authorize`,
+    )
+  } finally {
+    streamingServer.stop(true)
   }
 })
 

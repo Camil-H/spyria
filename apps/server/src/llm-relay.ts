@@ -13,12 +13,16 @@ import {
   modelNotAllowedNoticeOf,
   publicModelNameOf,
   routerTools,
+  spyriaCommandInstructions,
   spyriaTools,
+  spyriaToolsPath,
+  switchedToolServersOf,
   type ToolCallDecision,
   type ToolCallFailure,
   toolCallFailureOf,
   toolCallNoticeOf,
   toolGatewayUnreachable,
+  toolServerOffNoticeOf,
   webSearchAnswerOf,
   webSearchFailedOf,
   webSearchMilliseconds,
@@ -133,20 +137,6 @@ export const createUsageReader = () => {
   }
 }
 
-export const rpcAnswerOf = (text: string, contentType: string) => {
-  if (!contentType.includes('text/event-stream')) return jsonOf(text)
-  const eventData = text.split(/\r?\n\r?\n/).map((event) =>
-    event
-      .split(/\r?\n/)
-      .flatMap((line) => (line.startsWith('data:') ? [line.slice(5).replace(/^ /, '')] : []))
-      .join('\n'),
-  )
-  return eventData
-    .filter(Boolean)
-    .map(jsonOf)
-    .find((message) => typeof message === 'object' && message !== null && ('result' in message || 'error' in message))
-}
-
 export const contextTokensOf = (usage: Record<string, number>) =>
   Object.keys(usagePatterns).reduce((total, name) => total + (usage[name] ?? 0), 0)
 
@@ -217,15 +207,6 @@ export const createModelCallRelay = ({
         send({ type: 'gw_error', sid })
       }
     }
-    const answerWithSpyriaTools = async (id: unknown, response: Response) => {
-      const contentType = response.headers.get('content-type') ?? ''
-      if (!response.ok || !/application\/json|text\/event-stream/.test(contentType)) return stream(response)
-      const listed = rpcAnswerOf(await response.text(), contentType) as { result?: { tools?: object[] } } | undefined
-      const result = listed?.result && { ...listed.result, tools: [...spyriaTools, ...(listed.result.tools ?? [])] }
-      const sessionHeaders = picked(response.headers, ['mcp-session-id'])
-      if (!listed) return answerRpc(id, { result: { tools: spyriaTools } }, sessionHeaders)
-      answer(200, result ? { ...listed, result } : listed, sessionHeaders)
-    }
     const answerToolListChanges = async (chatId: ChatId) => {
       const event = (data: string) => send({ type: 'gw_chunk', sid, data })
       send({ type: 'gw_head', sid, status: 200, headers: { 'content-type': 'text/event-stream' } })
@@ -242,7 +223,11 @@ export const createModelCallRelay = ({
     const path = relayPathOf(String(frame.path ?? ''))
     const method = String(frame.method ?? 'POST')
     const isToolPath = path === '/mcp' || path.startsWith('/mcp?')
-    if (![routerPath, githubToolsPath, webToolsPath].includes(path) && !path.startsWith('/v1/') && !isToolPath)
+    if (
+      ![routerPath, githubToolsPath, webToolsPath, spyriaToolsPath].includes(path) &&
+      !path.startsWith('/v1/') &&
+      !isToolPath
+    )
       return answer(404, { error: { message: 'Not found', type: 'not_found' } })
     const headers = Object.entries((frame.headers ?? {}) as Record<string, string>)
     const { authorization, 'x-api-key': apiKey } = picked(headers, ['authorization', 'x-api-key'])
@@ -425,6 +410,47 @@ export const createModelCallRelay = ({
           .catch((error) => logToolCallFailure(turn.chat.chatId, error))
       return answerRpc(rpc.id, { result: { content: [{ type: 'text', text }], isError: status !== 'succeeded' } })
     }
+
+    if (path === spyriaToolsPath) {
+      const turn = token ? await handlers.toolCallTurn(host, token) : undefined
+      if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
+      const rpc = jsonOf(body) as RouterCall | undefined
+      if (Array.isArray(rpc)) return answerRpc(null, methodNotFound)
+      if (rpc?.method !== 'tools/call' || rpc.id === undefined)
+        return answerSpyriaServer(rpc, 'spyria', spyriaTools, spyriaCommandInstructions)
+      const { chat, prompterId, ownerId } = turn
+      if (!prompterId) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
+      const toolName = String(rpc.params?.name ?? '')
+      if (!isSpyriaTool(toolName)) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
+      const calledAt = new Date()
+      const { isRefused, text, status } = await handlers
+        .callSpyriaTool({ chat, name: toolName, input: rpc.params?.arguments })
+        .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
+        .catch((error: unknown) => {
+          log.error({
+            event: 'spyria_tool.failed',
+            body: 'A Spyria tool call failed',
+            attributes: { 'workspace.id': host.workspaceId, 'chat.id': chat.chatId, 'tool.name': toolName },
+            error,
+          })
+          return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
+        })
+      await handlers
+        .recordToolCall(host.workspaceId, {
+          chatId: chat.chatId,
+          prompterId,
+          ownerId,
+          server: 'spyria',
+          tool: toolName,
+          readOnly: null,
+          decision: 'not_needed',
+          decidedBy: null,
+          status,
+          calledAt,
+        })
+        .catch((error) => logToolCallFailure(chat.chatId, error))
+      return answerRpc(rpc.id, { result: { content: [{ type: 'text', text }], isError: isRefused } })
+    }
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)
     const gatewayCall = (callHeaders: Record<string, string>, timeoutSignal: AbortSignal) =>
@@ -442,14 +468,12 @@ export const createModelCallRelay = ({
       const rpc = jsonOf(body) as RouterCall | undefined
       const isToolCall = rpc?.method === 'tools/call'
       const toolName = String(rpc?.params?.name ?? '')
-      const isSpyriaCall = isToolCall && isSpyriaTool(toolName)
-      const { server, tool } = isSpyriaCall ? { server: 'spyria', tool: toolName } : toolNamePartsOf(toolName)
-      const { ownerId, prompterId, ownerName, prompterName } = turn
+      const { server, tool } = toolNamePartsOf(toolName)
+      const { ownerId, prompterId, ownerName, prompterName, toolServersOff } = turn
       const accountId = prompterId ?? ownerId
-      const serverName =
-        isToolCall && !isSpyriaCall
-          ? await tools.serverNameOf(host.workspaceId, ownerId, server).catch(() => server)
-          : server
+      const serverName = isToolCall
+        ? await tools.serverNameOf(host.workspaceId, ownerId, server).catch(() => server)
+        : server
       const call = {
         readOnly: null as boolean | null,
         status: 'refused' as ToolCallStatus,
@@ -466,32 +490,23 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
-        if (isSpyriaCall) {
-          const { isRefused, text, status } = await handlers
-            .callSpyriaTool({ chat: turn.chat, name: toolName, input: rpc?.params?.arguments })
-            .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
-            .catch((error: unknown) => {
-              log.error({
-                event: 'spyria_tool.failed',
-                body: 'A Spyria tool call failed',
-                attributes: { 'workspace.id': host.workspaceId, 'chat.id': turn.chat.chatId, 'tool.name': toolName },
-                error,
-              })
-              return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
-            })
-          call.status = status
-          return answerRpc(rpc?.id, { result: { content: [{ type: 'text', text }], isError: isRefused } })
-        }
+        const switched =
+          toolServersOff.length > 0 && (isToolCall || rpc?.method === 'tools/list')
+            ? switchedToolServersOf(await tools.catalogueServersOf(host.workspaceId, accountId), toolServersOff)
+            : undefined
+        if (isToolCall && switched?.off.includes(server)) return toolError(toolServerOffNoticeOf(serverName))
         const virtualKey = await tools.keyOf(host.workspaceId, accountId).then(
           (key) => key ?? undefined,
           () => null,
         )
-        const spyriaToolsAlone = () => answerSpyriaServer(rpc, 'spyria', spyriaTools)
+        const noTools = () => answerSpyriaServer(rpc, 'spyria-tools', [])
         if (rpc?.method === 'tools/list') recordToolListing(turn.chat.chatId, accountId)
-        if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : spyriaToolsAlone()
-        if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : spyriaToolsAlone()
+        if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : noTools()
+        if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : noTools()
         if (rpc?.method === 'initialize')
           await tools.grantMemberTools(host.workspaceId, accountId).catch(() => undefined)
+        const includedServers = isGuestCall ? [server] : switched?.on
+        if (rpc?.method === 'tools/list' && includedServers?.length === 0) return noTools()
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,
@@ -499,7 +514,7 @@ export const createModelCallRelay = ({
           'x-bf-dim-prompter': prompterId ?? '',
           'x-bf-dim-owner': ownerId,
           'x-bf-dim-workspace': host.workspaceId,
-          ...(isGuestCall && { 'x-bf-mcp-include-clients': server }),
+          ...(includedServers && { 'x-bf-mcp-include-clients': includedServers.join(',') }),
         }
         if (isToolCall) {
           const { refusal, ...authorization } = await handlers.authorizeToolCall(
@@ -515,10 +530,9 @@ export const createModelCallRelay = ({
           response = await gatewayCall(callHeaders, AbortSignal.timeout(headTimeoutMilliseconds))
         } catch {
           if (signal.aborted) return
-          return isToolCall ? toolError(toolGatewayUnreachable) : spyriaToolsAlone()
+          return isToolCall ? toolError(toolGatewayUnreachable) : noTools()
         }
-        if (!isToolCall && response.status >= 500) return spyriaToolsAlone()
-        if (rpc?.method === 'tools/list') return answerWithSpyriaTools(rpc.id, response)
+        if (!isToolCall && response.status >= 500) return noTools()
         if (!isToolCall) return stream(response)
         if (!response.ok) return toolError(toolGatewayUnreachable)
         call.status = 'succeeded'

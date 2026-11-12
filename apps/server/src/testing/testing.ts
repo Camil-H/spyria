@@ -866,10 +866,11 @@ export const mcpCall = async (
   body: string,
   headers: Record<string, string> = {},
   signal?: AbortSignal,
+  path = '/mcp',
 ) => {
   const answer = await host.modelCall({
     signal,
-    path: '/mcp',
+    path,
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',

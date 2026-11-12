@@ -30,6 +30,7 @@ export {
   type WebPage,
   webPagePath,
 } from './domain/browser-pages.ts'
+export { switchedToolServersOf, toolServerOffNoticeOf } from './domain/chat-tool-servers.ts'
 export { logExcerptOf } from './domain/ci-logs.ts'
 export {
   awaitTaskTool,
@@ -66,7 +67,13 @@ export {
   type PullRequestStep,
   type ReviewComment,
 } from './domain/pull-requests.ts'
-export { isSpyriaTool, spyriaTools } from './domain/spyria-tools.ts'
+export {
+  catalogueToolsPath,
+  isSpyriaTool,
+  spyriaCommandInstructions,
+  spyriaTools,
+  spyriaToolsPath,
+} from './domain/spyria-tools.ts'
 export type { CommandOutputFrame, DelegatedFrame, QuestionFrame } from './domain/streamed-reply.ts'
 export {
   guestPrompterOf,

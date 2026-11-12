@@ -10,6 +10,7 @@ export type PanelCommands = {
   changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>
   leaveChat: Command<{ chatId: ChatId }>
+  switchChatToolServer: Command<{ chatId: ChatId; connectionId: string; isOn: boolean }>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }>
   readWebPage: Command<{ url: string }, WebPage>

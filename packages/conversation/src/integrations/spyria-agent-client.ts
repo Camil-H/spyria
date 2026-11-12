@@ -14,6 +14,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import { delegateTimeoutSeconds } from '../domain/delegation.ts'
 import { githubToolsPath } from '../domain/github-tools.ts'
 import { piModelOf } from '../domain/session-routing.ts'
+import { catalogueToolsPath, spyriaToolsPath } from '../domain/spyria-tools.ts'
 import { spyriaToolTimeoutSeconds } from '../domain/tool-calls.ts'
 import { webSearchTimeoutSeconds, webToolsPath } from '../domain/web-search.ts'
 
@@ -87,6 +88,8 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
+const toolsUrlVariableOf = (gatewayUrl: string) => `SPYRIA_TOOLS_URL=${gatewayUrl.replace(/\/v1$/, catalogueToolsPath)}`
+
 const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
@@ -95,16 +98,17 @@ const harnessConversationOf = (
   hasRepository: boolean,
 ) => ({
   agent: {
-    acp_command: harnesses[harness].launch,
+    acp_command: ['env', toolsUrlVariableOf(endpoint.transport.gatewayUrl), ...harnesses[harness].launch.slice(1)],
     mcp_config: {
-      spyria: mcpServerOf(endpoint, '/mcp', llmToken),
+      spyria: mcpServerOf(endpoint, spyriaToolsPath, llmToken),
+      tools: mcpServerOf(endpoint, catalogueToolsPath, llmToken),
       ...(hasRepository && { github: mcpServerOf(endpoint, githubToolsPath, llmToken) }),
     },
     ...(resumeSessionId && { acp_resume_session_id: resumeSessionId }),
     ...(adapterModel && { acp_model: adapterModel }),
     ...(effort && { acp_thought_level: effort }),
   },
-  secrets: {},
+  secrets: { SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken } },
 })
 
 const piSettings = {
@@ -112,6 +116,7 @@ const piSettings = {
   enableInstallTelemetry: false,
   retry: { enabled: false },
   extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-tools.ts'],
+  skills: ['/usr/local/lib/spyria/skills'],
 }
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
@@ -127,11 +132,13 @@ const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) 
     }),
   })),
 })
-const piMcpServerOf = (gatewayUrl: string, path: string) => ({
+const piMcpServerOf = (gatewayUrl: string, path: string, exposure: 'direct' | 'codemode' = 'direct') => ({
   url: gatewayUrl.replace(/\/v1$/, path),
   headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
-  exposure: 'direct',
+  exposure,
 })
+// Pi adds a server's description to the search text of each of its tools: a domain word here would match them all
+const catalogueDescription = 'The services this workspace connected; reach their tools from codemode scripts'
 const piLauncherOf = (directory: string) => `set -e
 export PI_CODING_AGENT_DIR="$HOME/.pi/${directory}"
 mkdir -p "$PI_CODING_AGENT_DIR"
@@ -155,7 +162,12 @@ export const piCommandOf = (
     }),
   }
   const mcpServers = {
-    spyria: { ...piMcpServerOf(gatewayUrl, '/mcp'), timeout: spyriaToolTimeoutSeconds },
+    spyria: { ...piMcpServerOf(gatewayUrl, spyriaToolsPath), timeout: spyriaToolTimeoutSeconds },
+    tools: {
+      ...piMcpServerOf(gatewayUrl, catalogueToolsPath, 'codemode'),
+      description: catalogueDescription,
+      timeout: spyriaToolTimeoutSeconds,
+    },
     web: { ...piMcpServerOf(gatewayUrl, webToolsPath), timeout: webSearchTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
@@ -169,6 +181,7 @@ export const piCommandOf = (
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
     ...(sub ? [] : ['PI_CACHE_RETENTION=long']),
+    toolsUrlVariableOf(gatewayUrl),
     `SPYRIA_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
     `SPYRIA_PI_MODELS=${JSON.stringify({ providers })}`,
     `SPYRIA_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
