@@ -1,7 +1,6 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import { grantedToolsOf, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
-import { memberToolsOf } from '../domain/workspace-connection.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type Member = { workspaceId: WorkspaceId; memberId: MemberId }
@@ -26,7 +25,7 @@ export const grantWorkspaceTools = async (
       Object.fromEntries(
         connections.map((connection) => [
           connection.gatewayName,
-          holder ? memberToolsOf(connection, accessRows, holder) : [],
+          holder ? grantedToolsOf(connection, accessRows, holder) : [],
         ]),
       ),
     )

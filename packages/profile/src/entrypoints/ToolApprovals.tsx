@@ -2,6 +2,7 @@ import {
   approvalChoicesOf,
   type ConnectionTool,
   defaultToolApprovalOf,
+  ownValueOf,
   serverApprovalOf,
   type ToolApproval,
   type ToolApprovalPreference,
@@ -86,7 +87,7 @@ export const ToolApprovals = ({
           approvalSelect(
             `Approval for ${tool.name}`,
             tool.name,
-            server.approvals?.toolApprovals[tool.name] ?? null,
+            ownValueOf(server.approvals?.toolApprovals, tool.name) ?? null,
             defaultToolApprovalOf(server, tool, server.approvals),
           )
         }

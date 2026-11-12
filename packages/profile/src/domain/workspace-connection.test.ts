@@ -120,3 +120,13 @@ test('after a new listing, known tools keep their marking and new tools count as
     { name: 'export', readOnly: false, destructive: false },
   ])
 })
+
+test('single changes add to the ones already saved, and one equal to the new level is dropped', () => {
+  const previous = { ...memberRoleReads, toolChanges: { update: true } }
+  expect(accessOf(crm, { roleId: 'member', level: 'read', toolChanges: { delete: true } }, previous)).toMatchObject({
+    toolChanges: { update: true, delete: true },
+  })
+  expect(accessOf(crm, { roleId: 'member', level: 'write', toolChanges: {} }, previous)).toMatchObject({
+    toolChanges: {},
+  })
+})

@@ -5,6 +5,7 @@ import {
   type ConnectionTool,
   isAllowedAtLevel,
   type MemberId,
+  ownValueOf,
   type ToolServerAccess,
   type WorkspaceId,
 } from '@spyria/kernel'
@@ -225,15 +226,11 @@ const AccessRow = ({
   const level = access?.level ?? accessLevels.none
   const toolChanges = access?.toolChanges ?? {}
   const changeCount = Object.keys(toolChanges).length
-  const isAllowed = (tool: ConnectionTool) => toolChanges[tool.name] ?? isAllowedAtLevel(level, tool)
+  const isAllowed = (tool: ConnectionTool) => ownValueOf(toolChanges, tool.name) ?? isAllowedAtLevel(level, tool)
   const save = (changed: { level: AccessLevel | null; toolChanges?: Record<string, boolean> }) =>
-    run(() => commands.setConnectionAccess({ ...target, ...subject, toolChanges, ...changed }))
-
+    run(() => commands.setConnectionAccess({ ...target, ...subject, toolChanges: {}, ...changed }))
   const allowAll = (tools: readonly ConnectionTool[], isAllowedNow: boolean) =>
-    save({
-      level,
-      toolChanges: { ...toolChanges, ...Object.fromEntries(tools.map(({ name }) => [name, isAllowedNow])) },
-    })
+    save({ level, toolChanges: Object.fromEntries(tools.map(({ name }) => [name, isAllowedNow])) })
   return (
     <li aria-label={name} className="flex flex-col gap-2 py-1">
       <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +283,7 @@ const AccessRow = ({
                 aria-label={`${tool.name} for ${name}`}
                 disabled={isPending}
                 checked={isAllowed(tool)}
-                onChange={() => save({ level, toolChanges: { ...toolChanges, [tool.name]: !isAllowed(tool) } })}
+                onChange={() => save({ level, toolChanges: { [tool.name]: !isAllowed(tool) } })}
               />
             )}
           />

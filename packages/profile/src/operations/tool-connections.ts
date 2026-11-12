@@ -1,5 +1,6 @@
 import {
   type ConnectionTool,
+  grantedToolsOf,
   type MemberId,
   MemberNotFound,
   type ToolApproval,
@@ -13,7 +14,6 @@ import { checkedConnectionStatusOf, connectionStatuses, connectionStatusOf } fro
 import {
   canSignIn,
   connectionSignIns,
-  memberToolsOf,
   type ToolHolder,
   type WorkspaceConnection,
 } from '../domain/workspace-connection.ts'
@@ -169,7 +169,7 @@ export const toolCallPolicy = async (
     return { access: 'owner_account', ...policy }
   const isAllowed = [ownerId, prompterId].every((memberId) => {
     const holder = holderIn(holders, memberId)
-    return holder !== undefined && memberToolsOf(connection, accessRows, holder).includes(tool.name)
+    return holder !== undefined && grantedToolsOf(connection, accessRows, holder).includes(tool.name)
   })
   return { access: isAllowed ? 'allowed' : 'not_allowed', ...policy }
 }

@@ -5,6 +5,7 @@ import {
   grantedToolsOf,
   isAllowedAtLevel,
   type MemberId,
+  ownValueOf,
   type ToolHolder,
   type ToolServerAccess,
   type WorkspaceId,
@@ -63,8 +64,6 @@ export const gatewayNameOf = (name: string) =>
       .slice(0, gatewaySlugLength) || 'tools'
   }_${crypto.randomUUID().slice(0, 6)}`
 
-export const memberToolsOf = grantedToolsOf
-
 const requireKnownTools = (connection: WorkspaceConnection, tools: readonly string[]) => {
   const unknown = tools.find((tool) => !connection.tools.some(({ name }) => name === tool))
   if (unknown !== undefined) throw new InvalidConnection(`${connection.name} has no tool ${unknown}`)
@@ -87,15 +86,20 @@ export const relistedToolsOf = (connection: WorkspaceConnection, tools: readonly
     return { ...tool, readOnly: known?.readOnly ?? false }
   })
 
-export const accessOf = (connection: WorkspaceConnection, input: AccessInput): ToolServerAccess | null => {
+export const accessOf = (
+  connection: WorkspaceConnection,
+  input: AccessInput,
+  previous?: ToolServerAccess,
+): ToolServerAccess | null => {
   if (input.level === null) return null
   if (!Object.values(accessLevels).includes(input.level))
     throw new InvalidConnection('Choose None, Read or Read and write')
   requireKnownTools(connection, Object.keys(input.toolChanges))
   const level = input.level
+  const changes = { ...previous?.toolChanges, ...input.toolChanges }
   const toolChanges = Object.fromEntries(
     connection.tools.flatMap((tool) => {
-      const isAllowed = input.toolChanges[tool.name]
+      const isAllowed = ownValueOf(changes, tool.name)
       return typeof isAllowed === 'boolean' && isAllowed !== isAllowedAtLevel(level, tool)
         ? [[tool.name, isAllowed]]
         : []
@@ -123,4 +127,4 @@ export const canSignIn = (
   connection: WorkspaceConnection,
   accessRows: readonly ToolServerAccess[],
   holder: ToolHolder,
-) => connection.signIn === connectionSignIns.member && memberToolsOf(connection, accessRows, holder).length > 0
+) => connection.signIn === connectionSignIns.member && grantedToolsOf(connection, accessRows, holder).length > 0
