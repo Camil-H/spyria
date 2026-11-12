@@ -131,8 +131,8 @@ export const changesOf = async (root: string, base: string, env: Record<string, 
     await git(root, ['add', '--ignore-removal', '--intent-to-add', '.'], indexEnvironment)
     const [files, unstaged, staged] = await Promise.all([
       cappedGit(root, ['diff', '--name-status', '--no-renames', '-z', mergeBase], indexEnvironment),
-      cappedGit(root, ['diff', '--no-renames', '--no-color'], indexEnvironment),
-      cappedGit(root, ['diff', '--cached', '--no-renames', '--no-color', 'HEAD'], env),
+      cappedGit(root, ['diff', '--histogram', '--no-renames', '--no-color'], indexEnvironment),
+      cappedGit(root, ['diff', '--cached', '--histogram', '--no-renames', '--no-color', 'HEAD'], env),
     ])
     const cut = cutPartsOf({ files, unstaged, staged })
     return { files: files.text, unstaged: unstaged.text, staged: staged.text, truncated: cut.length > 0, cut }
@@ -156,6 +156,7 @@ export const commitLogOf = async (root: string, base: string, env: Record<string
       [
         'log',
         '--remerge-diff',
+        '--histogram',
         '--no-renames',
         '--no-color',
         `--max-count=${maximumCommits}`,
