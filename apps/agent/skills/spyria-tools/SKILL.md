@@ -11,4 +11,4 @@ description: Use the services this workspace connected (issue trackers, document
 3. `spyria <service> <tool> --help` shows what a tool takes.
 4. `spyria <service> <tool> --<argument> <value>` runs it. Lists and objects take JSON (`--labels '["bug"]'`); `--json '{…}'` passes all arguments at once.
 
-The answer is printed on standard output; a refusal or failure is printed on standard error with exit code 1, and says why (for example that the service is off for this chat or that the member did not approve the call). Filter long answers in the shell (`| jq`, `| head`) before reading them.
+The answer is printed on standard output; a refusal or failure is printed on standard error with exit code 1, and says why (for example that the service is off for this chat or that the member did not approve the call). Filter long answers in the shell (`| jq`, `| head`) before reading them. A call that waits for a member's approval can outlast your shell's time limit: if the command is cut off or says Spyria did not answer, the call may still have run, so check its effect before running it again.

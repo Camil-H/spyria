@@ -1,6 +1,7 @@
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
 import { type AccessLevel, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
+import { InvalidConnection } from '../domain/errors.ts'
 import { Secret } from '../domain/secret.ts'
 import type { ConnectionSignIn } from '../domain/workspace-connection.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
@@ -137,7 +138,11 @@ export const workspaceConnectionFromRequest = (
     edit: () => editWorkspaceConnection(dependencies, { ...target, ...connection }),
     remove: () => removeWorkspaceConnection(dependencies, target),
     review: () => reviewConnectionTools(dependencies, { ...target, markings: markingsOf(fields.markings) }),
-    'code-mode': () => setConnectionCodeMode(dependencies, { ...target, isOn: fields.isOn === true }),
+    'code-mode': () => {
+      if (typeof fields.isOn !== 'boolean')
+        throw new InvalidConnection('Say whether agents call this server from scripts')
+      return setConnectionCodeMode(dependencies, { ...target, isOn: fields.isOn })
+    },
     access: () =>
       setConnectionAccess(dependencies, {
         ...target,
