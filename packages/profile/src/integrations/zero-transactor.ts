@@ -52,6 +52,8 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     ({ ...row, workspaceId: inContextWorkspace(row.workspaceId as WorkspaceId) }) as WorkspaceConnection
   const connectionRows = (id: WorkspaceId) => zql.workspaceConnections.where('workspaceId', inContextWorkspace(id))
   const ownToolConnections = zql.toolConnections.where('workspaceId', workspaceId).where('userId', userId)
+  const ownToolApprovals = zql.toolApprovals.where('workspaceId', workspaceId).where('userId', userId)
+
   const gatewayKeys = async () =>
     (await gatewayKeyRefsOf(tx, workspaceId, userId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
   const unitOfWork: UnitOfWork = {
@@ -72,6 +74,14 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       permissions: () => workspacePermissionsOf(tx, workspaceId, userId),
       isActive: (workspace, id) => isActiveMember(tx, inContextWorkspace(workspace), id),
+      holders: async (workspace) =>
+        (
+          await tx.run(
+            zql.memberships.where('workspaceId', inContextWorkspace(workspace)).where('removedAt', 'IS', null),
+          )
+        ).map(({ userId: id, role }) => ({ memberId: toMemberId(id), roleId: role })),
+      roleIds: async (workspace) =>
+        (await tx.run(zql.workspaceRoles.where('workspaceId', inContextWorkspace(workspace)))).map(({ id }) => id),
     },
     aiProviders: {
       allowList: async () =>
@@ -167,34 +177,43 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           zql.toolConnections.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
           await tx.mutate.toolConnections.delete({ workspaceId, userId, connectionId })
-        for (const { userId } of await tx.run(
-          zql.connectionRestrictions.where('workspaceId', workspaceId).where('connectionId', connectionId),
+        for (const { id } of await tx.run(
+          zql.connectionAccess.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
-          await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId })
+          await tx.mutate.connectionAccess.delete({ workspaceId, connectionId, id })
+        for (const { userId } of await tx.run(
+          zql.toolApprovals.where('workspaceId', workspaceId).where('connectionId', connectionId),
+        ))
+          await tx.mutate.toolApprovals.delete({ workspaceId, userId, connectionId })
         await tx.mutate.workspaceConnections.delete({ workspaceId: inContextWorkspace(workspaceId), id: connectionId })
       },
-      restrictionsOf: async (workspaceId) =>
-        (await tx.run(zql.connectionRestrictions.where('workspaceId', inContextWorkspace(workspaceId)))).map(
-          ({ connectionId, userId, allowedTools }) => ({ connectionId, memberId: toMemberId(userId), allowedTools }),
+      accessOf: async (workspaceId) =>
+        (await tx.run(zql.connectionAccess.where('workspaceId', inContextWorkspace(workspaceId)))).map(
+          ({ connectionId, roleId, userId, level, toolChanges }) => ({
+            connectionId,
+            roleId,
+            memberId: userId === null ? null : toMemberId(userId),
+            level,
+            toolChanges,
+          }),
         ),
-      restrict: (workspaceId, { connectionId, memberId, allowedTools }) =>
-        tx.mutate.connectionRestrictions.upsert({
-          workspaceId: inContextWorkspace(workspaceId),
-          connectionId,
-          userId: memberId,
-          allowedTools,
-        }),
-      unrestrict: (workspaceId, connectionId, memberId) =>
-        tx.mutate.connectionRestrictions.delete({
-          workspaceId: inContextWorkspace(workspaceId),
-          connectionId,
-          userId: memberId,
-        }),
-      removeRestrictionsOf: async (workspaceId, memberId) => {
-        for (const { connectionId } of await tx.run(
-          zql.connectionRestrictions.where('workspaceId', inContextWorkspace(workspaceId)).where('userId', memberId),
+      setAccess: async (workspaceId, connectionId, subject, access) => {
+        const id = subject.roleId === undefined ? `member:${subject.memberId}` : `role:${subject.roleId}`
+        const key = { workspaceId: inContextWorkspace(workspaceId), connectionId, id }
+        if (!access) return tx.mutate.connectionAccess.delete(key)
+        await tx.mutate.connectionAccess.upsert({
+          ...key,
+          roleId: access.roleId,
+          userId: access.memberId,
+          level: access.level,
+          toolChanges: access.toolChanges,
+        })
+      },
+      removeAccessOf: async (workspaceId, memberId) => {
+        for (const { connectionId, id } of await tx.run(
+          zql.connectionAccess.where('workspaceId', inContextWorkspace(workspaceId)).where('userId', memberId),
         ))
-          await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId: memberId })
+          await tx.mutate.connectionAccess.delete({ workspaceId, connectionId, id })
       },
       removeSignIn: (workspaceId, connectionId, memberId) =>
         tx.mutate.toolConnections.delete({
@@ -202,6 +221,17 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           userId: memberId,
           connectionId,
         }),
+    },
+    toolApprovals: {
+      get: async (connectionId) => {
+        const row = await tx.run(ownToolApprovals.where('connectionId', connectionId).one())
+        return row && { connectionId, serverApproval: row.serverApproval, toolApprovals: row.toolApprovals }
+      },
+      save: (preference) => tx.mutate.toolApprovals.upsert({ ...owner, ...preference }),
+      removeAll: async () => {
+        for (const { connectionId } of await tx.run(ownToolApprovals))
+          await tx.mutate.toolApprovals.delete({ ...owner, connectionId })
+      },
     },
     workspaceEvents: {
       record: async ({ workspaceId: workspace, ...event }) => {

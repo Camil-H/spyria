@@ -11,20 +11,26 @@ export const grantWorkspaceTools = async (
   workspaceId: WorkspaceId,
   memberIds?: readonly MemberId[],
 ) => {
-  const { connections, restrictions, virtualKeys } = await transactor.run(
-    async ({ workspaceConnections, memberGatewayKeys }) => ({
+  const { connections, accessRows, holders, virtualKeys } = await transactor.run(
+    async ({ workspaceConnections, memberGatewayKeys, members }) => ({
       connections: await workspaceConnections.list(workspaceId),
-      restrictions: await workspaceConnections.restrictionsOf(workspaceId),
+      accessRows: await workspaceConnections.accessOf(workspaceId),
+      holders: await members.holders(workspaceId),
       virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
     }),
   )
-  for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true))
+  for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true)) {
+    const holder = holders.find((candidate) => candidate.memberId === memberId)
     await gateway.setToolGrants(
       virtualKeyId,
       Object.fromEntries(
-        connections.map((connection) => [connection.gatewayName, memberToolsOf(connection, restrictions, memberId)]),
+        connections.map((connection) => [
+          connection.gatewayName,
+          holder ? memberToolsOf(connection, accessRows, holder) : [],
+        ]),
       ),
     )
+  }
 }
 
 export const grantMemberTools = (dependencies: Dependencies, { workspaceId, memberId }: Member) =>

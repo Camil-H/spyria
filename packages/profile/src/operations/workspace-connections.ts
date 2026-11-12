@@ -1,22 +1,26 @@
-import { type MemberId, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import { MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
   ConnectionSetupFailed,
   ConnectionUnreachable,
   DuplicateConnectionName,
+  InvalidConnection,
   SecretRequired,
 } from '../domain/errors.ts'
 import {
-  allowedAfterRelisting,
+  type AccessInput,
+  accessOf,
   type ConnectionInput,
   connectionInputOf,
   connectionSignIns,
   editedInputOf,
   gatewayNameOf,
-  knownToolsOf,
+  markedToolsOf,
   memberToolsOf,
+  relistedToolsOf,
   type SecretHeader,
+  type ToolMarking,
 } from '../domain/workspace-connection.ts'
 import { grantMemberTools, grantWorkspaceTools } from './grant-tools.ts'
 
@@ -52,17 +56,19 @@ const releaseLostSignIns = async (
   { transactor, gateway }: Dependencies,
   { workspaceId, connectionId }: ConnectionTarget,
 ) => {
-  const { connection, restrictions, virtualKeys } = await transactor.run(
-    async ({ workspaceConnections, memberGatewayKeys }) => ({
+  const { connection, accessRows, holders, virtualKeys } = await transactor.run(
+    async ({ workspaceConnections, memberGatewayKeys, members }) => ({
       connection: await workspaceConnections.get(workspaceId, connectionId),
-      restrictions: await workspaceConnections.restrictionsOf(workspaceId),
+      accessRows: await workspaceConnections.accessOf(workspaceId),
+      holders: await members.holders(workspaceId),
       virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
     }),
   )
   if (connection.signIn !== connectionSignIns.member) return
   const server = (await gateway.toolServers()).find(({ name }) => name === connection.gatewayName)
   for (const { memberId, virtualKeyId } of virtualKeys) {
-    if (memberToolsOf(connection, restrictions, memberId).length > 0) continue
+    const holder = holders.find((candidate) => candidate.memberId === memberId)
+    if (holder && memberToolsOf(connection, accessRows, holder).length > 0) continue
     for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
       await gateway.removeToolSession(session.id)
     await transactor.run(({ workspaceConnections }) =>
@@ -97,7 +103,7 @@ export const addWorkspaceConnection = async (dependencies: Dependencies, input: 
     setupId: setup?.setupId ?? null,
     headerName: secretHeader?.name ?? null,
     tools,
-    allowedTools: tools.map((tool) => tool.name),
+    isReviewed: false,
   }
   try {
     await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
@@ -119,9 +125,7 @@ export const addWorkspaceConnection = async (dependencies: Dependencies, input: 
     await gateway.removeToolServer(gatewayName)
     throw error
   }
-  if (setup) return { connectionId: connection.id, authorizeUrl: setup.authorizeUrl }
-  await grantWorkspaceTools(dependencies, workspaceId)
-  return { connectionId: connection.id }
+  return setup ? { connectionId: connection.id, authorizeUrl: setup.authorizeUrl } : { connectionId: connection.id }
 }
 
 export const finishWorkspaceConnection = async (dependencies: Dependencies, input: ConnectionTarget) => {
@@ -141,9 +145,8 @@ export const finishWorkspaceConnection = async (dependencies: Dependencies, inpu
     throw new ConnectionSetupFailed(connection.name)
   }
   await asConnectionManager(dependencies, ({ workspaceConnections }) =>
-    workspaceConnections.save({ ...connection, setupId: null, tools, allowedTools: tools.map((tool) => tool.name) }),
+    workspaceConnections.save({ ...connection, setupId: null, tools }),
   )
-  await grantWorkspaceTools(dependencies, workspaceId)
 }
 
 export const editWorkspaceConnection = async (
@@ -161,7 +164,9 @@ export const editWorkspaceConnection = async (
   const isUrlChanged = url !== previous.url
   if (isUrlChanged && previous.headerName && secretHeader === undefined) throw new SecretRequired(previous.headerName)
   const gatewayName = isUrlChanged ? gatewayNameOf(name) : previous.gatewayName
-  const tools = isUrlChanged ? await registeredTools(gateway, { name: gatewayName, url, secretHeader }) : previous.tools
+  const tools = isUrlChanged
+    ? relistedToolsOf(previous, await registeredTools(gateway, { name: gatewayName, url, secretHeader }))
+    : previous.tools
   if (!isUrlChanged && secretHeader !== undefined) await gateway.replaceToolServerHeader(gatewayName, secretHeader)
   const connection = {
     ...previous,
@@ -169,7 +174,7 @@ export const editWorkspaceConnection = async (
     url,
     gatewayName,
     tools,
-    allowedTools: allowedAfterRelisting(previous, tools),
+
     headerName: secretHeader === undefined ? previous.headerName : (secretHeader?.name ?? null),
   }
   await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
@@ -201,42 +206,42 @@ export const removeWorkspaceConnection = async (dependencies: Dependencies, inpu
   })
 }
 
-export const allowConnectionTools = async (
+export const reviewConnectionTools = async (
   dependencies: Dependencies,
-  input: ConnectionTarget & { allowedTools: string[] },
+  input: ConnectionTarget & { markings: ToolMarking[] },
 ) => {
   const { workspaceId, connectionId } = input
   await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
     const connection = await workspaceConnections.get(workspaceId, connectionId)
-    const allowedTools = knownToolsOf(connection, input.allowedTools)
-    await workspaceConnections.save({ ...connection, allowedTools })
+    const tools = markedToolsOf(connection, input.markings)
+    await workspaceConnections.save({ ...connection, tools, isReviewed: true })
     await workspaceEvents.record({
       workspaceId,
-      type: 'connection.updated',
-      payload: { connectionId, allowedTools },
+      type: 'connection.reviewed',
+      payload: { connectionId, readTools: tools.filter((tool) => tool.readOnly).map(({ name }) => name) },
     })
   })
   await grantWorkspaceTools(dependencies, workspaceId)
   await releaseLostSignIns(dependencies, input)
 }
 
-export const restrictConnectionMember = async (
-  dependencies: Dependencies,
-  input: ConnectionTarget & { memberId: MemberId; allowedTools: string[] | null },
-) => {
-  const { workspaceId, connectionId, memberId } = input
+export const setConnectionAccess = async (dependencies: Dependencies, input: ConnectionTarget & AccessInput) => {
+  const { workspaceId, connectionId } = input
+  const subject = input.roleId === undefined ? { memberId: input.memberId } : { roleId: input.roleId }
   await asConnectionManager(dependencies, async ({ members, workspaceConnections, workspaceEvents }) => {
-    if (!(await members.isActive(workspaceId, memberId))) throw new MemberNotFound(memberId)
+    if (subject.memberId !== undefined && !(await members.isActive(workspaceId, subject.memberId)))
+      throw new MemberNotFound(subject.memberId)
+    if (subject.roleId !== undefined && !(await members.roleIds(workspaceId)).includes(subject.roleId))
+      throw new InvalidConnection(`The workspace has no role ${subject.roleId}`)
     const connection = await workspaceConnections.get(workspaceId, connectionId)
-    const allowedTools = input.allowedTools && knownToolsOf(connection, input.allowedTools)
-    if (allowedTools) await workspaceConnections.restrict(workspaceId, { connectionId, memberId, allowedTools })
-    else await workspaceConnections.unrestrict(workspaceId, connectionId, memberId)
+    const access = accessOf(connection, input)
+    await workspaceConnections.setAccess(workspaceId, connectionId, subject, access)
     await workspaceEvents.record({
       workspaceId,
-      type: 'connection.restricted',
-      payload: { connectionId, memberId, allowedTools },
+      type: 'connection.access_changed',
+      payload: { connectionId, ...subject, level: access?.level ?? null, toolChanges: access?.toolChanges ?? {} },
     })
   })
-  await grantMemberTools(dependencies, { workspaceId, memberId })
+  await grantWorkspaceTools(dependencies, workspaceId, subject.memberId && [subject.memberId])
   await releaseLostSignIns(dependencies, input)
 }
