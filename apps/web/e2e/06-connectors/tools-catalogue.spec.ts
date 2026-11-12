@@ -235,7 +235,7 @@ test.describe('Tools catalogue', () => {
     await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMOff in this chat'])
     await expect(
       await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.'), 'Look it up'),
-    ).toContainText(new RegExp(`CRM is off for this chat|${notOffered(gatewayName, 'lookup')}`))
+    ).toContainText(new RegExp(`CRM is off for this chat|${notOffered('CRM', 'lookup')}`))
     await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(0)
 
     await openPanelTab(page, 'Research', 'Connected tools')
