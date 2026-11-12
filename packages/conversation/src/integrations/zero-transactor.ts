@@ -380,6 +380,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           ownerId: turn?.ownerId ? memberId(turn.ownerId) : null,
           prompterId: turn?.promptId && turn.prompterId ? memberId(turn.prompterId) : null,
           promptId: turn?.promptId ? messageId(turn.promptId) : null,
+          toolServersOff: turn?.toolServersOff ?? [],
         }
       },
       lastFailure: async (id) => (await chatTurnOf(tx, contextWorkspaceId, id))?.failure ?? null,
@@ -564,6 +565,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           localSession: row.localSession ?? null,
           repository: row.repository ?? null,
           baseBranch: row.baseBranch ?? null,
+          toolServersOff: row.toolServersOff ?? [],
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
         }
       },
@@ -630,6 +632,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             .where('removedAt', 'IS', null)
             .one(),
         )) !== undefined,
+      setToolServersOff: (id, servers) =>
+        tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, toolServersOff: [...servers] }),
     },
   }
   return transactorOver(tx, unitOfWork)

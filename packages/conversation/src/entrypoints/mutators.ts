@@ -3,6 +3,7 @@ import type { ZeroContext } from '@spyria/db/zero-queries'
 import { chatId, ForeignWorkspace, memberId, messageId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import { maximumAttachmentsPerMessage } from '../domain/attachments.ts'
+import { toolServerNamePattern } from '../domain/chat-tool-servers.ts'
 import { runsOns } from '../domain/session-routing.ts'
 import { createZeroRuntimeRetrier } from '../integrations/runtime-agent-runtimes.ts'
 import { createZeroRuntimeChatStarter } from '../integrations/workspace-runtime-chat-starter.ts'
@@ -23,6 +24,7 @@ import { sendMessage } from '../operations/send-message.ts'
 import { startRuntimeFromMessage } from '../operations/start-runtime-from-message.ts'
 import { stopAgent } from '../operations/stop-agent.ts'
 import { stopRuntime } from '../operations/stop-runtime.ts'
+import { switchChatToolServer } from '../operations/switch-chat-tool-server.ts'
 import { updateChatRouting } from '../operations/update-chat-routing.ts'
 
 const id = z.string().check(z.minLength(1))
@@ -97,6 +99,10 @@ export const conversationMutators = defineMutators({
         reasoningEffort: z.optional(z.string().check(z.regex(/^[a-z]{1,16}$/))),
       }),
       ({ tx, ctx, args }) => updateChatRouting(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
+    ),
+    switchChatToolServer: defineMutator(
+      z.extend(chatArguments, { server: z.string().check(z.regex(toolServerNamePattern)), isOn: z.boolean() }),
+      ({ tx, ctx, args }) => switchChatToolServer(dependenciesOf(tx, ctx, args), { ...args, memberId: ctx.userId }),
     ),
     inviteMember: defineMutator(memberRoleArguments, ({ tx, ctx, args }) =>
       inviteMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),

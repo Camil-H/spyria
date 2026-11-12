@@ -55,7 +55,7 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
   const tokenChat = await tokenChatOf(dependencies, host, token)
   if (!tokenChat) return undefined
   return dependencies.transactor.run(async ({ agentTurns, members }) => {
-    const { ownerId, prompterId, promptId } = await agentTurns.toolCallTurn(tokenChat.chatId)
+    const { ownerId, prompterId, promptId, toolServersOff } = await agentTurns.toolCallTurn(tokenChat.chatId)
     return (
       ownerId &&
       isTokenTurn(tokenChat, promptId) && {
@@ -63,6 +63,7 @@ export const findToolCallTurn = async (dependencies: Dependencies, host: AgentHo
         ownerId,
         prompterId,
         promptId,
+        toolServersOff,
         ownerName: await members.displayNameOf(ownerId),
         prompterName: prompterId && (await members.displayNameOf(prompterId)),
         delegationId: tokenChat.delegationId,

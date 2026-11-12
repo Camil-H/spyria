@@ -437,10 +437,11 @@ export const chatTurnOf = (tx: Transaction, workspaceId: string, chatId: string)
     failure: string | null
     localSession: boolean
     sessionId: string | null
+    toolServersOff: string[]
   }>(
     tx,
     `select agent_turn_message_id as "promptId", agent_turn_prompter_id as "prompterId", owner_user_id as "ownerId",
-       agent_turn_failure as failure, local_session as "localSession",
+       agent_turn_failure as failure, local_session as "localSession", tool_servers_off as "toolServersOff",
        (select agent_conversation_id from runtimes
         where runtimes.workspace_id = chats.workspace_id and runtimes.chat_id = chats.id) as "sessionId"
      from chats where workspace_id = $1 and id = $2`,

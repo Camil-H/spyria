@@ -82,6 +82,7 @@ const channel: ConversationChat = {
   localSession: null,
   repository: null,
   baseBranch: null,
+  toolServersOff: [],
   isOwnerRemoved: false,
 }
 

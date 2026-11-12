@@ -48,6 +48,7 @@ export type ConversationChat = Readonly<{
   localSession: boolean | null
   repository: string | null
   baseBranch: string | null
+  toolServersOff: readonly string[]
   isOwnerRemoved: boolean
 }>
 

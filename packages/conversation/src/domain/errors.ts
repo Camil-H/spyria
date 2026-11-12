@@ -125,3 +125,8 @@ export const WebPageNotPublic = errorKind(
   ConversationError,
 )
 export const WebPageTooLarge = errorKind('web_page_too_large', () => 'This page is over 5 MB', ConversationError)
+export const TooManyToolServersOff = errorKind(
+  'too_many_tool_servers_off',
+  () => 'A chat turns off at most 100 tool servers',
+  ConversationError,
+)
