@@ -97,3 +97,6 @@ export const virtualKeyValueOf = async ({
   }))
   return hasProviderKey && virtualKeyId ? gateway.virtualKeyValue(virtualKeyId) : undefined
 }
+
+export const syncMemberGatewayKeyLater = ({ transactor }: Pick<Dependencies, 'transactor'>) =>
+  transactor.run(({ gatewayJobs }) => gatewayJobs.syncLater({}))
