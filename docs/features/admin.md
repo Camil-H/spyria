@@ -97,6 +97,10 @@ Runtime chats they owned **freeze**: participants can still read them, but nobod
 
 Inviting a removed member's address again creates a normal invite that restores their membership when they sign in.
 
+### Signing a member out
+
+**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again through their provider to come back; a session they still have in another workspace cannot reopen this one. After a lost device, also end their session at the provider, since a provider that still remembers them signs them in again. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
+
 ## Sign-in and SSO
 
 People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Setup SSO** lets a workspace enforce its organization's own provider instead, so that people lose access when their organization account is removed. The rules and the sign-in screen are in [who can join and sign-in](../guides/who-can-join.md); the reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md).

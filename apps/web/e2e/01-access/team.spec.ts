@@ -48,6 +48,12 @@ const removeMember = async (page: Page, name: string) => {
   await expect(memberRowOf(page, name)).toHaveCount(0)
 }
 
+const openChatWithStream = async (page: Page, chatName: string) => {
+  const streamOpened = page.waitForEvent('websocket', (socket) => socket.url().endsWith('/api/stream'))
+  await openChat(page, chatName)
+  await streamOpened
+}
+
 const insertBobsRuntimeChat = async (workerStack: WorkerStack) => {
   await workerStack.database.$client.begin(async (sql) => {
     await sql`
@@ -121,6 +127,22 @@ test.describe('Team', () => {
     await bobPage.context().close()
   })
 
+  test('As a member who manages members, I sign Bob out everywhere: his open page signs out of Acme and he stays a member', {
+    tag: ['@spec-36', '@spec-05'],
+  }, async ({ page, browser, workerStack }) => {
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await openChatWithStream(bobPage, 'Welcome')
+
+    await membersSectionOf(page).getByRole('button', { name: 'Sign Bob out everywhere' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Sign out everywhere' })
+    await dialog.getByRole('button', { name: 'Sign out everywhere' }).click()
+    await expect(dialog).toHaveCount(0)
+
+    await expect(signedOutScreenOf(bobPage, 'Acme')).toBeVisible()
+    await expect(memberRowOf(page, 'Bob')).toBeVisible()
+    await bobPage.context().close()
+  })
+
   machineTest(
     'As a member who manages members, I remove Bob mid-reply: his page signs out of Acme, his machine is removed and his runtime chat stays frozen until I take it over',
     { tag: ['@spec-36', '@slow'] },
@@ -174,6 +196,27 @@ test.describe('Team', () => {
       await bobPage.context().close()
     },
   )
+
+  test('As a member, I see in my profile where I am signed in, and signing out everywhere signs my other browser out of Acme too', {
+    tag: ['@spec-05'],
+  }, async ({ page, browser, workerStack }) => {
+    const otherBrowserPage = await openPageAs(browser, workerStack, 'member-alice')
+    await openChatWithStream(otherBrowserPage, 'Welcome')
+
+    await openProfile(page)
+    const sessions = mainOf(page).getByRole('list', { name: 'Sessions' }).getByRole('listitem')
+    await expect(sessions.filter({ hasText: 'This device' })).toHaveCount(1)
+    await expect(sessions.filter({ hasNotText: 'This device' }).first()).toContainText('Signed in')
+
+    await mainOf(page).getByRole('button', { name: 'Sign out everywhere' }).click()
+    await page
+      .getByRole('dialog', { name: 'Sign out everywhere' })
+      .getByRole('button', { name: 'Sign out everywhere' })
+      .click()
+    await expect(signedOutScreenOf(otherBrowserPage, 'Acme')).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toHaveCount(0)
+    await otherBrowserPage.context().close()
+  })
 
   test('As a member who can invite, I invite a removed member again and they sign in back in Acme', {
     tag: ['@spec-36'],

@@ -4,6 +4,7 @@ import { useSession } from '@spyria/session'
 import type { ReactNode } from 'react'
 import { useOutletContext } from 'react-router'
 import { getProfile } from '../queries/get-profile.ts'
+import { ActiveSessionsSection } from './ActiveSessionsSection.tsx'
 import { ConnectionsSection } from './ConnectionsSection.tsx'
 import { DisplayNameForm } from './DisplayNameForm.tsx'
 import { LlmAccessSection } from './LlmAccessSection.tsx'
@@ -28,6 +29,7 @@ export const ProfileView = ({ intro, children }: { intro?: ReactNode; children?:
         <LlmAccessSection workspaceId={workspaceId} memberId={memberId} />
         <ConnectionsSection workspaceId={workspaceId} memberId={memberId} />
         {children}
+        <ActiveSessionsSection workspaceId={workspaceId} />
       </div>
     </div>
   )

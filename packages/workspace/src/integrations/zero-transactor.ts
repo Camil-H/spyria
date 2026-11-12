@@ -6,6 +6,7 @@ import {
   enqueueJob,
   lockActiveAdminIds,
   scheduleWorkspaceDeletion,
+  signOutMemberEverywhere,
 } from '@spyria/db/server-writes'
 import type {
   Chat as ChatRow,
@@ -237,6 +238,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await deleteMemberSessions(tx, context.workspaceId, id)
         await removeMemberMachineOnServer(tx, context.workspaceId, id)
         await removeMemberProfileOnServer(tx, context.workspaceId, id)
+      },
+      endSessions: async (id) => {
+        await signOutMemberEverywhere(tx, context.workspaceId, id)
       },
       regrantToolsLater: (id) => regrantMemberToolsOnServer(tx, context.workspaceId, id),
       stopTurnsLater: async (change) => {
