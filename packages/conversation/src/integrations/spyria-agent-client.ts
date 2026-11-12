@@ -147,7 +147,7 @@ exec pi --mode rpc --no-themes`
 
 export const piCommandOf = (
   gatewayUrl: string,
-  { models, compactionModel, compaction }: PiLaunch,
+  { models, compactionModel, compaction, codeModeServers = [] }: PiLaunch,
   { sub, hasRepository = false }: { sub: boolean; hasRepository?: boolean },
 ) => {
   const anthropicModels = models.filter((model) => model.id.startsWith('anthropic/'))
@@ -164,6 +164,9 @@ export const piCommandOf = (
       ...piMcpServerOf(gatewayUrl, catalogueToolsPath, 'deferred'),
       description: catalogueDescription,
       timeout: spyriaToolTimeoutSeconds,
+      ...(codeModeServers.length > 0 && {
+        toolExposure: Object.fromEntries(codeModeServers.map((server) => [`${server}-*`, 'codemode'])),
+      }),
     },
     web: { ...piMcpServerOf(gatewayUrl, webToolsPath), timeout: webSearchTimeoutSeconds },
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),

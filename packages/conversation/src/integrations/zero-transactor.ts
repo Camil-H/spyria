@@ -598,6 +598,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             createdAt: new Date(),
           })
       },
+      codeModeServers: async () =>
+        (await tx.run(zql.workspaceConnections.where('workspaceId', contextWorkspaceId).where('codeMode', true))).map(
+          ({ gatewayName }) => gatewayName,
+        ),
       localSessionsAllowed: async () =>
         (await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.localSessions ?? true,
       setupCommandOf: async (repository) =>

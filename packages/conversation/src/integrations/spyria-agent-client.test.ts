@@ -359,3 +359,16 @@ test('a tool call waiting for the owner’s approval is decided before Pi gives 
   expect(spyriaToolTimeoutSeconds * 1000).toBeGreaterThan(toolApprovalWindowMilliseconds)
   expect(delegateTimeoutSeconds).toBe(120)
 })
+
+test('the catalogue servers in code mode are reached from codemode scripts, the others through tool search', () => {
+  const mcpOf = (command: string[]) =>
+    JSON.parse(command.find((part) => part.startsWith('SPYRIA_PI_MCP='))?.slice('SPYRIA_PI_MCP='.length) ?? '{}')
+      .mcpServers
+  const gateway = 'http://spyria-gateway-relay:4000/v1'
+  const launched = { ...piLaunch, codeModeServers: ['sentry_ab12cd', 'notion_ef34ab'] }
+  expect(mcpOf(piCommandOf(gateway, launched, { sub: false })).tools).toMatchObject({
+    exposure: 'deferred',
+    toolExposure: { 'sentry_ab12cd-*': 'codemode', 'notion_ef34ab-*': 'codemode' },
+  })
+  expect(mcpOf(piCommandOf(gateway, piLaunch, { sub: false })).tools).not.toHaveProperty('toolExposure')
+})

@@ -173,6 +173,14 @@ const routedFor = async (
   return early?.promptId === prompt.id ? early.routed : routeSession(dependencies, chat, prompterId, prompt)
 }
 
+export const withCodeModeServers = async (
+  { transactor }: Pick<AgentDependencies, 'transactor'>,
+  llm: AgentLlmChoice,
+): Promise<AgentLlmChoice> =>
+  'pi' in llm
+    ? { ...llm, pi: { ...llm.pi, codeModeServers: await transactor.run(({ chats }) => chats.codeModeServers()) } }
+    : llm
+
 const relaunchedConversationOf = async (
   dependencies: AgentDependencies,
   chat: AgentChat,
@@ -289,7 +297,13 @@ const createdConversationOf = async (
     const checkout = await checkoutWithOwnerOf(dependencies, chat).catch((error: Error) => {
       throw new AgentStartFailure(disclosableMessageOf(error))
     })
-    await agentClient.createConversation(conversation, await runtimes.issueLlmToken(chat), llm, undefined, checkout)
+    await agentClient.createConversation(
+      conversation,
+      await runtimes.issueLlmToken(chat),
+      await withCodeModeServers(dependencies, llm),
+      undefined,
+      checkout,
+    )
   }
   return conversation
 }
