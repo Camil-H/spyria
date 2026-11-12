@@ -4,10 +4,12 @@ import {
   addLlmKey,
   addParticipant,
   connectFake,
+  connectionsOf,
   expect,
   lastToolResultOf,
   messageItemsOf,
   openChat,
+  openProfile,
   type Page,
   promptTool,
   research,
@@ -67,7 +69,7 @@ test.describe('Guest rights', () => {
     const bobPage = await openAsBob(browser, workerStack)
     await agentScript(research, updateScript('Updated the record.'))
     await sendMessage(bobPage, 'Bob asks to update the record')
-    await expect(approvalCardOf(page)).toContainText('Bob asks to run update (CRM)')
+    await expect(approvalCardOf(page)).toContainText("The agent asks to run update (CRM) on Bob's prompt")
     await expect(approvalCardOf(page)).toContainText('{"text":"Renewal on 1 May"}')
     await expect(approvalCardOf(bobPage)).toContainText("Waiting for Alice's approval")
     await expect(approvalCardOf(bobPage).getByRole('button', { name: 'Approve' })).toHaveCount(0)
@@ -125,6 +127,30 @@ test.describe('Guest rights', () => {
     await updateStepOf(page).click()
     await expect(messageItemsOf(page).filter({ hasText: 'ran update' })).not.toHaveCount(0)
     await expect(approvalCardOf(page)).toHaveCount(0)
+  })
+
+  test('As a chat owner, I set CRM’s update to Always in my approvals, and my own prompt waits for my approval before it runs', {
+    tag: ['@spec-58'],
+  }, async ({ page, agentScript }) => {
+    await openProfile(page)
+    const crmRow = connectionsOf(page).getByRole('listitem', { name: 'CRM' })
+    await crmRow.getByRole('button', { name: 'Approvals for CRM' }).click()
+    const updateApproval = crmRow
+      .getByRole('region', { name: 'Approvals for CRM' })
+      .getByRole('combobox', { name: 'Approval for update' })
+    await expect(updateApproval.locator('option:checked')).toHaveText("Default (On a guest's prompt)")
+    await updateApproval.selectOption('always')
+    await expect(updateApproval).toHaveValue('always')
+
+    await openChat(page, 'Research')
+    await agentScript(research, updateScript('Updated the record.'))
+    await sendMessage(page, 'Alice updates the record')
+    await expect(approvalCardOf(page)).toContainText("The agent asks to run update (CRM) on Alice's prompt")
+    await approvalCardOf(page).getByRole('button', { name: 'Approve' }).click()
+    await expect(approvalCardOf(page)).toContainText('Approved by Alice')
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
+    await updateStepOf(page).click()
+    await expect(messageItemsOf(page).filter({ hasText: 'ran update' })).not.toHaveCount(0)
   })
 
   test('As a chat owner, my Approve reads Approving… while it is sent, and when my other page denies first, the late Approve is refused and the card keeps Denied by Alice', {

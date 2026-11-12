@@ -1,5 +1,10 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
-import { type ConnectionInput, connectionSignIns } from '../domain/workspace-connection.ts'
+import type { WorkspaceId } from '@spyria/kernel'
+import {
+  type AccessInput,
+  type ConnectionInput,
+  connectionSignIns,
+  type ToolMarking,
+} from '../domain/workspace-connection.ts'
 import { throwOnRefusal } from './http-refusal.ts'
 import { signInThroughPopup } from './http-tool-connections.ts'
 
@@ -28,13 +33,9 @@ export const createHttpWorkspaceConnections = (postAsMember: PostAsMember) => {
     editWorkspaceConnection: ({ workspaceId, connectionId, ...connection }: Target & Omit<ConnectionInput, 'signIn'>) =>
       post(workspaceId, `/${connectionId}/edit`, connection),
     removeWorkspaceConnection: ({ workspaceId, connectionId }: Target) => post(workspaceId, `/${connectionId}/remove`),
-    allowConnectionTools: ({ workspaceId, connectionId, allowedTools }: Target & { allowedTools: string[] }) =>
-      post(workspaceId, `/${connectionId}/tools`, { allowedTools }),
-    restrictConnectionMember: ({
-      workspaceId,
-      connectionId,
-      ...restriction
-    }: Target & { memberId: MemberId; allowedTools: string[] | null }) =>
-      post(workspaceId, `/${connectionId}/restrict`, restriction),
+    reviewConnectionTools: ({ workspaceId, connectionId, markings }: Target & { markings: ToolMarking[] }) =>
+      post(workspaceId, `/${connectionId}/review`, { markings }),
+    setConnectionAccess: ({ workspaceId, connectionId, ...access }: Target & AccessInput) =>
+      post(workspaceId, `/${connectionId}/access`, access),
   }
 }

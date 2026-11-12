@@ -1,5 +1,5 @@
 import type { Job } from '@spyria/db/zero-queries'
-import { memberId, workspaceId } from '@spyria/kernel'
+import { memberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { profileJobTypes } from '../domain/llm-credential.ts'
@@ -14,11 +14,15 @@ const gatewaySyncPayload = z.object({
 })
 const toolServerRemovalPayload = z.object({ gatewayName: id })
 
-export const createProfileJobs = (gateway: LlmGateway & ToolGateway) => ({
-  [profileJobTypes.gatewaySync]: ({ workspaceId: workspace, payload, transact }: Job) => {
+export const createProfileJobs = (
+  gateway: LlmGateway & ToolGateway,
+  onToolGrantsChanged: (workspace: WorkspaceId) => void = () => {},
+) => ({
+  [profileJobTypes.gatewaySync]: async ({ workspaceId: workspace, payload, transact }: Job) => {
     const job = gatewaySyncPayload.parse(payload)
     const transactor = createTransactingZeroTransactor(transact, memberContext(workspaceId(workspace), job.memberId))
-    return runGatewaySync({ transactor, gateway }, job)
+    await runGatewaySync({ transactor, gateway }, job)
+    onToolGrantsChanged(workspaceId(workspace))
   },
   [profileJobTypes.toolServerRemoval]: ({ payload }: Job) =>
     gateway.removeToolServer(toolServerRemovalPayload.parse(payload).gatewayName),

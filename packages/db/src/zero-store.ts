@@ -294,7 +294,11 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
-  const connectionRestrictionsOf = mappedRows(withMemberId<ZeroRows['connectionRestrictions'][number]>)
+  const connectionAccessOf = mappedRows(({ userId, ...access }: ZeroRows['connectionAccess'][number]) => ({
+    ...access,
+    memberId: userId,
+  }))
+  const toolApprovalsOf = mappedRows(withMemberId<ZeroRows['toolApprovals'][number]>)
   const runtimeHostsOf = mappedRows(
     ({ lastSeenAt, createdBy, createdAt, removedAt, protocolVersion, ...host }: ZeroRows['runtimeHosts'][number]) => ({
       ...host,
@@ -352,7 +356,8 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       workspaceOnboarding: workspaceOnboardingOf(rowsOf('workspaceOnboarding')),
       memberOnboarding: memberOnboardingOf(rowsOf('memberOnboarding')),
       workspaceConnections: workspaceConnectionsOf(rowsOf('workspaceConnections')),
-      connectionRestrictions: connectionRestrictionsOf(rowsOf('connectionRestrictions')),
+      connectionAccess: connectionAccessOf(rowsOf('connectionAccess')),
+      toolApprovals: toolApprovalsOf(rowsOf('toolApprovals')),
       runtimeHosts: runtimeHostsOf(rowsOf('runtimeHosts')),
       machineCounts: machineCountsOf(rowsOf('machineCounts')),
       runtimes: runtimesOf(rowsOf('runtimes')),
