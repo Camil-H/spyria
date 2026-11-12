@@ -239,3 +239,18 @@ test('a runtime whose preparation fails is removed and holds its place for an ho
   await warmIn('ready', 1)
   expect(commandsOf(host, 'snapshot')).toEqual([])
 })
+
+test('replacing failed runtimes kept ready frees no slot they did not hold, so the host keeps its last place for chats', async () => {
+  const agent = preparingAgent()
+  const host = await fakeHost('Full host', { memoryGibibytes: 4, containerAgent: agent.containerAgent })
+  await warmJobsSettled()
+  for (const id of [crypto.randomUUID(), crypto.randomUUID()])
+    await database.$client`
+      insert into warm_runtimes (workspace_id, id, repository, setup_command, host_id, state, image, api_key_id,
+        created_at, state_changed_at)
+      values (${acme}, ${id}, 'acme/app', 'bun install', ${host.id}, 'failed', ${testSpyriaAgentImage},
+        ${testSecretsKeyring.currentKeyId}, now() - interval '3 hours', now() - interval '2 hours')`
+  await keepReady([{ repository: 'acme/app', command: 'bun install', warmRuntimes: 2 }])
+  await fill()
+  expect(await warmRuntimes()).toHaveLength(1)
+})
