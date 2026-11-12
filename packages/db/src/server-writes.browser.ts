@@ -33,6 +33,12 @@ export const expireRuntimeHostClaims = skippedOnClient
 export const refreshMachineCounts = skippedOnClient
 export const lockRuntimes = async () => []
 export const lockRuntimeHostLoads = async () => []
+export const lockWorkspaceHostLoads = async () => []
+export const lockWarmRuntimes = async () => []
+export const findWarmRuntimes = async () => []
+export const insertWarmRuntime = skippedOnClient
+export const updateWarmRuntime = skippedOnClient
+export const deleteWarmRuntime = skippedOnClient
 export const serverOnlyRuntimeValueOf = skippedOnClient
 export const setServerOnlyRuntimeValue = skippedOnClient
 export const rememberAgentConversation = skippedOnClient

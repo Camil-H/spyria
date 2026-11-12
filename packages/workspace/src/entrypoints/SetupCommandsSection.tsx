@@ -1,5 +1,5 @@
 import { useQuery } from '@spyria/db/react'
-import type { SetupCommand, WorkspaceId } from '@spyria/kernel'
+import { maximumWarmRuntimes, type SetupCommand, type WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
   ErrorMessage,
@@ -9,13 +9,13 @@ import {
   labelClass,
   useGuardedAction,
 } from '@spyria/ui'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { RepositoryListing } from '../domain/github.ts'
 import { setupCommandsOf } from '../queries/get-setup-commands.ts'
 import { useWorkspaceCommands } from './providers.tsx'
 import { NewRepositoryPicker, newRepositoryTab, type RepositoryTab, RepositoryTabs } from './RepositoryTabs.tsx'
 
-type Row = { repository: string | null; command: string }
+type Row = { repository: string | null; command: string; warmRuntimes?: number }
 
 const defaultLabel = 'Default setup command'
 const rowsOf = (commands: readonly SetupCommand[]): Row[] => [
@@ -23,6 +23,7 @@ const rowsOf = (commands: readonly SetupCommand[]): Row[] => [
   ...commands.filter(({ repository }) => repository !== null),
 ]
 const commandsOf = (rows: Row[]) => rows.filter(({ command }) => command.trim() !== '')
+const warmRuntimesOf = (value: string) => Math.min(maximumWarmRuntimes, Math.max(0, Math.trunc(Number(value) || 0)))
 const repositoriesOf = (rows: Row[]) => rows.flatMap(({ repository }) => (repository === null ? [] : [repository]))
 
 export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
@@ -35,6 +36,7 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
   const [isDirty, setIsDirty] = useState(false)
   const [blankRepository, setBlankRepository] = useState<string | null>(null)
   const edits = useRef(0)
+  const warmRuntimesHintId = useId()
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
     commands.listRepositories({ workspaceId }).then(
@@ -119,6 +121,34 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
                 }
               />
             </label>
+            {row.repository !== null && (
+              <div className="flex flex-col gap-1">
+                <label className={labelClass}>
+                  Runtimes kept ready
+                  <input
+                    type="number"
+                    min={0}
+                    max={maximumWarmRuntimes}
+                    aria-describedby={warmRuntimesHintId}
+                    className={`${fieldClass} w-24`}
+                    value={row.warmRuntimes ?? 0}
+                    onChange={(event) =>
+                      edit(
+                        rows.map((known) =>
+                          known === row ? { ...row, warmRuntimes: warmRuntimesOf(event.target.value) } : known,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <p id={warmRuntimesHintId} className="text-sm text-muted">
+                  Spyria keeps this many runtimes of {row.repository} started on the runtime hosts, with the setup
+                  command already run on its default branch, so a new dev chat on that branch starts at once. Each one
+                  counts as a runtime on its host. A copy of the repository as setup left it stays on each host, and new
+                  runtimes of {row.repository} start from it.
+                </p>
+              </div>
+            )}
             {row.repository !== null && (
               <button
                 type="button"

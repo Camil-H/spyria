@@ -91,14 +91,26 @@ export const rulesOf = (settings: DevLoopSettings | null, repository: string | n
 
 export const isAnyRuleOn = (settings: DevLoopSettings | null) => settings?.rules.some(({ isOn }) => isOn) ?? false
 
-export type SetupCommand = Readonly<{ repository: string | null; command: string }>
+export type SetupCommand = Readonly<{ repository: string | null; command: string; warmRuntimes?: number }>
+export type WarmPool = Readonly<{ repository: string; command: string; size: number }>
 const maximumSetupCommands = 100
+export const maximumWarmRuntimes = 5
+
+const isWarmRuntimeCount = (repository: unknown, warmRuntimes: unknown) =>
+  warmRuntimes === undefined ||
+  (Number.isInteger(warmRuntimes) &&
+    (warmRuntimes as number) >= 0 &&
+    (warmRuntimes as number) <= (repository === null ? 0 : maximumWarmRuntimes))
 
 export const isSetupCommands = (value: unknown): value is readonly SetupCommand[] => {
   if (!Array.isArray(value) || value.length > maximumSetupCommands) return false
   const isEach = value.every((setup) => {
-    const { repository, command } = (setup ?? {}) as Record<string, unknown>
-    return (repository === null || isText(repository, maximumRepositoryLength)) && isText(command, maximumCommandLength)
+    const { repository, command, warmRuntimes } = (setup ?? {}) as Record<string, unknown>
+    return (
+      (repository === null || isText(repository, maximumRepositoryLength)) &&
+      isText(command, maximumCommandLength) &&
+      isWarmRuntimeCount(repository, warmRuntimes)
+    )
   })
   return isEach && new Set(value.map(({ repository }) => repository)).size === value.length
 }
@@ -109,3 +121,8 @@ export const setupCommandOf = (commands: readonly SetupCommand[], repository: st
   commands.find((setup) => setup.repository === repository)?.command ??
   commands.find((setup) => setup.repository === null)?.command ??
   null
+
+export const warmPoolsOf = (commands: readonly SetupCommand[]): WarmPool[] =>
+  commands.flatMap(({ repository, command, warmRuntimes = 0 }) =>
+    repository !== null && warmRuntimes > 0 ? [{ repository, command, size: warmRuntimes }] : [],
+  )

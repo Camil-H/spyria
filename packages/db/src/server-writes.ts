@@ -11,6 +11,7 @@ import {
   reachableModelsOf,
   storedActorOf,
 } from '@spyria/kernel'
+import type { WarmRuntimeState } from './schema.ts'
 
 const onServer = async <Row = unknown>(tx: Transaction, statement: string, parameters: unknown[]) =>
   (tx.location === 'server' ? [...(await tx.dbTransaction.query(statement, parameters))] : []) as Row[]
@@ -254,18 +255,112 @@ export const lockRuntimes = async (
   return rows.map((row) => row.id)
 }
 
+const hostLoads = `select id as "hostId", status = 'online' as online, coalesce((capacity->>'cap')::int, 0) as cap,
+    (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
+       and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'installing', 'running', 'stopping')
+    ) + (select count(*)::int from warm_runtimes where warm_runtimes.workspace_id = runtime_hosts.workspace_id
+       and warm_runtimes.host_id = runtime_hosts.id and warm_runtimes.state <> 'failed') as running
+  from runtime_hosts where workspace_id = $1 and removed_at is null`
+type HostLoadRow = { hostId: string; online: boolean; cap: number; running: number }
+
 export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatId: string) =>
-  onServer<{ hostId: string; online: boolean; cap: number; running: number }>(
+  onServer<HostLoadRow>(
     tx,
-    `select id as "hostId", status = 'online' as online, coalesce((capacity->>'cap')::int, 0) as cap,
-       (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
-          and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'installing', 'running', 'stopping')
-       ) as running
-     from runtime_hosts where workspace_id = $1 and removed_at is null and owner_id is not distinct from
+    `${hostLoads} and owner_id is not distinct from
        (select case when local_session then owner_user_id end from chats where workspace_id = $1 and id = $2)
-     for update`,
+     order by id for update`,
     [workspaceId, chatId],
   )
+
+export const lockWorkspaceHostLoads = (tx: Transaction, workspaceId: string) =>
+  onServer<HostLoadRow>(tx, `${hostLoads} and owner_id is null order by id for update`, [workspaceId])
+
+export type WarmRuntimeRow = {
+  workspaceId: string
+  id: string
+  repository: string
+  setupCommand: string
+  hostId: string
+  state: WarmRuntimeState
+  image: string
+  apiKeyId: string
+  baseBranch: string | null
+  agentVersion: string | null
+  agentProtocolVersion: number | null
+  createdAt: number
+  stateChangedAt: number
+}
+const warmRuntimeColumns = `workspace_id as "workspaceId", id, repository, setup_command as "setupCommand",
+  host_id as "hostId", state, image, api_key_id as "apiKeyId", base_branch as "baseBranch",
+  agent_version as "agentVersion", agent_protocol_version as "agentProtocolVersion",
+  (extract(epoch from created_at) * 1000)::float8 as "createdAt",
+  (extract(epoch from state_changed_at) * 1000)::float8 as "stateChangedAt"`
+const warmRuntimeLocks = {
+  all: 'true order by id for update',
+  id: 'id = $2 for update',
+  claimable: `repository = $2 and base_branch = $3 and setup_command = $4 and image = $5 and state = 'ready'
+    order by created_at limit 1 for update skip locked`,
+  host: 'host_id = $2 order by id for update',
+}
+
+export const lockWarmRuntimes = (
+  tx: Transaction,
+  workspaceId: string,
+  scope: keyof typeof warmRuntimeLocks,
+  ...keys: string[]
+) =>
+  onServer<WarmRuntimeRow>(
+    tx,
+    `select ${warmRuntimeColumns} from warm_runtimes where workspace_id = $1 and ${warmRuntimeLocks[scope]}`,
+    [workspaceId, ...keys],
+  )
+
+export const findWarmRuntimes = (tx: Transaction, workspaceId: string, ids: readonly string[]) =>
+  onServer<WarmRuntimeRow>(
+    tx,
+    `select ${warmRuntimeColumns} from warm_runtimes where workspace_id = $1 and id = any($2::text[])`,
+    [workspaceId, ids],
+  )
+
+const warmRuntimeValuesOf = (warm: WarmRuntimeRow) => [
+  warm.workspaceId,
+  warm.id,
+  warm.repository,
+  warm.setupCommand,
+  warm.hostId,
+  warm.state,
+  warm.image,
+  warm.apiKeyId,
+  warm.baseBranch,
+  warm.agentVersion,
+  warm.agentProtocolVersion,
+  warm.createdAt,
+  warm.stateChangedAt,
+]
+
+export const insertWarmRuntime = (tx: Transaction, warm: WarmRuntimeRow) =>
+  onServer(
+    tx,
+    `insert into warm_runtimes (workspace_id, id, repository, setup_command, host_id, state, image, api_key_id,
+       base_branch, agent_version, agent_protocol_version, created_at, state_changed_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+       to_timestamp($12::double precision / 1000), to_timestamp($13::double precision / 1000))`,
+    warmRuntimeValuesOf(warm),
+  )
+
+export const updateWarmRuntime = (tx: Transaction, warm: WarmRuntimeRow) =>
+  onServer(
+    tx,
+    `update warm_runtimes set repository = $3, setup_command = $4, host_id = $5, state = $6, image = $7,
+       api_key_id = $8, base_branch = $9, agent_version = $10, agent_protocol_version = $11,
+       created_at = to_timestamp($12::double precision / 1000),
+       state_changed_at = to_timestamp($13::double precision / 1000)
+     where workspace_id = $1 and id = $2`,
+    warmRuntimeValuesOf(warm),
+  )
+
+export const deleteWarmRuntime = (tx: Transaction, workspaceId: string, id: string) =>
+  onServer(tx, 'delete from warm_runtimes where workspace_id = $1 and id = $2', [workspaceId, id])
 
 const serverOnlyRuntimeColumns = {
   llmTokenHash: 'llm_token_hash',
@@ -808,6 +903,7 @@ export const workspaceTablesInPurgeOrder = [
   'deleted_message_texts',
   'messages',
   'runtimes',
+  'warm_runtimes',
   'runtime_hosts',
   'machine_counts',
   'chat_participants',
