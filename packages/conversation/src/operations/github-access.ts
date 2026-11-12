@@ -9,7 +9,9 @@ import {
 } from '@spyria/kernel'
 import type { AgentChat } from '../contracts/agent.ts'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
+import { ChatFrozen } from '../domain/errors.ts'
 import { isFrozen } from '../domain/message.ts'
+import { cannotPostRefusalOf, githubAccessRefusalOf } from '../domain/pull-requests.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 
@@ -49,3 +51,16 @@ export const githubToolPolicy = (
       answerer: 'prompter' as const,
     }
   })
+
+export const githubRefusalOf = async (
+  unitOfWork: Pick<UnitOfWork, 'chats' | 'toolCalls' | 'members'>,
+  chatId: ChatId,
+  memberId: MemberId,
+  tool: string,
+) => {
+  const memberName = await unitOfWork.members.displayNameOf(memberId)
+  if (isFrozen(await unitOfWork.chats.get(chatId))) return new ChatFrozen().message
+  if (!can(await unitOfWork.chats.permissions(chatId, memberId), 'chat.post')) return cannotPostRefusalOf(memberName)
+  if ((await githubToolsInChatOf(unitOfWork, chatId, memberId)).includes(tool)) return undefined
+  return githubAccessRefusalOf(memberName, tool)
+}

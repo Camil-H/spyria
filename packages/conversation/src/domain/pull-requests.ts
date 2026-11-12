@@ -36,6 +36,7 @@ export type PublishAction = 'push' | 'pull_request'
 export const noGitHubConnection = 'Connect your GitHub account in your profile to push'
 export const noPublisher = 'Pushing needs the GitHub account of a member'
 export const githubConnectionNoticeOf = (memberName: string) => `${memberName} needs to connect GitHub`
+export const cannotPostRefusalOf = (memberName: string) => `${memberName} cannot post in this chat`
 export const githubAccessRefusalOf = (memberName: string, tool: string) =>
   toolNotGrantedOf({ memberName, server: githubServerName, tool })
 export const publishToolOf = (action: PublishAction) => (action === 'push' ? 'push_branch' : 'open_pull_request')

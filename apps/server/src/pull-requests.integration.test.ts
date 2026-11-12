@@ -168,7 +168,7 @@ test('a member whose GitHub access allows it pushes and opens a pull request wit
   expect(await githubToolsOf(lee, id)).toEqual([])
   expect(await publish(lee, id, 'push')).toEqual({
     status: 403,
-    body: { isRefused: true, text: "Lee's access to GitHub does not include push_branch in this chat" },
+    body: { isRefused: true, text: 'Lee cannot post in this chat' },
   })
   try {
     await setMemberGitHubLevel('read')
