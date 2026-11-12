@@ -144,6 +144,7 @@ import {
   type TrustedProxy,
 } from './rate-limits.ts'
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
+import { securityTxtOf, securityTxtPath } from './security-txt.ts'
 import { contextOf, withSpan } from './telemetry.ts'
 import { announceToolListChange } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
@@ -366,6 +367,9 @@ export const createApp = ({
     .notFound(
       async (context) =>
         (webDist && (await webAppResponse(webDist, context.req.raw))) || context.text('404 Not Found', 404),
+    )
+    .get(securityTxtPath, (context) =>
+      context.text(securityTxtOf(new Date()), 200, { 'content-type': 'text/plain; charset=utf-8' }),
     )
     .get('/health/live', async (context) =>
       (await passesWithinTimeout(() => database.$client`select 1`.then(() => true)))

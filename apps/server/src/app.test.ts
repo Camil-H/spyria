@@ -209,3 +209,20 @@ test('loads every context server entry without React or client code', async () =
     ),
   ).toEqual([])
 })
+
+test('security.txt names the disclosure contact and policy, and expires within a year of being read', async () => {
+  const response = await app.request('/.well-known/security.txt')
+  expect(response.status).toBe(200)
+  expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8')
+  const fields = Object.fromEntries(
+    (await response.text())
+      .trim()
+      .split('\n')
+      .map((line) => [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 2)]),
+  )
+  expect(fields.Contact).toBe('mailto:camil@spyria.dev')
+  expect(fields.Policy).toBe('https://github.com/Camil-H/spyria/blob/develop/SECURITY.md')
+  const expiresInDays = (Date.parse(fields.Expires ?? '') - Date.now()) / (24 * 60 * 60 * 1000)
+  expect(expiresInDays).toBeGreaterThan(30)
+  expect(expiresInDays).toBeLessThan(365)
+})
