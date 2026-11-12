@@ -337,6 +337,7 @@ export const createAuthRoutes = ({
         isBeingSetUp,
         canCreateWorkspace: isBeingSetUp && isSetupToken(context.req.query('setup')),
         accountProviders,
+        callbackOrigin: new URL(redirectUri).origin,
         instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
       })
     })
