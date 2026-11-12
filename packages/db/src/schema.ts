@@ -3,8 +3,10 @@ import {
   type ChatId,
   type ChatPermission,
   type ChatVisibility,
+  type ConnectionTool,
   type CredentialId,
   type DevLoopSettings,
+  grantedToolsOf,
   type HarnessId,
   type MemberId,
   type MessageId,
@@ -13,6 +15,8 @@ import {
   type RuntimeHostId,
   type RuntimeId,
   type SetupCommand,
+  type ToolApprovalPreference,
+  type ToolServerAccess,
   type WorkspaceId,
   type WorkspacePermission,
 } from '@spyria/kernel'
@@ -189,8 +193,9 @@ type MemberOnboardingRow = {
   isCompleted: boolean
   isSkipped: boolean
 }
-export type ConnectionToolRow = { name: string; readOnly: boolean }
 export type ConnectionSignIn = 'member' | 'shared'
+export type { AccessLevel, ToolApproval } from '@spyria/kernel'
+
 type WorkspaceConnectionRow = {
   workspaceId: WorkspaceId
   id: string
@@ -200,15 +205,11 @@ type WorkspaceConnectionRow = {
   signIn: ConnectionSignIn
   setupId: string | null
   headerName: string | null
-  tools: readonly ConnectionToolRow[]
-  allowedTools: readonly string[]
+  tools: readonly ConnectionTool[]
+  isReviewed: boolean
 }
-type ConnectionRestrictionRow = {
-  workspaceId: WorkspaceId
-  connectionId: string
-  memberId: MemberId
-  allowedTools: readonly string[]
-}
+type ConnectionAccessRow = ToolServerAccess & { workspaceId: WorkspaceId; id: string }
+type ToolApprovalRow = ToolApprovalPreference & { workspaceId: WorkspaceId; memberId: MemberId }
 type ChatMemberRow = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -257,7 +258,8 @@ export type Snapshot = {
   workspaceOnboarding: readonly WorkspaceOnboardingRow[]
   memberOnboarding: readonly MemberOnboardingRow[]
   workspaceConnections: readonly WorkspaceConnectionRow[]
-  connectionRestrictions: readonly ConnectionRestrictionRow[]
+  connectionAccess: readonly ConnectionAccessRow[]
+  toolApprovals: readonly ToolApprovalRow[]
   runtimeHosts: readonly RuntimeHostRow[]
   machineCounts: readonly MachineCountsRow[]
   runtimes: readonly RuntimeRow[]
@@ -278,23 +280,36 @@ export const ownedBy =
 export const workspaceConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId) =>
   snapshot.workspaceConnections.filter((connection) => connection.workspaceId === workspaceId)
 
-export const memberToolsIn = (snapshot: Snapshot, connection: WorkspaceConnectionRow, memberId: MemberId) => {
-  const restriction = snapshot.connectionRestrictions.find(
-    (row) =>
-      row.workspaceId === connection.workspaceId && row.connectionId === connection.id && row.memberId === memberId,
-  )
-  return connection.allowedTools.filter((tool) => restriction?.allowedTools.includes(tool) ?? true)
-}
+export const connectionAccessIn = (snapshot: Snapshot, workspaceId: WorkspaceId) =>
+  snapshot.connectionAccess.filter((access) => access.workspaceId === workspaceId)
 
-export const usableConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) =>
-  workspaceConnectionsIn(snapshot, workspaceId).flatMap((connection) => {
-    const tools = memberToolsIn(snapshot, connection, memberId)
-    if (connection.setupId !== null || tools.length === 0) return []
+export const usableConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) => {
+  const membership = snapshot.memberships.find(
+    (row) => row.workspaceId === workspaceId && row.memberId === memberId && row.removedAt === null,
+  )
+  if (!membership) return []
+  const accessRows = connectionAccessIn(snapshot, workspaceId)
+  return workspaceConnectionsIn(snapshot, workspaceId).flatMap((connection) => {
+    const granted = grantedToolsOf(connection, accessRows, { memberId, roleId: membership.role })
+    if (granted.length === 0) return []
     const signedIn = snapshot.toolConnections.find(
       (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === connection.id,
     )
-    return [{ id: connection.id, name: connection.name, signIn: connection.signIn, tools, status: signedIn?.status }]
+    const approvals = snapshot.toolApprovals.find(
+      (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === connection.id,
+    )
+    return [
+      {
+        id: connection.id,
+        name: connection.name,
+        signIn: connection.signIn,
+        tools: connection.tools.filter((tool) => granted.includes(tool.name)),
+        approvals,
+        status: signedIn?.status,
+      },
+    ]
   })
+}
 
 export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   const nameByMemberId = new Map(
