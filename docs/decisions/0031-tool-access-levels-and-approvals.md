@@ -17,3 +17,5 @@
 - Adding a server takes one more step (confirming what its tools do), and a server is useless until roles get a level; until then no key is granted its tools.
 - Read and write mean what the admin confirmed, not what a server claims; the relay no longer asks the gateway for the hint before each call.
 - An owner can make a guest's write call run without asking (Never), or make their own calls ask (Always): approvals follow the person whose account answers for the call.
+- A call that waits needs the owner to answer within the approval window: on a turn nobody watches, such as a quality-gate turn, a tool set to Always, including a destructive one by default, is refused once the window ends. Owners who let such turns run set those tools to Never.
+- Servers in the catalogue before this change start unreviewed, with no access: an admin confirms their tools and sets the roles' levels again.
