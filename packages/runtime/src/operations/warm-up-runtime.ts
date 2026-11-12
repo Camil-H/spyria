@@ -1,6 +1,6 @@
-import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
+import { log, type RuntimeHostId, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { RepositoryAccess } from '../contracts/repositories.ts'
-import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
+import type { SandboxLocation, SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { isAgentOutOfDate } from '../domain/agent-version.ts'
 import { AgentOutOfDate, RepositoryAccessMissing } from '../domain/errors.ts'
@@ -14,7 +14,25 @@ type Dependencies = {
   repositories?: RepositoryAccess
   warmCheckMilliseconds?: number
 }
-type Input = { workspaceId: WorkspaceId; runtimeId: RuntimeId; now: number; isLastAttempt: boolean }
+type Input = {
+  workspaceId: WorkspaceId
+  runtimeId: RuntimeId
+  hostId: RuntimeHostId
+  now: number
+  isLastAttempt: boolean
+}
+
+const removeUnlessOwned = async (
+  { transactor, provider }: Pick<Dependencies, 'transactor' | 'provider'>,
+  sandbox: SandboxLocation & { runtimeId: RuntimeId },
+) => {
+  const isOwned = await transactor.run(
+    async ({ warmRuntimes, runtimes }) =>
+      Boolean(await warmRuntimes.lock(sandbox.workspaceId, sandbox.runtimeId)) ||
+      (await runtimes.findByIds(sandbox.workspaceId, [sandbox.runtimeId])).length > 0,
+  )
+  if (!isOwned) await provider.remove(sandbox).catch(() => {})
+}
 
 export const sandboxOf = (warm: WarmRuntime) => ({
   workspaceId: warm.workspaceId,
@@ -49,10 +67,11 @@ const preparedRepositoryOf = async (repositories: RepositoryAccess | undefined, 
 
 export const warmUpRuntime = async (
   { transactor, provider, repositories, warmCheckMilliseconds = warmCheckIntervalMilliseconds }: Dependencies,
-  { workspaceId, runtimeId, now, isLastAttempt }: Input,
+  { workspaceId, runtimeId, hostId, now, isLastAttempt }: Input,
 ) => {
   const warm = await transactor.run(({ warmRuntimes }) => warmRuntimes.lock(workspaceId, runtimeId))
-  if (warm?.state !== 'creating') return
+  if (!warm) return removeUnlessOwned({ transactor, provider }, { workspaceId, hostId, runtimeId })
+  if (warm.state !== 'creating') return
   const sandbox = sandboxOf(warm)
   try {
     const status = await provider.status(sandbox)
@@ -80,9 +99,13 @@ export const warmUpRuntime = async (
       await jobs.enqueue(workspaceId, runtimeJobTypes.warmCheck, { runtimeId }, warmCheckMilliseconds)
       return true
     })
-    if (!isStillWanted) await provider.remove(sandbox)
+    if (!isStillWanted) await removeUnlessOwned({ transactor, provider }, sandbox)
   } catch (error) {
-    if (!isLastAttempt && !(error instanceof AgentOutOfDate) && !(error instanceof RepositoryAccessMissing)) throw error
+    const isRetried =
+      !isLastAttempt && !(error instanceof AgentOutOfDate) && !(error instanceof RepositoryAccessMissing)
+    const current = await transactor.run(({ warmRuntimes }) => warmRuntimes.lock(workspaceId, runtimeId))
+    if (current?.state !== 'creating') return removeUnlessOwned({ transactor, provider }, sandbox)
+    if (isRetried) throw error
     await failWarmRuntime({ transactor, provider }, warm, { reason: 'warm_up_failed', now, error })
   }
 }

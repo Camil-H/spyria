@@ -14,10 +14,9 @@ import { sweepRuntimes } from '../operations/sweep-runtimes.ts'
 import { warmUpRuntime } from '../operations/warm-up-runtime.ts'
 
 const runtimePayload = z.object({ runtimeId: z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeId)) })
-const discardPayload = z.object({
-  runtimeId: z.string().check(z.minLength(1)),
-  hostId: z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeHostId)),
-})
+const hostIdField = z.pipe(z.string().check(z.minLength(1)), z.transform(runtimeHostId))
+const discardPayload = z.object({ runtimeId: z.string().check(z.minLength(1)), hostId: hostIdField })
+const warmUpPayload = z.extend(runtimePayload, { hostId: hostIdField })
 
 export const createRuntimeJobs = (
   provider: SandboxProvider,
@@ -45,7 +44,13 @@ export const createRuntimeJobs = (
     [runtimeJobTypes.start]: forRuntime(bringUpRuntime),
     [runtimeJobTypes.stop]: forRuntime(stopRuntime),
     [runtimeJobTypes.remove]: forRuntime(removeRuntime),
-    [runtimeJobTypes.warmUp]: forRuntime(warmUpRuntime),
+    [runtimeJobTypes.warmUp]: ({ workspaceId, payload, isLastAttempt, transact }: Job) =>
+      warmUpRuntime(dependenciesOf(transact), {
+        workspaceId,
+        ...warmUpPayload.parse(payload),
+        now: Date.now(),
+        isLastAttempt,
+      }),
     [runtimeJobTypes.warmCheck]: forRuntime(checkWarmRuntime),
     [runtimeJobTypes.discard]: ({ workspaceId, payload }: Job) =>
       provider.remove({ workspaceId, ...discardPayload.parse(payload) }),
