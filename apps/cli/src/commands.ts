@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statfsSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
@@ -15,8 +25,11 @@ import type { Flags } from './flags.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
+  credentialProblemsOf,
   diskProblemOf,
+  environmentFileModeProblemOf,
   productionProblemsIn,
+  publishedPortProblemsOf,
   serviceProblemsOf,
   serviceStatesOf,
 } from './health.ts'
@@ -338,14 +351,16 @@ export const upgrade = async (
 
 export const doctor = (folder: string) => {
   const environment = readEnvironment(folder)
-  const problems: string[] = []
+  const problems = credentialProblemsOf(environment)
+  const modeProblem = environmentFileModeProblemOf(statSync(environmentFileOf(folder)).mode)
+  if (modeProblem) problems.push(modeProblem)
   const docker = Bun.which('docker', { PATH: process.env.PATH ?? '' })
   if (docker === null || Bun.spawnSync([docker, 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0)
     problems.push('Docker does not answer: start Docker')
   else {
     const profiles = (environment.COMPOSE_PROFILES ?? '').split(',').filter(Boolean)
     const states = serviceStatesOf(readCompose(folder, ['ps', '--all', '--format', 'json']).output)
-    problems.push(...serviceProblemsOf(states, profiles))
+    problems.push(...serviceProblemsOf(states, profiles), ...publishedPortProblemsOf(states))
     problems.push(...productionProblemsIn(readCompose(folder, ['logs', '--tail', '200', 'server']).output))
     const images = readCompose(folder, ['images', '--format', 'json']).output.trim()
     if (images)
