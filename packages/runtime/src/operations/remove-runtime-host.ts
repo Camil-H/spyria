@@ -13,11 +13,12 @@ type Input = {
 }
 
 export const retireHost = async (
-  { runtimeHosts, runtimes }: Pick<UnitOfWork, 'runtimeHosts' | 'runtimes'>,
+  { runtimeHosts, runtimes, warmRuntimes }: Pick<UnitOfWork, 'runtimeHosts' | 'runtimes' | 'warmRuntimes'>,
   host: RuntimeHost,
   now: number,
 ) => {
   await runtimeHosts.save({ ...host, removedAt: now })
+  for (const warm of await warmRuntimes.lockOnHost(host.workspaceId, host.id)) await warmRuntimes.delete(warm)
   for (const runtime of await runtimes.lockOnHost(host.workspaceId, host.id))
     if (runtime.failure !== 'lost') await runtimes.save(transitioned(runtime, 'failed', now, 'lost'))
 }

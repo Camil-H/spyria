@@ -40,6 +40,7 @@ import {
 } from '@spyria/kernel'
 import { removeMemberProfileOnServer } from '@spyria/profile/published'
 import {
+  refillWarmPoolsOnServer,
   removeChatRuntimeOnServer,
   removeMemberMachineOnServer,
   stopChatRuntimeOnServer,
@@ -158,6 +159,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       setSetupCommands: async (commands) => {
         await tx.mutate.workspaces.update({ workspaceId: context.workspaceId, setupCommands: commands })
+        await refillWarmPoolsOnServer(tx, context.workspaceId)
       },
       setDevLoop: async (settings) => {
         await tx.mutate.workspaces.update({ workspaceId: context.workspaceId, devLoop: settings })

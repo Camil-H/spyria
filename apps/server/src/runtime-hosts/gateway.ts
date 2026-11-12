@@ -17,6 +17,7 @@ import {
   type SandboxResponse,
   type SandboxSocketListener,
   type SandboxStatus,
+  type SetupSnapshotScope,
 } from '@spyria/runtime/server'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
@@ -51,6 +52,7 @@ const maximumCloseReasonBytes = 123
 const tryAgainLaterCloseCode = 1013
 const requestTimeoutMilliseconds = 180_000
 const installTimeoutMilliseconds = 240_000
+const snapshotTimeoutMilliseconds = 31 * 60_000
 const identifyTimeoutMilliseconds = 10_000
 const defaultGatewayRelayUrl = 'http://spyria-gateway-relay:4000/v1'
 export const maximumFrameBytes = 64 * 1024 * 1024
@@ -379,25 +381,40 @@ export const createRuntimeHostGateway = ({
     await command(sandbox, op, { runtimeId: sandbox.runtimeId })
   }
 
+  const volumeKeyOf = (...parts: string[]) => createHash('sha256').update(parts.join('.')).digest('hex').slice(0, 32)
   const packageCacheKeyOf = (workspaceId: WorkspaceId, { repository, ownerId }: PackageCacheScope) =>
-    createHash('sha256').update(`package-cache.${workspaceId}.${repository}.${ownerId}`).digest('hex').slice(0, 32)
+    volumeKeyOf('package-cache', workspaceId, repository, ownerId)
+  const snapshotKeyOf = (workspaceId: WorkspaceId, { repository, setupCommand }: SetupSnapshotScope) =>
+    volumeKeyOf('setup-snapshot', workspaceId, repository, setupCommand)
 
   const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId, apiKeyId }) =>
     secretsKeyring.derivedKeyOf(apiKeyId ?? secretsKeyring.currentKeyId, `runtime-api-key.${workspaceId}.${runtimeId}`)
 
   const createWith =
     (op: 'create' | 'recreate'): SandboxProvider['create'] =>
-    async ({ image, packageCache, ...sandbox }) => {
+    async ({ image, packageCache, setupSnapshot, ...sandbox }) => {
       await command(sandbox, op, {
         runtimeId: sandbox.runtimeId,
         image,
         apiKey: apiKeyOf(sandbox),
         ...(packageCache && { packageCacheKey: packageCacheKeyOf(sandbox.workspaceId, packageCache) }),
+        ...(setupSnapshot && { snapshotKey: snapshotKeyOf(sandbox.workspaceId, setupSnapshot) }),
       })
     }
   const sandboxProvider: SandboxProvider = {
     create: createWith('create'),
     recreate: createWith('recreate'),
+    snapshot: async ({ setupSnapshot, ...sandbox }) => {
+      await command(
+        sandbox,
+        'snapshot',
+        { runtimeId: sandbox.runtimeId, snapshotKey: snapshotKeyOf(sandbox.workspaceId, setupSnapshot) },
+        snapshotTimeoutMilliseconds,
+      )
+    },
+    pruneSnapshots: async ({ keep, ...host }) => {
+      await command(host, 'prune_snapshots', { keep: keep.map((scope) => snapshotKeyOf(host.workspaceId, scope)) })
+    },
     currentApiKeyId: secretsKeyring.currentKeyId,
     apiKeyOf,
     start: commandWithoutResult('start'),

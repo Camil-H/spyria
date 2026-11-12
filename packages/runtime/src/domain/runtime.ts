@@ -50,6 +50,9 @@ export const runtimeJobTypes = {
   remove: 'runtime.remove',
   discard: 'runtime.discard',
   sweep: 'runtime.sweep',
+  warm: 'runtime.warm',
+  warmUp: 'runtime.warm_up',
+  warmCheck: 'runtime.warm_check',
 } as const
 
 const nextStates: Record<RuntimeState, readonly RuntimeState[]> = {

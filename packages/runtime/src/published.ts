@@ -1,8 +1,10 @@
 export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contracts/sandbox-provider.ts'
 export {
   haltChatRuntimeOnServer,
+  refillWarmPoolsOnServer,
   removeChatRuntimeOnServer,
   removeMemberMachineOnServer,
+  removeWarmRuntimesOnServer,
   stopChatRuntimeOnServer,
 } from './entrypoints/mutators.ts'
 export { createZeroTransactor as createRuntimeTransactor } from './integrations/zero-transactor.ts'
