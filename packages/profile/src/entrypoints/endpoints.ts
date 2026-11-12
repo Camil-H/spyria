@@ -26,6 +26,7 @@ import {
   removeWorkspaceConnection,
   reviewConnectionTools,
   setConnectionAccess,
+  setConnectionCodeMode,
 } from '../operations/workspace-connections.ts'
 
 const textOf = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -136,6 +137,7 @@ export const workspaceConnectionFromRequest = (
     edit: () => editWorkspaceConnection(dependencies, { ...target, ...connection }),
     remove: () => removeWorkspaceConnection(dependencies, target),
     review: () => reviewConnectionTools(dependencies, { ...target, markings: markingsOf(fields.markings) }),
+    'code-mode': () => setConnectionCodeMode(dependencies, { ...target, isOn: fields.isOn === true }),
     access: () =>
       setConnectionAccess(dependencies, {
         ...target,

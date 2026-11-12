@@ -223,6 +223,21 @@ test.describe('Tools catalogue', () => {
     await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMlookup'])
   })
 
+  test('As a member who can manage the tools catalogue, I let agents call CRM from scripts: the switch stays on after a reload', {
+    tag: ['@spec-59'],
+  }, async ({ page, workerStack }) => {
+    await registerCrm(page, workerStack)
+    const codeMode = crmCardOf(page).getByRole('switch', { name: 'Agents call its tools from scripts' })
+    await expect(codeMode).toHaveAttribute('aria-checked', 'false')
+    await codeMode.click()
+    await expect(codeMode).toHaveAttribute('aria-checked', 'true')
+    await page.reload()
+    await expect(crmCardOf(page).getByRole('switch', { name: 'Agents call its tools from scripts' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  })
+
   test('As the owner of a chat, I switch CRM off in its Connected tools tab: the agent no longer has its tools in that chat until I switch it back on', {
     tag: ['@spec-59'],
   }, async ({ page, workerStack, agentScript }) => {
