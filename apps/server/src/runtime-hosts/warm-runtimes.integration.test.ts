@@ -254,3 +254,70 @@ test('replacing failed runtimes kept ready frees no slot they did not hold, so t
   await fill()
   expect(await warmRuntimes()).toHaveLength(1)
 })
+
+const warmUp = (runtimeId: string, hostId: string) =>
+  runtimeJobs['runtime.warm_up']({
+    workspaceId: acme,
+    payload: { runtimeId, hostId },
+    isLastAttempt: false,
+    isRetry: true,
+    transact: (work) => zeroDatabase.transaction(work),
+  })
+const creatingWarmRuntime = async (hostId: string) => {
+  const id = crypto.randomUUID()
+  await database.$client`
+    insert into warm_runtimes (workspace_id, id, repository, setup_command, host_id, state, image, api_key_id,
+      created_at, state_changed_at)
+    values (${acme}, ${id}, 'acme/app', 'bun install', ${hostId}, 'creating', ${testSpyriaAgentImage},
+      ${testSecretsKeyring.currentKeyId}, now(), now())`
+  return id
+}
+const dropWarmRuntime = (id: string) => database.$client`delete from warm_runtimes where id = ${id}`
+const removedOn = (host: FakeHost, runtimeId: string) =>
+  commandsOf(host, 'remove').some((command) => command.runtimeId === runtimeId)
+
+test('a warm-up whose runtime is no longer kept ready removes its container: on a retry with no row, after it succeeded, and when it failed and would retry', async () => {
+  const agent = preparingAgent()
+  const host = await fakeHost('Orphans host', { memoryGibibytes: 16, containerAgent: agent.containerAgent })
+  await warmJobsSettled()
+
+  const leftOver = crypto.randomUUID()
+  host.containers.set(leftOver, { running: true, apiKey: '' })
+  await warmUp(leftOver, host.id)
+  expect(removedOn(host, leftOver)).toBe(true)
+  expect(host.containers.has(leftOver)).toBe(false)
+
+  const unwanted = await creatingWarmRuntime(host.id)
+  const releaseCreate = host.hold('create')
+  const warmingUp = warmUp(unwanted, host.id)
+  await waitFor(() => commandsOf(host, 'create').some((command) => command.runtimeId === unwanted))
+  await dropWarmRuntime(unwanted)
+  releaseCreate()
+  await warmingUp
+  expect(removedOn(host, unwanted)).toBe(true)
+  expect(host.containers.has(unwanted)).toBe(false)
+
+  const failing = await creatingWarmRuntime(host.id)
+  const releaseFailingCreate = host.hold('create')
+  host.failing('start')
+  const failingWarmUp = warmUp(failing, host.id)
+  await waitFor(() => commandsOf(host, 'create').some((command) => command.runtimeId === failing))
+  await dropWarmRuntime(failing)
+  releaseFailingCreate()
+  await failingWarmUp
+  expect(removedOn(host, failing)).toBe(true)
+  expect(host.containers.has(failing)).toBe(false)
+})
+
+test('a warm-up job never removes the container of a runtime a chat owns', async () => {
+  const host = await fakeHost('Owned host', { memoryGibibytes: 16 })
+  await warmJobsSettled()
+  const chat = await devChat('acme/site')
+  const { id } = await ensure(chat)
+  await waitFor(
+    async () => (await database.$client`select state from runtimes where chat_id = ${chat}`)[0]?.state === 'running',
+  )
+  await warmUp(id, host.id)
+  expect(removedOn(host, id)).toBe(false)
+  expect(host.containers.get(id)?.running).toBe(true)
+})
