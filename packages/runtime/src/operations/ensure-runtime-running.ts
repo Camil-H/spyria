@@ -22,10 +22,9 @@ const claimedWarmRuntime = async (
   spyriaAgentImage: string | undefined,
 ) => {
   const scope = await runtimes.claimScopeOf(workspaceId, chatId)
-  if (!scope) return undefined
-  const ready = await warmRuntimes.lockReady(workspaceId, scope.repository)
-  const warm = ready.find((candidate) => isClaimable(candidate, scope, spyriaAgentImage))
-  if (!warm) return undefined
+  if (!scope || !spyriaAgentImage) return undefined
+  const warm = await warmRuntimes.lockClaimable(workspaceId, scope, spyriaAgentImage)
+  if (!warm || !isClaimable(warm, scope, spyriaAgentImage)) return undefined
   const runtime = runtimeOfClaimed(warm, chatId, now)
   await warmRuntimes.delete(warm)
   await runtimes.add(runtime)
@@ -47,9 +46,10 @@ const placeRuntime = async (
     if (existing.hostId && existing.state !== 'removed' && existing.failure !== 'lost')
       await jobs.enqueue(workspaceId, runtimeJobTypes.discard, { runtimeId: existing.id, hostId: existing.hostId })
   }
+  const loads = await runtimeHosts.lockLoads(workspaceId, chatId)
   const claimed = await claimedWarmRuntime(unitOfWork, { workspaceId, chatId, id, now }, spyriaAgentImage)
   if (claimed) return claimed
-  const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
+  const placement = placementOf(loads)
   const failure = placement.failure ?? (spyriaAgentImage ? null : 'no_image')
   const runtime: Runtime = {
     workspaceId,

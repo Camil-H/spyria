@@ -204,8 +204,10 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const [row] = await lockWarmRuntimes(tx, workspaceId, 'id', id)
         return row && warmRuntimeOf(row)
       },
-      lockReady: async (workspaceId, repository) =>
-        (await lockWarmRuntimes(tx, workspaceId, 'ready', repository)).map(warmRuntimeOf),
+      lockClaimable: async (workspaceId, { repository, baseBranch, setupCommand }, image) => {
+        const [row] = await lockWarmRuntimes(tx, workspaceId, 'claimable', repository, baseBranch, setupCommand, image)
+        return row && warmRuntimeOf(row)
+      },
       lockOnHost: async (workspaceId, hostId) =>
         (await lockWarmRuntimes(tx, workspaceId, 'host', hostId)).map(warmRuntimeOf),
       findByIds: async (workspaceId, ids) =>
