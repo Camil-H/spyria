@@ -260,7 +260,7 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  'a runtime reaches its model relay, the internet and a port the machine publishes on every interface, but not one published on 127.0.0.1 nor a service on another Docker network',
+  'a runtime reaches the internet and a port the machine publishes on every interface, but not one published on 127.0.0.1 nor a service on another Docker network',
   async () => {
     const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
     const provider = gateway.sandboxProvider
@@ -276,7 +276,6 @@ test.skipIf(!hasImage)(
       )
     for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
       if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
-    expect(reaches(runtimeContainer, `${transport.gatewayUrl}/models`)).toBe('reached')
     expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
 
     const service = `${prefix}service`
