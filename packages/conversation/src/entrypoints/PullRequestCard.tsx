@@ -18,7 +18,7 @@ const PullRequestCard = ({ step }: { step: PullRequestStep }) => {
   const workspaceId = useOutletContext<WorkspaceId>()
   const currentChatId = chatId(useParams().chatId ?? '')
   const commands = useConversationCommands()
-  const { isOwner } = use(QuestionAnswererContext)
+  const mayAddress = use(QuestionAnswererContext).githubTools.includes('push_branch')
   const [isAddressing, setIsAddressing] = useState(false)
   const comments = unresolvedCommentsOf(step)
   const address = () => {
@@ -58,7 +58,7 @@ const PullRequestCard = ({ step }: { step: PullRequestStep }) => {
           ))}
         </ul>
       )}
-      {isOwner && comments.length > 0 && step.state !== 'merged' && step.state !== 'closed' && (
+      {mayAddress && comments.length > 0 && step.state !== 'merged' && step.state !== 'closed' && (
         <button type="button" disabled={isAddressing} onClick={address} className={`self-start ${ghostButtonClass}`}>
           Address review comments
         </button>

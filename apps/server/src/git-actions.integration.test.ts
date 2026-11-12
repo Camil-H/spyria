@@ -372,7 +372,7 @@ test('the agent fetches a branch into origin/<branch> from a thin bundle of that
   expect([
     ...(await database.$client`select tool, read_only, status from tool_calls where chat_id = ${id} order by called_at`),
   ]).toEqual([
-    { tool: 'fetch_branch', read_only: false, status: 'succeeded' },
-    { tool: 'fetch_branch', read_only: false, status: 'refused' },
+    { tool: 'fetch_branch', read_only: true, status: 'succeeded' },
+    { tool: 'fetch_branch', read_only: true, status: 'refused' },
   ])
 })

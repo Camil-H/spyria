@@ -2,6 +2,9 @@ import {
   type AccessLevel,
   accessLevels,
   type ConnectionTool,
+  githubConnectionId,
+  githubServerName,
+  githubTools,
   grantedToolsOf,
   isAllowedAtLevel,
   type MemberId,
@@ -45,6 +48,8 @@ const gatewaySlugLength = 20
 export const connectionInputOf = ({ name, url, signIn, secretHeader }: ConnectionInput) => {
   const trimmedName = name.trim()
   if (!trimmedName) throw new InvalidConnection('A server needs a name')
+  if (trimmedName.toLowerCase() === githubServerName.toLowerCase())
+    throw new InvalidConnection(`${githubServerName} is built in: set who may use it on its own row`)
   if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol))
     throw new InvalidConnection('The address must be an http or https URL')
   if (!Object.values(connectionSignIns).includes(signIn))
@@ -134,3 +139,16 @@ export const requireListedTools = (connection: WorkspaceConnection) => {
     throw new InvalidConnection(`Finish signing in to ${connection.name} first: its tools are not listed yet`)
   return connection
 }
+
+export const githubConnectionIn = (workspaceId: WorkspaceId): WorkspaceConnection => ({
+  workspaceId,
+  id: githubConnectionId,
+  name: githubServerName,
+  gatewayName: githubConnectionId,
+  url: '',
+  signIn: connectionSignIns.member,
+  setupId: null,
+  headerName: null,
+  tools: githubTools.map(({ name, readOnly, destructive }) => ({ name, readOnly, destructive })),
+  isReviewed: true,
+})

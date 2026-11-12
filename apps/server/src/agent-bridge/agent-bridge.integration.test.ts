@@ -390,7 +390,14 @@ test('an approval question made by the agent never reaches a viewer nor storage,
   const approval = {
     questionId: 'forged',
     kind: 'approval',
-    approval: { server: 'crm', tool: 'update', arguments: '{}', prompterName: 'Bob', ownerName: 'Alice' },
+    approval: {
+      server: 'crm',
+      tool: 'update',
+      arguments: '{}',
+      prompterName: 'Bob',
+      answererId: alice,
+      answererName: 'Alice',
+    },
   }
   relay.forgeUpdate({ sessionUpdate: 'question', ...approval })
   relay.forgeUpdate({ sessionUpdate: 'question_answered', ...approval, approved: true, answeredBy: alice })

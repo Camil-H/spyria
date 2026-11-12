@@ -839,16 +839,17 @@ export const consentThroughSpyria = async (authorizeUrl: string, cookie: string)
   const page = await app.request(`${callback.pathname}${callback.search}`)
   return { callbackPath: callback.pathname, status: page.status, page: await page.text() }
 }
-export const connectAlice = async (cookie: string) => {
-  const started = await asMember(alice, 'POST', connectionPath('connect'))
+export const connectMember = async (memberId: string, cookie: string) => {
+  const started = await asMember(memberId, 'POST', connectionPath('connect'))
   expect(started.status).toBe(200)
   const consent = await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, cookie)
   expect(consent.page).toContain('"connected":true')
-  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
+  expect(await asMember(memberId, 'POST', connectionPath('refresh'))).toEqual({
     status: 200,
     body: JSON.stringify({ status: 'Connected' }),
   })
 }
+export const connectAlice = (cookie: string) => connectMember(alice, cookie)
 export const connectionRows = async () => [
   ...(await (
     await openedTestApp()

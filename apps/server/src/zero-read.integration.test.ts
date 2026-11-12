@@ -20,6 +20,8 @@ import {
 } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
+await database.$client`delete from connection_access`
+await database.$client`delete from tool_approvals`
 await database.$client`delete from workspace_connections`
 
 const collectionsInStoredOrder = ['messages', 'terminalLines']
@@ -69,13 +71,6 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
       .slice(0, 1)
       .map((message) => ({ ...message, needsReply: false })),
   )
-  const readableChatOwners = new Set(readableChats.map((chat) => `${chat.workspaceId}/${chat.ownerId}`))
-  const ownedByViewerOrReadableChatOwner = <Row extends { workspaceId: WorkspaceId; memberId: MemberId }>(
-    rows: readonly Row[],
-  ) =>
-    inWorkspaces(rows).filter(
-      (row) => row.memberId === viewerId || readableChatOwners.has(`${row.workspaceId}/${row.memberId}`),
-    )
   return {
     ...snapshot,
     workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
@@ -98,7 +93,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     threadReadMarkers: inReadableChats(ownedByViewer(snapshot.threadReadMarkers)),
     llmCredentials: ownedByViewer(snapshot.llmCredentials),
     workspaceConnections: inWorkspaces(snapshot.workspaceConnections),
-    toolConnections: ownedByViewerOrReadableChatOwner(snapshot.toolConnections),
+    toolConnections: ownedByViewer(snapshot.toolConnections),
   }
 }
 

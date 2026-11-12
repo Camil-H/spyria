@@ -18,6 +18,7 @@ export {
 } from './domain/errors.ts'
 export {
   enteredSecretsOf,
+  type GitHubMemberAccount,
   type GitHubRepository,
   type GitHubSecrets,
   type GitHubSettingsInput,

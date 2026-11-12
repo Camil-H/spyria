@@ -47,7 +47,6 @@ export {
   type Issue,
   type IssueFilter,
   type IssueSummary,
-  isReadOnlyGitHubTool,
   type PullRequestChange,
   type PullRequestChecks,
   type ReviewThread,
@@ -101,6 +100,7 @@ export { createAgentHandlers } from './entrypoints/jobs.ts'
 export { conversationMutators } from './entrypoints/mutators.ts'
 export { createGatewaySessionClassifier } from './integrations/gateway-session-classifier.ts'
 export {
+  chatGitHubToolsPathOf,
   chatGitPathOf,
   chatPublishPathOf,
   chatQuestionPathOf,

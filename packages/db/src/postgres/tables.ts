@@ -617,10 +617,6 @@ export const connectionAccess = table(
     index().on(table.workspaceId, table.userId),
     check('connection_access_subject', sql`num_nonnulls(${table.roleId}, ${table.userId}) = 1`),
     check('connection_access_level', sql`${table.level} in ('none', 'read', 'write')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
       'cascade',
     ),
@@ -640,10 +636,6 @@ export const toolApprovals = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.connectionId] }),
     check('tool_approvals_server_approval', sql`${table.serverApproval} in ('never', 'always', 'guest')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     memberReference(table, table.userId),
   ],
 )
@@ -1036,19 +1028,9 @@ export const relations = defineRelations(
         memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
       },
       connectionAccess: {
-        ownedChats: r.many.chats({
-          from: [r.connectionAccess.workspaceId, r.connectionAccess.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
-        }),
         memberships: r.many.memberships({
           from: r.connectionAccess.workspaceId,
           to: r.memberships.workspaceId,
-        }),
-      },
-      toolConnections: {
-        ownedChats: r.many.chats({
-          from: [r.toolConnections.workspaceId, r.toolConnections.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
         }),
       },
       chats: {

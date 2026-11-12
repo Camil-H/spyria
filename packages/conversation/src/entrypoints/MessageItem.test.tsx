@@ -21,6 +21,7 @@ const answer: ConversationMessage = {
   isEdited: false,
   isRunning: true,
   canReply: false,
+  isOnViewersPrompt: false,
   canQuote: false,
   quote: null,
   thread: null,
