@@ -22,6 +22,7 @@ import {
   memberMcpUrl,
   openSharedTestApp,
   openZeroStore,
+  promptedBy,
   rpcOf,
   runtimeTurn,
   sharedMcpUrl,
@@ -266,7 +267,7 @@ test('a member given Read is refused update on their own prompts, their key hold
   const { token } = await runtimeTurn(host, bob, bob)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
+    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
   )
 
   const keyBefore = (await virtualKeyOf(bob)).id
@@ -277,7 +278,7 @@ test('a member given Read is refused update on their own prompts, their key hold
   await addLlmKey(bob, 'Mistral')
   expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
+    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
   )
 
   expect(await setCrmAccess(bob, 'none')).toBe(200)
@@ -490,7 +491,7 @@ test('editing replaces the secret in place, a new URL registers the server again
   expect((await database.$client`select 1 from connection_access where connection_id = ${connectionId}`).length).toBe(0)
   expect(await gatewayClientNames()).not.toContain(secondName)
   expect(textOf((await mcpCall(host, token, callOf(secondName, 'lookup'))).result)).toBe(
-    `${secondName} isn't available on Alice's prompts in this chat`,
+    `Alice's access to ${secondName} does not include lookup in this chat`,
   )
   expect(
     (await workspaceEventsOf(database))
@@ -551,4 +552,24 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
   closing.abort()
   await stream
+})
+
+test('the agent lists the tools of the member who prompted, so a guest’s turn lists their own access and not the owner’s', async () => {
+  const { connectionId } = await register('Tickets')
+  await openToEveryRole(connectionId)
+  const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
+  const host = await fakeHost('Prompter listing host')
+  const { chatId, token } = await runtimeTurn(host, alice)
+  const ticketTools = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[])
+      .map(({ name }) => name)
+      .filter((name) => name.startsWith(`${gatewayName}-`))
+  try {
+    expect(await setAccess(connectionId, { memberId: bob }, 'none')).toBe(200)
+    await waitFor(async () => (await ticketTools()).length > 0)
+    await promptedBy(chatId, bob)
+    await waitFor(async () => (await ticketTools()).length === 0)
+  } finally {
+    await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)
+  }
 })

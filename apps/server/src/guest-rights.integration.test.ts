@@ -10,9 +10,11 @@ import {
   aliceInAcme,
   asMember,
   bob,
+  bobInAcme,
   connectAlice,
   connectionPath,
   connectionRows,
+  connectMember,
   createFakeHosts,
   lookup,
   mcpCall,
@@ -43,6 +45,8 @@ afterAll(() => disconnectFakeHosts())
 
 const aliceAccount = `alice-${crypto.randomUUID().slice(0, 8)}`
 const aliceCookie = `fake_mcp_user=${aliceAccount}`
+const bobAccount = `bob-${crypto.randomUUID().slice(0, 8)}`
+const bobCookie = `fake_mcp_user=${bobAccount}`
 beforeEach(() => asMember(alice, 'POST', connectionPath('disconnect')))
 
 const update = rpcOf('tools/call', { name: `${sharedToolServer}-update`, arguments: { text: 'new' } })
@@ -68,28 +72,40 @@ const refused = (answer: { status: number | undefined; result: { content?: { tex
   text: textOf(answer.result),
 })
 
-test('on a guest’s prompt a server the owner signed in to with their own account is refused before the gateway, and the owner’s own prompt uses it; every call is audited', async () => {
+test('on a guest’s prompt a server each member signs in to runs on the guest’s own account, never the owner’s: unconnected, the call names the guest to connect; every call is audited', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Guest own-account host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const callsBefore = fakeMcp.records.length
+  try {
+    await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
+    const unconnected = await mcpCall(host, token, whoami)
+    expect(unconnected).toMatchObject({ status: 200, result: { isError: true } })
+    expect(textOf(unconnected.result)).toBe('Bob needs to connect fake')
+    expect(fakeMcp.records.slice(callsBefore).filter((record) => record.user === aliceAccount)).toEqual([])
 
-  const guestCall = await mcpCall(host, token, whoami)
-  expect(guestCall).toMatchObject({ status: 200, result: { isError: true } })
-  expect(textOf(guestCall.result)).toBe("fake signs in with Alice's own account, so only Alice's prompts can use it")
-  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
-  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
-
-  await promptedBy(chatId, alice)
-  expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${aliceAccount}`)
-  const audited = { owner_id: alice, server: 'fake', tool: 'whoami', decision: 'not_needed', decided_by: null }
-  expect(await toolCallRows(chatId, 2)).toEqual([
-    { ...audited, prompter_id: bob, read_only: null, status: 'refused' },
-    { ...audited, prompter_id: alice, read_only: true, status: 'succeeded' },
+    await connectMember(bob, bobCookie)
+    expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${bobAccount}`)
+    await promptedBy(chatId, alice)
+    expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${aliceAccount}`)
+    expect(await connectionRows()).toEqual(
+      expect.arrayContaining([
+        { user_id: alice, tool: 'fake', status: 'Connected' },
+        { user_id: bob, tool: 'fake', status: 'Connected' },
+      ]),
+    )
+  } finally {
+    await asMember(bob, 'POST', connectionPath('disconnect'))
+  }
+  const audited = { owner_id: alice, server: 'fake', tool: 'whoami', read_only: true, decided_by: null }
+  expect(await toolCallRows(chatId, 3)).toEqual([
+    { ...audited, prompter_id: bob, decision: 'not_needed', status: 'failed' },
+    { ...audited, prompter_id: bob, decision: 'not_needed', status: 'succeeded' },
+    { ...audited, prompter_id: alice, decision: 'not_needed', status: 'succeeded' },
   ])
 })
 
-test('on a guest’s prompt a workspace tool needs both the owner’s and the prompter’s access to allow it, and the gateway only sees that server', async () => {
+test('on a guest’s prompt a shared-login tool needs both the owner’s and the guest’s access, each refusal says whose access lacks it, and the gateway only sees that server', async () => {
   await addLlmKey(bob, 'Mistral')
   const host = await fakeHost('Guest workspace host')
   const { chatId, token } = await runtimeTurn(host, bob)
@@ -100,7 +116,7 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
     await allowOnlySharedTools(bob, ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
-      text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
+      text: `Bob's access to ${testCrmConnection.name} does not include lookup in this chat`,
     })
     await allowOnlySharedTools(bob, null)
     await allowOnlySharedTools(alice, ['update'])
@@ -127,7 +143,7 @@ test('on a guest’s prompt a workspace tool needs both the owner’s and the pr
   ])
 })
 
-test('a guest’s turn answers only tool and session methods, so resources, prompts and batches never reach the gateway on the owner’s key, and a batch is refused on the owner’s turn too', async () => {
+test('a guest’s turn answers only tool and session methods, so resources, prompts and batches never reach the gateway, and a batch is refused on the owner’s turn too', async () => {
   const host = await fakeHost('Guest methods host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const notFound = { jsonrpc: '2.0', id: 7, error: { code: -32601, message: 'Method not found' } }
@@ -220,7 +236,7 @@ const approvalStepsOf = async (chatId: string, count: number) => {
 }
 const notApproved = { status: 200, text: 'Alice did not approve this call' }
 
-test('a guest’s write call waits for the owner: approved it runs, denied it gets the refusal; only the owner answers and read-only calls never wait', async () => {
+test('a guest’s write call on a shared login waits for the owner: approved it runs, denied it gets the refusal; only the owner answers and read-only calls never wait', async () => {
   const { host, chatId, token, frames } = await guestTurnWithApprovals('Approvals host')
   const callsBefore = fakeMcp.records.length
   expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
@@ -234,7 +250,8 @@ test('a guest’s write call waits for the owner: approved it runs, denied it ge
       tool: 'update',
       arguments: '{"text":"new"}',
       prompterName: 'Bob',
-      ownerName: 'Alice',
+      answererId: alice,
+      answererName: 'Alice',
     },
   })
   expect(await answerAs(bob, chatId, first.questionId, true)).toBe(403)
@@ -322,7 +339,7 @@ test('a pending approval is cancelled when its request aborts or its turn ends, 
   ])
 })
 
-test('the owner’s approval choices decide which calls wait: Always asks on their own prompt, and Never lets a guest’s write run', async () => {
+test('on a shared login the owner’s approval choices decide which calls wait: Always asks on their own prompt, and Never lets a guest’s write run', async () => {
   const chooseApproval = async (tool: string | null, approval: string | null) =>
     expect(
       await approvals.mutate(aliceInAcme, 'profile.setToolApproval', {
@@ -339,7 +356,9 @@ test('the owner’s approval choices decide which calls wait: Always asks on the
     const { frames } = await approvals.openStream(toChatId(ownerTurn.chatId))
     const ownerCall = mcpCall(host, ownerTurn.token, update)
     const asked = await approvalOf(frames, 1)
-    expect(asked).toMatchObject({ approval: { tool: 'update', prompterName: 'Alice', ownerName: 'Alice' } })
+    expect(asked).toMatchObject({
+      approval: { tool: 'update', prompterName: 'Alice', answererId: alice, answererName: 'Alice' },
+    })
     expect(await answerAs(alice, ownerTurn.chatId, asked.questionId, true)).toBe(200)
     expect(textOf((await ownerCall).result)).toBe('ran update')
 
@@ -357,5 +376,44 @@ test('the owner’s approval choices decide which calls wait: Always asks on the
   } finally {
     await chooseApproval('update', null)
     await chooseApproval(null, null)
+  }
+})
+
+test('on a server each member signs in to, the prompter’s approval choices apply and the prompter answers, not the owner', async () => {
+  const chooseApproval = async (context: typeof aliceInAcme, approval: string | null) =>
+    expect(
+      await approvals.mutate(context, 'profile.setToolApproval', {
+        workspaceId: acme,
+        connectionId: 'connection-fake',
+        tool: 'whoami',
+        approval,
+      }),
+    ).toEqual(succeeded)
+  await connectMember(bob, bobCookie)
+  try {
+    await chooseApproval(bobInAcme, 'always')
+    const { host, chatId, token, frames } = await guestTurnWithApprovals('Prompter approvals host')
+    await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
+    const bobCall = mcpCall(host, token, whoami)
+    const asked = await approvalOf(frames, 1)
+    expect(asked).toMatchObject({
+      approval: { server: 'fake', tool: 'whoami', prompterName: 'Bob', answererId: bob, answererName: 'Bob' },
+    })
+    expect(await answerAs(alice, chatId, asked.questionId, true)).toBe(403)
+    expect(await answerAs(bob, chatId, asked.questionId, true)).toBe(200)
+    expect(textOf((await bobCall).result)).toBe(`you are ${bobAccount}`)
+
+    await chooseApproval(bobInAcme, null)
+    await chooseApproval(aliceInAcme, 'always')
+    expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${bobAccount}`)
+    const audited = { prompter_id: bob, owner_id: alice, server: 'fake', tool: 'whoami', read_only: true }
+    expect(await toolCallRows(chatId, 2)).toEqual([
+      { ...audited, decision: 'approved', decided_by: bob, status: 'succeeded' },
+      { ...audited, decision: 'not_needed', decided_by: null, status: 'succeeded' },
+    ])
+  } finally {
+    await chooseApproval(bobInAcme, null)
+    await chooseApproval(aliceInAcme, null)
+    await asMember(bob, 'POST', connectionPath('disconnect'))
   }
 })
