@@ -1,4 +1,5 @@
 export * from './actors.ts'
+export * from './built-in-tools.ts'
 export * from './chat-access.ts'
 export * from './deployment.ts'
 export * from './dev-loop.ts'

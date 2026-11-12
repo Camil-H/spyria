@@ -8,7 +8,6 @@ import {
   guestPrompterOf,
   isDevLoopTool,
   isGuestToolMethod,
-  isReadOnlyGitHubTool,
   isSpyriaTool,
   type ModelCallFailure,
   modelNotAllowedNoticeOf,
@@ -36,6 +35,7 @@ import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import {
   isConnectionRefused,
+  isReadOnlyGitHubTool,
   log,
   type MemberId,
   soleRequestedModelOf,

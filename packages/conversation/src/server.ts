@@ -47,7 +47,6 @@ export {
   type Issue,
   type IssueFilter,
   type IssueSummary,
-  isReadOnlyGitHubTool,
   type PullRequestChange,
   type PullRequestChecks,
   type ReviewThread,
