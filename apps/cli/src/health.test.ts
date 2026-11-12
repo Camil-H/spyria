@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test'
+import { withSecrets } from './environment.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
+  credentialProblemsOf,
   diskProblemOf,
+  environmentFileModeProblemOf,
   productionProblemsIn,
+  publishedPortProblemsOf,
   serviceProblemsOf,
   serviceStatesOf,
 } from './health.ts'
@@ -63,5 +67,63 @@ test('backups are named by database and time, and only the newest of each databa
   expect(backupsToRemoveOf(files, 1).toSorted()).toEqual([
     'spyria-20261101T000000Z.dump',
     'spyria-20261102T000000Z.dump',
+  ])
+})
+
+test('a port published beyond this machine is a problem, once per service and port, while loopback and unpublished ports are not', () => {
+  const states = serviceStatesOf(
+    [
+      {
+        ...healthy('server'),
+        Publishers: [
+          { URL: '127.0.0.1', TargetPort: 3000, PublishedPort: 3300 },
+          { URL: '::1', TargetPort: 3000, PublishedPort: 3300 },
+        ],
+      },
+      {
+        ...healthy('postgres'),
+        Publishers: [
+          { URL: '0.0.0.0', TargetPort: 5432, PublishedPort: 5432 },
+          { URL: '0.0.0.0', TargetPort: 5432, PublishedPort: 5432 },
+          { URL: '', TargetPort: 5433, PublishedPort: 0 },
+        ],
+      },
+      { ...healthy('gateway'), Publishers: null },
+    ]
+      .map((state) => JSON.stringify(state))
+      .join('\n'),
+  )
+  expect(publishedPortProblemsOf(states)).toEqual([
+    'postgres publishes port 5432 on 0.0.0.0, reachable from other machines: publish it on 127.0.0.1 only',
+  ])
+})
+
+test('.env readable by anyone but its owner is a problem', () => {
+  expect(environmentFileModeProblemOf(0o100600)).toBeUndefined()
+  expect(environmentFileModeProblemOf(0o100400)).toBeUndefined()
+  expect(environmentFileModeProblemOf(0o100644)).toBe(
+    '.env is readable by other users of this machine (mode 644): run chmod 600 on it',
+  )
+  expect(environmentFileModeProblemOf(0o100640)).toBeDefined()
+})
+
+test('a missing, short or development default secret, or a default gateway admin, is a problem', () => {
+  const generated = withSecrets({})
+  expect(credentialProblemsOf(generated)).toEqual([])
+  expect(
+    credentialProblemsOf({
+      ...generated,
+      SPYRIA_POSTGRES_PASSWORD: 'spyria',
+      SPYRIA_GATEWAY_ADMIN_PASSWORD: 'spyria-dev-gateway-with-a-long-enough-suffix',
+      SPYRIA_ZERO_ADMIN_PASSWORD: 'short',
+      SPYRIA_SECRETS_KEY: '',
+      SPYRIA_GATEWAY_ADMIN_USER: 'spyria',
+    }),
+  ).toEqual([
+    'SPYRIA_SECRETS_KEY is missing from .env: run spyria setup again, which generates it',
+    'SPYRIA_GATEWAY_ADMIN_PASSWORD is a default or short value: give it a random one of at least 32 characters',
+    'SPYRIA_POSTGRES_PASSWORD is a default or short value: give it a random one of at least 32 characters',
+    'SPYRIA_ZERO_ADMIN_PASSWORD is a default or short value: give it a random one of at least 32 characters',
+    'SPYRIA_GATEWAY_ADMIN_USER is a development default: give it another name',
   ])
 })
