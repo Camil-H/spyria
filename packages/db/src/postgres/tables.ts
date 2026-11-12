@@ -747,7 +747,7 @@ export const warmRuntimes = table(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
-    check('warm_runtimes_state', sql`${table.state} in ('creating', 'preparing', 'ready')`),
+    check('warm_runtimes_state', sql`${table.state} in ('creating', 'preparing', 'ready', 'failed')`),
     tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
     index().on(table.workspaceId, table.repository, table.state),
     index().on(table.workspaceId, table.hostId),

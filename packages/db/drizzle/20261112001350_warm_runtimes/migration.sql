@@ -13,7 +13,7 @@ CREATE TABLE "warm_runtimes" (
 	"created_at" timestamp with time zone NOT NULL,
 	"state_changed_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "warm_runtimes_pkey" PRIMARY KEY("workspace_id","id"),
-	CONSTRAINT "warm_runtimes_state" CHECK ("state" in ('creating', 'preparing', 'ready'))
+	CONSTRAINT "warm_runtimes_state" CHECK ("state" in ('creating', 'preparing', 'ready', 'failed'))
 );
 --> statement-breakpoint
 CREATE INDEX "warm_runtimes_workspace_id_repository_state_index" ON "warm_runtimes" ("workspace_id","repository","state");--> statement-breakpoint

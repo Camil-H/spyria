@@ -381,11 +381,11 @@ export const createRuntimeHostGateway = ({
     await command(sandbox, op, { runtimeId: sandbox.runtimeId })
   }
 
-  const volumeKeyOf = (...parts: string[]) => createHash('sha256').update(parts.join('.')).digest('hex').slice(0, 32)
+  const volumeKeyOf = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 32)
   const packageCacheKeyOf = (workspaceId: WorkspaceId, { repository, ownerId }: PackageCacheScope) =>
-    volumeKeyOf('package-cache', workspaceId, repository, ownerId)
+    volumeKeyOf(`package-cache.${workspaceId}.${repository}.${ownerId}`)
   const snapshotKeyOf = (workspaceId: WorkspaceId, { repository, setupCommand }: SetupSnapshotScope) =>
-    volumeKeyOf('setup-snapshot', workspaceId, repository, setupCommand)
+    volumeKeyOf(JSON.stringify(['setup-snapshot', workspaceId, repository, setupCommand]))
 
   const apiKeyOf: SandboxProvider['apiKeyOf'] = ({ workspaceId, runtimeId, apiKeyId }) =>
     secretsKeyring.derivedKeyOf(apiKeyId ?? secretsKeyring.currentKeyId, `runtime-api-key.${workspaceId}.${runtimeId}`)

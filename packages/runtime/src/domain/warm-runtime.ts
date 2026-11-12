@@ -1,7 +1,7 @@
 import type { ChatId, RuntimeHostId, RuntimeId, WarmPool, WorkspaceId } from '@spyria/kernel'
 import { type HostLoad, placementOf, type Runtime } from './runtime.ts'
 
-export type WarmRuntimeState = 'creating' | 'preparing' | 'ready'
+export type WarmRuntimeState = 'creating' | 'preparing' | 'ready' | 'failed'
 export type WarmRuntime = Readonly<{
   workspaceId: WorkspaceId
   id: RuntimeId
@@ -27,21 +27,25 @@ export type Preparation =
 const minute = 60_000
 const readyLifetimeMilliseconds = 24 * 60 * minute
 const preparingLimitMilliseconds = 60 * minute
+const failedRetryMilliseconds = 60 * minute
 export const warmCheckIntervalMilliseconds = 10_000
 
 const isStale = (warm: WarmRuntime, pools: readonly WarmPool[], currentImage: string, now: number) => {
   const pool = pools.find(({ repository }) => repository === warm.repository)
-  const age = warm.state === 'ready' ? now - warm.stateChangedAt : now - warm.createdAt
+  const isPreparing = warm.state === 'creating' || warm.state === 'preparing'
+  const age = isPreparing ? now - warm.createdAt : now - warm.stateChangedAt
   return (
     !pool ||
     pool.command !== warm.setupCommand ||
     warm.image !== currentImage ||
-    age > (warm.state === 'ready' ? readyLifetimeMilliseconds : preparingLimitMilliseconds)
+    age > (isPreparing ? preparingLimitMilliseconds : lifetimes[warm.state])
   )
 }
+const lifetimes = { ready: readyLifetimeMilliseconds, failed: failedRetryMilliseconds }
 
-const readyFirst = (first: WarmRuntime, second: WarmRuntime) =>
-  Number(second.state === 'ready') - Number(first.state === 'ready') || second.createdAt - first.createdAt
+const usefulness = { ready: 2, creating: 1, preparing: 1, failed: 0 }
+const mostUsefulFirst = (first: WarmRuntime, second: WarmRuntime) =>
+  usefulness[second.state] - usefulness[first.state] || second.createdAt - first.createdAt
 
 export const warmPoolPlanOf = (
   warm: readonly WarmRuntime[],
@@ -53,7 +57,7 @@ export const warmPoolPlanOf = (
   const kept = warm.filter((known) => !stale.includes(known))
   const keptOf = (pool: WarmPool) => kept.filter(({ repository }) => repository === pool.repository)
   return {
-    removed: [...stale, ...pools.flatMap((pool) => keptOf(pool).toSorted(readyFirst).slice(pool.size))],
+    removed: [...stale, ...pools.flatMap((pool) => keptOf(pool).toSorted(mostUsefulFirst).slice(pool.size))],
     missing: pools.flatMap((pool) => Array.from({ length: Math.max(0, pool.size - keptOf(pool).length) }, () => pool)),
   }
 }
@@ -62,6 +66,12 @@ export const warmPlacementOf = (hosts: readonly HostLoad[]) =>
   placementOf(hosts.map((host) => ({ ...host, cap: host.cap - 1 })))
 
 export const isPreparingTooLong = (warm: WarmRuntime, now: number) => now - warm.createdAt > preparingLimitMilliseconds
+
+export const failedWarmRuntime = (warm: WarmRuntime, now: number): WarmRuntime => ({
+  ...warm,
+  state: 'failed',
+  stateChangedAt: now,
+})
 
 export const preparationOf = (body: unknown): Preparation => {
   const { state, branch, isSetUp, failure } = (body ?? {}) as Record<string, unknown>

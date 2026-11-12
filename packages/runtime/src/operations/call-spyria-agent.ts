@@ -1,7 +1,7 @@
 import type { RuntimeId } from '@spyria/kernel'
 import type { SandboxLocation, SandboxProvider, SandboxTransport } from '../contracts/sandbox-provider.ts'
 import { type AgentReadiness, readinessOf } from '../domain/agent-version.ts'
-import { RuntimeNotReady } from '../domain/errors.ts'
+import { RuntimeNotReady, SpyriaAgentRefused } from '../domain/errors.ts'
 
 const readyBudgetMilliseconds = 15_000
 const readyPollMilliseconds = 250
@@ -36,6 +36,6 @@ export const callSpyriaAgent = async (
     body: body && JSON.stringify(body),
     timeoutMilliseconds: requestTimeoutMilliseconds,
   })
-  if (response.status >= 300) throw new Error(`spyria-agent answered ${method} ${path} with ${response.status}`)
+  if (response.status >= 300) throw new SpyriaAgentRefused(`${method} ${path}`, response.status)
   return JSON.parse(response.body || '{}') as unknown
 }

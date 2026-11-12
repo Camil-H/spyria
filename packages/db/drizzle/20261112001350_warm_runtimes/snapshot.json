@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "878bf29e-c6cf-4bc5-b7e4-fae450b1485a",
+  "id": "ff3ad8e3-c4f6-46f3-83f9-af3182cd0267",
   "prevIds": ["49424a6b-c1a1-45db-914b-210aa391ccde"],
   "ddl": [
     {
@@ -7557,7 +7557,7 @@
       "table": "users"
     },
     {
-      "value": "\"state\" in ('creating', 'preparing', 'ready')",
+      "value": "\"state\" in ('creating', 'preparing', 'ready', 'failed')",
       "name": "warm_runtimes_state",
       "entityType": "checks",
       "schema": "public",
