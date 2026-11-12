@@ -13,7 +13,7 @@ const ConnectionsTab = ({ workspaceId, chatId }: TabProps) => {
       rows={connections.map(({ id, name, signIn, tools, status }) => ({
         key: id,
         label: name,
-        value: signIn === 'member' ? (status ?? 'Not connected') : tools.join(', '),
+        value: signIn === 'member' ? (status ?? 'Not connected') : tools.map((tool) => tool.name).join(', '),
       }))}
     />
   )
