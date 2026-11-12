@@ -348,7 +348,7 @@ test('a member moved to a role without access to a server they signed in to lose
   }
 })
 
-test("a member's own access syncs to them and to admins, not to a member who reads none of their chats, while every member reads the roles' access", async () => {
+test("a member's own access syncs to them and to admins, never to other members, while every member reads the roles' access", async () => {
   await setCrmAccess(lee, 'read')
   const accessOf = async (userId: string, isLeeSynced: boolean) => {
     const store = await openZeroStore(createZeroStore, userId as never, [acme])
