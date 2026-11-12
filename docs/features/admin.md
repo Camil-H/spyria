@@ -134,14 +134,14 @@ Its **Setup commands** set what a dev chat's runtime runs when it starts, before
 - **Each member signs in** (the default): each member connects their own account in **Profile** > **Tool connections**, and Spyria uses it on their chats. Adding the server opens a window where you sign in once with your own account: the gateway uses that sign-in only to list the server's tools, and the server is ready once you have. If the sign-in fails, Spyria removes the server and says why; while it waits, the server reads "Waiting for the sign-in that lists its tools", and one whose window was closed before the end stays so until it is removed. Its address cannot change once added, since members' sign-ins belong to it: remove it and add it again. The server must let the gateway register itself (OAuth dynamic client registration); one that needs a pre-registered OAuth app, such as GitHub's MCP server, cannot be added yet.
 - **One shared login**: every member's calls use a secret header (name and value) you enter, only for servers without their own sign-in, such as API-key or internal servers. The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the address or the header recreates the server in the gateway.
 
-Members cannot add servers of their own. Once a server is added, Spyria lists its tools, each marked read-only or writes:
+Members cannot add servers of their own. Once a server is added, its card shows how many tools it has and how many read or write ("12 tools · 8 read · 4 write"):
 
-- **Allowed tools** decides which of them the workspace may use (all by default).
-- **Member access** narrows them per member: all allowed tools, some, or none. A member with none of a server's tools does not see it.
+- **What each tool does**: Spyria marks each tool as only reading or writing from what the server says, and you confirm or correct each marking, in a searchable list grouped into read and write tools, then click **Confirm**. Nobody gets the server until you do. **Correct read and write** changes the markings later; tools a new listing adds count as writing until you mark them. Tools the server marks destructive say so.
+- **Access**: each workspace role has a level on the server, **None** (the default), **Read** (the tools marked read) or **Read and write**. **Single tools** opens the same searchable list for that role, with a switch to allow all read or all write tools and a checkbox per tool, to allow or refuse one tool against the level. **Add a member** names a member on the server with their own level and single tools, which replace their role's there, to give them more or less; **Remove** returns them to their role's. A member with no tool of a server does not see it.
 
-Each member's gateway key is given exactly the catalogue's servers with the allowed tools minus their restrictions, and the gateway enforces it on every call. Servers of one workspace are invisible to other workspaces. Adding, changing or removing a server reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Removing a server also deletes every member's sign-in to it.
+Each member's gateway key is given exactly the tools their access gives on each server, and the gateway enforces it on every call. Changing a member's role gives them the new role's tools at once. Servers of one workspace are invisible to other workspaces. Adding, changing or removing a server reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Removing a server also deletes every member's sign-in to it.
 
-When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only the shared-login servers, with what both the owner and the guest may use, never a server the owner signed in to with their own account, and write calls wait for the owner's approval (see [Agents](./agents.md)). See [decision 0030](../decisions/0030-workspace-tools-catalogue.md).
+When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only the shared-login servers, with what both the owner and the guest may use, never a server the owner signed in to with their own account. Which calls wait for the owner's approval is each member's choice in their profile (see [Agents](./agents.md#tool-approvals)). See [decision 0030](../decisions/0030-workspace-tools-catalogue.md) and [decision 0031](../decisions/0031-tool-access-levels-and-approvals.md).
 
 ## AI providers
 
@@ -198,7 +198,8 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
 | Sign-in | SSO configured, client secret replaced |
 | GitHub | App configured, App secrets replaced |
-| Tools | tool servers added, changed, removed, member restrictions |
+| Tools | tool servers added, changed, removed, reviewed, and changes to who may use them |
+
 | Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |
 | Tool calls | every agent tool call, with prompter, owner, server, tool, whether it writes, approval decision and outcome |
 | Publishing | pushes, pull requests opened, reopened, turned into drafts, merged, closed |

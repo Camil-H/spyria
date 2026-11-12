@@ -582,13 +582,22 @@ const aliceSeededCredential = {
 type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
 
 export const testCrmConnection = { id: 'connection-crm', name: 'CRM', gatewayName: 'crm' }
-export const shareTestCrm = (writer: SeedWriter) =>
+const openToEveryRole = (writer: SeedWriter, workspaceId: string, connectionId: string) =>
   writer.execute(
-    sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, header_name, tools, allowed_tools)
+    sql`insert into connection_access (workspace_id, connection_id, id, role_id, level, tool_changes)
+      select workspace_id, ${connectionId}, 'role:' || id, id, 'write', '{}' from workspace_roles
+      where workspace_id = ${workspaceId}`,
+  )
+
+export const shareTestCrm = async (writer: SeedWriter) => {
+  await writer.execute(
+    sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, header_name, tools, is_reviewed)
       values (${aliceSeededCredential.workspaceId}, ${testCrmConnection.id}, ${testCrmConnection.name},
         ${testCrmConnection.gatewayName}, 'http://fake-mcp/shared/mcp', 'shared', null,
-        '[{"name":"lookup","readOnly":true},{"name":"update","readOnly":false}]', '["lookup","update"]')`,
+        '[{"name":"lookup","readOnly":true,"destructive":false},{"name":"update","readOnly":false,"destructive":false}]', true)`,
   )
+  await openToEveryRole(writer, aliceSeededCredential.workspaceId, testCrmConnection.id)
+}
 
 export const testSignInServers = [
   ...['fake', 'GitHub', 'Slack', 'Notion', 'Linear'].map((name) => ({
@@ -599,12 +608,14 @@ export const testSignInServers = [
   { workspaceId: 'workspace-globex', name: 'fake', gatewayName: 'fakeglobex' },
 ]
 export const catalogueTestSignInServers = async (writer: SeedWriter) => {
-  for (const { workspaceId, name, gatewayName } of testSignInServers)
+  for (const { workspaceId, name, gatewayName } of testSignInServers) {
     await writer.execute(
-      sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, allowed_tools)
+      sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, is_reviewed)
         values (${workspaceId}, ${`connection-${gatewayName}`}, ${name}, ${gatewayName}, 'http://fake-mcp/mcp', 'member',
-          '[{"name":"whoami","readOnly":true}]', '["whoami"]')`,
+          '[{"name":"whoami","readOnly":true,"destructive":false}]', true)`,
     )
+    await openToEveryRole(writer, workspaceId, `connection-${gatewayName}`)
+  }
 }
 
 type SeededGatewayKeys = ((writer: SeedWriter) => Promise<void>) & { keyId: string; virtualKeyId: string }

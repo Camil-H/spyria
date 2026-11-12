@@ -247,16 +247,20 @@ export const queries = defineQueries({
   workspaceConnections: defineQuery(({ ctx }) =>
     zql.workspaceConnections.where('workspaceId', ctx.workspaceId).orderBy('name', 'asc'),
   ),
-  connectionRestrictions: defineQuery(({ ctx }) =>
-    zql.connectionRestrictions
+  connectionAccess: defineQuery(({ ctx }) =>
+    zql.connectionAccess
       .where('workspaceId', ctx.workspaceId)
       .where(({ or, cmp, exists }) =>
         or(
+          cmp('userId', 'IS', null),
           cmp('userId', ctx.userId),
           exists('ownedChats', takenPartInBy(ctx.userId)),
           exists('memberships', activeMemberWith(ctx.userId, 'tools.manage')),
         ),
       ),
+  ),
+  toolApprovals: defineQuery(({ ctx }) =>
+    zql.toolApprovals.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
   toolConnections: defineQuery(({ ctx }) =>
     zql.toolConnections

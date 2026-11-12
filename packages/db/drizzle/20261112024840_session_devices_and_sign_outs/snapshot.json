@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "171f79fb-6b6b-415d-986e-fad7a5e2401f",
-  "prevIds": ["98183c58-c312-4f96-9cda-b34d98c86efd"],
+  "id": "ffc76e11-8313-4254-82dc-014fbfa1b040",
+  "prevIds": ["c62a7215-0706-4b4c-96ee-b80be42d6426"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -54,7 +54,7 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "connection_restrictions",
+      "name": "connection_access",
       "entityType": "tables",
       "schema": "public"
     },
@@ -223,6 +223,12 @@
     {
       "isRlsEnabled": false,
       "name": "thread_read_markers",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "tool_approvals",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1037,7 +1043,7 @@
       "name": "workspace_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
     },
     {
       "type": "text",
@@ -1050,7 +1056,7 @@
       "name": "connection_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
     },
     {
       "type": "text",
@@ -1060,10 +1066,49 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "connection_access"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "connection_access"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "user_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "level",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "connection_access"
     },
     {
       "type": "jsonb",
@@ -1073,10 +1118,10 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "allowed_tools",
+      "name": "tool_changes",
       "entityType": "columns",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
     },
     {
       "type": "text",
@@ -3988,6 +4033,71 @@
       "name": "workspace_id",
       "entityType": "columns",
       "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connection_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "server_approval",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tool_approvals",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "tool_calls"
     },
     {
@@ -4459,14 +4569,14 @@
       "table": "workspace_connections"
     },
     {
-      "type": "jsonb",
+      "type": "boolean",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "allowed_tools",
+      "name": "is_reviewed",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_connections"
@@ -5030,6 +5140,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "chats"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "connection_access_workspace_id_user_id_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "connection_access"
     },
     {
       "nameExplicit": false,
@@ -6165,10 +6303,23 @@
       "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "connection_restrictions_Dtv7aelAqLO1_fkey",
+      "name": "connection_access_WNl84f8CFVZU_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["workspace_id", "role_id"],
+      "schemaTo": "public",
+      "tableTo": "workspace_roles",
+      "columnsTo": ["workspace_id", "id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "connection_access_2p5ZmUNQVYh8_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "connection_access"
     },
     {
       "nameExplicit": false,
@@ -6178,10 +6329,10 @@
       "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "connection_restrictions_or6kv4FyHFrO_fkey",
+      "name": "connection_access_f7TgzULFd5vz_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
     },
     {
       "nameExplicit": false,
@@ -6783,6 +6934,32 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["workspace_id", "connection_id"],
+      "schemaTo": "public",
+      "tableTo": "workspace_connections",
+      "columnsTo": ["workspace_id", "id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "tool_approvals_O9iClJL83Qtw_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["workspace_id", "user_id"],
+      "schemaTo": "public",
+      "tableTo": "memberships",
+      "columnsTo": ["workspace_id", "user_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "tool_approvals_cOxWj3KyzHvH_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "tool_approvals"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
@@ -6999,12 +7176,12 @@
       "table": "chats"
     },
     {
-      "columns": ["workspace_id", "connection_id", "user_id"],
+      "columns": ["workspace_id", "connection_id", "id"],
       "nameExplicit": false,
-      "name": "connection_restrictions_pkey",
+      "name": "connection_access_pkey",
       "entityType": "pks",
       "schema": "public",
-      "table": "connection_restrictions"
+      "table": "connection_access"
     },
     {
       "columns": ["workspace_id", "id"],
@@ -7221,6 +7398,14 @@
       "entityType": "pks",
       "schema": "public",
       "table": "thread_read_markers"
+    },
+    {
+      "columns": ["workspace_id", "user_id", "connection_id"],
+      "nameExplicit": false,
+      "name": "tool_approvals_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "tool_approvals"
     },
     {
       "columns": ["workspace_id", "id"],
@@ -7451,6 +7636,20 @@
       "table": "chats"
     },
     {
+      "value": "num_nonnulls(\"role_id\", \"user_id\") = 1",
+      "name": "connection_access_subject",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "connection_access"
+    },
+    {
+      "value": "\"level\" in ('none', 'read', 'write')",
+      "name": "connection_access_level",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "connection_access"
+    },
+    {
       "value": "\"actor_kind\" in ('member', 'agent', 'system', 'integration')",
       "name": "events_actor_kind",
       "entityType": "checks",
@@ -7463,6 +7662,13 @@
       "entityType": "checks",
       "schema": "public",
       "table": "invitations"
+    },
+    {
+      "value": "\"server_approval\" in ('never', 'always', 'guest')",
+      "name": "tool_approvals_server_approval",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "tool_approvals"
     },
     {
       "value": "\"email\" = lower(btrim(\"email\"))",

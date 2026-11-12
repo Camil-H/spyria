@@ -29,12 +29,14 @@ import {
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
 import type {
+  AccessLevel,
   ConnectionSignIn,
   MessageAttachment,
   MessageStep,
   RuntimeFailure,
   RuntimeHostCapacity,
   RuntimeState,
+  ToolApproval,
 } from '../schema.ts'
 
 const table = snakeCase.table
@@ -577,7 +579,7 @@ export const memberOnboarding = table(
   ],
 )
 
-export type ConnectionTool = { name: string; readOnly: boolean }
+export type ConnectionTool = { name: string; readOnly: boolean; destructive: boolean }
 
 export const workspaceConnections = table(
   'workspace_connections',
@@ -593,21 +595,50 @@ export const workspaceConnections = table(
     setupId: text(),
     headerName: text(),
     tools: jsonb().$type<ConnectionTool[]>().notNull(),
-    allowedTools: jsonb().$type<string[]>().notNull(),
+    isReviewed: boolean().notNull(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), unique().on(table.workspaceId, table.name)],
 )
 
-export const connectionRestrictions = table(
-  'connection_restrictions',
+export const connectionAccess = table(
+  'connection_access',
   {
     ...tenant,
     connectionId: text().notNull(),
-    userId: text().notNull(),
-    allowedTools: jsonb().$type<string[]>().notNull(),
+    id: text().notNull(),
+    roleId: text(),
+    userId: text(),
+    level: text().$type<AccessLevel>().notNull(),
+    toolChanges: jsonb().$type<Record<string, boolean>>().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.connectionId, table.userId] }),
+    primaryKey({ columns: [table.workspaceId, table.connectionId, table.id] }),
+    index().on(table.workspaceId, table.userId),
+    check('connection_access_subject', sql`num_nonnulls(${table.roleId}, ${table.userId}) = 1`),
+    check('connection_access_level', sql`${table.level} in ('none', 'read', 'write')`),
+    tenantReference(
+      [table.workspaceId, table.connectionId],
+      [workspaceConnections.workspaceId, workspaceConnections.id],
+    ).onDelete('cascade'),
+    tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
+      'cascade',
+    ),
+    memberReference(table, table.userId),
+  ],
+)
+
+export const toolApprovals = table(
+  'tool_approvals',
+  {
+    ...tenant,
+    userId: text().notNull(),
+    connectionId: text().notNull(),
+    serverApproval: text().$type<ToolApproval>(),
+    toolApprovals: jsonb().$type<Record<string, ToolApproval>>().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId, table.connectionId] }),
+    check('tool_approvals_server_approval', sql`${table.serverApproval} in ('never', 'always', 'guest')`),
     tenantReference(
       [table.workspaceId, table.connectionId],
       [workspaceConnections.workspaceId, workspaceConnections.id],
@@ -932,7 +963,8 @@ export const relations = defineRelations(
     threadReadMarkers,
     runtimeOrigins,
     workspaceConnections,
-    connectionRestrictions,
+    connectionAccess,
+    toolApprovals,
     toolConnections,
     browserPages,
     sources,
@@ -976,13 +1008,13 @@ export const relations = defineRelations(
       machineCounts: {
         memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
       },
-      connectionRestrictions: {
+      connectionAccess: {
         ownedChats: r.many.chats({
-          from: [r.connectionRestrictions.workspaceId, r.connectionRestrictions.userId],
+          from: [r.connectionAccess.workspaceId, r.connectionAccess.userId],
           to: [r.chats.workspaceId, r.chats.ownerUserId],
         }),
         memberships: r.many.memberships({
-          from: r.connectionRestrictions.workspaceId,
+          from: r.connectionAccess.workspaceId,
           to: r.memberships.workspaceId,
         }),
       },

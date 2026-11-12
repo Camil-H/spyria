@@ -5,6 +5,7 @@ import type {
   LlmCredentialRepository,
   MemberGatewayKeyRepository,
   MemberRepository,
+  ToolApprovalRepository,
   ToolConnectionRepository,
   WorkspaceConnectionRepository,
   WorkspaceEventLog,
@@ -17,6 +18,7 @@ export type UnitOfWork = {
   memberGatewayKeys: MemberGatewayKeyRepository
   gatewayJobs: GatewayJobs
   toolConnections: ToolConnectionRepository
+  toolApprovals: ToolApprovalRepository
   workspaceConnections: WorkspaceConnectionRepository
   workspaceEvents: WorkspaceEventLog
 }
