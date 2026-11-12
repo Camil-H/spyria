@@ -227,6 +227,9 @@ test.describe('Tools catalogue', () => {
     tag: ['@spec-59'],
   }, async ({ page, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
+    await expect(
+      await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Looked it up.'), 'Look it up first'),
+    ).toContainText('ran lookup')
     await openPanelTab(page, 'Research', 'Connected tools')
     const crmSwitch = tabPanelOf(page).getByRole('switch', { name: 'CRM' })
     await expect(crmSwitch).toHaveAttribute('aria-checked', 'true')
@@ -236,7 +239,7 @@ test.describe('Tools catalogue', () => {
     await expect(
       await promptIn(page, agentScript, toolScriptOf(gatewayName, 'lookup', 'Tried to look it up.'), 'Look it up'),
     ).toContainText(new RegExp(`CRM is off for this chat|${notOffered('CRM', 'lookup')}`))
-    await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(0)
+    await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(1)
 
     await openPanelTab(page, 'Research', 'Connected tools')
     await crmSwitch.click()
