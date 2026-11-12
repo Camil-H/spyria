@@ -128,3 +128,9 @@ export const canSignIn = (
   accessRows: readonly ToolServerAccess[],
   holder: ToolHolder,
 ) => connection.signIn === connectionSignIns.member && grantedToolsOf(connection, accessRows, holder).length > 0
+
+export const requireListedTools = (connection: WorkspaceConnection) => {
+  if (connection.setupId !== null)
+    throw new InvalidConnection(`Finish signing in to ${connection.name} first: its tools are not listed yet`)
+  return connection
+}

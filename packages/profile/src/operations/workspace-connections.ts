@@ -18,6 +18,7 @@ import {
   gatewayNameOf,
   markedToolsOf,
   relistedToolsOf,
+  requireListedTools,
   type SecretHeader,
   type ToolMarking,
 } from '../domain/workspace-connection.ts'
@@ -119,7 +120,7 @@ export const finishWorkspaceConnection = async (dependencies: Dependencies, inpu
     throw new ConnectionSetupFailed(connection.name)
   }
   await asConnectionManager(dependencies, ({ workspaceConnections }) =>
-    workspaceConnections.save({ ...connection, setupId: null, tools }),
+    workspaceConnections.save({ ...connection, setupId: null, tools, isReviewed: false }),
   )
 }
 
@@ -185,7 +186,7 @@ export const reviewConnectionTools = async (
 ) => {
   const { workspaceId, connectionId } = input
   await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {
-    const connection = await workspaceConnections.get(workspaceId, connectionId)
+    const connection = requireListedTools(await workspaceConnections.get(workspaceId, connectionId))
     const tools = markedToolsOf(connection, input.markings)
     await workspaceConnections.save({ ...connection, tools, isReviewed: true })
     await workspaceEvents.record({
@@ -206,7 +207,7 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
       throw new MemberNotFound(subject.memberId)
     if (subject.roleId !== undefined && !(await members.roleIds(workspaceId)).includes(subject.roleId))
       throw new InvalidConnection(`The workspace has no role ${subject.roleId}`)
-    const connection = await workspaceConnections.get(workspaceId, connectionId)
+    const connection = requireListedTools(await workspaceConnections.get(workspaceId, connectionId))
     const previous = (await workspaceConnections.accessOf(workspaceId)).find(
       (row) =>
         row.connectionId === connectionId &&

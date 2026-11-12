@@ -8,6 +8,7 @@ import {
   gatewayNameOf,
   markedToolsOf,
   relistedToolsOf,
+  requireListedTools,
   type WorkspaceConnection,
 } from './workspace-connection.ts'
 
@@ -129,4 +130,9 @@ test('single changes add to the ones already saved, and one equal to the new lev
   expect(accessOf(crm, { roleId: 'member', level: 'write', toolChanges: {} }, previous)).toMatchObject({
     toolChanges: {},
   })
+})
+
+test('a server waiting for its first sign-in takes no review or access until its tools are listed', () => {
+  expect(() => requireListedTools({ ...crm, setupId: 'setup-1' })).toThrow('Finish signing in to CRM first')
+  expect(requireListedTools(crm)).toBe(crm)
 })
