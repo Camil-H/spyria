@@ -8,7 +8,7 @@ Say what you found, the version or commit, the steps or a proof of concept that 
 
 Please test only on an instance of your own, and do not read, change or delete other people's data.
 
-Every Spyria serves this contact at `/.well-known/security.txt`.
+Every Spyria serves this contact at `/.well-known/security.txt`, since its code is ours, whoever runs it. When a report turns out to be about one organization's setup rather than the code, we say so, and you take it to that organization.
 
 ## Supported versions
 
