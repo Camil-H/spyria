@@ -37,4 +37,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0031](0031-tool-access-levels-and-approvals.md) | Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals (approvals amended by 0033) |
 | [0032](0032-runtimes-kept-ready-and-setup-snapshots.md) | Runtimes kept ready and setup snapshots per repository |
 | [0033](0033-tools-on-the-prompters-account.md) | The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's |
-| [0034](0034-catalogue-tools-found-not-declared.md) | Catalogue tools are found when needed instead of declared on every call: tool search, per-chat switches, code mode per server and the spyria command |
+| [0034](0034-catalogue-tools-found-not-declared.md) | Catalogue tools are found when needed instead of declared on every call: code mode for Pi, per-chat switches and the spyria command |

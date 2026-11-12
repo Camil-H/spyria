@@ -135,13 +135,13 @@ const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) 
     }),
   })),
 })
-const piMcpServerOf = (gatewayUrl: string, path: string, exposure: 'direct' | 'deferred' = 'direct') => ({
+const piMcpServerOf = (gatewayUrl: string, path: string, exposure: 'direct' | 'codemode' = 'direct') => ({
   url: gatewayUrl.replace(/\/v1$/, path),
   headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
   exposure,
 })
 // Pi adds a server's description to the search text of each of its tools: a domain word here would match them all
-const catalogueDescription = 'The services this workspace connected; load their tools with tool_search'
+const catalogueDescription = 'The services this workspace connected; reach their tools from codemode scripts'
 const piLauncherOf = (directory: string) => `set -e
 export PI_CODING_AGENT_DIR="$HOME/.pi/${directory}"
 mkdir -p "$PI_CODING_AGENT_DIR"
@@ -167,7 +167,7 @@ export const piCommandOf = (
   const mcpServers = {
     spyria: { ...piMcpServerOf(gatewayUrl, spyriaToolsPath), timeout: spyriaToolTimeoutSeconds },
     tools: {
-      ...piMcpServerOf(gatewayUrl, catalogueToolsPath, 'deferred'),
+      ...piMcpServerOf(gatewayUrl, catalogueToolsPath, 'codemode'),
       description: catalogueDescription,
       timeout: spyriaToolTimeoutSeconds,
     },

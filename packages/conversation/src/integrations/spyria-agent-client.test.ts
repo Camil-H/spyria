@@ -291,7 +291,7 @@ test.each([
   expect(command).toContain(`SPYRIA_COMPACTION_MODEL=spyria/${id}`)
 })
 
-test('a parent Pi reaches Spyria tools, web search and the router directly and the catalogue through tool search, with its LLM token; a sub reaches all but the router with its own token from its own directory, on the default 5-minute cache', async () => {
+test('a parent Pi reaches Spyria tools, web search and the router directly and the catalogue from codemode scripts, with its LLM token; a sub reaches all but the router with its own token from its own directory, on the default 5-minute cache', async () => {
   const parent = await createdPiOf()
   const toolServer = (path: string) => ({
     url: `http://spyria-gateway-relay:4000${path}`,
@@ -300,8 +300,8 @@ test('a parent Pi reaches Spyria tools, web search and the router directly and t
   })
   const catalogue = {
     ...toolServer('/mcp'),
-    exposure: 'deferred',
-    description: 'The services this workspace connected; load their tools with tool_search',
+    exposure: 'codemode',
+    description: 'The services this workspace connected; reach their tools from codemode scripts',
     timeout: spyriaToolTimeoutSeconds,
   }
   expect(parent.mcp).toEqual({
