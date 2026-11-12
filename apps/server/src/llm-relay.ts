@@ -6,7 +6,6 @@ import {
   genericModelCallNoticeOf,
   githubToolsPath,
   guestPrompterOf,
-  includedToolServersOf,
   isDevLoopTool,
   isGuestToolMethod,
   isSpyriaTool,
@@ -17,6 +16,7 @@ import {
   spyriaCommandInstructions,
   spyriaTools,
   spyriaToolsPath,
+  switchedToolServersOf,
   type ToolCallDecision,
   type ToolCallFailure,
   toolCallFailureOf,
@@ -490,7 +490,11 @@ export const createModelCallRelay = ({
         return answerRpc(rpc?.id ?? null, methodNotFound)
       const isGuestCall = isToolCall && isGuestTurn
       try {
-        if (isToolCall && toolServersOff.includes(server)) return toolError(toolServerOffNoticeOf(serverName))
+        const switched =
+          toolServersOff.length > 0 && (isToolCall || rpc?.method === 'tools/list')
+            ? switchedToolServersOf(await tools.catalogueServersOf(host.workspaceId, accountId), toolServersOff)
+            : undefined
+        if (isToolCall && switched?.off.includes(server)) return toolError(toolServerOffNoticeOf(serverName))
         const virtualKey = await tools.keyOf(host.workspaceId, accountId).then(
           (key) => key ?? undefined,
           () => null,
@@ -501,11 +505,7 @@ export const createModelCallRelay = ({
         if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : noTools()
         if (rpc?.method === 'initialize')
           await tools.grantMemberTools(host.workspaceId, accountId).catch(() => undefined)
-        const includedServers = isGuestCall
-          ? [server]
-          : toolServersOff.length > 0
-            ? includedToolServersOf(await tools.catalogueServersOf(host.workspaceId, accountId), toolServersOff)
-            : undefined
+        const includedServers = isGuestCall ? [server] : switched?.on
         const callHeaders = {
           ...picked(headers, toolHeaders),
           authorization: `Bearer ${virtualKey}`,

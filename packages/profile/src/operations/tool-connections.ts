@@ -148,7 +148,10 @@ export const toolServerNameOf = ({ transactor }: Pick<Dependencies, 'transactor'
 
 export const catalogueServersOf = ({ transactor }: Pick<Dependencies, 'transactor'>) =>
   transactor.run(async ({ workspaceConnections }) =>
-    (await workspaceConnections.list(transactor.member.workspaceId)).map(({ gatewayName }) => gatewayName),
+    (await workspaceConnections.list(transactor.member.workspaceId)).map(({ id, gatewayName }) => ({
+      id,
+      gatewayName,
+    })),
   )
 
 export const toolCallPolicy = async (

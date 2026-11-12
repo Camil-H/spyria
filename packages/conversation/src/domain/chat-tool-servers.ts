@@ -1,16 +1,20 @@
 import { TooManyToolServersOff } from './errors.ts'
 
-const maximumToolServersOff = 100
-export const toolServerNamePattern = /^[a-z0-9_]{1,100}$/
+type CatalogueServer = Readonly<{ id: string; gatewayName: string }>
 
-export const toolServersOffAfter = (off: readonly string[], server: string, isOn: boolean) => {
-  if (isOn) return off.filter((name) => name !== server)
-  if (off.includes(server)) return off
+const maximumToolServersOff = 100
+export const toolServerIdPattern = /^[A-Za-z0-9-]{1,100}$/
+
+export const toolServersOffAfter = (off: readonly string[], connectionId: string, isOn: boolean) => {
+  if (isOn) return off.filter((id) => id !== connectionId)
+  if (off.includes(connectionId)) return off
   if (off.length >= maximumToolServersOff) throw new TooManyToolServersOff()
-  return [...off, server]
+  return [...off, connectionId]
 }
 
-export const includedToolServersOf = (catalogue: readonly string[], off: readonly string[]) =>
-  catalogue.filter((server) => !off.includes(server))
+export const switchedToolServersOf = (catalogue: readonly CatalogueServer[], off: readonly string[]) => ({
+  on: catalogue.filter(({ id }) => !off.includes(id)).map(({ gatewayName }) => gatewayName),
+  off: catalogue.filter(({ id }) => off.includes(id)).map(({ gatewayName }) => gatewayName),
+})
 
 export const toolServerOffNoticeOf = (serverName: string) => `${serverName} is off for this chat`

@@ -20,7 +20,7 @@ const server = (id: string, name: string) => ({
 const mock = createMockSnapshot()
 const snapshot = {
   ...mock,
-  chats: mock.chats.map((chat) => (chat.id === invoiceBug ? { ...chat, toolServersOff: ['crm_ab12cd'] } : chat)),
+  chats: mock.chats.map((chat) => (chat.id === invoiceBug ? { ...chat, toolServersOff: ['crm'] } : chat)),
   workspaceConnections: [server('crm', 'CRM'), server('ledger', 'Ledger')],
   connectionAccess: ['crm', 'ledger'].flatMap((connectionId) =>
     ['admin', 'member'].map((roleId) => ({
