@@ -1,9 +1,17 @@
 import type { HarnessId, RuntimeHostId, WorkspaceId } from '@spyria/kernel'
+import type { SetupSnapshotScope } from '../domain/warm-runtime.ts'
+
+export type { SetupSnapshotScope }
 
 export type SandboxLocation = { workspaceId: WorkspaceId; hostId: RuntimeHostId; runtimeId: string }
 type HostLocation = Omit<SandboxLocation, 'runtimeId'>
 export type SandboxStatus = 'running' | 'stopped' | 'missing'
 export type PackageCacheScope = { repository: string; ownerId: string }
+type CreateRequest = SandboxLocation & {
+  image: string
+  packageCache?: PackageCacheScope
+  setupSnapshot?: SetupSnapshotScope
+}
 type SandboxRequest = {
   method: string
   path: string
@@ -26,8 +34,10 @@ export type SandboxTransport = {
 }
 
 export type SandboxProvider = {
-  create(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
-  recreate(sandbox: SandboxLocation & { image: string; packageCache?: PackageCacheScope }): Promise<void>
+  create(sandbox: CreateRequest): Promise<void>
+  recreate(sandbox: CreateRequest): Promise<void>
+  snapshot(sandbox: SandboxLocation & { setupSnapshot: SetupSnapshotScope }): Promise<void>
+  pruneSnapshots(host: HostLocation & { keep: readonly SetupSnapshotScope[] }): Promise<void>
   currentApiKeyId: string
   apiKeyOf(sandbox: Pick<SandboxLocation, 'workspaceId' | 'runtimeId'> & { apiKeyId?: string }): string
   start(sandbox: SandboxLocation): Promise<void>

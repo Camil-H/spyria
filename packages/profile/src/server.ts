@@ -4,7 +4,7 @@ export {
   checkToolConnectionsFromRequest,
   createMemberKeyReader,
   createModelGuard,
-  createToolCallOwnerAccess,
+  createToolCallAccess,
   toolConnectionFromRequest,
   toolConsentCallbackPath,
   toolConsentPageFromRequest,
@@ -13,6 +13,7 @@ export {
 export { createProfileJobs } from './entrypoints/jobs.ts'
 export { profileMutators } from './entrypoints/mutators.ts'
 export { createLlmGateway, type LlmGatewaySettings } from './integrations/bifrost-gateway.ts'
+export { createHttpActiveSessions } from './integrations/http-active-sessions.ts'
 export {
   createHttpGitHubConnection,
   githubConnectionChannel,

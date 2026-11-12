@@ -26,4 +26,6 @@ export const sweepRuntimes = (
     }
     await unitOfWork.runtimeHosts.expireClaims(workspaceId, now)
     await unitOfWork.jobs.enqueue(workspaceId, runtimeJobTypes.sweep, {}, sweepIntervalMilliseconds)
+    if ((await unitOfWork.workspaces.warmPoolsOf(workspaceId)).length > 0)
+      await unitOfWork.jobs.enqueue(workspaceId, runtimeJobTypes.warm, {})
   })

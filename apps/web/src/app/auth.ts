@@ -30,6 +30,7 @@ export const loadAuthMode = async (
   isBeingSetUp: boolean
   canCreateWorkspace: boolean
   accountProviders: ('google' | 'microsoft' | 'oidc')[]
+  callbackOrigin: string
   instanceApps: ('google' | 'microsoft')[]
 }> => (await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')).json()
 
@@ -54,6 +55,9 @@ export const openSession = async (workspaceId: WorkspaceId, bearerToken: string)
   return response.json()
 }
 
+const isFromSpyria = async ({ origin }: MessageEvent) =>
+  origin === location.origin || origin === (await sharedAuthMode()).callbackOrigin
+
 const resultOf = (popup: Window | null) =>
   new Promise<SignInResult>((resolve) => {
     if (!popup) return resolve({ status: 'closed' })
@@ -62,8 +66,8 @@ const resultOf = (popup: Window | null) =>
       window.removeEventListener('message', receive)
       resolve(result)
     }
-    const receive = (event: MessageEvent) => {
-      if (event.source !== popup) return
+    const receive = async (event: MessageEvent) => {
+      if (event.source !== popup || !(await isFromSpyria(event))) return
       popup.close()
       settle(event.data)
     }

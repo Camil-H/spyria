@@ -12,7 +12,7 @@ Each record states one decision: the context that called for it, what was decide
 | [0006](0006-own-agent-process.md) | Spyria's own agent process, with Pi for API-key chats |
 | [0007](0007-subscriptions-on-the-members-machine.md) | Subscription harnesses run on the member's own machine |
 | [0008](0008-one-model-per-session.md) | One model per session, chosen at the first prompt |
-| [0009](0009-agent-acts-as-the-owner.md) | The agent acts as the chat owner; guests get the intersection |
+| [0009](0009-agent-acts-as-the-owner.md) | The agent acts as the chat owner; guests get the intersection (tools amended by 0033) |
 | [0010](0010-permissions-as-sets.md) | Permissions are checked; roles are stored sets of them |
 | [0011](0011-publishing-through-server-side-bundles.md) | Publishing goes through server-side bundles |
 | [0012](0012-per-workspace-sso.md) | Per-workspace SSO (amended by 0029) |
@@ -34,5 +34,6 @@ Each record states one decision: the context that called for it, what was decide
 | [0028](0028-generic-oidc-must-confirm-addresses.md) | A generic OIDC provider must confirm the address it returns, with no per-workspace exception |
 | [0029](0029-account-sign-in-and-workspace-sso.md) | Sign in with an account; a workspace may enforce its own SSO |
 | [0030](0030-workspace-tools-catalogue.md) | Tools come from a per-workspace catalogue, signed in to by each member or through one shared login (access revised by 0031) |
-| [0031](0031-tool-access-levels-and-approvals.md) | Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals |
-
+| [0031](0031-tool-access-levels-and-approvals.md) | Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals (approvals amended by 0033) |
+| [0032](0032-runtimes-kept-ready-and-setup-snapshots.md) | Runtimes kept ready and setup snapshots per repository |
+| [0033](0033-tools-on-the-prompters-account.md) | The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's |

@@ -11,6 +11,7 @@ export const chatQuestionPathOf = (chatId: string, questionId: string) => `/api/
 export const chatWorkspacePathOf = (chatId: string, read: string) => `/api/chats/${chatId}/workspace/${read}`
 export const chatPublishPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/publish/${action}`
 export const chatGitPathOf = (chatId: string, action: string) => `/api/chats/${chatId}/git/${action}`
+export const chatGitHubToolsPathOf = (chatId: string) => `/api/chats/${chatId}/github-tools`
 
 const storedWaitMilliseconds = 5000
 const storedRetryMilliseconds = 100
@@ -57,6 +58,11 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
     const response = await postAsMember(workspaceId, chatPublishPathOf(chatId, action), JSON.stringify(draft))
     const { text } = (await response.json().catch(() => ({}))) as { text?: string }
     return { isRefused: !response.ok, text: text ?? `Publishing answered ${response.status}` }
+  },
+  githubToolsInChat: async ({ workspaceId, chatId }: ChatInput) => {
+    const response = await getAsMember(workspaceId, chatGitHubToolsPathOf(chatId))
+    if (!response.ok) throw new Error(`Reading the GitHub tools answered ${response.status}`)
+    return ((await response.json()) as { tools: string[] }).tools
   },
   runGitAction: async ({
     workspaceId,

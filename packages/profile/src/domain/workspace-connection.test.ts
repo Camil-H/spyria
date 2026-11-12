@@ -43,6 +43,9 @@ const shared = { url: 'https://crm.example/mcp', signIn: 'shared' } as const
 test('a server needs a name, an http address, a sign-in mode and, when a secret header is given, its name and value', () => {
   expect(connectionInputOf({ ...shared, name: ' CRM ' })).toEqual({ ...shared, name: 'CRM', secretHeader: undefined })
   expect(() => connectionInputOf({ ...shared, name: ' ' })).toThrow('A server needs a name')
+  expect(() => connectionInputOf({ ...shared, name: ' github ' })).toThrow(
+    'GitHub is built in: set who may use it on its own row',
+  )
   expect(() => connectionInputOf({ ...shared, name: 'CRM', url: 'ftp://crm.example' })).toThrow('http or https')
   expect(() => connectionInputOf({ ...shared, name: 'CRM', signIn: 'anyone' as never })).toThrow(
     'Choose whether each member signs in',

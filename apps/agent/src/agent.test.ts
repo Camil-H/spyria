@@ -681,7 +681,7 @@ test('requests without the session key are refused, /ready is open, a socket tha
   const { call, create } = clientOf(agent.port)
   expect(await call('GET', '/ready', undefined, '')).toEqual({
     status: 200,
-    body: { status: 'ready', agentVersion: 'dev', protocolVersion: 1 },
+    body: { status: 'ready', agentVersion: 'dev', protocolVersion: 2 },
   })
   expect((await call('POST', '/api/conversations', launchOf(), 'wrong')).status).toBe(401)
   expect((await call('POST', '/api/conversations', launchOf(), apiKey.replace(/.$/, 'x'))).status).toBe(401)

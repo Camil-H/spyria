@@ -9,6 +9,9 @@ import type {
   MemberId,
   MessageId,
   Model,
+  ToolApprovalPreference,
+  ToolHolder,
+  ToolServerAccess,
   WorkspaceId,
 } from '@spyria/kernel'
 import type { AgentEvent } from '../domain/agent-events.ts'
@@ -81,7 +84,15 @@ export type ToolCall = Readonly<{
   status: 'succeeded' | 'failed' | 'refused'
   calledAt: Date
 }>
-export type ToolCallRepository = { record(call: ToolCall): Promise<void> }
+export type GitHubAccess = Readonly<{
+  holder: ToolHolder | undefined
+  accessRows: readonly ToolServerAccess[]
+  approvals: ToolApprovalPreference | undefined
+}>
+export type ToolCallRepository = {
+  record(call: ToolCall): Promise<void>
+  githubAccessOf(memberId: MemberId): Promise<GitHubAccess>
+}
 
 export type ModelCallTurn = {
   promptId: MessageId

@@ -387,3 +387,17 @@ test('retention defaults to forever, a change is audited, and the daily sweep de
     'w:recent',
   ])
 })
+
+test('a change of who may use GitHub reads in the audit log with GitHub as its target', async () => {
+  const setMemberGitHubLevel = (level: string | null) =>
+    asMember(alice, 'POST', '/api/workspace-connections/github/access', { roleId: 'member', level, toolChanges: {} })
+  try {
+    expect((await setMemberGitHubLevel('read')).status).toBe(200)
+    const changed = (await auditPageOf()).entries.find(
+      (entry) => entry.action === 'Changed who may use a tool server' && entry.target === 'GitHub',
+    )
+    expect(changed && summaryOf(changed)).toBe('Alice | Changed who may use a tool server | GitHub')
+  } finally {
+    await setMemberGitHubLevel(null)
+  }
+})

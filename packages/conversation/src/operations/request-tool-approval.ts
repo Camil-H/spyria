@@ -9,7 +9,7 @@ import { recordAgentEvent } from './record-agent-event.ts'
 type Input = {
   chat: AgentChat
   promptId: MessageId | null
-  ownerId: MemberId
+  answererId: MemberId
   approval: ToolApproval
   signal?: AbortSignal
 }
@@ -19,7 +19,7 @@ const invalidStatus = 400
 
 export const requestToolApproval = async (
   { transactor, eventSockets, approvalWindowMilliseconds = toolApprovalWindowMilliseconds }: AgentDependencies,
-  { chat, promptId, ownerId, approval, signal }: Input,
+  { chat, promptId, answererId, approval, signal }: Input,
 ): Promise<Decided> => {
   const question = { questionId: crypto.randomUUID(), kind: 'approval' as const, approval }
   const decided = Promise.withResolvers<Decided>()
@@ -28,7 +28,7 @@ export const requestToolApproval = async (
     decided.resolve(outcome)
   }
   const cancel = () => decide({ decision: 'cancelled', decidedBy: null })
-  pendingApprovals.set(question.questionId, { chat, promptId, ownerId, decide })
+  pendingApprovals.set(question.questionId, { chat, promptId, answererId, decide })
   eventSockets.showQuestion(chat, { promptId: promptId ?? '', question: { sessionUpdate: 'question', ...question } })
   const timer = setTimeout(() => decide({ decision: 'expired', decidedBy: null }), approvalWindowMilliseconds)
   signal?.addEventListener('abort', cancel)
@@ -67,7 +67,7 @@ export const requestToolApproval = async (
 export const answerToolApproval = (chat: AgentChat, memberId: MemberId, questionId: string, answer: object) => {
   const pending = pendingApprovals.get(questionId)
   if (pending?.chat.chatId !== chat.chatId || pending.chat.workspaceId !== chat.workspaceId) return undefined
-  if (pending.ownerId !== memberId) return forbiddenStatus
+  if (pending.answererId !== memberId) return forbiddenStatus
   const { approve } = answer as { approve?: unknown }
   if (typeof approve !== 'boolean') return invalidStatus
   pending.decide({ decision: approve ? 'approved' : 'denied', decidedBy: memberId })

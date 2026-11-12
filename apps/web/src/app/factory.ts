@@ -7,10 +7,11 @@ import {
   saveDraft,
 } from '@spyria/conversation/server'
 import { createZeroStore, type Store, type WorkspaceSession } from '@spyria/db/zero-store'
-import { type ChatId, type MemberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { type ChatId, githubServerName, type MemberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type OnboardingCommands, onboardingMutators } from '@spyria/onboarding/server'
 import type { PanelCommands } from '@spyria/panel'
 import {
+  createHttpActiveSessions,
   createHttpGitHubConnection,
   createHttpLlmCredentialAdder,
   createHttpToolConnections,
@@ -178,7 +179,9 @@ export const createApp = async (
   const fetchAsMember = (workspaceId: WorkspaceId, path: string, method = 'GET') =>
     fetch(path, { method, headers: { authorization: `Bearer ${store.tokenOf(workspaceId)}` } })
   const toolConnections = createHttpToolConnections(fetchAsMember)
+  const githubConnection = createHttpGitHubConnection(fetchAsMember)
   const githubCommands = createHttpGitHubCommands(postAsMember, fetchAsMember)
+  const activeSessions = createHttpActiveSessions(fetchAsMember)
   const ssoSettingsCommands = createHttpSsoSettingsCommands(postAsMember, fetchAsMember)
   const whenChatSynced = (chatId: ChatId) =>
     new Promise<void>((resolve) => {
@@ -196,7 +199,8 @@ export const createApp = async (
   const conversationCommands = commandsOf<ConversationCommands>(conversationMutators.conversation, {
     saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
     ...createHttpChatCommands(postAsMember, fetchAsMember),
-    connectTool: toolConnections.connectTool,
+    connectTool: (input) =>
+      input.tool === githubServerName ? githubConnection.connectGitHub(input) : toolConnections.connectTool(input),
     startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
     forkChat: mutateIntoNewChat(conversationMutators.conversation.forkChat),
     sendMessage: mutateConfirmed(conversationMutators.conversation.sendMessage),
@@ -241,6 +245,7 @@ export const createApp = async (
       revokeInvite: mutateConfirmed(workspaceMutators.workspace.revokeInvite),
       changeMemberRole: mutateConfirmed(workspaceMutators.workspace.changeMemberRole),
       removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
+      endMemberSessions: mutateConfirmed(workspaceMutators.workspace.endMemberSessions),
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
       setDevLoop: mutateConfirmed(workspaceMutators.workspace.setDevLoop),
       setSetupCommands: mutateConfirmed(workspaceMutators.workspace.setSetupCommands),
@@ -283,7 +288,13 @@ export const createApp = async (
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,
       ...createHttpWorkspaceConnections(postAsMember),
-      ...createHttpGitHubConnection(fetchAsMember),
+      ...githubConnection,
+      ...activeSessions,
+      signOutEverywhere: async (input) => {
+        await activeSessions.signOutEverywhere(input)
+        await store.signOut(input.workspaceId)
+        location.assign('/')
+      },
     }),
     runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
     usageCommands: {

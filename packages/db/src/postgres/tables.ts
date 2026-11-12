@@ -37,6 +37,7 @@ import type {
   RuntimeHostCapacity,
   RuntimeState,
   ToolApproval,
+  WarmRuntimeState,
 } from '../schema.ts'
 
 const table = snakeCase.table
@@ -264,11 +265,27 @@ export const sessions = table(
     id: text().notNull(),
     userId: text().notNull(),
     openedThroughWorkspaceSso: boolean().notNull().default(false),
+    userAgent: text().notNull().default(''),
+    signedInAt: instant().notNull().defaultNow(),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
+    index('sessions_member_index').on(table.workspaceId, table.userId),
+    memberReference(table, table.userId).onDelete('cascade'),
+  ],
+)
+
+export const memberSignOuts = table(
+  'member_sign_outs',
+  {
+    ...tenant,
+    userId: text().notNull(),
+    signedOutAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
     memberReference(table, table.userId).onDelete('cascade'),
   ],
 )
@@ -600,10 +617,6 @@ export const connectionAccess = table(
     index().on(table.workspaceId, table.userId),
     check('connection_access_subject', sql`num_nonnulls(${table.roleId}, ${table.userId}) = 1`),
     check('connection_access_level', sql`${table.level} in ('none', 'read', 'write')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
       'cascade',
     ),
@@ -623,10 +636,6 @@ export const toolApprovals = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.connectionId] }),
     check('tool_approvals_server_approval', sql`${table.serverApproval} in ('never', 'always', 'guest')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     memberReference(table, table.userId),
   ],
 )
@@ -761,6 +770,32 @@ export const runtimes = table(
     tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
     index().on(table.workspaceId, table.hostId),
     index().on(table.workspaceId, table.state, table.lastActiveAt),
+  ],
+)
+
+export const warmRuntimes = table(
+  'warm_runtimes',
+  {
+    ...tenant,
+    id: text().notNull(),
+    repository: text().notNull(),
+    setupCommand: text().notNull(),
+    hostId: text().notNull(),
+    state: text().$type<WarmRuntimeState>().notNull(),
+    image: text().notNull(),
+    apiKeyId: text().notNull(),
+    baseBranch: text(),
+    agentVersion: text(),
+    agentProtocolVersion: integer(),
+    createdAt: instant().notNull(),
+    stateChangedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    check('warm_runtimes_state', sql`${table.state} in ('creating', 'preparing', 'ready', 'failed')`),
+    tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
+    index().on(table.workspaceId, table.repository, table.state),
+    index().on(table.workspaceId, table.hostId),
   ],
 )
 
@@ -993,19 +1028,9 @@ export const relations = defineRelations(
         memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
       },
       connectionAccess: {
-        ownedChats: r.many.chats({
-          from: [r.connectionAccess.workspaceId, r.connectionAccess.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
-        }),
         memberships: r.many.memberships({
           from: r.connectionAccess.workspaceId,
           to: r.memberships.workspaceId,
-        }),
-      },
-      toolConnections: {
-        ownedChats: r.many.chats({
-          from: [r.toolConnections.workspaceId, r.toolConnections.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
         }),
       },
       chats: {

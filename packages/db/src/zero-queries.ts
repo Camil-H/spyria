@@ -70,9 +70,6 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
     ),
   )
 
-const takenPartInBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
-  chat.whereExists('participants', (participant) => participant.where('userId', userId))
-
 const id = z.string().check(z.minLength(1))
 export const pinnedStepTypes = ['question', 'pull_request']
 export const searchTextMinimumLength = 2
@@ -218,6 +215,9 @@ export const queries = defineQueries({
   chatPinnedSteps: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     messagesOf(ctx, args.chatId).where('kind', 'step').where('body', 'IN', pinnedStepTypes),
   ),
+  chatOwnPrompt: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
+    messagesOf(ctx, args.chatId).where('kind', 'member').where('authorId', ctx.userId).limit(1),
+  ),
   readMarkers: defineQuery(({ ctx }) =>
     zql.readMarkers
       .where('workspaceId', ctx.workspaceId)
@@ -254,7 +254,6 @@ export const queries = defineQueries({
         or(
           cmp('userId', 'IS', null),
           cmp('userId', ctx.userId),
-          exists('ownedChats', takenPartInBy(ctx.userId)),
           exists('memberships', activeMemberWith(ctx.userId, 'tools.manage')),
         ),
       ),
@@ -263,9 +262,7 @@ export const queries = defineQueries({
     zql.toolApprovals.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
   toolConnections: defineQuery(({ ctx }) =>
-    zql.toolConnections
-      .where('workspaceId', ctx.workspaceId)
-      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', takenPartInBy(ctx.userId)))),
+    zql.toolConnections.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
   chatBrowserPages: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     zql.browserPages

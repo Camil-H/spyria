@@ -19,6 +19,7 @@ import {
   bob,
   bobInAcme,
   captureLogs,
+  lee,
   sessionTokenOf,
   startAgentStack,
   succeeded,
@@ -104,6 +105,11 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
       { fullName: 'acme/docs', defaultBranch: 'main' },
     ],
     listingFailure: null,
+    memberAccounts: [
+      { memberId: alice, name: 'Alice', login: null, needsReconnection: false },
+      { memberId: bob, name: 'Bob', login: null, needsReconnection: false },
+      { memberId: lee, name: 'Lee', login: null, needsReconnection: false },
+    ],
   })
   const read = await request(alice, 'GET', '/api/github-settings')
   expect(await request(alice, 'GET', '/api/github-settings/configured')).toEqual({
@@ -156,6 +162,11 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
   expect(await secretBox.open(stored?.encrypted_access_token)).toStartWith('ghu_')
   expect(await secretBox.open(stored?.encrypted_refresh_token)).toStartWith('ghr_')
   expect(await request(bob, 'GET', '/api/github/connection')).toMatchObject({ body: { connection: null } })
+  const accounts = (await request(alice, 'GET', '/api/github-settings')).body.settings.memberAccounts
+  expect(accounts).toContainEqual({ memberId: alice, name: 'Alice', login: fakeGitHubLogin, needsReconnection: false })
+  expect(accounts).toContainEqual({ memberId: bob, name: 'Bob', login: null, needsReconnection: false })
+  expect(JSON.stringify(accounts)).not.toContain('ghu_')
+  expect((await request(bob, 'GET', '/api/github-settings')).status).toBe(403)
 
   await database.$client`update github_connections set access_expires_at = now() - interval '1 minute'`
   expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({

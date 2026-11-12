@@ -10,7 +10,7 @@ import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { enqueueSweeps } from './auth/sessions.ts'
 import { assertInstanceAppsConfigured, hasNoWorkspace } from './auth/sso.ts'
-import { createGitHubCheckouts } from './github/github.ts'
+import { createGitHubCheckouts, createRepositoryAccess } from './github/github.ts'
 import { createGitHubApi, githubDotCom } from './github/github-api.ts'
 import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
@@ -125,6 +125,7 @@ void llmGateway.refreshListedModels()
 const jobWorker = startJobWorker(database, {
   sandboxProvider: runtimeHosts.sandboxProvider,
   spyriaAgentImage,
+  repositoryAccess: createRepositoryAccess(database, github),
   agentBridge,
   llmGateway,
   usageLogs: createBifrostUsageLogs(gatewaySettings),
