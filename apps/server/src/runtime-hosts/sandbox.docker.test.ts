@@ -296,7 +296,19 @@ test.skipIf(!hasImage)(
     for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
       if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
 
-    expect(reaches(runtimeContainer, `${transport.gatewayUrl}/models`)).toBe('reached')
+    const relayPort = new URL(transport.gatewayUrl).port
+    const networkGateway = dockerText(
+      ...['network', 'inspect', '-f', '{{range .IPAM.Config}}{{.Gateway}}{{end}}', `${runtimeContainer}-net`],
+    )
+    expect({
+      fromRuntime: reaches(runtimeContainer, `${transport.gatewayUrl}/models`),
+      fromMachine: await fetch(`http://127.0.0.1:${relayPort}/v1/models`, { signal: AbortSignal.timeout(3000) }).then(
+        (response) => `status ${response.status}`,
+        (error: Error) => `blocked ${error.name}`,
+      ),
+      throughNetworkGateway: reaches(runtimeContainer, `http://${networkGateway}:${relayPort}/v1/models`),
+      hostMachineEntry: dockerText('exec', runtimeContainer, 'getent', 'hosts', 'host.docker.internal'),
+    }).toMatchObject({ fromRuntime: 'reached' })
     expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
     const operatingSystem = dockerOperatingSystem()
     if (operatingSystem === 'OrbStack' || operatingSystem === 'Docker Desktop')
