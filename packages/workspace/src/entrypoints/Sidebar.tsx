@@ -14,6 +14,7 @@ import { NewChatDialog } from './NewChatDialog.tsx'
 import { ProjectGroup } from './ProjectGroup.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { navLinkClass } from './ui.ts'
+import { chatDropTargetClass, useChatDrop } from './useChatDrop.ts'
 import { maximumSidebarWidth, minimumSidebarWidth, sidebarWidthVariable, useSidebarWidth } from './useSidebarWidth.ts'
 import { useWorkspacePermissions } from './useWorkspacePermissions.ts'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx'
@@ -70,6 +71,7 @@ export const Sidebar = ({
   const navigate = useNavigate()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
+  const looseChatDrop = useChatDrop({ workspaceId, projectId: null, chats: sidebar.looseChats, chatAction })
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'chats' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
@@ -157,7 +159,11 @@ export const Sidebar = ({
               chatAdornment={chatAdornment}
             />
           ))}
-          <fieldset aria-label="Loose chats" className="m-0 min-w-0 border-0 p-0">
+          <fieldset
+            {...looseChatDrop}
+            aria-label="Loose chats"
+            className={`m-0 min-w-0 border-0 p-0 ${chatDropTargetClass}`}
+          >
             <strong className="block px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted">
               Loose chats
             </strong>

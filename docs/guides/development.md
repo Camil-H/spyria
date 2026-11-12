@@ -14,9 +14,9 @@ The dev stack is the Compose project in `infra/docker-compose.yml`. Its containe
 
 | Service | Container | Port |
 |---|---|---|
-| Postgres 18 | `spyria-postgres` | 5434 |
-| Dex (dev identity provider) | `spyria-dex` | 5556 |
-| zero-cache (profile `zero`) | `spyria-zero-cache` | 4848 |
+| Postgres 18 | `spyria-postgres` | 127.0.0.1:5434 |
+| Dex (dev identity provider) | `spyria-dex` | 127.0.0.1:5556 |
+| zero-cache (profile `zero`) | `spyria-zero-cache` | 127.0.0.1:4848 |
 | Model gateway, Bifrost (profile `gateway`) | `spyria-gateway` | 127.0.0.1:8180 |
 
 Tests never use this stack: they start their own containers, named `spyria-test-*` (see [Testing](./testing.md#test-infrastructure)).

@@ -358,6 +358,26 @@ test.describe('Messaging', () => {
     await expect(enlarge).toBeVisible()
   })
 
+  test('As a member, I drop an image anywhere on the message box to attach it, and send it', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    const dataTransfer = await page.evaluateHandle(
+      (bytes) => {
+        const transfer = new DataTransfer()
+        transfer.items.add(new File([new Uint8Array(bytes)], 'chart.png', { type: 'image/png' }))
+        return transfer
+      },
+      [...onePixelPng],
+    )
+    const dropTarget = page.getByRole('group', { name: 'Message box' })
+    await dropTarget.dispatchEvent('dragover', { dataTransfer })
+    await dropTarget.dispatchEvent('drop', { dataTransfer })
+    await expect(page.getByRole('list', { name: 'Files to send' })).toContainText(`chart.png${onePixelPng.length} B`)
+    await sendMessage(page, 'Dropped chart')
+    await expect(
+      messageContaining(page, 'Dropped chart').getByRole('button', { name: 'Enlarge chart.png' }),
+    ).toBeVisible()
+  })
+
   test('As a member, I read a channel with its authors and times, and its composer and message menu allow only what I may do', async ({
     page,
   }) => {

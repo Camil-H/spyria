@@ -22,6 +22,7 @@ import type { Sidebar } from '../queries/get-sidebar.ts'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuTriggerClass, navLinkClass } from './ui.ts'
+import { startChatDrag } from './useChatDrop.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode
@@ -47,7 +48,7 @@ export const ChatRow = ({
   const chatTypeId = useId()
   const indicatorsId = useId()
   return (
-    <li className="flex items-center">
+    <li className="flex items-center" onDragStart={chat.canAdmin ? startChatDrag(chat.id) : undefined}>
       <NavLink
         to={`/w/${workspaceId}/chats/${chat.id}`}
         aria-label={chat.name}

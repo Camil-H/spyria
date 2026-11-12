@@ -175,6 +175,7 @@ export const Composer = ({
     threadRootId ? '' : getDraft(workspaceId, chatId, memberId)(store.readDrafts()),
   )
   const [pending, setPending] = useState<readonly PendingAttachment[]>([])
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -332,9 +333,15 @@ export const Composer = ({
       event.preventDefault()
   }
   const dragOver = (event: DragEvent) => {
-    if (!isBlocked && event.dataTransfer.types.includes('Files')) event.preventDefault()
+    if (isBlocked || !event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    setIsDraggingFiles(true)
+  }
+  const dragLeave = (event: DragEvent) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFiles(false)
   }
   const drop = (event: DragEvent) => {
+    setIsDraggingFiles(false)
     if (isBlocked || event.dataTransfer.files.length === 0) return
     event.preventDefault()
     attach([...event.dataTransfer.files])
@@ -344,7 +351,14 @@ export const Composer = ({
       {isBlocked && <div className="text-sm text-muted">{blockedNotice}</div>}
       {aboveBox}
       <ErrorMessage message={sending.errorMessage && `Not sent: ${sending.errorMessage}`} />
-      <div className="relative rounded-xl border border-line bg-raised has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-focus has-[textarea:focus-visible]:-outline-offset-1">
+      <fieldset
+        aria-label={threadRootId ? 'Reply box' : 'Message box'}
+        data-dragging-files={isDraggingFiles || undefined}
+        onDragOver={dragOver}
+        onDragLeave={dragLeave}
+        onDrop={drop}
+        className="relative m-0 min-w-0 rounded-xl border border-line bg-raised p-0 has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-focus has-[textarea:focus-visible]:-outline-offset-1 data-[dragging-files]:outline-2 data-[dragging-files]:outline-dashed data-[dragging-files]:outline-focus"
+      >
         {mentionCandidates.length > 0 && (
           <MentionList id={mentionListId} names={mentionCandidates} highlighted={highlighted} onChoose={mention} />
         )}
@@ -373,8 +387,6 @@ export const Composer = ({
             onBlur={() => setCaret(undefined)}
             onKeyDown={handleKey}
             onPaste={paste}
-            onDragOver={dragOver}
-            onDrop={drop}
           />
           <input
             ref={fileInputRef}
@@ -413,7 +425,7 @@ export const Composer = ({
         {bottomBar && (
           <div className="flex min-w-0 items-center gap-1 border-t border-line px-1.5 py-1">{bottomBar}</div>
         )}
-      </div>
+      </fieldset>
     </Provider>
   )
 }

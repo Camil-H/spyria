@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: spyria
       POSTGRES_DB: spyria
     ports:
-      - 5434:5432
+      - 127.0.0.1:5434:5432
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -25,7 +25,7 @@ services:
     environment:
       DEX_SESSIONS_ENABLED: true
     ports:
-      - 5556:5556
+      - 127.0.0.1:5556:5556
     volumes:
       - ./dex.yaml:/etc/dex/config.yaml:ro
     healthcheck:
@@ -55,7 +55,7 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
-      - 4848:4848
+      - 127.0.0.1:4848:4848
     healthcheck:
       test: [CMD, node, -e, "fetch('http://localhost:4848/keepalive').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
       interval: 1s
