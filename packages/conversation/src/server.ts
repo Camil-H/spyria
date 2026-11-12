@@ -30,6 +30,7 @@ export {
   type WebPage,
   webPagePath,
 } from './domain/browser-pages.ts'
+export { includedToolServersOf, toolServerOffNoticeOf } from './domain/chat-tool-servers.ts'
 export { logExcerptOf } from './domain/ci-logs.ts'
 export {
   awaitTaskTool,
