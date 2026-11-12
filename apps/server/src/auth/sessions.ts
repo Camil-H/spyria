@@ -15,13 +15,14 @@ export const openSessions = (
   workspaceId?: string,
   through: SignedInThrough = 'account',
   userAgent = '',
+  signedInAt?: Date,
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
-      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, user_agent, created_at,
-        expires_at)
-      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, ${userAgent}, now(),
-        now() + interval '7 days'
+      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, user_agent, signed_in_at,
+        created_at, expires_at)
+      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, ${userAgent},
+        coalesce(${signedInAt ?? null}::timestamptz, now()), now(), now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
         and exists(select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id)
@@ -65,16 +66,16 @@ export const signOutMemberEverywhere = (database: Database, workspaceId: string,
     insert into member_sign_outs (workspace_id, user_id, signed_out_at) values (${workspaceId}, ${userId}, now())
     on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
 
-export const isSignedOutSince = async (
-  database: Database,
-  { workspaceId, userId, sessionId }: SessionClaims,
-  targetWorkspaceId: string,
-) => {
+export const signedInAtOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
+  const [session] = await database.$client<{ signedInAt: Date }[]>`
+    select signed_in_at as "signedInAt" from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
+  return session?.signedInAt
+}
+
+export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: Date) => {
   const [signedOut] = await database.$client`
-    select 1 from member_sign_outs join sessions on sessions.workspace_id = ${workspaceId}
-      and sessions.id = ${sessionId}
-    where member_sign_outs.workspace_id = ${targetWorkspaceId} and member_sign_outs.user_id = ${userId}
-      and member_sign_outs.signed_out_at >= sessions.created_at`
+    select 1 from member_sign_outs where workspace_id = ${workspaceId} and user_id = ${userId}
+      and signed_out_at >= ${signedInAt}`
   return signedOut !== undefined
 }
 

@@ -256,6 +256,7 @@ export const sessions = table(
     userId: text().notNull(),
     openedThroughWorkspaceSso: boolean().notNull().default(false),
     userAgent: text().notNull().default(''),
+    signedInAt: instant().notNull().defaultNow(),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
   },
