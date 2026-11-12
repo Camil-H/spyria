@@ -48,6 +48,8 @@ const gatewaySlugLength = 20
 export const connectionInputOf = ({ name, url, signIn, secretHeader }: ConnectionInput) => {
   const trimmedName = name.trim()
   if (!trimmedName) throw new InvalidConnection('A server needs a name')
+  if (trimmedName.toLowerCase() === githubServerName.toLowerCase())
+    throw new InvalidConnection(`${githubServerName} is built in: set who may use it on its own row`)
   if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol))
     throw new InvalidConnection('The address must be an http or https URL')
   if (!Object.values(connectionSignIns).includes(signIn))
