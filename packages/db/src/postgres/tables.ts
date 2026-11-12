@@ -266,6 +266,19 @@ export const sessions = table(
   ],
 )
 
+export const memberSignOuts = table(
+  'member_sign_outs',
+  {
+    ...tenant,
+    userId: text().notNull(),
+    signedOutAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    memberReference(table, table.userId).onDelete('cascade'),
+  ],
+)
+
 export const serviceIdentities = table(
   'service_identities',
   {

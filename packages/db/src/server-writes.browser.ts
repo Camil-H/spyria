@@ -13,6 +13,7 @@ export const setVirtualKeyId = skippedOnClient
 export const lockMembership = skippedOnClient
 export const lockActiveAdminIds = async () => []
 export const deleteMemberSessions = skippedOnClient
+export const signOutMemberEverywhere = skippedOnClient
 export const deleteGitHubConnection = skippedOnClient
 export const appendWorkspaceEvent = skippedOnClient
 export const enqueueJob = skippedOnClient

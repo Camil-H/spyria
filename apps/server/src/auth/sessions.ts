@@ -59,8 +59,24 @@ export const findMemberSessions = (database: Database, workspaceId: string, user
     where workspace_id = ${workspaceId} and user_id = ${userId} and expires_at > now()
     order by created_at desc`
 
-export const deleteMemberSessions = (database: Database, workspaceId: string, userId: string) =>
-  database.$client`delete from sessions where workspace_id = ${workspaceId} and user_id = ${userId}`
+export const signOutMemberEverywhere = (database: Database, workspaceId: string, userId: string) =>
+  database.$client`
+    with ended as (delete from sessions where workspace_id = ${workspaceId} and user_id = ${userId})
+    insert into member_sign_outs (workspace_id, user_id, signed_out_at) values (${workspaceId}, ${userId}, now())
+    on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
+
+export const isSignedOutSince = async (
+  database: Database,
+  { workspaceId, userId, sessionId }: SessionClaims,
+  targetWorkspaceId: string,
+) => {
+  const [signedOut] = await database.$client`
+    select 1 from member_sign_outs join sessions on sessions.workspace_id = ${workspaceId}
+      and sessions.id = ${sessionId}
+    where member_sign_outs.workspace_id = ${targetWorkspaceId} and member_sign_outs.user_id = ${userId}
+      and member_sign_outs.signed_out_at >= sessions.created_at`
+  return signedOut !== undefined
+}
 
 export const findMemberIn =
   (databaseOf: (databaseName: string | undefined) => Database | undefined): FindMember =>

@@ -99,7 +99,7 @@ Inviting a removed member's address again creates a normal invite that restores 
 
 ### Signing a member out
 
-**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again to come back. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
+**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again through their provider to come back; a session they still have in another workspace cannot reopen this one. After a lost device, also end their session at the provider, since a provider that still remembers them signs them in again. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
 
 ## Sign-in and SSO
 

@@ -24,14 +24,15 @@ import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
 import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import {
-  deleteMemberSessions,
   deleteSession,
   findLiveSessions,
   findMemberSessions,
+  isSignedOutSince,
   openSessions,
   type SignedInThrough,
   signInThroughWorkspace,
   signInWithAccount,
+  signOutMemberEverywhere,
   type VerifiedIdentity,
 } from './sessions.ts'
 import {
@@ -480,9 +481,11 @@ export const createAuthRoutes = ({
       return context.body(null, 204)
     })
     .post('/sessions', (context) =>
-      asMember(context, async ({ context: member, scope }) => {
+      asMember(context, async ({ context: member, sessionId, scope }) => {
         if (member.signedInThroughWorkspaceSso) return context.json({ error: 'forbidden' }, 403)
         const workspaceId = await workspaceIdOfBody(context)
+        if (await isSignedOutSince(scope.database, { ...member, sessionId }, workspaceId))
+          return context.json({ error: 'forbidden' }, 403)
         const [session] = await openSessions(
           scope.database,
           member.userId,
@@ -509,7 +512,7 @@ export const createAuthRoutes = ({
     )
     .post('/sign-out-everywhere', (context) =>
       asMember(context, async ({ context: { workspaceId, userId }, scope }) => {
-        await deleteMemberSessions(scope.database, workspaceId, userId)
+        await signOutMemberEverywhere(scope.database, workspaceId, userId)
         closeMemberStreams(scope.database, workspaceId, userId)
         deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
         return context.body(null, 204)

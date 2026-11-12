@@ -368,7 +368,7 @@ test('renewal is refused without the CSRF header, from another origin, without a
   expect((await postAuth('/auth/renew', cookie, { workspaceId: globex })).status).toBe(200)
 })
 
-test("a member sees by device where they are signed in to a workspace, never a session's id, and signs out of it everywhere while their other workspaces and other members stay signed in", async () => {
+test("a member sees by device where they are signed in to a workspace, never a session's id, and signs out of it everywhere while their other workspaces and other members stay signed in, without reopening it from them", async () => {
   await database.$client`delete from sessions where user_id = 'member-alice'`
   const firefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0'
   const login = await startLogin()
@@ -415,6 +415,21 @@ test("a member sees by device where they are signed in to a workspace, never a s
   expect((await queryWith(laptopInGlobex.token)).status).toBe(200)
   expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: globex })).status).toBe(200)
   expect((await queryWith(bobToken)).status).toBe(200)
+
+  const reopenAcmeWith = (token: string) =>
+    app.request('/auth/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ workspaceId: acme }),
+    })
+  expect((await reopenAcmeWith(laptopInGlobex.token)).status).toBe(403)
+  const [laterInGlobex] = await openSessions(database, alice, globex)
+  if (!laterInGlobex) throw new Error('missing session')
+  const laterToken = (await issueSessionToken(testAuthSettings.tokenSecret, laterInGlobex)).token
+  expect((await reopenAcmeWith(laterToken)).status).toBe(200)
+  expect(
+    (await sessionsOf((await signInAs('alice@example.com')).cookie)).sessions.map(({ workspaceId }) => workspaceId),
+  ).toEqual([acme, globex])
 })
 
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
