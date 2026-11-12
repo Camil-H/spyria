@@ -37,5 +37,7 @@ export const createHttpWorkspaceConnections = (postAsMember: PostAsMember) => {
       post(workspaceId, `/${connectionId}/review`, { markings }),
     setConnectionAccess: ({ workspaceId, connectionId, ...access }: Target & AccessInput) =>
       post(workspaceId, `/${connectionId}/access`, access),
+    setConnectionCodeMode: ({ workspaceId, connectionId, isOn }: Target & { isOn: boolean }) =>
+      post(workspaceId, `/${connectionId}/code-mode`, { isOn }),
   }
 }

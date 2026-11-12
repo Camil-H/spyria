@@ -417,6 +417,19 @@ const ConnectionCard = ({
               </button>
             )}
           </div>
+          {connection.isReviewed && (
+            <div className="flex flex-col gap-1">
+              <Switch
+                label="Agents call its tools from scripts"
+                isOn={connection.codeMode}
+                onToggle={() => run(() => commands.setConnectionCodeMode({ ...target, isOn: !connection.codeMode }))}
+              />
+              <p className="text-xs text-muted">
+                Pi agents write a short script that finds its tools and keeps only what they need from the answers,
+                instead of loading the tools into the conversation. Applies to sessions that start afterwards.
+              </p>
+            </div>
+          )}
           {(!connection.isReviewed || isCorrecting) && (
             <ToolMarkings target={target} connection={connection} onSaved={() => setIsCorrecting(false)} />
           )}

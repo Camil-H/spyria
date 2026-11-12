@@ -142,6 +142,7 @@ Members cannot add servers of their own. Once a server is added, its card shows 
 
 - **What each tool does**: Spyria marks each tool as only reading or writing from what the server says, and you confirm or correct each marking, in a searchable list grouped into read and write tools, then click **Confirm**. Nobody gets the server until you do. **Correct read and write** changes the markings later; tools a new listing adds count as writing until you mark them. Tools the server marks destructive say so.
 - **Access**: each workspace role has a level on the server, **None** (the default), **Read** (the tools marked read) or **Read and write**. **Single tools** opens the same searchable list for that role, with a switch to allow all read or all write tools and a checkbox per tool, to allow or refuse one tool against the level. **Add a member** names a member on the server with their own level and single tools, which replace their role's there, to give them more or less; **Remove** returns them to their role's. A member with no tool of a server does not see it.
+- **Agents call its tools from scripts**: Pi agents reach the server's tools by writing a short script that finds them and keeps only what it needs from their answers, instead of loading the tools into the conversation (off by default). It suits large servers and tools with long answers; each call in a script is still one call through the gateway, with the same access, approvals and audit. It applies to sessions that start afterwards.
 
 Each member's gateway key is given exactly the tools their access gives on each server, and the gateway enforces it on every call. Changing a member's role gives them the new role's tools at once. Servers of one workspace are invisible to other workspaces. Adding, changing or removing a server reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Removing a server also deletes every member's sign-in to it.
 
@@ -202,7 +203,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
 | Sign-in | SSO configured, client secret replaced |
 | GitHub | App configured, App secrets replaced |
-| Tools | tool servers added, changed, removed, reviewed, and changes to who may use them |
+| Tools | tool servers added, changed, removed, reviewed, changes to who may use them and to whether agents call them from scripts |
 
 | Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |
 | Tool calls | every agent tool call, with prompter, owner, server, tool, whether it writes, approval decision and outcome |

@@ -14,6 +14,7 @@ const docs: WorkspaceConnection = {
   headerName: null,
   tools: [{ name: 'publish', readOnly: false, destructive: false }],
   isReviewed: true,
+  codeMode: false,
 }
 
 test("a member sets the server's default and a tool's own approval, and clears a tool's back to the default", () => {

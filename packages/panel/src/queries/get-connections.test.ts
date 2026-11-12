@@ -15,6 +15,7 @@ const server = (id: string, name: string) => ({
   headerName: null,
   tools: [{ name: 'lookup', readOnly: true, destructive: false }],
   isReviewed: true,
+  codeMode: false,
 })
 const mock = createMockSnapshot()
 const snapshot = {

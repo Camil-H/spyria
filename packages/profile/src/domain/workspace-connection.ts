@@ -31,6 +31,7 @@ export type WorkspaceConnection = {
   headerName: string | null
   tools: ConnectionTool[]
   isReviewed: boolean
+  codeMode: boolean
 }
 export type AccessSubject = { roleId: string; memberId?: undefined } | { memberId: MemberId; roleId?: undefined }
 export type AccessInput = AccessSubject & { level: AccessLevel | null; toolChanges: Record<string, boolean> }
@@ -151,4 +152,5 @@ export const githubConnectionIn = (workspaceId: WorkspaceId): WorkspaceConnectio
   headerName: null,
   tools: githubTools.map(({ name, readOnly, destructive }) => ({ name, readOnly, destructive })),
   isReviewed: true,
+  codeMode: false,
 })

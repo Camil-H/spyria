@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_connections" ADD COLUMN "code_mode" boolean DEFAULT false NOT NULL;
