@@ -157,10 +157,11 @@ export const createRuntimeHostGateway = ({
 
   const identify = async (connection: Connection, frame: HostSessionFrame) => {
     if (frame.type === 'claim') {
-      const claimed = await firstAccepted((handlers) => handlers.claim(frame.code)).catch(async (error: unknown) => {
-        const isWaiting =
-          error instanceof HostRefused && error.code === 'code_not_valid' && (await awaitsFirstWorkspace(frame.code))
-        if (!isWaiting) throw error
+      const claim = () => firstAccepted((handlers) => handlers.claim(frame.code))
+      const claimed = await claim().catch(async (error: unknown) => {
+        if (!(error instanceof HostRefused && error.code === 'code_not_valid')) throw error
+        if (await awaitsFirstWorkspace(frame.code)) return
+        return claim()
       })
       if (!claimed)
         return connection.socket.close(tryAgainLaterCloseCode, 'Waiting for the first workspace of this Spyria')
