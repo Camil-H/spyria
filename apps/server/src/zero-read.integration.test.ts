@@ -20,6 +20,8 @@ import {
 } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
+await database.$client`delete from connection_access`
+await database.$client`delete from tool_approvals`
 await database.$client`delete from workspace_connections`
 
 const collectionsInStoredOrder = ['messages', 'terminalLines']
