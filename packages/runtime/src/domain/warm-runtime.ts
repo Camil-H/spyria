@@ -67,6 +67,8 @@ export const warmPlacementOf = (hosts: readonly HostLoad[]) =>
 
 export const isPreparingTooLong = (warm: WarmRuntime, now: number) => now - warm.createdAt > preparingLimitMilliseconds
 
+export const isCountedOnHost = (warm: WarmRuntime) => warm.state !== 'failed'
+
 export const failedWarmRuntime = (warm: WarmRuntime, now: number): WarmRuntime => ({
   ...warm,
   state: 'failed',

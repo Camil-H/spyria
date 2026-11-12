@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { chatId, runtimeHostId, runtimeId, workspaceId } from '@spyria/kernel'
 import {
   isClaimable,
+  isCountedOnHost,
   type Preparation,
   preparationOf,
   runtimeOfClaimed,
@@ -69,6 +70,12 @@ test('a pool made smaller keeps its newest ready runtimes and removes the older 
   )
   expect(removed).toEqual([oldest, preparing, failed])
   expect(missing).toEqual([])
+})
+
+test('only a failed runtime kept ready is not counted on its host: its container was removed', () => {
+  expect(isCountedOnHost(warmRuntime({ state: 'failed' }))).toBe(false)
+  for (const state of ['creating', 'preparing', 'ready'] as const)
+    expect(isCountedOnHost(warmRuntime({ state }))).toBe(true)
 })
 
 test('runtimes kept ready never take the last slot of a host, so a chat always finds room', () => {

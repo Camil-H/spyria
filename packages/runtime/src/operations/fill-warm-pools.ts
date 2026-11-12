@@ -2,7 +2,7 @@ import { log, runtimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { type HostLoad, runtimeJobTypes } from '../domain/runtime.ts'
-import { type WarmRuntime, warmPlacementOf, warmPoolPlanOf } from '../domain/warm-runtime.ts'
+import { isCountedOnHost, type WarmRuntime, warmPlacementOf, warmPoolPlanOf } from '../domain/warm-runtime.ts'
 
 type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider; currentImage?: string }
 type Input = { workspaceId: WorkspaceId; now: number }
@@ -21,7 +21,7 @@ export const fillWarmPools = async (
     for (const warm of removed) {
       await warmRuntimes.delete(warm)
       await jobs.enqueue(workspaceId, runtimeJobTypes.discard, { runtimeId: warm.id, hostId: warm.hostId })
-      loads = withRunning(loads, warm.hostId, -1)
+      if (isCountedOnHost(warm)) loads = withRunning(loads, warm.hostId, -1)
     }
     for (const pool of missing) {
       const { hostId } = warmPlacementOf(loads)
@@ -42,7 +42,7 @@ export const fillWarmPools = async (
         stateChangedAt: now,
       }
       await warmRuntimes.add(warm)
-      await jobs.enqueue(workspaceId, runtimeJobTypes.warmUp, { runtimeId: warm.id })
+      await jobs.enqueue(workspaceId, runtimeJobTypes.warmUp, { runtimeId: warm.id, hostId })
       loads = withRunning(loads, hostId, 1)
     }
     return { pools, onlineHostIds: loads.filter(({ online }) => online).map((load) => load.hostId) }
