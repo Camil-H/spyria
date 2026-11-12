@@ -12,8 +12,8 @@ export {
 } from './entrypoints/endpoints.ts'
 export { createProfileJobs } from './entrypoints/jobs.ts'
 export { profileMutators } from './entrypoints/mutators.ts'
-export { createHttpActiveSessions } from './integrations/http-active-sessions.ts'
 export { createLlmGateway, type LlmGatewaySettings } from './integrations/bifrost-gateway.ts'
+export { createHttpActiveSessions } from './integrations/http-active-sessions.ts'
 export {
   createHttpGitHubConnection,
   githubConnectionChannel,
