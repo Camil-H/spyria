@@ -56,6 +56,18 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 
 Rules files come with the clone, so every agent can read them. Pi loads `AGENTS.md` (or `CLAUDE.md`) from the working directory upward; Claude Code reads `CLAUDE.md` files; Codex reads `AGENTS.md`. A repository that wants all three to follow the same rules keeps an `AGENTS.md` and a `CLAUDE.md` that points to it.
 
+### Runtimes kept ready
+
+A repository's own setup command, in **Workspace settings > Connect runtime > Setup commands**, can keep up to 5 runtimes ready (**Runtimes kept ready**, 0 by default). Spyria then keeps that many runtimes started on the workspace's runtime hosts, with the repository's default branch cloned and the setup command already run, so a new dev chat starts at once:
+
+- A new dev chat on the repository's default branch takes a ready runtime instead of starting one: the chat reads **Ready** right away. The agent fetches the latest base, creates the chat's working branch and starts. Setup does not run again unless the default branch moved since the runtime was set up, or setup failed there: then it runs as usual, as a step in the chat. Spyria then starts another runtime to keep the count.
+- A runtime kept ready belongs to no chat and no member: it has no package cache, its clone uses a read-only installation token, and no agent runs in it until a chat takes it. Chats on another base branch, and chats on members' machines, start their runtime as before.
+- Once setup has succeeded in a runtime kept ready, the host keeps a snapshot of it: the repository as setup left it and the runtime's home, where setup installs its tools. Every new runtime of the repository on that host, for any dev chat, starts from the newest snapshot instead of cloning: it fetches the latest base, creates its branch and runs setup, which then has little left to install. Runtimes see the snapshot read-only, so no chat can change what the next ones start from. A snapshot is never taken from a chat's runtime.
+- Each runtime kept ready counts as a runtime on its host, and never takes a host's last place, so a chat always finds room. Spyria replaces one after a day, or when its setup command or Spyria's runtime image changes, and removes them all when the count goes back to 0, then the snapshots too. A host going offline drops its runtimes kept ready; they start again when it is back.
+- Keep secrets out of what setup writes to disk: the snapshot hands it to every chat of the repository on that host.
+
+See [decision 0030](../decisions/0030-runtimes-kept-ready-and-setup-snapshots.md).
+
 ## The side panel
 
 Dev chats use the right panel's **Changes** and **Files** tabs; **Changes** comes first and opens by default. Every read goes from the browser to the server, which checks the reader may read the chat, then asks spyria-agent in the runtime through the host's relay. The browser never talks to a runtime directly.
