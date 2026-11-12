@@ -249,7 +249,7 @@ const hostLoads = `select id as "hostId", status = 'online' as online, coalesce(
     (select count(*)::int from runtimes where runtimes.workspace_id = runtime_hosts.workspace_id
        and runtimes.host_id = runtime_hosts.id and runtimes.state in ('creating', 'starting', 'installing', 'running', 'stopping')
     ) + (select count(*)::int from warm_runtimes where warm_runtimes.workspace_id = runtime_hosts.workspace_id
-       and warm_runtimes.host_id = runtime_hosts.id) as running
+       and warm_runtimes.host_id = runtime_hosts.id and warm_runtimes.state <> 'failed') as running
   from runtime_hosts where workspace_id = $1 and removed_at is null`
 type HostLoadRow = { hostId: string; online: boolean; cap: number; running: number }
 

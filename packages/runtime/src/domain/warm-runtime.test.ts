@@ -43,6 +43,7 @@ test.each([
   ['it runs an older runtime image', warmRuntime({ image: 'sha256:old' })],
   ['it has been ready for more than a day', warmRuntime({ stateChangedAt: now - 25 * hour })],
   ['it has been preparing for more than an hour', warmRuntime({ state: 'preparing', createdAt: now - 2 * hour })],
+  ['it failed more than an hour ago', warmRuntime({ state: 'failed', stateChangedAt: now - 2 * hour })],
 ])('a runtime kept ready is replaced when %s', (_, stale) => {
   expect(warmPoolPlanOf([stale], [appPool], image, now)).toEqual({
     removed: [stale],
@@ -50,12 +51,23 @@ test.each([
   })
 })
 
-test('a pool made smaller removes the runtimes still preparing first, then the oldest ready ones', () => {
+test('a runtime that failed within the hour holds its place in the pool, so a failing repository is retried once an hour at most', () => {
+  const failed = warmRuntime({ state: 'failed', stateChangedAt: now - 30 * 60_000 })
+  expect(warmPoolPlanOf([failed], [{ ...appPool, size: 1 }], image, now)).toEqual({ removed: [], missing: [] })
+})
+
+test('a pool made smaller keeps its newest ready runtimes and removes the older ready ones, those still preparing and the failed ones', () => {
   const oldest = warmRuntime({ createdAt: now - 3 * hour })
   const newest = warmRuntime({ createdAt: now - hour })
   const preparing = warmRuntime({ state: 'preparing', createdAt: now - 1000 })
-  const { removed, missing } = warmPoolPlanOf([oldest, preparing, newest], [{ ...appPool, size: 1 }], image, now)
-  expect(removed).toEqual([oldest, preparing])
+  const failed = warmRuntime({ state: 'failed', createdAt: now - 500 })
+  const { removed, missing } = warmPoolPlanOf(
+    [oldest, failed, preparing, newest],
+    [{ ...appPool, size: 1 }],
+    image,
+    now,
+  )
+  expect(removed).toEqual([oldest, preparing, failed])
   expect(missing).toEqual([])
 })
 

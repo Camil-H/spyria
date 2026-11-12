@@ -202,6 +202,7 @@ test('runtimes kept ready never take a host’s last slot, are replaced when the
   expect((await warmRuntimes()).map(({ id }) => id)).not.toContain(first?.id)
   await waitFor(() => commandsOf(host, 'remove').some(({ runtimeId }) => runtimeId === first?.id))
 
+  host.commands.length = 0
   await keepReady([{ repository: 'acme/app', command: 'bun install', warmRuntimes: 0 }])
   await fill()
   await waitFor(async () => (await warmRuntimes()).length === 0)
@@ -214,7 +215,7 @@ test('runtimes kept ready never take a host’s last slot, are replaced when the
   expect(await warmRuntimes()).toEqual([])
 })
 
-test('a runtime whose preparation fails is removed; one whose setup failed is kept ready without a snapshot, so the chat runs setup again', async () => {
+test('a runtime whose preparation fails is removed and holds its place for an hour, so a failing repository is not rebuilt at every sweep; one whose setup failed is kept ready without a snapshot, so the chat runs setup again', async () => {
   const agent = preparingAgent()
   const host = await fakeHost('Failing host', { memoryGibibytes: 8, containerAgent: agent.containerAgent })
   await warmJobsSettled()
@@ -224,10 +225,16 @@ test('a runtime whose preparation fails is removed; one whose setup failed is ke
   await fill()
   await waitFor(() => commandsOf(host, 'remove').length === 1)
   await warmJobsSettled()
-  expect(await warmRuntimes()).toEqual([])
+  expect((await warmRuntimes()).map(({ state }) => state)).toEqual(['failed'])
+  await fill()
+  expect(commandsOf(host, 'create')).toHaveLength(1)
   capturedConsole.restore()
 
   agent.finish({ state: 'ready', branch: 'main', isSetUp: false })
+  await keepReady([
+    { repository: 'acme/app', command: 'bun install', warmRuntimes: 1 },
+    { repository: 'acme/site', command: 'npm ci', warmRuntimes: 1 },
+  ])
   await fill()
   await warmIn('ready', 1)
   expect(commandsOf(host, 'snapshot')).toEqual([])

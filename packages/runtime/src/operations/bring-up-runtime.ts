@@ -4,8 +4,8 @@ import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { isAgentOutOfDate } from '../domain/agent-version.ts'
 import { AgentOutOfDate, HarnessInstallFailed } from '../domain/errors.ts'
 import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
+import { waitUntilReady } from './call-spyria-agent.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
-import { waitUntilReady } from './spyria-agent.ts'
 
 type Dependencies = { transactor: RuntimeTransactor; provider: SandboxProvider; currentImage?: string }
 type Input = { workspaceId: WorkspaceId; runtimeId: RuntimeId; now: number; isLastAttempt: boolean }
