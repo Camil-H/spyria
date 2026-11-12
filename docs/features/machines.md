@@ -44,17 +44,18 @@ docker rm -f spyria-host
 docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
 docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
 docker volume rm $(docker volume ls -q --filter name=^spyria-cache-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-snapshot-)
 docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
 docker volume rm spyria-host
 ```
 
-The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads. If you add the machine to another workspace instead, its new host removes these runtimes and their volumes when it connects, as runtimes that workspace does not know. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads, and the snapshots a copy of a repository after its setup. If you add the machine to another workspace instead, its new host removes these runtimes and their volumes when it connects, as runtimes that workspace does not know. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
 
 ## Where a chat runs
 
-A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
+A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. The runtimes kept ready for a repository ([Dev mode](./dev-mode.md#runtimes-kept-ready)) count against it, but never take a host's last place. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline".
 
-The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 7 days is removed. When a host connects, it also removes the runtimes Spyria no longer knows, such as one replaced while the host was offline, with their volumes. A package cache is removed with the last runtime on its host that uses it.
+The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**) and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime stopped or failed for 7 days is removed. When a host connects, it also removes the runtimes Spyria no longer knows, such as one replaced while the host was offline, with their volumes. A package cache is removed with the last runtime on its host that uses it. A repository's snapshot stays on its host while the repository keeps runtimes ready; the host keeps only the newest one.
 
 When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
 
@@ -65,7 +66,7 @@ While the agent is working, both ask for confirmation, because they stop the cur
 
 When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. That output is redacted like the rest of the agent's output and kept in the agent's logs.
 
-Each runtime has three volumes (its workspace, its home and its temporary directory), plus, for a dev chat, the package cache its owner shares across their runtimes on the same repository (`<deployment>-cache-*`), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
+Each runtime has three volumes (its workspace, its home and its temporary directory), plus, for a dev chat, the package cache its owner shares across their runtimes on the same repository (`<deployment>-cache-*`) and, read-only, the newest snapshot of its repository on that host (`<deployment>-snapshot-*`), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
 
 ## Isolation and egress
 
