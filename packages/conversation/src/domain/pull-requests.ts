@@ -1,4 +1,5 @@
-import type { MemberId } from '@spyria/kernel'
+import { githubServerName, type MemberId } from '@spyria/kernel'
+import { toolNotGrantedOf } from './tool-calls.ts'
 
 export type CheckState = 'pending' | 'passing' | 'failing'
 export type ReviewComment = {
@@ -33,8 +34,11 @@ export const keepsSourceBranch = (
 export type PublishAction = 'push' | 'pull_request'
 
 export const noGitHubConnection = 'Connect your GitHub account in your profile to push'
-export const publishingRefusalOf = (ownerName: string) =>
-  `Only ${ownerName} can push or open pull requests in this chat`
+export const noPublisher = 'Pushing needs the GitHub account of a member'
+export const githubConnectionNoticeOf = (memberName: string) => `${memberName} needs to connect GitHub`
+export const githubAccessRefusalOf = (memberName: string, tool: string) =>
+  toolNotGrantedOf({ memberName, server: githubServerName, tool })
+export const publishToolOf = (action: PublishAction) => (action === 'push' ? 'push_branch' : 'open_pull_request')
 
 const passingConclusions = ['success', 'neutral', 'skipped']
 export const checkStateOf = (isCompleted: boolean, conclusion: string | null): CheckState =>

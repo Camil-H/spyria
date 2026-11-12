@@ -4,7 +4,7 @@ export {
   checkToolConnectionsFromRequest,
   createMemberKeyReader,
   createModelGuard,
-  createToolCallOwnerAccess,
+  createToolCallAccess,
   toolConnectionFromRequest,
   toolConsentCallbackPath,
   toolConsentPageFromRequest,

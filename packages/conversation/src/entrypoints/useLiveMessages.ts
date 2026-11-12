@@ -72,6 +72,7 @@ const liveMessageOf = (
   isRunning: true,
   isStreamed: true,
   canReply: false,
+  isOnViewersPrompt: false,
   canQuote: false,
   quote: null,
   runtimes: [],

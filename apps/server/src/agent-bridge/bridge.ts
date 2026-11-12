@@ -29,6 +29,7 @@ import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
 import type { Authentication } from '../auth/session-tokens.ts'
+import { announcePrompter } from '../tool-list-changes.ts'
 
 type Segment = { first: AgentEvent; last: AgentEvent; text: string; isReasoning: boolean }
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
@@ -185,6 +186,7 @@ export const createAgentBridge = ({
       checkouts: repositoryCheckoutsOf?.(database),
       deployment,
       isBudgetUsedUp: async (workspace, member) => (await usedUpBudgetOf(workspace, member)) !== null,
+      onTurnPrompter: (chat, prompter) => announcePrompter(chat.workspaceId, chat.chatId, prompter),
       eventSockets: {
         showQuestion: (chat, frame) => {
           shownQuestions.set(
@@ -477,6 +479,8 @@ export const createAgentBridge = ({
       readRuntimeMedia: handlers.readRuntimeMedia,
       publishBranch: handlers.publishBranch,
       callGitHubTool: handlers.callGitHubTool,
+      githubToolsInChat: handlers.githubToolsInChat,
+      githubToolPolicy: handlers.githubToolPolicy,
       callDevLoopTool: handlers.callDevLoopTool,
       githubToolsOf: handlers.githubToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,

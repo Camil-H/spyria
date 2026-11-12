@@ -51,6 +51,7 @@ import {
   chatId,
   devLoopSettingsFrom,
   ForeignWorkspace,
+  githubConnectionId,
   type HarnessId,
   isAllowedModel,
   type MemberId,
@@ -472,6 +473,37 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     toolCalls: {
       record: async (call) => {
         await insertToolCall(tx, { workspaceId: contextWorkspaceId, ...call })
+      },
+      githubAccessOf: async (memberOfChat) => {
+        const membership = await tx.run(
+          zql.memberships
+            .where('workspaceId', contextWorkspaceId)
+            .where('userId', memberOfChat)
+            .where('removedAt', 'IS', null)
+            .one(),
+        )
+        const accessRows = await tx.run(
+          zql.connectionAccess.where('workspaceId', contextWorkspaceId).where('connectionId', githubConnectionId),
+        )
+        const approvals = await tx.run(
+          zql.toolApprovals
+            .where('workspaceId', contextWorkspaceId)
+            .where('userId', memberOfChat)
+            .where('connectionId', githubConnectionId)
+            .one(),
+        )
+        return {
+          holder: membership && { memberId: memberOfChat, roleId: membership.role },
+          accessRows: accessRows.map(({ userId, ...access }) => ({
+            ...access,
+            memberId: userId === null ? null : memberId(userId),
+          })),
+          approvals: approvals && {
+            connectionId: githubConnectionId,
+            serverApproval: approvals.serverApproval,
+            toolApprovals: approvals.toolApprovals,
+          },
+        }
       },
     },
     delegations: {

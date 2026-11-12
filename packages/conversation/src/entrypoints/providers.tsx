@@ -1,4 +1,4 @@
-import type { MessageId } from '@spyria/kernel'
+import type { MemberId, MessageId } from '@spyria/kernel'
 import { createCommandsContext } from '@spyria/ui'
 import { createContext, type ReactNode } from 'react'
 import type { AgentStream, ConversationCommands } from './commands.ts'
@@ -26,8 +26,9 @@ export const ConversationProvider = ({
 export const QuestionAnswererContext = createContext<{
   answer: (questionId: string, answer: QuestionAnswer) => Promise<number>
   mayAnswerAsPrompter: boolean
-  isOwner: boolean
-}>({ answer: async () => 0, mayAnswerAsPrompter: false, isOwner: false })
+  viewerId: MemberId | null
+  githubTools: readonly string[]
+}>({ answer: async () => 0, mayAnswerAsPrompter: false, viewerId: null, githubTools: [] })
 
 export const ToolsAwaitingApprovalContext = createContext<ReadonlySet<string>>(new Set())
 

@@ -525,9 +525,9 @@ const isPermissionRefused = (error: unknown) => error instanceof GitHubRequestFa
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies
   const authorsByMember = new Map<string, { login: string; author: GitAuthor }>()
-  const publishingOf = async (chat: AgentChat, ownerId: string) => {
+  const publishingOf = async (chat: AgentChat, publisherId: string) => {
     const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
-    const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+    const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: publisherId })
     if (!repository || !baseBranch || !workingBranch || !token) throw new GitHubNotConfigured()
     return { repository, baseBranch, workingBranch, token }
   }
@@ -554,9 +554,9 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       )
       return { url: api.cloneUrlOf(repository), token, baseBranch, workingBranch, ...(startBranch && { startBranch }) }
     },
-    pushBranch: async (chat, ownerId, bundleOf) => {
+    pushBranch: async (chat, publisherId, bundleOf) => {
       const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
-      const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: ownerId })
+      const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: publisherId })
       if (!repository || !baseBranch || !workingBranch || !token) return undefined
       const url = api.cloneUrlOf(repository)
       return {
@@ -590,8 +590,8 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       authorsByMember.set(memberKey, { login: connection.login, author })
       return author
     },
-    openPullRequest: async (chat, ownerId, { title, body }) => {
-      const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, ownerId)
+    openPullRequest: async (chat, publisherId, { title, body }) => {
+      const { repository, baseBranch, workingBranch, token } = await publishingOf(chat, publisherId)
       return githubCall(chat.workspaceId, async () =>
         pullRequestStepOf(
           repository,
@@ -599,8 +599,8 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         ),
       )
     },
-    updatePullRequest: async (chat, ownerId, pullRequest, change) => {
-      const { token } = await publishingOf(chat, ownerId)
+    updatePullRequest: async (chat, publisherId, pullRequest, change) => {
+      const { token } = await publishingOf(chat, publisherId)
       return githubCall(chat.workspaceId, async () =>
         pullRequestStepOf(
           pullRequest.repository,
@@ -685,8 +685,8 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
         thread: comments.map(threadCommentOf),
       }
     },
-    refreshPullRequest: async (chat, ownerId, pullRequest) => {
-      const { token } = await publishingOf(chat, ownerId)
+    refreshPullRequest: async (chat, publisherId, pullRequest) => {
+      const { token } = await publishingOf(chat, publisherId)
       return githubCall(chat.workspaceId, async () =>
         pullRequestStepOf(
           pullRequest.repository,

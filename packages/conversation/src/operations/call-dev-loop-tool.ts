@@ -113,6 +113,9 @@ export const githubToolsOf = ({ transactor }: Dependencies, chat: AgentChat) =>
   transactor.run(async ({ devLoop, chats }) => {
     const { baseBranch, repository } = await chats.get(chat.chatId)
     return baseBranch && rulesOf(await devLoop.settings(), repository).isOn
-      ? { tools: [...githubToolDefinitions, ...devLoopTools], instructions: `${githubToolsInstructions} ${devLoopInstructions}` }
+      ? {
+          tools: [...githubToolDefinitions, ...devLoopTools],
+          instructions: `${githubToolsInstructions} ${devLoopInstructions}`,
+        }
       : { tools: githubToolDefinitions, instructions: githubToolsInstructions }
   })
