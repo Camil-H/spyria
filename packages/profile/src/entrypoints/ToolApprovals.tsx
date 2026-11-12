@@ -69,7 +69,7 @@ export const ToolApprovals = ({
         Choose which calls wait for your approval before they run on your chats. Read tools default to Never, and tools
         the server marks destructive to Always.
       </p>
-      <label className={`${labelClass} w-fit`}>
+      <div className={`${labelClass} w-fit`}>
         Write tools of {server.name}
         {approvalSelect(
           `Approval for ${server.name}`,
@@ -77,7 +77,8 @@ export const ToolApprovals = ({
           server.approvals?.serverApproval ?? null,
           serverApprovalOf({ signIn: server.signIn }),
         )}
-      </label>
+      </div>
+
       <ToolList
         label={`${server.name} approvals`}
         tools={server.tools}

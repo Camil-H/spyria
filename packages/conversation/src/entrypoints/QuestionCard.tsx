@@ -96,7 +96,6 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
         <p>
           The agent asks to run <strong>{step.approval.tool}</strong> ({step.approval.server}) on{' '}
           {step.approval.prompterName}'s prompt
-
         </p>
         <pre className="overflow-x-auto rounded-md bg-app px-2 py-1 font-mono text-xs">{step.approval.arguments}</pre>
         {canAnswer && (

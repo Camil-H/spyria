@@ -51,7 +51,8 @@ export const authorizeToolCall = async (
   if (access !== 'allowed')
     return {
       refusal: guestToolRefusalOf(access, { ownerName, prompterName, server: serverName }),
-      readOnly,
+      readOnly: null,
+
       ...notNeeded,
     }
   if (!needsApproval(approval, guestId !== null)) return { readOnly, ...notNeeded }
