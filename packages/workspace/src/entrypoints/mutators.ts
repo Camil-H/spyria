@@ -16,6 +16,7 @@ import { createWorkspaceRole } from '../operations/create-workspace-role.ts'
 import { deleteChatRole } from '../operations/delete-chat-role.ts'
 import { deleteWorkspace } from '../operations/delete-workspace.ts'
 import { deleteWorkspaceRole } from '../operations/delete-workspace-role.ts'
+import { endMemberSessions } from '../operations/end-member-sessions.ts'
 import { inviteMember } from '../operations/invite-member.ts'
 import { moveChat } from '../operations/move-chat.ts'
 import { removeMember } from '../operations/remove-member.ts'
@@ -132,6 +133,10 @@ export const workspaceMutators = defineMutators({
     ),
     removeMember: defineMutator(z.extend(workspaceArguments, { memberId: memberIdArgument }), ({ tx, ctx, args }) =>
       removeMember(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId, now: Date.now() }),
+    ),
+    endMemberSessions: defineMutator(
+      z.extend(workspaceArguments, { memberId: memberIdArgument }),
+      ({ tx, ctx, args }) => endMemberSessions(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     setSetupCommands: defineMutator(
       z.extend(workspaceArguments, {

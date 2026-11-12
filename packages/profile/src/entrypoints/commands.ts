@@ -1,4 +1,5 @@
 import type { AiProviderAllowList, CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
+import type { ActiveSession } from '../domain/active-session.ts'
 import type { Avatar } from '../domain/avatar.ts'
 import type { DisplayName } from '../domain/display-name.ts'
 import type { GitHubConnection } from '../domain/github-connection.ts'
@@ -27,4 +28,6 @@ export type ProfileCommands = {
   readGitHubConnection: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>
   connectGitHub: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>
   disconnectGitHub: Command<object>
+  readActiveSessions: (input: { workspaceId: WorkspaceId }) => Promise<readonly ActiveSession[]>
+  signOutEverywhere: Command<object>
 }

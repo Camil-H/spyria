@@ -368,6 +368,54 @@ test('renewal is refused without the CSRF header, from another origin, without a
   expect((await postAuth('/auth/renew', cookie, { workspaceId: globex })).status).toBe(200)
 })
 
+test("a member sees by device where they are signed in to a workspace, never a session's id, and signs out of it everywhere while their other workspaces and other members stay signed in", async () => {
+  await database.$client`delete from sessions where user_id = 'member-alice'`
+  const firefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0'
+  const login = await startLogin()
+  nextIdToken = await signIdToken({
+    nonce: login.nonce,
+    sub: subjectOf('alice@example.com'),
+    email: 'alice@example.com',
+    email_verified: true,
+  })
+  const signIn = await app.request(`/auth/callback?code=code-1&state=${login.state}`, {
+    headers: { cookie: login.cookie, 'user-agent': firefox },
+  })
+  const laptopCookie = cookieHeaderOf(signIn)
+  const { sessions } = await sessionsOf(laptopCookie)
+  const [laptopInAcme, laptopInGlobex] = sessions
+  const [phone] = await openSessions(database, alice, acme, 'account', 'phone')
+  const [bobSession] = await openSessions(database, bob, acme)
+  if (!laptopInAcme || !laptopInGlobex || !phone || !bobSession) throw new Error('missing session')
+  const phoneToken = (await issueSessionToken(testAuthSettings.tokenSecret, phone)).token
+  const bobToken = (await issueSessionToken(testAuthSettings.tokenSecret, bobSession)).token
+  const asMember = (path: string, token: string, method = 'GET') =>
+    app.request(path, { method, headers: { authorization: `Bearer ${token}` } })
+
+  const listed = await asMember('/auth/active-sessions', laptopInAcme.token)
+  const listedText = await listed.text()
+  expect(JSON.parse(listedText)).toEqual({
+    sessions: [
+      { userAgent: 'phone', signedInAt: expect.any(Number), isCurrent: false },
+      { userAgent: firefox, signedInAt: expect.any(Number), isCurrent: true },
+    ],
+  })
+  const storedIds = await database.$client<{ id: string }[]>`select id from sessions`
+  for (const { id } of storedIds) expect(listedText).not.toContain(id)
+  expect((await app.request('/auth/active-sessions')).status).toBe(401)
+  expect((await app.request('/auth/sign-out-everywhere', { method: 'POST' })).status).toBe(401)
+
+  const signedOut = await asMember('/auth/sign-out-everywhere', phoneToken, 'POST')
+  expect(signedOut.status).toBe(204)
+  expect(signedOut.headers.getSetCookie().join()).toContain(`spyria_s_${acme}=;`)
+  expect((await queryWith(laptopInAcme.token)).status).toBe(401)
+  expect((await queryWith(phoneToken)).status).toBe(401)
+  expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: acme })).status).toBe(401)
+  expect((await queryWith(laptopInGlobex.token)).status).toBe(200)
+  expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: globex })).status).toBe(200)
+  expect((await queryWith(bobToken)).status).toBe(200)
+})
+
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
   const [aliceInAcme] = await openSessions(database, 'member-alice', acme)
   const [bobInAcme] = await openSessions(database, 'member-bob', acme)
