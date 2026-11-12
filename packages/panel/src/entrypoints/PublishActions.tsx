@@ -10,7 +10,7 @@ import {
   smallButtonClass,
   smallGhostButtonClass,
 } from '@spyria/ui'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type BranchStatus, hasNothingToPush } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
@@ -35,11 +35,22 @@ export const PublishActions = ({
   onOutcome: (outcome: ActionOutcome) => void
 }) => {
   const { memberId } = useSession()
-  const { canPublish, chatName, hasOpenPullRequest } = useQuery(getPublishing, workspaceId, chatId, memberId)
-  const { publishBranch } = usePanelCommands()
+  const { hasRepository, chatName, hasOpenPullRequest } = useQuery(getPublishing, workspaceId, chatId, memberId)
+  const { publishBranch, githubToolsInChat } = usePanelCommands()
   const [draft, setDraft] = useState<{ title: string; body: string }>()
   const [publishingAction, setPublishingAction] = useState<'push' | 'pull_request'>()
-  if (!canPublish) return null
+  const [githubTools, setGitHubTools] = useState<{ chatId: ChatId; tools: readonly string[] }>()
+  useEffect(() => {
+    if (hasRepository)
+      githubToolsInChat({ workspaceId, chatId }).then(
+        (tools) => setGitHubTools({ chatId, tools }),
+        () => setGitHubTools({ chatId, tools: [] }),
+      )
+  }, [githubToolsInChat, workspaceId, chatId, hasRepository])
+  const tools = hasRepository && githubTools?.chatId === chatId ? githubTools.tools : []
+  const mayPush = tools.includes('push_branch')
+  const mayOpenPullRequest = tools.includes('open_pull_request')
+  if (!mayPush && !mayOpenPullRequest) return null
   const isPublishing = publishingAction !== undefined
   const isPushPointless = hasNothingToPush(status)
   const publish = async (action: 'push' | 'pull_request') => {
@@ -96,17 +107,19 @@ export const PublishActions = ({
     actionsSlot &&
       createPortal(
         <>
-          <button
-            type="button"
-            disabled={isPublishing || isPushPointless}
-            title={isPushPointless ? 'Nothing to push' : undefined}
-            onClick={() => publish('push')}
-            className={`inline-flex items-center gap-1.5 ${smallGhostButtonClass}`}
-          >
-            {publishingAction === 'push' && <Spinner />}
-            Push
-          </button>
-          {!hasOpenPullRequest && (
+          {mayPush && (
+            <button
+              type="button"
+              disabled={isPublishing || isPushPointless}
+              title={isPushPointless ? 'Nothing to push' : undefined}
+              onClick={() => publish('push')}
+              className={`inline-flex items-center gap-1.5 ${smallGhostButtonClass}`}
+            >
+              {publishingAction === 'push' && <Spinner />}
+              Push
+            </button>
+          )}
+          {mayOpenPullRequest && !hasOpenPullRequest && (
             <button
               type="button"
               disabled={isPublishing}

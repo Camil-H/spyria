@@ -1,4 +1,4 @@
-export const minimumAgentProtocol = 1
+export const minimumAgentProtocol = 2
 
 export type AgentReadiness = { agentVersion: string | null; protocolVersion: number }
 

@@ -140,7 +140,7 @@ test.describe('Pull requests', () => {
     ])
   })
 
-  test('As a prompter, my request to push is refused to the agent with the owner-only notice, and I have no Push or Open pull request', {
+  test('As a prompter without a GitHub account, my agent’s push asks me, and only me, to connect GitHub, and once my role reads GitHub only I have no Push or Open pull request', {
     tag: ['@spec-41'],
   }, async ({ page, browser, agentScript, workerStack }) => {
     await configureGitHubApp(page)
@@ -150,24 +150,42 @@ test.describe('Pull requests', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await addLlmKey(bobPage, 'Mistral')
     await openChat(bobPage, 'Guest push')
-    await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Only Alice can publish here.' })
+    await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Connect GitHub first.' })
     await sendMessage(bobPage, 'Push the branch')
-    await expect(messageContaining(bobPage, 'Only Alice can publish here.')).toHaveCount(1)
+    await expect(messageContaining(bobPage, 'Connect GitHub first.')).toHaveCount(1)
     await finished(bobPage)
-    await messageItemsOf(bobPage)
-      .getByRole('button', { name: /^Used push_branch/ })
-      .click()
-    await expect(messageContaining(bobPage, 'Used push_branch')).toContainText(
-      'Only Alice can push or open pull requests in this chat',
-    )
-    await panelTabOf(bobPage, 'Changes').click()
-    await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
-    await expect(pushButtonOf(bobPage)).toHaveCount(0)
-    await expect(tabPanelOf(bobPage).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
-    expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
-    const [refusal] = await workerStack.database.$client`
-    select prompter_id, tool, status from tool_calls where chat_id = ${chatId} and server = 'github'`
-    expect(refusal).toEqual({ prompter_id: 'member-bob', tool: 'push_branch', status: 'refused' })
+
+    await test.step('names me to connect GitHub, with the link for me only', async () => {
+      await expect(messageItemsOf(bobPage).getByRole('button', { name: 'Connect GitHub' })).toBeVisible()
+      await expect(messageContaining(page, 'Bob needs to connect GitHub').first()).toBeVisible()
+      await expect(messageItemsOf(page).getByRole('button', { name: 'Connect GitHub' })).toHaveCount(0)
+      expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
+      const [refusal] = await workerStack.database.$client`
+        select prompter_id, tool, status from tool_calls where chat_id = ${chatId} and server = 'github'`
+      expect(refusal).toEqual({ prompter_id: 'member-bob', tool: 'push_branch', status: 'refused' })
+    })
+
+    await test.step('offers me Push, which asks me to connect my own account, not the owner’s', async () => {
+      await panelTabOf(bobPage, 'Changes').click()
+      await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
+      await pushButtonOf(bobPage).click()
+      await expect(tabPanelOf(bobPage).getByRole('alert')).toHaveText(
+        'Connect your GitHub account in your profile to push',
+      )
+      expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
+    })
+
+    await test.step('once my role reads GitHub only, I have no Push or Open pull request', async () => {
+      await workerStack.database.$client`
+        insert into connection_access (workspace_id, connection_id, id, role_id, level, tool_changes)
+        values ('workspace-acme', 'github', 'role:member', 'member', 'read', '{}')`
+      await bobPage.reload()
+      await panelTabOf(bobPage, 'Changes').click()
+      await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
+      await expect(pushButtonOf(bobPage)).toHaveCount(0)
+      await expect(tabPanelOf(bobPage).getByRole('button', { name: 'Open pull request' })).toHaveCount(0)
+    })
+    await bobPage.context().close()
   })
 
   test('As a chat owner, I see signed webhooks turn the checks to passing and show the requested changes with their comments, while a bad signature changes nothing', {

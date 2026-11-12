@@ -390,7 +390,14 @@ test('an approval question made by the agent never reaches a viewer nor storage,
   const approval = {
     questionId: 'forged',
     kind: 'approval',
-    approval: { server: 'crm', tool: 'update', arguments: '{}', prompterName: 'Bob', ownerName: 'Alice' },
+    approval: {
+      server: 'crm',
+      tool: 'update',
+      arguments: '{}',
+      prompterName: 'Bob',
+      answererId: alice,
+      answererName: 'Alice',
+    },
   }
   relay.forgeUpdate({ sessionUpdate: 'question', ...approval })
   relay.forgeUpdate({ sessionUpdate: 'question_answered', ...approval, approved: true, answeredBy: alice })
@@ -619,6 +626,37 @@ test('signing out closes the stream of that session at once and leaves the other
   expect(logout.status).toBe(204)
   expect(await signedOutViewer.closed).toBe(4001)
   await otherViewer.resubscribe()
+})
+
+test.each<[string, (bobToken: string) => Promise<unknown>, unknown]>([
+  [
+    'signs out everywhere',
+    async (bobToken) =>
+      (
+        await app.request('/auth/sign-out-everywhere', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${bobToken}` },
+        })
+      ).status,
+    204,
+  ],
+  [
+    'is signed out everywhere by an admin',
+    () => mutate(aliceInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob }),
+    succeeded,
+  ],
+])('every stream of a member who %s closes at once, and other members stream on', async (_, signOut, outcome) => {
+  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+  const bobToken = await sessionTokenOf(database, acme, bob)
+  const bobViewers = [
+    await openStream(chat, { token: bobToken }),
+    await openStream(chat, { token: await sessionTokenOf(database, acme, bob) }),
+  ]
+  const aliceViewer = await openStream(chat)
+  await Promise.all([...bobViewers, aliceViewer].map((viewer) => viewer.subscribed))
+  expect(await signOut(bobToken)).toEqual(outcome)
+  for (const viewer of bobViewers) expect(await viewer.closed).toBe(4001)
+  await aliceViewer.resubscribe()
 })
 
 test('a stream closes when its token expires and stays open when a renewed token arrives first', async () => {

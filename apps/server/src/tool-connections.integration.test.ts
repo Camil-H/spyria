@@ -127,7 +127,7 @@ test('a member acts only on their own key: unknown servers are refused, a member
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
 })
 
-test('/mcp runs as the chat owner with Spyria’s attribution, lists Spyria’s own tools first then the gateway’s outside a turn but calls them only during one, and refuses another host’s token', async () => {
+test('/mcp runs on the prompter’s key with Spyria’s attribution, lists Spyria’s own tools first then the gateway’s outside a turn but calls them only during one, and refuses another host’s token', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -171,7 +171,7 @@ test('/mcp runs as the chat owner with Spyria’s attribution, lists Spyria’s 
   }
 })
 
-test('/mcp for a chat owner without an LLM key runs the workspace tools on a key that serves only tools, and a call to a server they sign in to answers that the owner needs to connect', async () => {
+test('/mcp for a prompter without an LLM key runs the workspace tools on a key that serves only tools, and a call to a server they sign in to answers that the prompter needs to connect', async () => {
   const host = await fakeHost('Keyless tools host')
   const { token } = await runtimeTurn(host, bob, bob)
   const initialized = await mcpCall(
@@ -220,7 +220,7 @@ test('a member signs in only to a finished, reviewed server of their workspace t
   }
 })
 
-test('a server the owner has not connected, or whose token was revoked, answers Spyria’s wording and flags the connection', async () => {
+test('a server the prompter has not connected, or whose token was revoked, answers Spyria’s wording and flags the connection', async () => {
   const host = await fakeHost('Unconnected tools host')
   const { token } = await runtimeTurn(host, alice)
   await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))

@@ -3,7 +3,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { createToolCallOwnerAccess } from '@spyria/profile/server'
+import { createToolCallAccess } from '@spyria/profile/server'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -22,6 +22,7 @@ import {
   memberMcpUrl,
   openSharedTestApp,
   openZeroStore,
+  promptedBy,
   rpcOf,
   runtimeTurn,
   sharedMcpUrl,
@@ -266,7 +267,7 @@ test('a member given Read is refused update on their own prompts, their key hold
   const { token } = await runtimeTurn(host, bob, bob)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
+    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
   )
 
   const keyBefore = (await virtualKeyOf(bob)).id
@@ -277,7 +278,7 @@ test('a member given Read is refused update on their own prompts, their key hold
   await addLlmKey(bob, 'Mistral')
   expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
   expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
+    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
   )
 
   expect(await setCrmAccess(bob, 'none')).toBe(200)
@@ -347,7 +348,7 @@ test('a member moved to a role without access to a server they signed in to lose
   }
 })
 
-test("a member's own access syncs to them and to admins, not to a member who reads none of their chats, while every member reads the roles' access", async () => {
+test("a member's own access syncs to them and to admins, never to other members, while every member reads the roles' access", async () => {
   await setCrmAccess(lee, 'read')
   const accessOf = async (userId: string, isLeeSynced: boolean) => {
     const store = await openZeroStore(createZeroStore, userId as never, [acme])
@@ -425,14 +426,15 @@ test('a workspace’s connections are never granted to, listed for or callable b
     body: rpcOf('tools/list'),
   })
   expect(await listed.text()).not.toContain(gatewayName)
-  const access = createToolCallOwnerAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
+  const access = createToolCallAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
   expect(await access.toolCallPolicy(globex, alice, alice, `${gatewayName}-lookup`)).toMatchObject({
-    access: 'not_allowed',
+    access: 'not_granted',
   })
   expect(await access.toolCallPolicy(acme, alice, alice, `${gatewayName}-lookup`)).toEqual({
     access: 'allowed',
     readOnly: true,
     approval: 'never',
+    answerer: 'owner',
   })
 })
 
@@ -489,7 +491,7 @@ test('editing replaces the secret in place, a new URL registers the server again
   expect((await database.$client`select 1 from connection_access where connection_id = ${connectionId}`).length).toBe(0)
   expect(await gatewayClientNames()).not.toContain(secondName)
   expect(textOf((await mcpCall(host, token, callOf(secondName, 'lookup'))).result)).toBe(
-    `${secondName} isn't available on Alice's prompts in this chat`,
+    `Alice's access to ${secondName} does not include lookup in this chat`,
   )
   expect(
     (await workspaceEventsOf(database))
@@ -550,4 +552,24 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
   closing.abort()
   await stream
+})
+
+test('the agent lists the tools of the member who prompted, so a guest’s turn lists their own access and not the owner’s', async () => {
+  const { connectionId } = await register('Tickets')
+  await openToEveryRole(connectionId)
+  const gatewayName = (await connectionRow(connectionId))?.gatewayName ?? ''
+  const host = await fakeHost('Prompter listing host')
+  const { chatId, token } = await runtimeTurn(host, alice)
+  const ticketTools = async () =>
+    ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[])
+      .map(({ name }) => name)
+      .filter((name) => name.startsWith(`${gatewayName}-`))
+  try {
+    expect(await setAccess(connectionId, { memberId: bob }, 'none')).toBe(200)
+    await waitFor(async () => (await ticketTools()).length > 0)
+    await promptedBy(chatId, bob)
+    await waitFor(async () => (await ticketTools()).length === 0)
+  } finally {
+    await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)
+  }
 })

@@ -13,7 +13,8 @@ export const getPublishing = (workspaceId: WorkspaceId, chatId: ChatId, viewerId
       undefined,
     )
   return {
-    canPublish: chat !== undefined && chat.repository !== null && chat.ownerId === viewerId,
+    hasRepository: chat !== undefined && chat.repository !== null,
+    isOwner: chat?.ownerId === viewerId,
     chatName: chat?.name ?? '',
     hasOpenPullRequest: openStates.includes(String(card?.step?.state)),
     isTurnRunning: Boolean(chat?.agentTurnMessageId),

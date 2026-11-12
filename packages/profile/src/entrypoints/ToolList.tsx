@@ -12,6 +12,8 @@ export const toolCountsOf = (tools: readonly ConnectionTool[]) => {
   return `${tools.length} ${tools.length === 1 ? 'tool' : 'tools'} · ${readCount} read · ${tools.length - readCount} write`
 }
 
+type ListedTool = ConnectionTool & { summary?: string }
+
 export const ToolList = ({
   label,
   tools,
@@ -19,7 +21,7 @@ export const ToolList = ({
   groupControlOf,
 }: {
   label: string
-  tools: readonly ConnectionTool[]
+  tools: readonly ListedTool[]
   controlOf: (tool: ConnectionTool) => ReactNode
   groupControlOf?: (title: string, groupTools: readonly ConnectionTool[]) => ReactNode
 }) => {
@@ -53,9 +55,12 @@ export const ToolList = ({
               <ul className="flex flex-col">
                 {shown.map((tool) => (
                   <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
-                    <span>
-                      {tool.name}
-                      {tool.destructive && <span className="ml-2 text-xs text-muted">destructive</span>}
+                    <span className="flex flex-col">
+                      <span>
+                        {tool.name}
+                        {tool.destructive && <span className="ml-2 text-xs text-muted">destructive</span>}
+                      </span>
+                      {tool.summary && <span className="text-xs text-muted">{tool.summary}</span>}
                     </span>
                     {controlOf(tool)}
                   </li>

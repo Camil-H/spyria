@@ -93,9 +93,13 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     permissions.includes('members.manage') &&
     grantableRoles.some((role) => role.id === member.role)
   const [removing, setRemoving] = useState<WorkspaceMember | null>(null)
+  const [signingOut, setSigningOut] = useState<WorkspaceMember | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   const remove = async (member: WorkspaceMember) => {
     if (await run(() => commands.removeMember({ workspaceId, memberId: member.id }))) setRemoving(null)
+  }
+  const signOutEverywhere = async (member: WorkspaceMember) => {
+    if (await run(() => commands.endMemberSessions({ workspaceId, memberId: member.id }))) setSigningOut(null)
   }
   return (
     <LabelledSection title="Members" className="flex max-w-2xl flex-col gap-3">
@@ -120,6 +124,15 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
                 />
                 <button
                   type="button"
+                  aria-label={`Sign ${member.name} out everywhere`}
+                  className={ghostButtonClass}
+                  disabled={isPending}
+                  onClick={() => setSigningOut(member)}
+                >
+                  Sign out
+                </button>
+                <button
+                  type="button"
                   aria-label={`Remove ${member.name}`}
                   className={ghostButtonClass}
                   disabled={isPending}
@@ -132,7 +145,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           </li>
         ))}
       </ul>
-      {!removing && <ErrorMessage message={errorMessage} />}
+      {!removing && !signingOut && <ErrorMessage message={errorMessage} />}
       {invitations.length > 0 && (
         <ul aria-label="Pending invites" className="flex flex-col gap-2 text-sm">
           {invitations.map((invitation) => (
@@ -163,6 +176,23 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           <ErrorMessage message={errorMessage} />
           <button type="button" className={buttonClass} disabled={isPending} onClick={() => remove(removing)}>
             Remove
+          </button>
+        </Dialog>
+      )}
+      {signingOut && (
+        <Dialog label="Sign out everywhere" subject={signingOut.name} onClose={() => setSigningOut(null)}>
+          <p className="text-sm text-muted">
+            They are signed out of this workspace on every device and their open agent views close. They stay a member
+            and can sign in again.
+          </p>
+          <ErrorMessage message={errorMessage} />
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={isPending}
+            onClick={() => signOutEverywhere(signingOut)}
+          >
+            Sign out everywhere
           </button>
         </Dialog>
       )}

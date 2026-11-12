@@ -97,6 +97,10 @@ Runtime chats they owned **freeze**: participants can still read them, but nobod
 
 Inviting a removed member's address again creates a normal invite that restores their membership when they sign in.
 
+### Signing a member out
+
+**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again through their provider to come back; a session they still have in another workspace cannot reopen this one. After a lost device, also end their session at the provider, since a provider that still remembers them signs them in again. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
+
 ## Sign-in and SSO
 
 People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Setup SSO** lets a workspace enforce its organization's own provider instead, so that people lose access when their organization account is removed. The rules and the sign-in screen are in [who can join and sign-in](../guides/who-can-join.md); the reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md).
@@ -111,13 +115,13 @@ A session opened through a workspace's own provider opens only that workspace: i
 
 ## GitHub
 
-**Connect GitHub** creates the workspace's GitHub App on GitHub in one click (on your account or an organization), or takes the details of an App created by hand. It then lists the repositories the App's installations grant. How dev chats use it is described in [Dev mode](./dev-mode.md); the setup steps are in [Manual install](../guides/self-hosting.md).
+**Connect GitHub** creates the workspace's GitHub App on GitHub in one click (on your account or an organization), or takes the details of an App created by hand. It then lists the repositories the App's installations grant. It also lists **Members' accounts**: each member's GitHub account, or that they have not connected one, since the agent pushes and opens pull requests with the account of the member who prompted. Who may use GitHub's commands is set with the other tools in **Tools**, which the card links to; no control is in both. How dev chats use it is described in [Dev mode](./dev-mode.md); the setup steps are in [Manual install](../guides/self-hosting.md).
 
 ## Runtime hosts and members' machines
 
 **Connect runtime** lists the workspace's runtime hosts, adds new ones, and, in its **Member local runtimes** section, holds the switch **Members can run sessions on their own machine**. Turning it off stops members from adding a machine or starting a chat on one, and prompts in existing ones get a notice. See [Machines](./machines.md).
 
-Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: a **Default setup command** tab for the repositories without one of their own, a tab for each repository that has its own, and a **New repository setup command** tab to add one, as the quality gates do. Nothing runs without one, even a repository's `.spyria/setup.sh`. Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
+Its **Setup commands** set what a dev chat's runtime runs when it starts, before the agent gets a message: a **Default setup command** tab for the repositories without one of their own, a tab for each repository that has its own, and a **New repository setup command** tab to add one, as the quality gates do. Nothing runs without one, even a repository's `.spyria/setup.sh`. A repository's own setup command can also keep up to 5 runtimes ready, set up on its default branch, so a new dev chat starts at once ([Runtimes kept ready](./dev-mode.md#runtimes-kept-ready)). Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
 
 ## Quality gates
 
@@ -125,7 +129,11 @@ Its **Setup commands** set what a dev chat's runtime runs when it starts, before
 
 ## Tools
 
-**Tools** is the workspace's catalogue of approved tool servers (MCP). Each server has a name, unique in the workspace, its address, and how members sign in, chosen when it is added:
+**Tools** lists, under **Built in**, Spyria's own tools, which every agent has, with what each does: `open_page`, `take_screenshot`, `web_search`, `delegate`, `await_task`, `check_task`, `finish_work` and `report_review`. There is nothing to edit there: their settings live with their feature, the Browser tab for the first two and **Quality gates**, which the row links to, for the last two.
+
+Under **Servers**, **GitHub** comes first, a row like any other: its commands with what each does (`fetch_branch`, `read_review_threads`, `read_checks`, `list_issues` and `read_issue` read; `push_branch`, `open_pull_request` and `update_pull_request` write, as Spyria marks them), a level and single tools for each role, named members, and each member's approvals in their profile. A role without a GitHub setting has **Read and write**, so dev chats work before you set levels. Its setup (the App, repositories, members' accounts) stays in **Connect GitHub**, which its row links to. The agent's GitHub tools, the Changes panel's Push and Open pull request, the pull request card's Address review comments and the quality gates all go through the same check of the member's GitHub access. A catalogue server cannot be named GitHub.
+
+The rest is the workspace's catalogue of approved tool servers (MCP). Each server has a name, unique in the workspace, its address, and how members sign in, chosen when it is added:
 
 - **Each member signs in** (the default): each member connects their own account in **Profile** > **Tool connections**, and Spyria uses it on their chats. Adding the server opens a window where you sign in once with your own account: the gateway uses that sign-in only to list the server's tools, and the server is ready once you have. If the sign-in fails, Spyria removes the server and says why; while it waits, the server reads "Waiting for the sign-in that lists its tools", and one whose window was closed before the end stays so until it is removed. Its address cannot change once added, since members' sign-ins belong to it: remove it and add it again. The server must let the gateway register itself (OAuth dynamic client registration); one that needs a pre-registered OAuth app, such as GitHub's MCP server, cannot be added yet.
 - **One shared login**: every member's calls use a secret header (name and value) you enter, only for servers without their own sign-in, such as API-key or internal servers. The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the address or the header recreates the server in the gateway.
@@ -137,7 +145,7 @@ Members cannot add servers of their own. Once a server is added, its card shows 
 
 Each member's gateway key is given exactly the tools their access gives on each server, and the gateway enforces it on every call. Changing a member's role gives them the new role's tools at once. Servers of one workspace are invisible to other workspaces. Adding, changing or removing a server reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Removing a server also deletes every member's sign-in to it.
 
-When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only the shared-login servers, with what both the owner and the guest may use, never a server the owner signed in to with their own account. Which calls wait for the owner's approval is each member's choice in their profile (see [Agents](./agents.md#tool-approvals)). See [decision 0030](../decisions/0030-workspace-tools-catalogue.md) and [decision 0031](../decisions/0031-tool-access-levels-and-approvals.md).
+When an agent acts, it uses the access and accounts of the member who prompted: a server each member signs in to answers with the prompter's own sign-in, and on a guest's prompt a shared-login server needs both the owner's and the guest's access. Which calls wait for approval is the choice of the member whose account answers for the call, in their profile (see [Agents](./agents.md#tool-approvals)). See [decision 0030](../decisions/0030-workspace-tools-catalogue.md), [decision 0031](../decisions/0031-tool-access-levels-and-approvals.md) and [decision 0033](../decisions/0033-tools-on-the-prompters-account.md).
 
 ## AI providers
 

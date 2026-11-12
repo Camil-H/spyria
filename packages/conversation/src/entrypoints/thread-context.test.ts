@@ -18,6 +18,7 @@ const messageOf = (message: Partial<ConversationMessage>): ConversationMessage =
   isEdited: false,
   isRunning: false,
   canReply: true,
+  isOnViewersPrompt: false,
   canQuote: true,
   quote: null,
   thread: null,

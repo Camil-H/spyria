@@ -6,6 +6,7 @@ import {
   type AgentChat,
   chatAttachmentPathOf,
   chatAttachmentsPathOf,
+  chatGitHubToolsPathOf,
   chatGitPathOf,
   chatMediaPathOf,
   chatPublishPathOf,
@@ -464,6 +465,8 @@ export const createApp = ({
         testDatabaseByName,
         closeSessionStreams: (sessionDatabase, workspaceId, sessionId) =>
           agentBridge.forDatabase(sessionDatabase).closeSessionStreams(workspaceId, sessionId),
+        closeMemberStreams: (sessionDatabase, workspaceId, memberId) =>
+          agentBridge.forDatabase(sessionDatabase).closeMemberStreams(workspaceId, memberId),
         rateLimited,
       }),
     )
@@ -508,6 +511,10 @@ export const createApp = ({
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')
               runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)
+            if (mutation.name === 'workspace.endMemberSessions') {
+              const { memberId } = mutation.args[0] as { memberId: string }
+              agentBridge.forDatabase(context.get('database')).closeMemberStreams(ctx.workspaceId, memberId)
+            }
             if (mutation.name === 'workspace.removeMember') {
               const { memberId } = mutation.args[0] as { memberId: string }
               agentBridge.forDatabase(context.get('database')).closeMemberStreams(ctx.workspaceId, memberId)
@@ -618,6 +625,13 @@ export const createApp = ({
         draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
       })
       return context.json(publication, publication.isRefused ? 403 : 200)
+    })
+    .get(chatGitHubToolsPathOf(':chatId'), async (context) => {
+      const { workspaceId, userId } = context.get('zeroContext')
+      const tools = await agentBridge
+        .forDatabase(context.get('database'))
+        .githubToolsInChat({ workspaceId, chatId: chatId(context.req.param('chatId') ?? '') }, userId)
+      return context.json({ tools })
     })
     .post(chatGitPathOf(':chatId', ':action'), async (context) => {
       const action = context.req.param('action') ?? ''

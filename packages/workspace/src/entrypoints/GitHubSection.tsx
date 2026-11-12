@@ -10,7 +10,8 @@ import {
 } from '@spyria/ui'
 import { Check } from 'lucide-react'
 import { type SubmitEvent, useEffect, useState } from 'react'
-import type { GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
+import { Link } from 'react-router'
+import type { GitHubMemberAccount, GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
 import { GitHubAppCreationForm } from './GitHubAppCreationForm.tsx'
 import { GitHubAppGuide } from './GitHubAppGuide.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -21,6 +22,29 @@ const secretLabels = {
   webhookSecret: 'Webhook secret',
 }
 const noSecrets: GitHubSecrets = { clientSecret: '', privateKey: '', webhookSecret: '' }
+
+const accountStatusOf = ({ login, needsReconnection }: GitHubMemberAccount) => {
+  if (!login) return 'Not connected'
+  return needsReconnection ? `${login}, needs reconnection` : login
+}
+
+const MemberAccounts = ({ accounts }: { accounts: readonly GitHubMemberAccount[] }) => (
+  <>
+    <h3 className="text-sm font-medium">Members' accounts</h3>
+    <p className="text-sm text-muted">
+      Each member connects their own GitHub account in their profile: the agent pushes and opens pull requests with the
+      account of the member who prompted.
+    </p>
+    <ul aria-label="Members' accounts" className="flex flex-col gap-1 text-sm">
+      {accounts.map((account) => (
+        <li key={account.memberId} className="flex gap-3">
+          <span className="font-medium">{account.name}</span>
+          <span className="text-muted">{accountStatusOf(account)}</span>
+        </li>
+      ))}
+    </ul>
+  </>
+)
 
 export const useIsGitHubConfigured = (workspaceId: WorkspaceId, isShown: boolean) => {
   const commands = useWorkspaceCommands()
@@ -35,6 +59,7 @@ export const useIsGitHubConfigured = (workspaceId: WorkspaceId, isShown: boolean
 
 export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
+  const mayManageTools = useWorkspacePermissions(workspaceId).includes('tools.manage')
   const [settings, setSettings] = useState<GitHubSettingsView | null>()
   const [ids, setIds] = useState({ appId: '', clientId: '' })
   const [secrets, setSecrets] = useState(noSecrets)
@@ -67,6 +92,17 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const placeholder = settings ? 'Set: enter a new value to replace it' : 'Not set'
   return (
     <LabelledSection title="GitHub">
+      <p className="text-sm text-muted">
+        Who may use GitHub's tools, and which of them, is set with the other tools in{' '}
+        {mayManageTools ? (
+          <Link to={`/w/${workspaceId}/settings/tools`} className="text-ink underline">
+            Tools
+          </Link>
+        ) : (
+          'Tools'
+        )}
+        .
+      </p>
       {settings && (
         <>
           <p role="status" title="GitHub App connected" className="text-sm font-medium flex items-center gap-2">
@@ -88,6 +124,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
               ))}
             </ul>
           )}
+          <MemberAccounts accounts={settings.memberAccounts} />
         </>
       )}
       {!settings && <GitHubAppCreationForm workspaceId={workspaceId} />}

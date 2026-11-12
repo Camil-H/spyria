@@ -32,6 +32,7 @@ import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
 import { awaitTask, checkTask, delegateTask } from '../operations/delegate-task.ts'
 import { forwardToAgent } from '../operations/forward-to-agent.ts'
 import { runGitAction } from '../operations/git-actions.ts'
+import { githubToolPolicy, readGitHubToolsInChat } from '../operations/github-access.ts'
 import { interruptOwnedTurns } from '../operations/interrupt-owned-turns.ts'
 import {
   findModelCallTurn,
@@ -84,6 +85,7 @@ export const createAgentHandlers = ({
   checkouts,
   deployment,
   isBudgetUsedUp,
+  onTurnPrompter,
 }: {
   transact: Transact
   sandboxProvider: SandboxProvider
@@ -98,6 +100,7 @@ export const createAgentHandlers = ({
   checkouts?: RepositoryCheckouts
   deployment?: string
   isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
+  onTurnPrompter?: (chat: AgentChat, prompterId: MemberId) => void
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { spyriaAgentImage })
   const agentClient = createSpyriaAgentClient()
@@ -115,6 +118,7 @@ export const createAgentHandlers = ({
     approvalWindowMilliseconds,
     deployment,
     isBudgetUsedUp,
+    onTurnPrompter,
   })
   return {
     jobs: {
@@ -185,6 +189,10 @@ export const createAgentHandlers = ({
     githubToolsOf: (chat: AgentChat) => githubToolsOf(dependenciesOf(chat.workspaceId), chat),
     callGitHubTool: (input: Parameters<typeof callGitHubTool>[1]) =>
       callGitHubTool(dependenciesOf(input.chat.workspaceId), input),
+    githubToolsInChat: (chat: AgentChat, member: MemberId) =>
+      readGitHubToolsInChat(dependenciesOf(chat.workspaceId), { chat, memberId: member }),
+    githubToolPolicy: (input: Parameters<typeof githubToolPolicy>[1]) =>
+      githubToolPolicy(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
       runGitAction(dependenciesOf(input.chat.workspaceId), input),
     recordPullRequest: (input: Parameters<typeof recordPullRequest>[1]) =>

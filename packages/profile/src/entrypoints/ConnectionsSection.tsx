@@ -4,7 +4,7 @@ import { ErrorMessage, ghostButtonClass, LabelledSection, useGuardedAction } fro
 import { useEffect, useState } from 'react'
 import { connectionStatuses, notConnectedStatus } from '../domain/tool-connection.ts'
 import { connectionSignIns } from '../domain/workspace-connection.ts'
-import { getToolConnections } from '../queries/get-tool-connections.ts'
+import { getGitHubApprovals, getToolConnections } from '../queries/get-tool-connections.ts'
 import { GitHubConnectionRow } from './GitHubConnectionRow.tsx'
 import { useProfileCommands } from './providers.tsx'
 import { ToolApprovals } from './ToolApprovals.tsx'
@@ -14,6 +14,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   const commands = useProfileCommands()
   const { errorMessage, run } = useGuardedAction()
   const connections = useQuery(getToolConnections, workspaceId, memberId)
+  const github = useQuery(getGitHubApprovals, workspaceId, memberId)
   const [disconnectedTool, setDisconnectedTool] = useState<string>()
   const [approvalsShown, setApprovalsShown] = useState<string>()
   useEffect(() => {
@@ -29,6 +30,18 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
   return (
     <LabelledSection id="connections" title="Tool connections">
       <GitHubConnectionRow workspaceId={workspaceId} />
+      {github && github.tools.length > 0 && (
+        <div className="flex flex-col gap-1 text-sm">
+          <button
+            type="button"
+            className={`${ghostButtonClass} w-fit`}
+            onClick={() => setApprovalsShown(approvalsShown === github.id ? undefined : github.id)}
+          >
+            Approvals for {github.name}
+          </button>
+          {approvalsShown === github.id && <ToolApprovals workspaceId={workspaceId} server={github} />}
+        </div>
+      )}
       {connections.length === 0 ? (
         <p className="text-sm text-muted">No tools available to you in this workspace yet</p>
       ) : (

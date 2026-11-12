@@ -1,3 +1,4 @@
+export type { RepositoryAccess } from './contracts/repositories.ts'
 export type * from './contracts/sandbox-provider.ts'
 export { HostNotRegistered, HostRefused } from './domain/errors.ts'
 export { hostUpdateCommandOf } from './domain/host-command.ts'

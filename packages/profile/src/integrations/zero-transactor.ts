@@ -226,6 +226,16 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         const row = await tx.run(ownToolApprovals.where('connectionId', connectionId).one())
         return row && { connectionId, serverApproval: row.serverApproval, toolApprovals: row.toolApprovals }
       },
+      ofMember: async (approver, connectionId) => {
+        const row = await tx.run(
+          zql.toolApprovals
+            .where('workspaceId', workspaceId)
+            .where('userId', approver)
+            .where('connectionId', connectionId)
+            .one(),
+        )
+        return row && { connectionId, serverApproval: row.serverApproval, toolApprovals: row.toolApprovals }
+      },
       save: (preference) => tx.mutate.toolApprovals.upsert({ ...owner, ...preference }),
       removeAll: async () => {
         for (const { connectionId } of await tx.run(ownToolApprovals))

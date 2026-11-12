@@ -10,7 +10,7 @@ test.describe('Setup commands', () => {
     await page.goto('/')
   })
 
-  test('As an admin, I give a repository its own setup command next to the runtime hosts, and the others a default one', {
+  test('As an admin, I give a repository its own setup command and runtimes kept ready next to the runtime hosts, and the others a default one', {
     tag: ['@spec-57'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
@@ -24,13 +24,16 @@ test.describe('Setup commands', () => {
     await section.getByRole('button', { name: 'Save' }).click()
     await expect(section.getByText('Give acme/app a setup command, or delete it')).toBeVisible()
     await commandOf(page).fill('bun install && bun run db:migrate')
+    await section.getByLabel('Runtimes kept ready').fill('2')
     await section.getByRole('button', { name: 'Save' }).click()
     await expect(section.getByText('Saved')).toBeVisible()
 
     await page.reload()
     await expect(commandOf(page)).toHaveValue('bun install')
+    await expect(section.getByLabel('Runtimes kept ready')).toHaveCount(0)
     await tabOf(page, 'acme/app').click()
     await expect(commandOf(page)).toHaveValue('bun install && bun run db:migrate')
+    await expect(section.getByLabel('Runtimes kept ready')).toHaveValue('2')
 
     await section.getByRole('button', { name: 'Delete the setup command of acme/app' }).click()
     await expect(tabOf(page, 'Default setup command')).toHaveAttribute('aria-selected', 'true')

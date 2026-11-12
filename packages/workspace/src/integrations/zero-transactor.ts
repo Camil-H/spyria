@@ -6,6 +6,7 @@ import {
   enqueueJob,
   lockActiveAdminIds,
   scheduleWorkspaceDeletion,
+  signOutMemberEverywhere,
 } from '@spyria/db/server-writes'
 import type {
   Chat as ChatRow,
@@ -40,6 +41,7 @@ import {
 } from '@spyria/kernel'
 import { regrantMemberToolsOnServer, removeMemberProfileOnServer } from '@spyria/profile/published'
 import {
+  refillWarmPoolsOnServer,
   removeChatRuntimeOnServer,
   removeMemberMachineOnServer,
   stopChatRuntimeOnServer,
@@ -158,6 +160,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
       },
       setSetupCommands: async (commands) => {
         await tx.mutate.workspaces.update({ workspaceId: context.workspaceId, setupCommands: commands })
+        await refillWarmPoolsOnServer(tx, context.workspaceId)
       },
       setDevLoop: async (settings) => {
         await tx.mutate.workspaces.update({ workspaceId: context.workspaceId, devLoop: settings })
@@ -237,6 +240,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await deleteMemberSessions(tx, context.workspaceId, id)
         await removeMemberMachineOnServer(tx, context.workspaceId, id)
         await removeMemberProfileOnServer(tx, context.workspaceId, id)
+      },
+      endSessions: async (id) => {
+        await signOutMemberEverywhere(tx, context.workspaceId, id)
       },
       regrantToolsLater: (id) => regrantMemberToolsOnServer(tx, context.workspaceId, id),
       stopTurnsLater: async (change) => {

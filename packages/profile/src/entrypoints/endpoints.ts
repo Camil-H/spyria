@@ -76,7 +76,7 @@ export const toolConnectionFromRequest = (
 export const checkToolConnectionsFromRequest = (transact: Transact, context: ZeroContext, gateway: ToolGateway) =>
   checkToolConnections({ transactor: createTransactingZeroTransactor(transact, context), gateway })
 
-export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGateway & ToolGateway) => {
+export const createToolCallAccess = (transact: Transact, gateway: LlmGateway & ToolGateway) => {
   const dependenciesOf = (workspace: WorkspaceId, member: MemberId) => ({
     transactor: createTransactingZeroTransactor(transact, memberContext(workspace, member)),
     gateway,
@@ -88,7 +88,7 @@ export const createToolCallOwnerAccess = (transact: Transact, gateway: LlmGatewa
     flagToolConnection: (workspace: WorkspaceId, member: MemberId, tool: string) =>
       flagToolConnection(dependenciesOf(workspace, member), { tool }),
     toolCallPolicy: (workspace: WorkspaceId, owner: MemberId, prompter: MemberId, toolName: string) =>
-      toolCallPolicy(dependenciesOf(workspace, owner), { prompterId: prompter, toolName }),
+      toolCallPolicy(dependenciesOf(workspace, prompter), { ownerId: owner, prompterId: prompter, toolName }),
     serverNameOf: (workspace: WorkspaceId, owner: MemberId, server: string) =>
       toolServerNameOf(dependenciesOf(workspace, owner), { tool: server }),
   }
