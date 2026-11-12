@@ -8,7 +8,6 @@ import {
   notApprovedOf,
   toolGatewayUnreachable,
 } from '../domain/tool-calls.ts'
-
 import type { AgentDependencies } from './agent-turn.ts'
 import { requestToolApproval } from './request-tool-approval.ts'
 
@@ -52,7 +51,6 @@ export const authorizeToolCall = async (
     return {
       refusal: guestToolRefusalOf(access, { ownerName, prompterName, server: serverName }),
       readOnly: null,
-
       ...notNeeded,
     }
   if (!needsApproval(approval, guestId !== null)) return { readOnly, ...notNeeded }

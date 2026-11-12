@@ -205,7 +205,6 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   expect((await asMember(bob, 'POST', '/api/tool-connections/check')).status).toBe(204)
   expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Needs reconnection' }])
   expect(await setAccess(connectionId, { memberId: bob }, 'none')).toBe(200)
-
   expect(await signInsOf(connectionId)).toEqual([])
   expect(await sessionsOf(bob, gatewayName)).toEqual([])
   await removeKeysOf(bob)
@@ -327,7 +326,6 @@ test("a member's own access syncs to them and to admins, not to a member who rea
         .connectionAccess.map(
           ({ roleId, memberId, level }): Record<string, string | null> => ({ roleId, memberId, level }),
         )
-
     await waitFor(
       () =>
         store.read().workspaceConnections.length > 0 &&
@@ -518,7 +516,6 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   const beforeRemoving = changeCount()
   expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
   await waitFor(() => changeCount() > beforeRemoving)
-
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
   closing.abort()
   await stream

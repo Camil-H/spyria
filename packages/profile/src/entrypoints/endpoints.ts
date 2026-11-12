@@ -1,6 +1,5 @@
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
 import { type AccessLevel, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
-
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
 import type { ConnectionSignIn } from '../domain/workspace-connection.ts'

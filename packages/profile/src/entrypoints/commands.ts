@@ -16,7 +16,6 @@ export type ProfileCommands = {
   reviewConnectionTools: ConnectionCommand<{ markings: ToolMarking[] }>
   setConnectionAccess: ConnectionCommand<AccessInput>
   setToolApproval: ConnectionCommand<{ tool: string | null; approval: ToolApproval | null }>
-
   renameMember: Command<{ name: DisplayName }>
   changeAvatar: Command<{ avatar: Avatar | null }>
   removeLlmCredential: Command<{ credentialId: CredentialId }>

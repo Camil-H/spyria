@@ -294,7 +294,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
-
   const connectionAccessOf = mappedRows(({ userId, ...access }: ZeroRows['connectionAccess'][number]) => ({
     ...access,
     memberId: userId,
@@ -359,7 +358,6 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       workspaceConnections: workspaceConnectionsOf(rowsOf('workspaceConnections')),
       connectionAccess: connectionAccessOf(rowsOf('connectionAccess')),
       toolApprovals: toolApprovalsOf(rowsOf('toolApprovals')),
-
       runtimeHosts: runtimeHostsOf(rowsOf('runtimeHosts')),
       machineCounts: machineCountsOf(rowsOf('machineCounts')),
       runtimes: runtimesOf(rowsOf('runtimes')),

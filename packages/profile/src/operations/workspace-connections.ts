@@ -174,7 +174,6 @@ export const editWorkspaceConnection = async (
     url,
     gatewayName,
     tools,
-
     headerName: secretHeader === undefined ? previous.headerName : (secretHeader?.name ?? null),
   }
   await asConnectionManager(dependencies, async ({ workspaceConnections, workspaceEvents }) => {

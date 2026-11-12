@@ -30,7 +30,6 @@ test('changing a member’s tool grants keeps their provider key on their virtua
     toolChanges: {},
   })
   expect(readOnly.status).toBe(200)
-
   expect(
     (await virtualKeyOf(bob)).mcp_configs.find((config) => config.mcp_client.name === 'crm')?.tools_to_execute,
   ).toEqual(['lookup'])

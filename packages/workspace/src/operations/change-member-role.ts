@@ -17,6 +17,5 @@ export const changeMemberRole = ({ transactor }: Dependencies, { memberId, role,
     requireAnotherAdmin(member, await memberships.activeAdminIds())
     await memberships.save({ ...member, role })
     await memberAccess.regrantToolsLater(memberId)
-
     await workspaceEvents.record({ type: 'member.role_changed', actorId, payload: { memberId, role } })
   })
