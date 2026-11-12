@@ -38,7 +38,7 @@ import {
   workspaceId,
   workspacePermissions,
 } from '@spyria/kernel'
-import { removeMemberProfileOnServer } from '@spyria/profile/published'
+import { regrantMemberToolsOnServer, removeMemberProfileOnServer } from '@spyria/profile/published'
 import {
   refillWarmPoolsOnServer,
   removeChatRuntimeOnServer,
@@ -240,6 +240,7 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         await removeMemberMachineOnServer(tx, context.workspaceId, id)
         await removeMemberProfileOnServer(tx, context.workspaceId, id)
       },
+      regrantToolsLater: (id) => regrantMemberToolsOnServer(tx, context.workspaceId, id),
       stopTurnsLater: async (change) => {
         await enqueueJob(tx, {
           workspaceId: context.workspaceId,

@@ -1,1 +1,5 @@
-export { releaseWorkspaceConnectionsOnServer, removeMemberProfileOnServer } from './entrypoints/mutators.ts'
+export {
+  regrantMemberToolsOnServer,
+  releaseWorkspaceConnectionsOnServer,
+  removeMemberProfileOnServer,
+} from './entrypoints/mutators.ts'

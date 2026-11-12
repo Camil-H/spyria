@@ -37,7 +37,29 @@ test.describe('Tools catalogue', () => {
   const crmCardOf = (page: Page) => serverCardOf(page, 'CRM')
   const notOffered = (serverName: string, tool: string) => `Tool ${serverName}-${tool} not found`
 
+  const setLevel = async (page: Page, who: string, level: string, serverName = 'CRM') => {
+    const select = serverCardOf(page, serverName).getByRole('combobox', { name: `Access of ${who}` })
+    await select.selectOption({ label: level })
+    await expect(select.locator('option:checked')).toHaveText(level)
+  }
+  const confirmTools = async (page: Page, serverName: string) => {
+    await serverCardOf(page, serverName).getByRole('button', { name: 'Confirm' }).click()
+    await expect(serverCardOf(page, serverName).getByRole('region', { name: `Access to ${serverName}` })).toBeVisible()
+  }
+  const addNamedMember = async (page: Page, who: string) => {
+    await crmCardOf(page)
+      .getByRole('combobox', { name: /own access replaces/ })
+      .selectOption({ label: who })
+    await expect(crmCardOf(page).getByRole('combobox', { name: `Access of ${who}` })).toBeVisible()
+  }
   const registerCrm = async (page: Page, workerStack: WorkerStack) => {
+    const gatewayName = await addCrm(page, workerStack)
+    await confirmTools(page, 'CRM')
+    await setLevel(page, 'Admin', 'Read and write')
+    await setLevel(page, 'Member', 'Read and write')
+    return gatewayName
+  }
+  const addCrm = async (page: Page, workerStack: WorkerStack) => {
     await openSettings(page, 'Tools')
     const form = settingsSectionOf(page).getByRole('form', { name: 'Add server' })
     await form.getByLabel('Name').fill('CRM')
@@ -89,28 +111,29 @@ test.describe('Tools catalogue', () => {
     await checkbox.click()
     await expect(checkbox).not.toBeChecked()
   }
-  const restrictFor = (page: Page, memberName: string, tool: string) =>
-    untick(crmCardOf(page).getByRole('checkbox', { name: `${tool} for ${memberName}` }))
   const profileCrmOf = async (page: Page) => {
     await openProfile(page)
     return connectionsOf(page).getByRole('listitem', { name: 'CRM' })
   }
 
-  test('As a member who can manage the tools catalogue, I register CRM with a secret header: its tools are listed, the secret shows only as set, and Bob sees it in his tool connections and his agent uses it', {
-    tag: ['@spec-38', '@smoke'],
+  test('As a member who can manage the tools catalogue, I register CRM with a secret header, confirm what its tools do and open it to every role: the secret shows only as set, and Bob sees it in his tool connections and his agent uses it', {
+    tag: ['@spec-38', '@spec-58', '@smoke'],
   }, async ({ page, browser, workerStack, agentScript }) => {
-    const gatewayName = await registerCrm(page, workerStack)
+    const gatewayName = await addCrm(page, workerStack)
     await expect(crmCardOf(page)).toContainText('One shared login, x-crm-key: set')
     await expect(crmCardOf(page)).not.toContainText('crm-e2e-secret')
-    const tools = crmCardOf(page).getByRole('group', { name: 'Tools of CRM' })
-    await expect(tools).toContainText('lookupread-only')
-    await expect(tools).toContainText('updatewrites')
-    await expect(tools.getByRole('checkbox', { name: /^lookup/ })).toBeChecked()
-    await expect(tools.getByRole('checkbox', { name: /^update/ })).toBeChecked()
+    await expect(crmCardOf(page)).toContainText('2 tools · 1 read · 1 write')
+    const review = crmCardOf(page).getByRole('region', { name: 'Read and write of CRM' })
+    await expect(review.getByRole('combobox', { name: 'What lookup does' })).toHaveValue('read')
+    await expect(review.getByRole('combobox', { name: 'What update does' })).toHaveValue('write')
+    await expect(crmCardOf(page).getByRole('region', { name: 'Access to CRM' })).toHaveCount(0)
+    await confirmTools(page, 'CRM')
+    await setLevel(page, 'Admin', 'Read and write')
+    await setLevel(page, 'Member', 'Read and write')
 
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
-    await expect(await profileCrmOf(bobPage)).toHaveText('CRMShared login: lookup, update')
+    await expect(await profileCrmOf(bobPage)).toContainText('Shared login: 2 tools · 1 read · 1 write')
     const result = await promptIn(bobPage, agentScript, toolScriptOf(gatewayName, 'lookup', 'Found it.'), 'Look it up')
     await expect(result).toContainText('ran lookup')
     await bobPage.context().close()
@@ -128,11 +151,12 @@ test.describe('Tools catalogue', () => {
     await expect(await promptIn(page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
   })
 
-  test('As a member who can manage the tools catalogue, I restrict Bob to lookup and his update is refused, also after he removes his LLM key and adds it again', {
-    tag: ['@spec-38'],
+  test('As a member who can manage the tools catalogue, I give Bob his own Read access and his update is refused, also after he removes his LLM key and adds it again', {
+    tag: ['@spec-38', '@spec-58'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
-    await restrictFor(page, 'Bob', 'update')
+    await addNamedMember(page, 'Bob')
+    await setLevel(page, 'Bob', 'Read')
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
@@ -160,11 +184,12 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I restrict a chat owner from update and a guest’s prompt in her chat cannot use it either, while lookup works', {
-    tag: ['@spec-38'],
+  test('As a member who can manage the tools catalogue, I give a chat owner Read only and a guest’s prompt in her chat cannot use update either, while lookup works', {
+    tag: ['@spec-38', '@spec-58'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
-    await restrictFor(page, 'Alice', 'update')
+    await addNamedMember(page, 'Alice')
+    await setLevel(page, 'Alice', 'Read')
     await addParticipant(workerStack, research, 'member-bob', 'prompter')
     const bobPage = await openAsBobWithKey(browser, workerStack)
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
@@ -174,14 +199,20 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I untick update for the workspace: it is refused on every prompt and the Connected tools tab shows CRM with lookup only', {
-    tag: ['@spec-38'],
+  test('As a member who can manage the tools catalogue, I untick update in the Admin role’s tool list: it is refused on my prompts and the Connected tools tab shows CRM with lookup only', {
+    tag: ['@spec-38', '@spec-58'],
   }, async ({ page, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
-    const update = crmCardOf(page)
-      .getByRole('group', { name: 'Tools of CRM' })
-      .getByRole('checkbox', { name: /^update/ })
-    await untick(update)
+    const adminRow = crmCardOf(page).getByRole('list', { name: 'Roles' }).getByRole('listitem', { name: 'Admin' })
+    await adminRow.getByRole('button', { name: 'Single tools' }).click()
+    await adminRow.getByRole('searchbox', { name: 'Search tools for Admin' }).fill('upd')
+    await expect(adminRow.getByRole('checkbox', { name: 'lookup for Admin' })).toHaveCount(0)
+    await untick(adminRow.getByRole('checkbox', { name: 'update for Admin' }))
+    await expect(adminRow.getByRole('button', { name: '1 single change' })).toBeVisible()
+    await expect(adminRow.getByRole('switch', { name: 'Allow all write tools' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     await expect(
       await promptIn(page, agentScript, toolScriptOf(gatewayName, 'update', 'Tried to update.'), 'Update it'),
     ).toContainText(notOffered('CRM', 'update'))
@@ -195,7 +226,7 @@ test.describe('Tools catalogue', () => {
     const gatewayName = await registerCrm(page, workerStack)
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     const bobCrm = await profileCrmOf(bobPage)
-    await expect(bobCrm).toHaveText('CRMShared login: lookup, update')
+    await expect(bobCrm).toContainText('Shared login: 2 tools · 1 read · 1 write')
 
     await crmCardOf(page).getByRole('button', { name: 'Remove' }).click()
     await page.getByRole('dialog', { name: 'Remove server' }).getByRole('button', { name: 'Remove' }).click()
@@ -226,9 +257,9 @@ test.describe('Tools catalogue', () => {
     await expect(form.getByLabel('Secret value')).toHaveCount(0)
     await inPopup(page, () => form.getByRole('button', { name: 'Add server' }).click())
     await expect(serverCardOf(page, 'Docs')).toContainText('Each member signs in')
-    await expect(serverCardOf(page, 'Docs').getByRole('group', { name: 'Tools of Docs' })).toContainText(
-      'whoamiread-only',
-    )
+    await expect(serverCardOf(page, 'Docs').getByRole('combobox', { name: 'What whoami does' })).toHaveValue('read')
+    await confirmTools(page, 'Docs')
+    await setLevel(page, 'Member', 'Read', 'Docs')
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     const bobAccount = accountOf('bob')

@@ -16,7 +16,7 @@ type McpClient = {
   config: { client_id: string; name: string; auth_type: string; headers?: Record<string, unknown> }
   tools?: { name?: string }[]
 }
-type ListedTool = { name: string; annotations?: { readOnlyHint?: boolean } }
+type ListedTool = { name: string; annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } }
 type McpConfig = { id: number; mcp_client: { name: string }; tools_to_execute: string[] }
 type BifrostGateway = LlmGateway &
   ToolGateway & {
@@ -187,6 +187,7 @@ export const createLlmGateway = ({
         (tool): ConnectionTool => ({
           name: tool.name.slice(name.length + 1),
           readOnly: tool.annotations?.readOnlyHint === true,
+          destructive: tool.annotations?.destructiveHint === true,
         }),
       )
     } finally {
@@ -254,7 +255,7 @@ export const createLlmGateway = ({
       const listed = await listedServerTools(name)
       if (listed.length > 0) return listed
       return ((await clientNamed(name))?.tools ?? []).flatMap((tool) =>
-        tool.name ? [{ name: tool.name, readOnly: false }] : [],
+        tool.name ? [{ name: tool.name, readOnly: false, destructive: false }] : [],
       )
     },
     replaceToolServerHeader: async (name, secretHeader) => {
