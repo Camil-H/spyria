@@ -5,4 +5,7 @@ CREATE TABLE "member_sign_outs" (
 	CONSTRAINT "member_sign_outs_pkey" PRIMARY KEY("workspace_id","user_id")
 );
 --> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "user_agent" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "signed_in_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+CREATE INDEX "sessions_member_index" ON "sessions" ("workspace_id","user_id");--> statement-breakpoint
 ALTER TABLE "member_sign_outs" ADD CONSTRAINT "member_sign_outs_GwJWlPHZNmDw_fkey" FOREIGN KEY ("workspace_id","user_id") REFERENCES "memberships"("workspace_id","user_id") ON DELETE CASCADE;

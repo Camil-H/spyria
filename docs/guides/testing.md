@@ -172,7 +172,7 @@ The suite lives in `apps/web/e2e`, in segments that run in this order of depende
 | `03-sharing` | Chat members, chat permissions, fork, runtime from a thread. |
 | `04-agent` | Conversation, steps, questions, delegation, models, errors, runtime lifecycle. |
 | `05-machines` | Workspace hosts, a member's machine and its tools, harness install, machine sessions, the policy, where a chat runs. |
-| `06-connectors` | The profile, LLM keys, personal and shared tools, guest rights, the GitHub account. |
+| `06-connectors` | The profile, LLM keys, the tools catalogue and members' tool connections, guest rights, the GitHub account. |
 | `07-dev-mode` | GitHub setup, dev chats, the workspace panel, the dev panel's diff, branch actions, pull requests. |
 | `08-admin` | Workspace settings, audit log, spend, budgets. |
 

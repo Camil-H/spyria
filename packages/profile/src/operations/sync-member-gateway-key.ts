@@ -41,9 +41,9 @@ export const syncMemberGatewayKey = (
     )
     if (isLeaving || !isActive) {
       if (virtualKeyId) await gateway.removeVirtualKey(virtualKeyId)
-      await transactor.run(async ({ memberGatewayKeys, personalConnections }) => {
+      await transactor.run(async ({ memberGatewayKeys, toolConnections }) => {
         await memberGatewayKeys.setVirtualKey(null)
-        await personalConnections.removeAll()
+        await toolConnections.removeAll()
       })
       return undefined
     }

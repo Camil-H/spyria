@@ -1,7 +1,6 @@
 export type { ProfileCommands } from './entrypoints/commands.ts'
 export {
   addLlmCredentialFromRequest,
-  availableToolsFromRequest,
   checkToolConnectionsFromRequest,
   createMemberKeyReader,
   createModelGuard,
@@ -13,8 +12,8 @@ export {
 } from './entrypoints/endpoints.ts'
 export { createProfileJobs } from './entrypoints/jobs.ts'
 export { profileMutators } from './entrypoints/mutators.ts'
-export { createLlmGateway, type LlmGatewaySettings, type ToolServerSetup } from './integrations/bifrost-gateway.ts'
 export { createHttpActiveSessions } from './integrations/http-active-sessions.ts'
+export { createLlmGateway, type LlmGatewaySettings } from './integrations/bifrost-gateway.ts'
 export {
   createHttpGitHubConnection,
   githubConnectionChannel,

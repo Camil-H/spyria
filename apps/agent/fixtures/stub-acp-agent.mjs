@@ -46,9 +46,9 @@ const claudeExited = {
   message: 'Internal error',
   data: { details: 'The Claude Agent process exited unexpectedly' },
 }
-const dieAsClaude = (id, sessionId) => {
+const dieAsClaude = (id, sessionId, lastLine = 'Claude Code process exited with code 1') => {
   process.stderr.write(
-    `Claude Code started with ${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? 'no token'}\nretrying with sk-ant-oat01-stubtoken0123456789\nClaude Code process exited with code 1\n`,
+    `Claude Code started with ${process.env.CLAUDE_CODE_OAUTH_TOKEN ?? 'no token'}\nretrying with sk-ant-oat01-stubtoken0123456789\n${lastLine}\n`,
   )
   deadSessions.add(sessionId)
   send({ id, error: claudeExited })
@@ -509,6 +509,14 @@ const turn = async (id, { sessionId, prompt }) => {
     if (has('die-early') && !existsSync(`${stateDirectory}/died-${sessionId}`)) {
       writeFileSync(`${stateDirectory}/died-${sessionId}`, '')
       return dieAsClaude(id, sessionId)
+    }
+    if (has('die-asking-command')) {
+      await say('Working on it… ')
+      return dieAsClaude(
+        id,
+        sessionId,
+        'You can manually restore it by running: cp "/home/spyria/.claude/backups/.claude.json.backup.1" "/home/spyria/.claude.json"',
+      )
     }
     if (has('die')) {
       await say('Working on it… ')

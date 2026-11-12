@@ -33,3 +33,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0027](0027-join-by-invited-address.md) | Who can join: by email domain or by invited address (superseded by 0029) |
 | [0028](0028-generic-oidc-must-confirm-addresses.md) | A generic OIDC provider must confirm the address it returns, with no per-workspace exception |
 | [0029](0029-account-sign-in-and-workspace-sso.md) | Sign in with an account; a workspace may enforce its own SSO |
+| [0030](0030-workspace-tools-catalogue.md) | Tools come from a per-workspace catalogue, signed in to by each member or through one shared login |

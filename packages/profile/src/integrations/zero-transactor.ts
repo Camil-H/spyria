@@ -130,24 +130,20 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         })
       },
     },
-    personalConnections: {
-      connect: async ({ tool, status }) => {
+    toolConnections: {
+      connect: async ({ connectionId, status }) => {
         await lockMembership(tx, workspaceId, userId)
-        const stored = await tx.run(ownToolConnections)
-        if (stored.some((row) => row.tool === tool)) await tx.mutate.toolConnections.update({ ...owner, tool, status })
-        else {
-          const position = Math.max(0, ...stored.map((row) => row.position)) + 1
-          await tx.mutate.toolConnections.insert({ ...owner, tool, status, position })
-        }
+        await tx.mutate.toolConnections.upsert({ ...owner, connectionId, status })
       },
-      disconnect: (tool) => tx.mutate.toolConnections.delete({ ...owner, tool }),
+      disconnect: (connectionId) => tx.mutate.toolConnections.delete({ ...owner, connectionId }),
       removeAll: async () => {
-        for (const { tool } of await tx.run(ownToolConnections))
-          await tx.mutate.toolConnections.delete({ ...owner, tool })
+        for (const { connectionId } of await tx.run(ownToolConnections))
+          await tx.mutate.toolConnections.delete({ ...owner, connectionId })
         await deleteGitHubConnection(tx, workspaceId, userId)
       },
-      statusOf: async (tool) => (await tx.run(ownToolConnections.where('tool', tool).one()))?.status,
-      tools: async () => (await tx.run(ownToolConnections)).map(({ tool }) => tool),
+      statusOf: async (connectionId) =>
+        (await tx.run(ownToolConnections.where('connectionId', connectionId).one()))?.status,
+      connectionIds: async () => (await tx.run(ownToolConnections)).map(({ connectionId }) => connectionId),
     },
     workspaceConnections: {
       list: async (workspaceId) => (await tx.run(connectionRows(workspaceId))).map(connectionOf),
@@ -160,9 +156,17 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         const row = await tx.run(connectionRows(workspaceId).where('gatewayName', gatewayName).one())
         return row && connectionOf(row)
       },
+      findByName: async (workspaceId, name) => {
+        const row = await tx.run(connectionRows(workspaceId).where('name', name).one())
+        return row && connectionOf(row)
+      },
       add: (connection) => tx.mutate.workspaceConnections.insert(connection),
       save: (connection) => tx.mutate.workspaceConnections.update(connection),
       remove: async (workspaceId, connectionId) => {
+        for (const { userId } of await tx.run(
+          zql.toolConnections.where('workspaceId', workspaceId).where('connectionId', connectionId),
+        ))
+          await tx.mutate.toolConnections.delete({ workspaceId, userId, connectionId })
         for (const { userId } of await tx.run(
           zql.connectionRestrictions.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
@@ -192,6 +196,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         ))
           await tx.mutate.connectionRestrictions.delete({ workspaceId, connectionId, userId: memberId })
       },
+      removeSignIn: (workspaceId, connectionId, memberId) =>
+        tx.mutate.toolConnections.delete({
+          workspaceId: inContextWorkspace(workspaceId),
+          userId: memberId,
+          connectionId,
+        }),
     },
     workspaceEvents: {
       record: async ({ workspaceId: workspace, ...event }) => {
