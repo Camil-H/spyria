@@ -218,6 +218,9 @@ export const queries = defineQueries({
   chatPinnedSteps: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     messagesOf(ctx, args.chatId).where('kind', 'step').where('body', 'IN', pinnedStepTypes),
   ),
+  chatOwnPrompt: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
+    messagesOf(ctx, args.chatId).where('kind', 'member').where('authorId', ctx.userId).limit(1),
+  ),
   readMarkers: defineQuery(({ ctx }) =>
     zql.readMarkers
       .where('workspaceId', ctx.workspaceId)

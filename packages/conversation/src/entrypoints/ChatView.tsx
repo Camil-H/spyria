@@ -1,5 +1,5 @@
 import { Provider } from '@radix-ui/react-tooltip'
-import { useChatMessages, useIsWorkspaceLoaded, useQuery } from '@spyria/db/react'
+import { useChatMessages, useIsWorkspaceLoaded, useQuery, useScoped } from '@spyria/db/react'
 import { type ChatId, type MessageId, chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import {
@@ -128,6 +128,8 @@ export const ChatView = ({
         () => setGitHubTools({ chatId, tools: [] }),
       )
   }, [commands, workspaceId, chatId, mayUseGitHub])
+  const isSharedRuntime = conversation?.type === 'runtime' && !conversation.localSession && conversation.isShared
+  const ownPrompt = useScoped(workspaceId, 'chatOwnPrompt', isSharedRuntime ? { chatId } : null)
   const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
   const isReadMarkerBehind = conversation?.isReadMarkerBehind === true
   useEffect(() => {
@@ -322,6 +324,11 @@ export const ChatView = ({
           aboveBox={
             <>
               {conversation.type === 'runtime' && budgetNotice}
+              {mayPrompt && isSharedRuntime && ownPrompt?.isComplete && ownPrompt.rows.length === 0 && (
+                <p role="note" className="text-xs text-muted">
+                  Your prompts here use your own tool connections, and everyone in this chat sees what they return.
+                </p>
+              )}
               {(live.workspace || branch !== null || conversation.repository !== null) && (
                 <div className="flex min-w-0 gap-2">
                   {(live.workspace || conversation.repository !== null) && (
