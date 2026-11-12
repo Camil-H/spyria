@@ -3,6 +3,7 @@ import type {
   CredentialId,
   GatewayKey,
   MemberId,
+  ToolApprovalPreference,
   WorkspaceId,
   WorkspacePermission,
 } from '@spyria/kernel'
@@ -11,9 +12,11 @@ import type { Member } from '../domain/member.ts'
 import type { Secret } from '../domain/secret.ts'
 import type { ToolConnection } from '../domain/tool-connection.ts'
 import type {
-  ConnectionRestriction,
+  AccessSubject,
   ConnectionTool,
   SecretHeader,
+  ToolHolder,
+  ToolServerAccess,
   WorkspaceConnection,
 } from '../domain/workspace-connection.ts'
 
@@ -22,6 +25,8 @@ export type MemberRepository = {
   save(member: Member): Promise<void>
   permissions(): Promise<readonly WorkspacePermission[]>
   isActive(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
+  holders(workspaceId: WorkspaceId): Promise<ToolHolder[]>
+  roleIds(workspaceId: WorkspaceId): Promise<string[]>
 }
 
 export type LlmCredentialRepository = {
@@ -73,11 +78,21 @@ export type WorkspaceConnectionRepository = {
   add(connection: WorkspaceConnection): Promise<void>
   save(connection: WorkspaceConnection): Promise<void>
   remove(workspaceId: WorkspaceId, connectionId: string): Promise<void>
-  restrictionsOf(workspaceId: WorkspaceId): Promise<ConnectionRestriction[]>
-  restrict(workspaceId: WorkspaceId, restriction: ConnectionRestriction): Promise<void>
-  unrestrict(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
-  removeRestrictionsOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
+  accessOf(workspaceId: WorkspaceId): Promise<ToolServerAccess[]>
+  setAccess(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    subject: AccessSubject,
+    access: ToolServerAccess | null,
+  ): Promise<void>
+  removeAccessOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
   removeSignIn(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
+}
+
+export type ToolApprovalRepository = {
+  get(connectionId: string): Promise<ToolApprovalPreference | undefined>
+  save(preference: ToolApprovalPreference): Promise<void>
+  removeAll(): Promise<void>
 }
 
 export type WorkspaceEventLog = {

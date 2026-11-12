@@ -1,10 +1,10 @@
-import type { AiProviderAllowList, CredentialId, MemberId, WorkspaceId } from '@spyria/kernel'
+import type { AiProviderAllowList, CredentialId, ToolApproval, WorkspaceId } from '@spyria/kernel'
 import type { ActiveSession } from '../domain/active-session.ts'
 import type { Avatar } from '../domain/avatar.ts'
 import type { DisplayName } from '../domain/display-name.ts'
 import type { GitHubConnection } from '../domain/github-connection.ts'
 import type { Secret } from '../domain/secret.ts'
-import type { ConnectionInput } from '../domain/workspace-connection.ts'
+import type { AccessInput, ConnectionInput, ToolMarking } from '../domain/workspace-connection.ts'
 
 type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<unknown>
 
@@ -14,8 +14,9 @@ export type ProfileCommands = {
   addWorkspaceConnection: Command<ConnectionInput>
   editWorkspaceConnection: ConnectionCommand<Omit<ConnectionInput, 'signIn'>>
   removeWorkspaceConnection: ConnectionCommand<object>
-  allowConnectionTools: ConnectionCommand<{ allowedTools: string[] }>
-  restrictConnectionMember: ConnectionCommand<{ memberId: MemberId; allowedTools: string[] | null }>
+  reviewConnectionTools: ConnectionCommand<{ markings: ToolMarking[] }>
+  setConnectionAccess: ConnectionCommand<AccessInput>
+  setToolApproval: ConnectionCommand<{ tool: string | null; approval: ToolApproval | null }>
   renameMember: Command<{ name: DisplayName }>
   changeAvatar: Command<{ avatar: Avatar | null }>
   removeLlmCredential: Command<{ credentialId: CredentialId }>

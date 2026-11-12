@@ -154,8 +154,8 @@ test('the purge erases every row of the workspace with its chat history, gateway
   const [{ virtualKeyId = '' } = {}] = await database.$client<{ virtualKeyId: string }[]>`
     select virtual_key_id as "virtualKeyId" from member_gateway_keys where workspace_id = ${wayne}`
   await database.$client`
-    insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, allowed_tools)
-    values (${wayne}, 'connection-docs', 'Docs', ${`docs-${crypto.randomUUID()}`}, 'https://docs.example.com/mcp', 'shared', '[]', '[]')`
+    insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, is_reviewed)
+    values (${wayne}, 'connection-docs', 'Docs', ${`docs-${crypto.randomUUID()}`}, 'https://docs.example.com/mcp', 'shared', '[]', true)`
   expect(
     await resultOf(aliceInWayne, 'workspace.createChat', {
       workspaceId: wayne,
