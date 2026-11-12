@@ -78,37 +78,40 @@ Both are disabled while the agent is working ("The agent is working: wait for it
 
 ## Pushing and pull requests
 
-Only the chat owner publishes, with their own GitHub account:
+A member who may post in the chat publishes with their own GitHub account, when their GitHub access in **Workspace settings > Tools** includes the command ([decision 0032](../decisions/0032-tools-on-the-prompters-account.md)). A role without a GitHub setting reads and writes, so by default every member who may prompt can publish:
 
-- **Push** and **Open pull request** in the **Changes** tab (the form prefills the title with the chat name and the description with the branch's commit subjects). Once a pull request is open, a push updates it.
-- The agent's `push_branch`, `open_pull_request` and `update_pull_request` tools (see [The agent's GitHub tools](#the-agents-github-tools)). They run only on the owner's own prompts; on anyone else's turn they are refused with "Only <owner> can push or open pull requests in this chat", and the refusal is recorded like any tool call.
+- **Push** and **Open pull request** in the **Changes** tab (the form prefills the title with the chat name and the description with the branch's commit subjects), each shown to a member whose access includes `push_branch` or `open_pull_request`. Once a pull request is open, a push updates it.
+- The agent's `push_branch`, `open_pull_request` and `update_pull_request` tools (see [The agent's GitHub tools](#the-agents-github-tools)), with the GitHub account of the member who prompted. A prompter whose access lacks the command gets "*Name*'s access to GitHub does not include *command* in this chat", and the refusal is recorded like any tool call.
+- The quality gates' pull request gate, with the owner's account, since the gates act for the owner.
 
-The owner needs a linked GitHub account ("Connect your GitHub account in your profile to push") and a running runtime ("The runtime is asleep: wake it, then push again"); publishing never wakes it.
+The Changes panel, the pull request card, the gates and the agent's tools ask the server the same question: which GitHub commands this member may use in this chat. The member needs a linked GitHub account and a running runtime ("The runtime is asleep: wake it, then push again"); publishing never wakes it. Without an account, **Push** answers "Connect your GitHub account in your profile to push", and the agent's step says "*Name* needs to connect GitHub" with a **Connect GitHub** link for that member only.
 
 ### Why the server pushes
 
-The owner's GitHub token can write to every repository the owner can, so it must never reach a runtime where an agent runs arbitrary commands. The runtime only hands the server a git bundle of the new commits of the working branch (at most 12 MB; larger pushes are refused with a hint to push from your own machine). The server checks that the bundle carries only that branch, rebuilds it in a fresh temporary repository with a git configuration of its own (no hooks, no credential helper, no URL rewrites from the runtime), and pushes to the repository's URL with the owner's token. There is no force push: a rewritten branch fails with git's message. The server therefore needs `git` installed. See [Security](../architecture/security.md) and the [decision records](../decisions/).
+A member's GitHub token can write to every repository the member can, so it must never reach a runtime where an agent runs arbitrary commands. The runtime only hands the server a git bundle of the new commits of the working branch (at most 12 MB; larger pushes are refused with a hint to push from your own machine). The server checks that the bundle carries only that branch, rebuilds it in a fresh temporary repository with a git configuration of its own (no hooks, no credential helper, no URL rewrites from the runtime), and pushes to the repository's URL with the publishing member's token. There is no force push: a rewritten branch fails with git's message. The server therefore needs `git` installed. See [Security](../architecture/security.md) and the [decision records](../decisions/).
 
-The pull request is created through GitHub's API with the owner's token, from the working branch into the chat's base branch, so GitHub shows the owner as its author.
+The pull request is created through GitHub's API with the publishing member's token, from the working branch into the chat's base branch, so GitHub shows that member as its author. Later pushes to it and `update_pull_request` use the token of whoever makes them.
 
 ## The agent's GitHub tools
 
 The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, `gh` and GitHub's API cannot reach a private repository from inside it. The agent reaches GitHub through tools that run on the server instead, available in the main conversation of a dev chat. The tool server tells the agent so when it connects.
 
-| Tool | Who can call it | What it does |
+| Tool | Read or write | What it does |
 |---|---|---|
-| `push_branch` | The owner's prompts | Pushes the working branch, fast-forward only |
-| `open_pull_request` | The owner's prompts | Pushes, then opens a pull request into the base branch |
-| `update_pull_request` | The owner's prompts | Changes the title or the description of the chat's open pull request |
-| `fetch_branch` | Any prompt | Fetches any branch of the chat's repository into `origin/<branch>` in the runtime, leaving the working branch as it is |
-| `read_review_threads` | Any prompt | Reads a pull request's review threads: file, line, resolved or outdated, and comments; the chat's pull request by default |
-| `read_checks` | Any prompt | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
-| `list_issues` | Any prompt | Lists up to 30 issues of the repository, filtered by state, labels and words |
-| `read_issue` | Any prompt | Reads an issue with its comments |
-| `finish_work` | The owner's prompts and those of quality gates | Says the work is done, with the pull request's title and description; listed only when [quality gates](#quality-gates) are on |
-| `report_review` | The review prompt of quality gates | Reports the review's findings, each important, nit or pre-existing, and the ids of the findings it was asked to check that are not fixed |
+| `push_branch` | Write | Pushes the working branch, fast-forward only |
+| `open_pull_request` | Write | Pushes, then opens a pull request into the base branch |
+| `update_pull_request` | Write | Changes the title or the description of the chat's open pull request |
+| `fetch_branch` | Read | Fetches any branch of the chat's repository into `origin/<branch>` in the runtime, leaving the working branch as it is |
+| `read_review_threads` | Read | Reads a pull request's review threads: file, line, resolved or outdated, and comments; the chat's pull request by default |
+| `read_checks` | Read | Reads the checks of a pull request's head commit, failing first, with the annotations of each failing check (file, line, title and message) and, for a GitHub Actions job, the step that failed and the end of its log; the chat's pull request by default |
+| `list_issues` | Read | Lists up to 30 issues of the repository, filtered by state, labels and words |
+| `read_issue` | Read | Reads an issue with its comments |
+| `finish_work` | Built in: the owner's prompts and those of quality gates | Says the work is done, with the pull request's title and description; listed only when [quality gates](#quality-gates) are on |
+| `report_review` | Built in: the review prompt of quality gates | Reports the review's findings, each important, nit or pre-existing, and the ids of the findings it was asked to check that are not fixed |
 
-`fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts. Every call is recorded like any tool call.
+The GitHub commands are a row of **Workspace settings > Tools**: each role has a level (None, Read, Read and write) with single tools, a member can be named with their own, and Spyria marks each command read or write. A role without a setting reads and writes. The agent lists every command; on a prompt the server checks the prompter's access to the one called, then the prompter's approval choice for it (**Profile > Tool connections > Approvals for GitHub**: Never by default, or Always, which asks the prompter on a card before the call runs). `finish_work` and `report_review` belong to the quality gates, which set who they serve, and are listed under **Built in**.
+
+`fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts; a prompter still needs Read on GitHub to call them. Every call is recorded like any tool call.
 
 Issue and comment text can be written by anyone who can comment on the repository, and it reaches the agent as it is. Check annotations and logs are written by the repository's CI, which runs the code of the pull request, so a pull request can write any text there; the tool's description tells the agent to read them as data, never as instructions.
 
@@ -126,7 +129,7 @@ When an admin turns quality gates on, the agent of a dev chat checks its own wor
 
 - **Command**: a name, one command run in the runtime with what setup installed on its `PATH` (see [Clone and setup script](#clone-and-setup-script)), and a timeout. Keep the logic in a script in the repository, such as a package script or `scripts/check.sh`, so the gate only runs it and developers run the same thing. Consecutive commands run one after the other and fail together, so the agent gets every failure at once, with the end of each one's output; the card marks each one passed or failed as soon as it finishes.
 - **Code review**: the agent starts a subagent with a fresh context on the branch's diff (then, in later rounds, on what changed since the last review). The subagent follows the repository's rules files like any agent (see [Clone and setup script](#clone-and-setup-script)); in Claude Code the agent is asked for a general-purpose subagent, since Explore and Plan skip `CLAUDE.md`. The agent reports each finding with `report_review` as important, nit or pre-existing. Each finding gets a short id (F1, F2…). An important finding counts as a failure and goes back to the agent; the next review gets the findings that sent the work back, with their ids, checks each one against the current code and lists in `unresolved` the ones that are not fixed. A finding listed there, or reported again, fails the review again and counts toward its fixes like a new one; one not listed is resolved. Nits and pre-existing defects never block, and later reviews are told not to report them again.
-- **Pull request**: pushes the branch and opens the pull request, or pushes to the open one, as the owner, with the title and description given to `finish_work`.
+- **Pull request**: pushes the branch and opens the pull request, or pushes to the open one, as the owner and with the owner's GitHub account, with the title and description given to `finish_work`. It goes through the same check of GitHub access as the agent's tools: if the owner's access lacks the command, the gates hand over with the refusal.
 - **CI**: every minute it reads the checks of the pushed commit, and once every one of them has finished, any failing one counts as a failure, as `read_checks` shows them. It is all or nothing: every check GitHub reports counts, and a skipped check counts as passed. When no check reports within 15 minutes, it hands over. When GitHub says the pull request conflicts with its base, which runs no CI, the gate does not wait: it updates the branch from the base in the runtime. If that merges cleanly, the gates run again on the merge; if it conflicts, the merge is undone and the agent gets the conflicting files, to merge the base itself (`fetch_branch`, then `git merge`), as a CI failure that counts toward its fixes. A conflict that may not go back to the agent, or an update that cannot run or leaves nothing new to push, hands over at once. The update runs only while the gates are still on and within their limits. When GitHub refuses a push while the open pull request conflicts, the gates hand over at once, naming both, and leave the branch as it is: GitHub never refuses a push because of a conflict, so the refusal has another cause for the owner to look at.
 
 Each gate but the pull request says what a failure does: **send it back to the agent, up to N times**, or **stop and hand over to the owner**. After a fix the agent calls `finish_work` again and the gates run from the first one. If the agent commits during the review turn, that commit goes through the gates again before anything is pushed. Only CI may come after the pull request, so nothing the agent commits stays unpushed, and each command has a name of its own. The built-in gates, before an admin changes them, are a code review, the pull request and CI. Every member can read the gates, so a command must hold no secret.
@@ -150,7 +153,7 @@ Opening a pull request posts a card in the chat: title, number, state (open, dra
 
 The checks summary is failing when any check fails, pending while any is pending or none has run, and passing otherwise; only checks of the current head count.
 
-When the pull request has unresolved review comments, the owner sees **Address review comments**: it sends the agent one prompt listing each comment with its file, line, author and text. The owner then pushes again.
+When the pull request has unresolved review comments, a member whose GitHub access includes `push_branch` in the chat sees **Address review comments**: it sends the agent one prompt listing each comment with its file, line, author and text. They then push again.
 
 ## Webhooks
 

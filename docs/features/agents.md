@@ -8,7 +8,7 @@ A runtime chat pairs a conversation with an agent running in its own sandboxed *
 
 Prompts are handled one turn at a time. A prompt sent while the agent works waits and runs after the current turn, in order. A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs. In a dev chat with quality gates on, the server also sends prompts on the owner's behalf, marked as sent by quality gates; see [Dev mode](./dev-mode.md#quality-gates).
 
-The agent acts as the chat owner for tools (**Agent acts as** *owner* in the header), and each model call runs on the key of the member who sent the prompt. Every model call records both.
+The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt ([decision 0032](../decisions/0032-tools-on-the-prompters-account.md)). Every model call and tool call records both.
 
 ## Harnesses
 
@@ -56,13 +56,13 @@ The agent can ask the member a question with suggested answers and a free answer
 
 ## Tool approvals
 
-A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the chat owner answers it. Each member chooses which calls wait in **Profile > Tool connections > Approvals for** *server*: a default for the server's write tools and a choice per tool, in a searchable list grouped into read and write tools:
+A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the member whose account answers for the call answers it: the prompter on servers each member signs in to and on GitHub, the chat owner on shared-login servers. Everyone else sees whom it waits for. Each member chooses which calls wait in **Profile > Tool connections > Approvals for** *server* (and **Approvals for GitHub**, under their GitHub account): a default for the server's write tools and a choice per tool, in a searchable list grouped into read and write tools:
 
 - **Never**: the call runs at once.
 - **Always**: every call waits, on the member's own prompts too.
 - **On a guest's prompt** (shared-login servers only): the call waits when someone other than the owner prompted.
 
-Read tools default to Never and tools the server marks destructive to Always; the other tools follow the server's default, Never on servers each member signs in to and On a guest's prompt on shared-login servers. The choices of the chat owner apply to their chats, since the agent acts with the owner's access. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
+Read tools default to Never and tools the server marks destructive to Always; the other tools follow the server's default, Never on servers each member signs in to and on GitHub, and On a guest's prompt on shared-login servers. A prompter's choices apply to their own prompts in any chat on servers they sign in to and on GitHub; the chat owner's apply to shared-login servers in their chats, since those calls use the owner's access. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
 
 
 ## Opening pages
@@ -89,7 +89,7 @@ Each delegation appears as one step, "Delegated to *model* · N steps · duratio
 
 ## Steps
 
-Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. A command shows its command line as soon as the agent has written it, and its output live while it runs on Pi or Codex; Claude Code reports a command's output only when it ends, so until then its step says **No output yet**. When a tool needs the owner to connect or reconnect an account, the step says so with a **Connect** or **Reconnect** link. Secrets that appear in output from a member's machine are stored as `[redacted]`.
+Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. A command shows its command line as soon as the agent has written it, and its output live while it runs on Pi or Codex; Claude Code reports a command's output only when it ends, so until then its step says **No output yet**. When a tool needs the prompter to connect or reconnect an account, GitHub included, the step says so, with a **Connect** or **Reconnect** link for that prompter only. Secrets that appear in output from a member's machine are stored as `[redacted]`.
 
 Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
 
@@ -115,5 +115,5 @@ The **Usage** tab of a chat shows its spend per member and per model (tokens, co
 
 ## Keys
 
-A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Tool connections** lists, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
- and on those each member signs in to, **Connect** signs you in with your own account. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
+A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Tool connections** lists your GitHub account, with **Approvals for GitHub** when your access gives you GitHub tools, then, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
+ and on those each member signs in to, **Connect** signs you in with your own account, which the agent uses on your prompts in any chat. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
