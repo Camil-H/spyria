@@ -48,6 +48,7 @@ export type ConversationCommands = {
   saveDraft: Command<{ chatId: ChatId; text: string }, void>
   commandOutput: Command<{ chatId: ChatId; stepId: string }>
   connectTool: Command<{ tool: string }, unknown>
+  githubToolsInChat: Command<{ chatId: ChatId }, readonly string[]>
   updateChatRouting: Command<{
     chatId: ChatId
     sessionModel?: string

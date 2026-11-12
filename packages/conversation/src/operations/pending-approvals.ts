@@ -6,7 +6,7 @@ export type Decided = { decision: Exclude<ToolCallDecision, 'not_needed'>; decid
 type PendingApproval = {
   chat: AgentChat
   promptId: MessageId | null
-  ownerId: MemberId
+  answererId: MemberId
   decide: (decided: Decided) => void
 }
 

@@ -8,6 +8,7 @@ import {
   type WorkspaceId,
 } from '@spyria/kernel'
 import type {
+  AgentChat,
   AgentClient,
   AgentEventSockets,
   AgentRuntimes,
@@ -38,6 +39,7 @@ export type AgentDependencies = {
   approvalWindowMilliseconds?: number
   deployment?: string
   isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
+  onTurnPrompter?: (chat: AgentChat, prompterId: MemberId) => void
 }
 
 export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: string) =>

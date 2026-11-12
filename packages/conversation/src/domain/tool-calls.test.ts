@@ -4,10 +4,12 @@ import { observedStep, type StoredStep, toolServerNamerOf } from './agent-steps.
 import { acpUpdate } from './testing.ts'
 import {
   needsApproval,
+  notApprovedOf,
   toolCallFailureOf,
   toolCallNoticeOf,
   toolConnectionOf,
   toolDisplayNameOf,
+  toolRefusalOf,
 } from './tool-calls.ts'
 
 const authenticationRequired =
@@ -38,7 +40,7 @@ test('tool errors the member must act on map to Spyria wording, without the cons
   expect(toolCallFailureOf(crashed)).toBeUndefined()
   expect(toolCallFailureOf('you are alice on oauth')).toBeUndefined()
 
-  const names = { ownerName: 'Alice', server: 'fake' }
+  const names = { memberName: 'Alice', server: 'fake' }
   expect(toolCallNoticeOf('needs_connection', { ...names, isReconnect: false })).toBe('Alice needs to connect fake')
   expect(toolCallNoticeOf('needs_connection', { ...names, isReconnect: true })).toBe('Alice needs to reconnect fake')
   expect(toolCallNoticeOf('not_allowed', { ...names, isReconnect: false })).toBe("fake isn't available for this chat")
@@ -68,7 +70,14 @@ test('a workspace connection’s gateway name reads as its display name in tool 
   })
   const running: StoredStep = { type: 'tool', name: 'lookup (crm_1a2b3c)', arguments: '{}', result: null }
   expect(named(running)).toEqual({ ...running, name: 'lookup (CRM)' })
-  const approval = { server: 'crm_1a2b3c', tool: 'update', arguments: '{}', prompterName: 'Bob', ownerName: 'Alice' }
+  const approval = {
+    server: 'crm_1a2b3c',
+    tool: 'update',
+    arguments: '{}',
+    prompterName: 'Bob',
+    answererId: 'bob',
+    answererName: 'Bob',
+  }
   expect(named({ type: 'question', questionId: 'q1', kind: 'approval', approval })).toEqual({
     type: 'question',
     questionId: 'q1',
@@ -129,4 +138,11 @@ test("a call waits for approval when its tool is set to Always, or to On a guest
   expect(needsApproval('guest', true)).toBe(true)
   expect(needsApproval('guest', false)).toBe(false)
   expect(needsApproval('never', true)).toBe(false)
+})
+
+test('a refused call says whose access lacks the tool, or that a shared login needs the owner to have it too', () => {
+  const names = { prompterName: 'Bob', server: 'CRM', tool: 'update' }
+  expect(toolRefusalOf('not_granted', names)).toBe("Bob's access to CRM does not include update in this chat")
+  expect(toolRefusalOf('not_shared', names)).toBe("CRM isn't available on Bob's prompts in this chat")
+  expect(notApprovedOf('Bob')).toBe('Bob did not approve this call')
 })

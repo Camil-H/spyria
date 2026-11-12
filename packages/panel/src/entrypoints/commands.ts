@@ -17,6 +17,7 @@ export type PanelCommands = {
     { chatId: ChatId; action: 'push' | 'pull_request'; draft: { title: string; body: string } },
     { isRefused: boolean; text: string }
   >
+  githubToolsInChat: Command<{ chatId: ChatId }, readonly string[]>
   runGitAction: Command<{ chatId: ChatId; action: 'commit' | 'update'; message: string }, GitActionOutcome>
   sendMessage: Command<{ chatId: ChatId; text: string }>
 }

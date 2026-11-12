@@ -9,8 +9,10 @@ import {
   issueTextOf,
   reviewThreadsTextOf,
 } from '../domain/github-tools.ts'
+import { githubAccessRefusalOf } from '../domain/pull-requests.ts'
 import { agentWorkspacePathOf, runtimeHeadsOf } from '../domain/workspace-reads.ts'
 import type { AgentDependencies } from './agent-turn.ts'
+import { githubToolsInChatOf } from './github-access.ts'
 import { type Publication, publishBranch, updatePullRequest } from './publish-branch.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>
@@ -74,15 +76,19 @@ export const callGitHubTool = async (dependencies: Dependencies, { chat, memberI
   if (call.tool === 'update_pull_request')
     return updatePullRequest(dependencies, { chat, actor: agentActor(chat.chatId, memberId), change: call.change })
   const { transactor, checkouts } = dependencies
-  const { baseBranch, pullRequestNumber } = await transactor.run(async ({ chats, messages }) => {
+  const { baseBranch, pullRequestNumber, mayUse, memberName } = await transactor.run(async (unitOfWork) => {
+    const { chats, messages, members } = unitOfWork
     await requireChatPermission(chats, chat.chatId, memberId, 'chat.read')
     const card = await messages.pullRequestCard(chat.chatId)
     return {
       baseBranch: (await chats.get(chat.chatId)).baseBranch,
       pullRequestNumber: card?.step?.type === 'pull_request' ? card.step.number : null,
+      mayUse: (await githubToolsInChatOf(unitOfWork, chat.chatId, memberId)).includes(name),
+      memberName: await members.displayNameOf(memberId),
     }
   })
   if (!baseBranch || !checkouts) return refused('This chat has no repository')
+  if (!mayUse) return refused(githubAccessRefusalOf(memberName, name))
   return repositoryTool({ ...dependencies, checkouts }, { chat, baseBranch, pullRequestNumber }, call).catch(
     (error: unknown) => {
       if (error instanceof DomainError) return refused(error.message)

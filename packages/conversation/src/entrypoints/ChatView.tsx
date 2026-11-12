@@ -88,6 +88,7 @@ export const ChatView = ({
   const [spyriaRuntime, setSpyriaRuntime] = useState<{ chatId: ChatId; isAvailable: boolean }>()
   const [loadedRemoteImages, setLoadedRemoteImages] = useState<{ chatId: ChatId; sources: ReadonlySet<string> }>()
   const [quoting, setQuoting] = useState<{ chatId: ChatId; threadRootId: MessageId | null; quote: ComposerQuote }>()
+  const [githubTools, setGitHubTools] = useState<{ chatId: ChatId; tools: readonly string[] }>()
   const conversation = useQuery(
     getConversation,
     workspaceId,
@@ -119,6 +120,14 @@ export const ChatView = ({
         () => setSpyriaRuntime({ chatId, isAvailable: true }),
       )
   }, [commands, workspaceId, chatId, isChoosingRunsOn])
+  const mayUseGitHub = conversation?.repository != null && conversation.canPost
+  useEffect(() => {
+    if (mayUseGitHub)
+      commands.githubToolsInChat({ workspaceId, chatId }).then(
+        (tools) => setGitHubTools({ chatId, tools }),
+        () => setGitHubTools({ chatId, tools: [] }),
+      )
+  }, [commands, workspaceId, chatId, mayUseGitHub])
   const live = useLiveMessages(workspaceId, chatId, conversation?.messages ?? [])
   const isReadMarkerBehind = conversation?.isReadMarkerBehind === true
   useEffect(() => {
@@ -230,7 +239,12 @@ export const ChatView = ({
         )}
       </Provider>
       <QuestionAnswererContext
-        value={{ answer: answerQuestion, mayAnswerAsPrompter: mayPrompt, isOwner: conversation.isOwner }}
+        value={{
+          answer: answerQuestion,
+          mayAnswerAsPrompter: mayPrompt,
+          viewerId: memberId,
+          githubTools: mayUseGitHub && githubTools?.chatId === chatId ? githubTools.tools : [],
+        }}
       >
         <ToolsAwaitingApprovalContext value={toolsAwaitingApproval}>
           <ChatMediaContext value={{ chatId, isRuntime: conversation.type === 'runtime' }}>

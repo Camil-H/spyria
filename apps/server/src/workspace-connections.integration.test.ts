@@ -3,7 +3,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { createToolCallOwnerAccess } from '@spyria/profile/server'
+import { createToolCallAccess } from '@spyria/profile/server'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -425,14 +425,15 @@ test('a workspace’s connections are never granted to, listed for or callable b
     body: rpcOf('tools/list'),
   })
   expect(await listed.text()).not.toContain(gatewayName)
-  const access = createToolCallOwnerAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
+  const access = createToolCallAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
   expect(await access.toolCallPolicy(globex, alice, alice, `${gatewayName}-lookup`)).toMatchObject({
-    access: 'not_allowed',
+    access: 'not_granted',
   })
   expect(await access.toolCallPolicy(acme, alice, alice, `${gatewayName}-lookup`)).toEqual({
     access: 'allowed',
     readOnly: true,
     approval: 'never',
+    answerer: 'owner',
   })
 })
 

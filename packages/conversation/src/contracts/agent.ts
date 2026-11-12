@@ -97,16 +97,16 @@ export type RepositoryCheckouts = {
   checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
   pushBranch(
     chat: AgentChat,
-    ownerId: MemberId,
+    publisherId: MemberId,
     bundleOf: BundleOf,
   ): Promise<{ branch: string; head?: string | undefined; failure?: string } | undefined>
   fetchBundle(chat: AgentChat, branch: string | null, runtimeHeads: string[]): Promise<FetchedBundle>
   authorOf(chat: AgentChat, ownerId: MemberId): Promise<GitAuthor | undefined>
-  openPullRequest(chat: AgentChat, ownerId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
-  refreshPullRequest(chat: AgentChat, ownerId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>
+  openPullRequest(chat: AgentChat, publisherId: MemberId, draft: PullRequestDraft): Promise<PullRequestStep>
+  refreshPullRequest(chat: AgentChat, publisherId: MemberId, pullRequest: PullRequestStep): Promise<PullRequestStep>
   updatePullRequest(
     chat: AgentChat,
-    ownerId: MemberId,
+    publisherId: MemberId,
     pullRequest: PullRequestStep,
     change: PullRequestChange,
   ): Promise<PullRequestStep>

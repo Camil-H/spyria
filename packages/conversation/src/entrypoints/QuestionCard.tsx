@@ -41,7 +41,9 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
   const [sentAnswer, setSentAnswer] = useState<QuestionAnswer>()
   const isPending = isOpenQuestion(step)
   const answerer = use(QuestionAnswererContext)
-  const canAnswer = isPending && (step.kind === 'approval' ? answerer.isOwner : answerer.mayAnswerAsPrompter)
+  const canAnswer =
+    isPending &&
+    (step.kind === 'approval' ? step.approval?.answererId === answerer.viewerId : answerer.mayAnswerAsPrompter)
   const isSending = sentAnswer !== undefined
   const send = async (answer: QuestionAnswer) => {
     setSentAnswer(answer)
@@ -114,7 +116,7 @@ const QuestionCard = ({ message }: { message: ConversationMessage }) => {
           </div>
         )}
         {isPending && !canAnswer && (
-          <p className="text-xs text-muted">Waiting for {step.approval.ownerName}'s approval</p>
+          <p className="text-xs text-muted">Waiting for {step.approval.answererName}'s approval</p>
         )}
         {outcome}
         {alert}

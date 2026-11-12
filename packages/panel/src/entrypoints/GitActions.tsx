@@ -33,13 +33,13 @@ export const GitActions = ({
   onOutcome: (outcome: ActionOutcome) => void
 }) => {
   const { memberId } = useSession()
-  const { canPublish, isTurnRunning } = useQuery(getPublishing, workspaceId, chatId, memberId)
+  const { hasRepository, isOwner, isTurnRunning } = useQuery(getPublishing, workspaceId, chatId, memberId)
   const { isAsleep } = useQuery(getDevWorkspace, workspaceId, chatId)
   const { runGitAction, sendMessage } = usePanelCommands()
   const [message, setMessage] = useState<string>()
   const [runningAction, setRunningAction] = useState<'commit' | 'update'>()
   const [conflictOutcome, setConflictOutcome] = useState<ConflictOutcome>()
-  if (!canPublish) return null
+  if (!hasRepository || !isOwner) return null
   const unavailableReason = isTurnRunning
     ? 'Available when the agent’s turn ends'
     : isAsleep

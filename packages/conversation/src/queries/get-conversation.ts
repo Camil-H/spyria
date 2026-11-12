@@ -41,6 +41,7 @@ export type ConversationMessage = Readonly<{
   attachments: readonly Attachment[]
   step: AgentStep | null
   replyToId: MessageId | null
+  isOnViewersPrompt: boolean
   canEdit: boolean
   isDeleted: boolean
   isEdited: boolean
@@ -360,6 +361,7 @@ export const getConversation =
         attachments: message.attachments,
         step,
         replyToId: message.replyToId,
+        isOnViewersPrompt: message.replyToId !== null && chatMessageById.get(message.replyToId)?.authorId === viewerId,
         canEdit: canPost && message.authorId === viewerId && !isDevLoopPrompt(message),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
