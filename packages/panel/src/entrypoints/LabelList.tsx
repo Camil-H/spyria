@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-type LabelListRow = { key: string; label: string; value: string }
+type LabelListRow = { key: string; label: ReactNode; value: string }
 
 export const LabelList = ({ rows, empty }: { rows: readonly LabelListRow[]; empty: ReactNode }) =>
   rows.length === 0 ? (
