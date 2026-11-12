@@ -1,4 +1,10 @@
-import { githubConnectionId, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import {
+  githubConnectionId,
+  githubServerName,
+  MemberNotFound,
+  requirePermissionIn,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -229,7 +235,13 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.access_changed',
-      payload: { connectionId, ...subject, level: access?.level ?? null, toolChanges: access?.toolChanges ?? {} },
+      payload: {
+        connectionId,
+        ...(connectionId === githubConnectionId && { name: githubServerName }),
+        ...subject,
+        level: access?.level ?? null,
+        toolChanges: access?.toolChanges ?? {},
+      },
     })
   })
   if (connectionId === githubConnectionId) return
