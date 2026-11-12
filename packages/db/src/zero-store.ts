@@ -19,6 +19,7 @@ export const scopedQueryNames = [
   'chatMessages',
   'chatEarlierRoot',
   'chatPinnedSteps',
+  'chatOwnPrompt',
   'chatBrowserPages',
   'chatUsage',
   'monthUsage',

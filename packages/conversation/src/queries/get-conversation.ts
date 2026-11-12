@@ -1,5 +1,6 @@
 import {
   type ChatRow,
+  chatParticipantsIn,
   chatPermissionsIn,
   inChat,
   type MessageRow,
@@ -89,6 +90,7 @@ export type Conversation = Readonly<{
   isFrozen: boolean
   canPost: boolean
   canJoin: boolean
+  isShared: boolean
   canConfigure: boolean
   runsOnChoices: readonly RunsOn[] | null
   gitBranch: string | null
@@ -421,6 +423,7 @@ export const getConversation =
       }),
       canPost,
       canJoin: chat.visibility === 'public' && !participantIn(snapshot, workspaceId, viewerId)(chat),
+      isShared: chat.visibility === 'public' || chatParticipantsIn(snapshot, workspaceId, chat.id).length > 1,
       canConfigure: can(permissions, 'session.configure'),
       runsOnChoices,
       gitBranch: chat.gitBranch,
