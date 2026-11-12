@@ -302,6 +302,22 @@ test('a member given Read is refused update on their own prompts, their key hold
   ])
 })
 
+test('a review and level changes sent together leave every member with the tools of the last change, never an earlier snapshot', async () => {
+  await addLlmKey(bob, 'Mistral')
+  const { connectionId } = await register('Ledger')
+  const { gatewayName } = (await connectionRow(connectionId)) ?? { gatewayName: '' }
+  const answers = await Promise.all([
+    asMember(alice, 'POST', `${connectionsPath}/${connectionId}/review`, { markings: [] }),
+    setAccess(connectionId, { roleId: 'admin' }, 'write'),
+    setAccess(connectionId, { roleId: 'member' }, 'read'),
+  ])
+  expect(answers.map((answer) => (typeof answer === 'number' ? answer : answer.status))).toEqual([200, 200, 200])
+  expect((await grantsOf(alice))[gatewayName]).toEqual(['lookup', 'update'])
+  expect((await grantsOf(bob))[gatewayName]).toEqual(['lookup'])
+  await removeKeysOf(bob)
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)).status).toBe(200)
+})
+
 test("a role's level and single-tool changes reach every member of the role, a later change keeps the earlier ones, and a member whose role changes gets the new role's tools", async () => {
   await addLlmKey(bob, 'openai')
   try {
