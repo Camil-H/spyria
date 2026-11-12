@@ -103,7 +103,7 @@ const reaches = (from = '', url: string) =>
     from,
     'node',
     '-e',
-    `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), () => console.log('blocked'))`,
+    `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), (error) => console.log('blocked', error.cause?.code ?? error.name))`,
   )
 let connectedHostId: ReturnType<typeof connectHost> | undefined
 const hostId = () => {
@@ -253,7 +253,7 @@ test.skipIf(!hasImage)(
     expect(reaches(first, `http://${addressOf(first)}:8000/ready`)).toBe('reached')
     if (dockerOperatingSystem() === 'OrbStack')
       console.warn('OrbStack accepts traffic between Docker networks: the address check between runtimes is skipped')
-    else expect(reaches(first, `http://${addressOf(second)}:8000/ready`)).toBe('blocked')
+    else expect(reaches(first, `http://${addressOf(second)}:8000/ready`)).toStartWith('blocked')
     for (const runtime of runtimes) await provider.remove(runtime)
   },
   90_000,
@@ -301,10 +301,10 @@ test.skipIf(!hasImage)(
     const operatingSystem = dockerOperatingSystem()
     if (operatingSystem === 'OrbStack' || operatingSystem === 'Docker Desktop')
       console.warn(`${operatingSystem} forwards host.docker.internal to the machine's loopback: that check is skipped`)
-    else expect(reaches(runtimeContainer, `http://host.docker.internal:${servicePort}/`)).toBe('blocked')
+    else expect(reaches(runtimeContainer, `http://host.docker.internal:${servicePort}/`)).toStartWith('blocked')
     if (operatingSystem === 'OrbStack')
       console.warn('OrbStack accepts traffic between Docker networks: the address check of the service is skipped')
-    else expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toBe('blocked')
+    else expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toStartWith('blocked')
     await provider.remove(runtime)
     docker('rm', '-f', service)
     docker('network', 'rm', serviceNetwork)
