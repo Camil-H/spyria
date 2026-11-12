@@ -12,6 +12,7 @@ import {
 } from './acp.ts'
 import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
+import { asksToRunACommand } from './command-request.ts'
 import { outputTailOf } from './output-tail.ts'
 import { connectPi } from './pi.ts'
 import { agentProtocolVersion, agentVersion } from './protocol.ts'
@@ -129,6 +130,7 @@ const setupStartOf = (command: string) => ({
 const conversationIdPattern = /^[\w-]{1,64}$/
 const exitedUnexpectedly = /exited unexpectedly/i
 const restartedNotice = 'The agent restarted; send your message again'
+const restartCallToAction = 'If it happens again, restart the session'
 const errorSummaryCharacters = 300
 const adapterCloseWaitMilliseconds = 2_000
 const rememberedPromptCount = 50
@@ -175,7 +177,14 @@ const lastLineOf = (errorOutput: string[]) =>
 
 const withSummary = (message: string, errorOutput: string[]) => {
   const summary = lastLineOf(errorOutput)
-  return summary ? `${message}. It reported: ${summary}` : message
+  return summary && !asksToRunACommand(summary) ? `${message}. It reported: ${summary}` : message
+}
+
+const restartedNoticeOf = (errorOutput: string[]) => {
+  const summary = lastLineOf(errorOutput)
+  return summary && asksToRunACommand(summary)
+    ? `${restartedNotice}. ${restartCallToAction}`
+    : withSummary(restartedNotice, errorOutput)
 }
 
 const durationOf = (milliseconds: number) =>
@@ -348,6 +357,7 @@ export const startAgent = ({
     const error = new AcpError(
       withSummary(`The agent did not respond within ${durationOf(requestTimeoutMilliseconds)}`, errorOutput),
     )
+    if (conversations.get(conversation.id) !== conversation) return error
     reportAdapterFailure(conversation, errorOutput, error, { 'adapter.unanswered_method': method })
     if (conversation.connection === connection) fail(conversation, error)
     return error
@@ -866,7 +876,7 @@ export const startAgent = ({
           return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
         conversation.status = 'running'
         await promptOnce(async (errorOutput, hasStreamed) => {
-          const notice = new AcpError(withSummary(restartedNotice, errorOutput))
+          const notice = new AcpError(restartedNoticeOf(errorOutput))
           if (hasStreamed) return failed(notice)
           conversation.status = 'running'
           await promptOnce(async () => failed(notice))
