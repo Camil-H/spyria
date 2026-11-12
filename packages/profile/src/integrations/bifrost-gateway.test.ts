@@ -271,9 +271,12 @@ test('a session is checked with a read-only tool only, and reads unauthorized wh
   }
 })
 
-test('a server each member signs in to is set up on an admin sign-in, then lists its tools through a key used once, or the names the gateway kept when that key lists none', async () => {
+test('a server each member signs in to is set up on an admin sign-in, then lists its tools and their read-only and destructive marks through a key used once, or the names the gateway kept when that key lists none', async () => {
   const requests: { method: string; pathname: string; body: string }[] = []
-  let listedTools: object[] = [{ name: 'docs_a1b2c3-search', annotations: { readOnlyHint: true } }]
+  let listedTools: object[] = [
+    { name: 'docs_a1b2c3-search', annotations: { readOnlyHint: true } },
+    { name: 'docs_a1b2c3-delete', annotations: { readOnlyHint: false, destructiveHint: true } },
+  ]
   const setupServer = Bun.serve({
     port: 0,
     fetch: async (request) => {
@@ -308,7 +311,8 @@ test('a server each member signs in to is set up on an admin sign-in, then lists
       oauth_config: {},
     })
     expect(await setupGateway.finishMemberToolServer('docs_a1b2c3', 'setup-1')).toEqual([
-      { name: 'search', readOnly: true },
+      { name: 'search', readOnly: true, destructive: false },
+      { name: 'delete', readOnly: false, destructive: true },
     ])
     expect(requests.map(({ method, pathname }) => `${method} ${pathname}`).slice(1)).toEqual([
       'POST /api/mcp/client/setup-1/complete-oauth',
@@ -318,7 +322,7 @@ test('a server each member signs in to is set up on an admin sign-in, then lists
     ])
     listedTools = []
     expect(await setupGateway.finishMemberToolServer('docs_a1b2c3', 'setup-1')).toEqual([
-      { name: 'fetch', readOnly: false },
+      { name: 'fetch', readOnly: false, destructive: false },
     ])
   } finally {
     setupServer.stop(true)

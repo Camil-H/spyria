@@ -726,7 +726,7 @@ export const createApp = ({
       )
     })
     .post(workspaceConnectionsPath, (context) => workspaceConnectionResponse(context, 'add', ''))
-    .post(`${workspaceConnectionsPath}/:connectionId/:action{edit|remove|tools|restrict|finish}`, (context) =>
+    .post(`${workspaceConnectionsPath}/:connectionId/:action{edit|remove|review|access|finish}`, (context) =>
       workspaceConnectionResponse(context, context.req.param('action'), context.req.param('connectionId')),
     )
     .get(ssoSettingsPath, (context) =>

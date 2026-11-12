@@ -1,4 +1,4 @@
-import { type MemberId, toolNamePartsOf } from '@spyria/kernel'
+import { type MemberId, type ToolApproval, toolApprovals, toolNamePartsOf } from '@spyria/kernel'
 
 export type ToolCallFailure = 'needs_connection' | 'not_allowed' | 'unavailable'
 type Names = { ownerName: string; server: string; isReconnect: boolean }
@@ -9,6 +9,9 @@ export const notApprovedOf = (ownerName: string) => `${ownerName} did not approv
 export const toolGatewayUnreachable = 'The tool gateway is unreachable, try again shortly'
 const connectionNotice = / needs to (re)?connect (\S+)$/
 const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
+
+export const needsApproval = (approval: ToolApproval, isGuestPrompt: boolean) =>
+  approval === toolApprovals.always || (approval === toolApprovals.guest && isGuestPrompt)
 
 export const guestPrompterOf = ({ ownerId, prompterId }: { ownerId: MemberId; prompterId: MemberId | null }) =>
   prompterId !== ownerId ? prompterId : null

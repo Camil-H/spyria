@@ -54,7 +54,16 @@ Next to the chip, a circle shows how full the agent's context is: the tokens of 
 
 The agent can ask the member a question with suggested answers and a free answer. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
 
-On a guest's prompt, a tool call that is not read-only produces a **Tool approval** card that only the owner answers. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
+## Tool approvals
+
+A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the chat owner answers it. Each member chooses which calls wait in **Profile > Tool connections > Approvals for** *server*: a default for the server's write tools and a choice per tool, in a searchable list grouped into read and write tools:
+
+- **Never**: the call runs at once.
+- **Always**: every call waits, on the member's own prompts too.
+- **On a guest's prompt** (shared-login servers only): the call waits when someone other than the owner prompted.
+
+Read tools default to Never and tools the server marks destructive to Always; the other tools follow the server's default, Never on servers each member signs in to and On a guest's prompt on shared-login servers. The choices of the chat owner apply to their chats, since the agent acts with the owner's access. See [Chats and sharing](./chats-and-sharing.md#prompts-from-someone-other-than-the-owner).
+
 
 ## Opening pages
 
@@ -106,4 +115,5 @@ The **Usage** tab of a chat shows its spend per member and per model (tokens, co
 
 ## Keys
 
-A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Tool connections** lists, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show the tools you may use, and on those each member signs in to, **Connect** signs you in with your own account. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
+A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Tool connections** lists, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
+ and on those each member signs in to, **Connect** signs you in with your own account. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).

@@ -12,6 +12,7 @@ import { createWorkspaceJobs } from '@spyria/workspace/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { recurringJobTypes, sessionJobs } from './auth/sessions.ts'
 import { contextOf, withSpan } from './telemetry.ts'
+import { announceToolListChange } from './tool-list-changes.ts'
 
 type TransactionalJobHandler = (tx: ServerTransaction, workspaceId: WorkspaceId, payload: unknown) => Promise<unknown>
 type JobHandler = (job: Job) => Promise<unknown>
@@ -70,7 +71,7 @@ export const startJobWorker = (
   const jobHandlers: Record<string, JobHandler | undefined> = {
     ...(sandboxProvider && createRuntimeJobs(sandboxProvider, { currentImage: spyriaAgentImage })),
     ...agentBridge?.forDatabase(database).jobs,
-    ...(llmGateway && createProfileJobs(llmGateway)),
+    ...(llmGateway && createProfileJobs(llmGateway, announceToolListChange)),
     ...(usageLogs && createUsageJobs(usageLogs)),
     ...auditJobs,
     ...createWorkspaceJobs({ cleanupPollMilliseconds, failedCleanupRetryMilliseconds }),
