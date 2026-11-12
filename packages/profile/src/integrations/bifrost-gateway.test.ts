@@ -28,12 +28,10 @@ test('admin requests, the OAuth fetches and the consent call give up after the t
   await Promise.all([
     expect(gateway.removeToolSession('session-1')).rejects.toMatchObject(timedOut),
     expect(gateway.finishToolConsent('?state=1')).rejects.toMatchObject(timedOut),
-    expect(
-      gateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' }, async () => {}),
-    ).rejects.toMatchObject(timedOut),
-    expect(
-      gateway.startToolConsent('key-1', { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }),
-    ).rejects.toMatchObject(timedOut),
+    expect(gateway.finishMemberToolServer('docs', 'setup-1')).rejects.toMatchObject(timedOut),
+    expect(gateway.startToolConsent('key-1', { id: 'docs', name: 'docs', tools: ['search'] })).rejects.toMatchObject(
+      timedOut,
+    ),
   ])
   expect(Date.now() - startedAt).toBeLessThan(2_000)
 })
@@ -112,6 +110,8 @@ test('the tool server list is read once per short window, and again after a serv
     fetch: (request) => {
       const { pathname } = new URL(request.url)
       if (pathname === '/api/mcp/clients') listings.push(Date.now())
+      if (pathname === '/api/mcp/client')
+        return Response.json({ oauth_config_id: 'setup-1', authorize_url: 'https://docs.test/authorize' })
       return Response.json(pathname === '/api/mcp/clients' ? { clients: [] } : {})
     },
   })
@@ -125,15 +125,14 @@ test('the tool server list is read once per short window, and again after a serv
     await Promise.all([listingGateway.toolServers(), listingGateway.toolServers()])
     await listingGateway.toolServers()
     expect(listings).toHaveLength(1)
-    await listingGateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp', isShared: true })
+    await listingGateway.startMemberToolServer({ name: 'docs', url: 'http://docs.test/mcp' })
+    await listingGateway.toolServers()
     expect(listings).toHaveLength(2)
     await listingGateway.toolServers()
-    expect(listings).toHaveLength(3)
-    await listingGateway.toolServers()
-    expect(listings).toHaveLength(3)
+    expect(listings).toHaveLength(2)
     await Bun.sleep(toolServerListMilliseconds + 50)
     await listingGateway.toolServers()
-    expect(listings).toHaveLength(4)
+    expect(listings).toHaveLength(3)
   } finally {
     clientServer.stop(true)
   }
@@ -174,7 +173,7 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
   }
 })
 
-test('a consent starts on a read-only tool of the server, or on its first tool when it marks none read-only', async () => {
+test('a consent starts on a read-only tool granted to the member, or on the first tool granted when none is read-only, never on a tool the key lacks', async () => {
   const calledTools: string[] = []
   const flowId = crypto.randomUUID()
   const consentServer = Bun.serve({
@@ -194,6 +193,7 @@ test('a consent starts on a read-only tool of the server, or on its first tool w
               { name: 'docs-create_page' },
               { name: 'docs-get_me', annotations: { readOnlyHint: true } },
               { name: 'wiki-update', annotations: { readOnlyHint: false } },
+              { name: 'notes-append' },
             ],
           },
         })
@@ -207,15 +207,23 @@ test('a consent starts on a read-only tool of the server, or on its first tool w
     adminPassword: 'secret',
   })
   try {
-    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'create_page', 'get_me'], isPersonal: true }
+    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'create_page', 'get_me'] }
     expect(await consentGateway.startToolConsent('key-1', docs)).toBe(
       `http://localhost:${consentServer.port}/authorize`,
     )
-    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'], isPersonal: true }
+    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'] }
     expect(await consentGateway.startToolConsent('key-1', wiki)).toBe(
       `http://localhost:${consentServer.port}/authorize`,
     )
-    expect(calledTools).toEqual(['docs-get_me', 'wiki-update'])
+    const notes = { id: 'notes', name: 'notes', tools: ['archive', 'append'] }
+    expect(await consentGateway.startToolConsent('key-1', notes)).toBe(
+      `http://localhost:${consentServer.port}/authorize`,
+    )
+    const sheets = { id: 'sheets', name: 'sheets', tools: ['read'] }
+    expect(await consentGateway.startToolConsent('key-1', sheets).then(String, (error: Error) => error.message)).toBe(
+      'The gateway grants no tool of sheets to start a consent',
+    )
+    expect(calledTools).toEqual(['docs-get_me', 'wiki-update', 'notes-append'])
   } finally {
     consentServer.stop(true)
   }
@@ -250,12 +258,12 @@ test('a session is checked with a read-only tool only, and reads unauthorized wh
     adminPassword: 'secret',
   })
   try {
-    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'get_me'], isPersonal: true }
+    const docs = { id: 'docs', name: 'docs', tools: ['delete_page', 'get_me'] }
     expect(await checkGateway.isToolSessionAuthorized('key-1', docs)).toBe(true)
     answer =
       '{"result":{"isError":true,"content":[{"type":"text","text":"Tool execution failed: failed to establish ephemeral MCP connection: transport error: request failed with status 401: invalid_token"}]}}'
     expect(await checkGateway.isToolSessionAuthorized('key-1', docs)).toBe(false)
-    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'], isPersonal: true }
+    const wiki = { id: 'wiki', name: 'wiki', tools: ['update'] }
     expect(await checkGateway.isToolSessionAuthorized('key-1', wiki)).toBeUndefined()
     expect(calledTools).toEqual(['docs-get_me', 'docs-get_me'])
   } finally {
@@ -263,20 +271,57 @@ test('a session is checked with a read-only tool only, and reads unauthorized wh
   }
 })
 
-test('a tool server with a per-member sign-in is not set up without an operator login', async () => {
-  const setUpServer = Bun.serve({ port: 0, fetch: () => Response.json({ clients: [] }) })
-  const setUpGateway = createLlmGateway({
-    url: `http://localhost:${setUpServer.port}`,
+test('a server each member signs in to is set up on an admin sign-in, then lists its tools through a key used once, or the names the gateway kept when that key lists none', async () => {
+  const requests: { method: string; pathname: string; body: string }[] = []
+  let listedTools: object[] = [{ name: 'docs_a1b2c3-search', annotations: { readOnlyHint: true } }]
+  const setupServer = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const { pathname, origin } = new URL(request.url)
+      requests.push({ method: request.method, pathname, body: await request.text() })
+      if (pathname === '/api/mcp/client')
+        return Response.json({ authorize_url: `${origin}/authorize`, oauth_config_id: 'setup-1' })
+      if (pathname === '/api/governance/virtual-keys')
+        return Response.json({ virtual_key: { id: 'listing-1', value: 'sk-bf-listing' } })
+      if (pathname === '/mcp') return Response.json({ result: { tools: listedTools } })
+      if (pathname === '/api/mcp/clients')
+        return Response.json({
+          clients: [{ config: { client_id: 'c1', name: 'docs_a1b2c3' }, tools: [{ name: 'fetch' }] }],
+        })
+      return Response.json({})
+    },
+  })
+  const setupGateway = createLlmGateway({
+    url: `http://localhost:${setupServer.port}`,
     adminUser: 'admin',
     adminPassword: 'secret',
   })
   try {
-    expect(
-      (await setUpGateway.setUpToolServer({ name: 'docs', url: 'http://docs.test/mcp' }).catch((error) => error))
-        .message,
-    ).toBe('Setting up docs needs an operator to log in to it')
+    expect(await setupGateway.startMemberToolServer({ name: 'docs_a1b2c3', url: 'https://docs.test/mcp' })).toEqual({
+      setupId: 'setup-1',
+      authorizeUrl: `http://localhost:${setupServer.port}/authorize`,
+    })
+    expect(JSON.parse(requests[0]?.body ?? '{}')).toMatchObject({
+      name: 'docs_a1b2c3',
+      connection_string: 'https://docs.test/mcp',
+      auth_type: 'per_user_oauth',
+      oauth_config: {},
+    })
+    expect(await setupGateway.finishMemberToolServer('docs_a1b2c3', 'setup-1')).toEqual([
+      { name: 'search', readOnly: true },
+    ])
+    expect(requests.map(({ method, pathname }) => `${method} ${pathname}`).slice(1)).toEqual([
+      'POST /api/mcp/client/setup-1/complete-oauth',
+      'POST /api/governance/virtual-keys',
+      'POST /mcp',
+      'DELETE /api/governance/virtual-keys/listing-1',
+    ])
+    listedTools = []
+    expect(await setupGateway.finishMemberToolServer('docs_a1b2c3', 'setup-1')).toEqual([
+      { name: 'fetch', readOnly: false },
+    ])
   } finally {
-    setUpServer.stop(true)
+    setupServer.stop(true)
   }
 })
 
@@ -298,7 +343,7 @@ test('the sessions of a tool are its credentials: a pending sign-in, which lets 
     adminPassword: 'secret',
   })
   try {
-    const docs = { id: 'docs', name: 'docs', tools: ['search'], isPersonal: true }
+    const docs = { id: 'docs', name: 'docs', tools: ['search'] }
     expect((await sessionGateway.toolSessions('key-1', docs)).map(({ id }) => id)).toEqual(['token-1', 'header-1'])
   } finally {
     sessionServer.stop(true)

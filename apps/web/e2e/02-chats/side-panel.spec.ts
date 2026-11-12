@@ -38,9 +38,8 @@ const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Memb
 const expectOwnerConnections = async (page: Page) => {
   await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
   await expect(tabPanelOf(page)).not.toContainText('Connections of')
-  const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
-  await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'CRM' })).toContainText('lookup, update')
-  await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
+  await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText('CRMlookup, update')
+  await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'fake' })).toHaveText('fakeNot connected')
 }
 
 test.describe('Side panel', () => {
@@ -134,7 +133,7 @@ test.describe('Side panel', () => {
       await expect(tabPanelOf(page).locator('iframe')).toHaveCount(0)
     })
 
-    await test.step('lists the workspace connections of the owner, who has no personal one, on Invoice bug', async () => {
+    await test.step('lists the tools of the owner, who has signed in to none, on Invoice bug', async () => {
       await openPanelTab(page, 'Invoice bug', 'Connected tools')
       await expectOwnerConnections(page)
     })
@@ -179,7 +178,7 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
 
-    await test.step('lists the workspace connections of the owner, who has no personal one, on Welcome', async () => {
+    await test.step('lists the tools of the owner, who has signed in to none, on Welcome', async () => {
       await openPanelTab(page, 'Welcome', 'Connected tools')
       await expectOwnerConnections(page)
     })
@@ -230,12 +229,11 @@ test.describe('Side panel', () => {
       await expect(tabPanelOf(page)).toContainText('No sources')
     })
 
-    await test.step('shows the shared connections and an empty message for an owner without personal connections', async () => {
+    await test.step('shows the owner’s tools: a shared login with its tools, a server the owner has not signed in to as not connected', async () => {
       await openPanelTab(page, 'Setup helper', 'Connected tools')
       await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
-      const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
-      await expect(workspaceGroup.getByRole('listitem').filter({ hasText: 'CRM' })).toContainText('lookup, update')
-      await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
+      await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText('CRMlookup, update')
+      await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'fake' })).toHaveText('fakeNot connected')
     })
   })
 

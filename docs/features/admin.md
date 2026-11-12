@@ -12,7 +12,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | | **Manage Team** | `members.invite` or `members.manage` |
 | Setup your agents | **Connect runtime** | `runtimes.manage` |
 | | **AI providers** | `providers.manage` |
-| | **MCP tools** | `tools.manage` |
+| | **Tools** | `tools.manage` |
 | | **Quality gates** | `github.manage` |
 | Analyze usage | **Analyze costs** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
@@ -43,7 +43,7 @@ A workspace role is a named set of permissions. Two are built in and cannot be c
 | `roles.manage` | Manage roles |
 | `sso.manage` | Set up SSO |
 | `github.manage` | Connect GitHub |
-| `tools.manage` | Manage shared MCP tools |
+| `tools.manage` | Manage the tools catalogue |
 | `providers.manage` | Manage AI providers |
 | `runtimes.manage` | Manage runtime hosts and local sessions |
 | `costs.view` | View costs |
@@ -90,7 +90,7 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 **Remove** takes effect at once:
 
 - the member's sessions in that workspace end and their open agent streams close;
-- their own machine is removed from the workspace, their API keys and their personal tool connections are deleted, and their linked GitHub account is forgotten;
+- their own machine is removed from the workspace, their API keys and their sign-ins to tool servers are deleted, and their linked GitHub account is forgotten;
 - they leave every chat they did not own; their name stays on past messages.
 
 Runtime chats they owned **freeze**: participants can still read them, but nobody can prompt ("This chat is frozen: its owner left the workspace"), and their runtimes stop. A frozen chat cannot act on the departed owner's rights, which is why it stops rather than continuing under someone else. A member with `members.manage` can pick a new owner with **Transfer to** in the chat; the new owner becomes its Owner and the chat thaws. Only a chat whose owner has left can be transferred. Channels never freeze, since no agent acts with their owner's rights; they can still be transferred.
@@ -123,18 +123,21 @@ Its **Setup commands** set what a dev chat's runtime runs when it starts, before
 
 **Quality gates** sets the gates the work of dev chat agents goes through before it reaches the owner: the **Default rules**, and rules for each repository that needs its own, each with its own switch, its gates and the limits of a run (time and cost). Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
 
-## Shared tools
+## Tools
 
-**MCP tools** registers tool servers (MCP) for the whole workspace: a display name, the server's URL and an optional secret header (name and value). The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the URL or the header recreates the connection in the gateway.
+**Tools** is the workspace's catalogue of approved tool servers (MCP). Each server has a name, unique in the workspace, its address, and how members sign in, chosen when it is added:
 
-After registration, Spyria lists the server's tools, each marked read-only or writes:
+- **Each member signs in** (the default): each member connects their own account in **Profile** > **Tool connections**, and Spyria uses it on their chats. Adding the server opens a window where you sign in once with your own account: the gateway uses that sign-in only to list the server's tools, and the server is ready once you have. If the sign-in fails, Spyria removes the server and says why; while it waits, the server reads "Waiting for the sign-in that lists its tools", and one whose window was closed before the end stays so until it is removed. Its address cannot change once added, since members' sign-ins belong to it: remove it and add it again. The server must let the gateway register itself (OAuth dynamic client registration); one that needs a pre-registered OAuth app, such as GitHub's MCP server, cannot be added yet.
+- **One shared login**: every member's calls use a secret header (name and value) you enter, only for servers without their own sign-in, such as API-key or internal servers. The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the address or the header recreates the server in the gateway.
+
+Members cannot add servers of their own. Once a server is added, Spyria lists its tools, each marked read-only or writes:
 
 - **Allowed tools** decides which of them the workspace may use (all by default).
-- **Member access** narrows them per member: all allowed tools, some, or none.
+- **Member access** narrows them per member: all allowed tools, some, or none. A member with none of a server's tools does not see it.
 
-Each member's gateway key is given exactly the workspace's connections with the allowed tools minus their restrictions, and the gateway enforces it on every call. Connections of one workspace are invisible to other workspaces. Adding, changing or removing a connection reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Members see what they may use in **Profile** > **Tool connections** > **Shared with me**.
+Each member's gateway key is given exactly the catalogue's servers with the allowed tools minus their restrictions, and the gateway enforces it on every call. Servers of one workspace are invisible to other workspaces. Adding, changing or removing a server reaches agents that are already running, in every chat: Spyria tells each of them that its tools changed, and Pi lists them again without a restart (Claude Code and Codex on a member's machine do so only if they support that notice). Removing a server also deletes every member's sign-in to it.
 
-When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only what both the owner and the guest may use on shared connections, never the owner's personal connections, and write calls wait for the owner's approval (see [Agents](./agents.md)).
+When an agent acts, it uses the chat owner's access. On a guest's prompt it uses only the shared-login servers, with what both the owner and the guest may use, never a server the owner signed in to with their own account, and write calls wait for the owner's approval (see [Agents](./agents.md)). See [decision 0030](../decisions/0030-workspace-tools-catalogue.md).
 
 ## AI providers
 
@@ -176,7 +179,7 @@ Spend is counted from the gateway's usage records, which Spyria reads every few 
 At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It is not a card and no workspace role can grant it: only members with the built-in Admin role see it, and the server checks the same. The dialog lists what goes and asks to type `DELETE`.
 
 - At once, every member loses access: their sessions end, their open agent streams close, running runtimes stop, and the workspace's background work, GitHub webhooks, agents' and sub-agents' model calls are refused. A few minutes later, runtimes that were still starting are removed, so a restored workspace starts those afresh. The workspace disappears from everyone's workspace switcher.
-- Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, shared connections, the link to the GitHub App, the sign-in settings, the audit log, and the people who belonged to no other workspace and never signed in with an account of their own.
+- Seven days later, Spyria erases the workspace for good: chats and their whole history, runtimes with their containers and files on the hosts, members' model keys in the gateway, the tools catalogue, the link to the GitHub App, the sign-in settings, the audit log, and the people who belonged to no other workspace and never signed in with an account of their own.
 - The GitHub App stays installed on the organization: uninstall it on GitHub.
 - Until the seven days are over, only the operator can restore the workspace ([Manual install](../guides/self-hosting.md#deleting-a-workspace)).
 - When the only workspace of a deployment is erased, creating one needs the setup link again ([who can join and sign-in](../guides/who-can-join.md)).
@@ -191,7 +194,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
 | Sign-in | SSO configured, client secret replaced |
 | GitHub | App configured, App secrets replaced |
-| Connections | shared connections added, changed, removed, member restrictions |
+| Tools | tool servers added, changed, removed, member restrictions |
 | Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |
 | Tool calls | every agent tool call, with prompter, owner, server, tool, whether it writes, approval decision and outcome |
 | Publishing | pushes, pull requests opened, reopened, turned into drafts, merged, closed |

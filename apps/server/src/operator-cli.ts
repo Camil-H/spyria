@@ -2,7 +2,6 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
-import { createLlmGateway, type ToolServerSetup } from '@spyria/profile/server'
 import { createSecretBox, secretsKeyringFrom } from './auth/secret-box.ts'
 import { hasNoWorkspace, stopWorkspaceSsoByOperator } from './auth/sso.ts'
 import { listFailedJobs, retryFailedJobs } from './job-worker.ts'
@@ -16,22 +15,6 @@ const requiredEnvironment = (name: string) => {
   if (!value) throw new Error(`${name} is required`)
   return value
 }
-const toolServers: Record<string, () => ToolServerSetup> = {
-  github: () => ({
-    name: 'GitHub',
-    url: 'https://api.githubcopilot.com/mcp/',
-    oauthConfig: {
-      client_id: requiredEnvironment('GITHUB_MCP_CLIENT_ID'),
-      client_secret: requiredEnvironment('GITHUB_MCP_CLIENT_SECRET'),
-      scopes: ['repo', 'read:org', 'read:user'],
-    },
-  }),
-  notion: () => ({ name: 'Notion', url: 'https://mcp.notion.com/mcp' }),
-}
-const logInAsAdmin = async (authorizeUrl: string) => {
-  console.log(`Log in once as the Spyria admin of this server, then press Enter:\n${authorizeUrl}`)
-  for await (const _ of console) break
-}
 const commands: Record<string, () => Promise<void>> = {
   'rebuild-messages': async () => {
     const chatId = options.includes('--chat') ? options[options.indexOf('--chat') + 1] : null
@@ -43,19 +26,6 @@ const commands: Record<string, () => Promise<void>> = {
     const failedJobs = await listFailedJobs(database)
     if (failedJobs.length === 0) console.log('No failed job')
     else console.table(failedJobs)
-  },
-  'tools-setup': async () => {
-    const [name = ''] = options
-    const setup = toolServers[name]
-    if (!setup) throw new Error(`Usage: bun run tools:setup ${Object.keys(toolServers).join('|')}`)
-    const gateway = createLlmGateway({
-      url: process.env.SPYRIA_GATEWAY_URL ?? 'http://127.0.0.1:8180',
-      adminUser: process.env.SPYRIA_GATEWAY_ADMIN_USER ?? 'spyria',
-      adminPassword: process.env.SPYRIA_GATEWAY_ADMIN_PASSWORD ?? 'spyria-dev-gateway',
-    })
-    const server = setup()
-    const isNew = await gateway.setUpToolServer(server, logInAsAdmin)
-    console.log(isNew ? `${server.name} is set up: members can connect it` : `${server.name} was already set up`)
   },
   'has-workspace': async () => {
     console.log((await hasNoWorkspace(database.$client)) ? 'no' : 'yes')
