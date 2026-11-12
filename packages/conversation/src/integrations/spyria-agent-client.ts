@@ -88,10 +88,7 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
-const toolsSecretsOf = (gatewayUrl: string, token: string) => ({
-  SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: token },
-  SPYRIA_TOOLS_URL: { kind: 'StaticSecret', value: gatewayUrl.replace(/\/v1$/, catalogueToolsPath) },
-})
+const toolsUrlVariableOf = (gatewayUrl: string) => `SPYRIA_TOOLS_URL=${gatewayUrl.replace(/\/v1$/, catalogueToolsPath)}`
 
 const harnessConversationOf = (
   endpoint: AgentEndpoint,
@@ -101,7 +98,7 @@ const harnessConversationOf = (
   hasRepository: boolean,
 ) => ({
   agent: {
-    acp_command: harnesses[harness].launch,
+    acp_command: ['env', toolsUrlVariableOf(endpoint.transport.gatewayUrl), ...harnesses[harness].launch.slice(1)],
     mcp_config: {
       spyria: mcpServerOf(endpoint, spyriaToolsPath, llmToken),
       tools: mcpServerOf(endpoint, catalogueToolsPath, llmToken),
@@ -111,7 +108,7 @@ const harnessConversationOf = (
     ...(adapterModel && { acp_model: adapterModel }),
     ...(effort && { acp_thought_level: effort }),
   },
-  secrets: toolsSecretsOf(endpoint.transport.gatewayUrl, llmToken),
+  secrets: { SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken } },
 })
 
 const piSettings = {
@@ -184,6 +181,7 @@ export const piCommandOf = (
     'PI_SKIP_VERSION_CHECK=1',
     'PI_TELEMETRY=0',
     ...(sub ? [] : ['PI_CACHE_RETENTION=long']),
+    toolsUrlVariableOf(gatewayUrl),
     `SPYRIA_COMPACTION_MODEL=${piModelOf(compactionModel)}`,
     `SPYRIA_PI_MODELS=${JSON.stringify({ providers })}`,
     `SPYRIA_PI_SETTINGS=${JSON.stringify({ ...piSettings, ...(compaction && { compaction }) })}`,
@@ -211,7 +209,7 @@ const piConversationOf = (
   },
   secrets: {
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
-    ...toolsSecretsOf(endpoint.transport.gatewayUrl, llmToken),
+    SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken },
   },
 })
 
