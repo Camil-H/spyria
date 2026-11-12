@@ -11,7 +11,8 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
   spyria backup [--keep 7]         dump both databases into backups/, keeping the newest
   spyria restore <file> [--yes]    back up the database it replaces, then restore a dump from backups/ (asks first
                                    unless --yes)
-  spyria doctor                    check Docker, the services, the server's start check and the disk
+  spyria doctor                    check Docker, the services, the server's start check, the disk,
+                                   the .env mode, its credentials and the published ports
   spyria setup-link                print the link that creates the first workspace
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
