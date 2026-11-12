@@ -247,9 +247,9 @@ test('spyria doctor names a .env others can read, a default credential and a por
     chmodSync(join(install, '.env'), 0o600)
   }
   expect(printed.filter((line) => line.startsWith('✗'))).toEqual([
-    '✗ SPYRIA_POSTGRES_PASSWORD is a default or short value: give it a random one of at least 32 characters',
-    '✗ .env is readable by other users of this machine (mode 644): run chmod 600 on it',
-    '✗ server publishes port 3300 on 0.0.0.0, reachable from other machines: publish it on 127.0.0.1 only',
+    '✗ SPYRIA_POSTGRES_PASSWORD is a default or short value: replace it as the troubleshooting guide shows',
+    '✗ .env is open to other users of this machine (mode 644): run chmod 600 on it',
+    '✗ server publishes port 3300 on every address, reachable from other machines: publish it on 127.0.0.1 only',
   ])
 })
 
