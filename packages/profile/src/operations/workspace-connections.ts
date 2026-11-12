@@ -1,4 +1,4 @@
-import { grantedToolsOf, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import { MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -21,7 +21,7 @@ import {
   type SecretHeader,
   type ToolMarking,
 } from '../domain/workspace-connection.ts'
-import { grantMemberTools, grantWorkspaceTools, releaseLostSignIns } from './grant-tools.ts'
+import { grantWorkspaceTools, releaseLostSignIns } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: ToolGateway }
 type InWorkspace = { workspaceId: WorkspaceId }
