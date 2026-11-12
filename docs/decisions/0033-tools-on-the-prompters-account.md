@@ -1,4 +1,4 @@
-# 0032. The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's
+# 0033. The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's
 
 ## Context
 

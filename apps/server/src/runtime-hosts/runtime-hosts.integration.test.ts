@@ -130,7 +130,7 @@ const claim = async (code: string) => {
 const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) =>
   'closed' in outcome ? outcome.closed.reason : 'not refused'
 
-const hostVersions = { hostVersion: 'test', protocolVersion: 3 }
+const hostVersions = { hostVersion: 'test', protocolVersion: 4 }
 
 const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean }) => {
   const { id, code } = await addedHost(name)
@@ -271,7 +271,7 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(online.capacity).toEqual({ ...hostSystem, cap: 6 })
   expect(online.running_runtimes).toBe(0)
   expect(online.host_version).toBe('test')
-  expect(online.protocol_version).toBe(3)
+  expect(online.protocol_version).toBe(4)
   expect(online.last_seen_at).toBeInstanceOf(Date)
 
   const expiring = await addedHost()

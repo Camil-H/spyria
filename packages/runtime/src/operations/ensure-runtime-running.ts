@@ -10,24 +10,46 @@ import {
   runtimeJobTypes,
   transitioned,
 } from '../domain/runtime.ts'
+import { isClaimable, runtimeOfClaimed } from '../domain/warm-runtime.ts'
 
 export type RuntimePlacement = { spyriaAgentImage?: string }
 type Dependencies = RuntimePlacement & { transactor: RuntimeTransactor }
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; id: string; now: number }
 
+const claimedWarmRuntime = async (
+  { runtimes, warmRuntimes, jobs }: UnitOfWork,
+  { workspaceId, chatId, now }: Input,
+  spyriaAgentImage: string | undefined,
+) => {
+  const scope = await runtimes.claimScopeOf(workspaceId, chatId)
+  if (!scope || !spyriaAgentImage) return undefined
+  const warm = await warmRuntimes.lockClaimable(workspaceId, scope, spyriaAgentImage)
+  if (!warm || !isClaimable(warm, scope, spyriaAgentImage)) return undefined
+  const runtime = runtimeOfClaimed(warm, chatId, now)
+  await warmRuntimes.delete(warm)
+  await runtimes.add(runtime)
+  await runtimes.keepApiKeyId(runtime, warm.apiKeyId)
+  await jobs.enqueue(workspaceId, runtimeJobTypes.warm, {})
+  return runtime
+}
+
 const placeRuntime = async (
-  { runtimes, runtimeHosts, secrets, jobs }: UnitOfWork,
+  unitOfWork: UnitOfWork,
   { workspaceId, chatId, id, now }: Input,
   existing: Runtime | undefined,
   { spyriaAgentImage }: RuntimePlacement,
 ) => {
+  const { runtimes, runtimeHosts, secrets, jobs } = unitOfWork
   if (existing) {
     await secrets.discard(existing)
     await runtimes.delete(existing)
     if (existing.hostId && existing.state !== 'removed' && existing.failure !== 'lost')
       await jobs.enqueue(workspaceId, runtimeJobTypes.discard, { runtimeId: existing.id, hostId: existing.hostId })
   }
-  const placement = placementOf(await runtimeHosts.lockLoads(workspaceId, chatId))
+  const loads = await runtimeHosts.lockLoads(workspaceId, chatId)
+  const claimed = await claimedWarmRuntime(unitOfWork, { workspaceId, chatId, id, now }, spyriaAgentImage)
+  if (claimed) return claimed
+  const placement = placementOf(loads)
   const failure = placement.failure ?? (spyriaAgentImage ? null : 'no_image')
   const runtime: Runtime = {
     workspaceId,

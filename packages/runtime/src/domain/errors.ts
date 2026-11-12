@@ -81,3 +81,13 @@ export const RetryRefused = errorKind(
   () => 'Only a runtime that could not start can be retried',
   RuntimeError,
 )
+export const SpyriaAgentRefused = errorKind(
+  'spyria_agent_refused',
+  (request: string, status: number) => `spyria-agent answered ${request} with ${status}`,
+  RuntimeError,
+)
+export const RepositoryAccessMissing = errorKind(
+  'repository_access_missing',
+  () => 'No GitHub App can clone the repository',
+  RuntimeError,
+)

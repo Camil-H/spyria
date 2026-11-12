@@ -10,7 +10,16 @@ import {
   liveOutputCharacters,
   unspawnedConnection,
 } from './acp.ts'
-import { checkOut, lastLinesOf, type Repository, runCommand } from './checkout.ts'
+import {
+  checkOut,
+  headOf,
+  lastLinesOf,
+  type Preparation,
+  type Prepared,
+  prepare,
+  type Repository,
+  runCommand,
+} from './checkout.ts'
 import { createChecksRunner } from './checks.ts'
 import { asksToRunACommand } from './command-request.ts'
 import { outputTailOf } from './output-tail.ts'
@@ -87,6 +96,14 @@ type TerminalMeta = {
   terminal_exit?: { exit_code?: unknown }
 }
 type ModelChoice = { model?: string; thoughtLevel?: string }
+type PreparationOutcome =
+  | { state: 'ready'; branch?: string; isRestored?: boolean; isSetUp: boolean }
+  | { state: 'failed'; failure: string }
+type Preparing = {
+  done: Promise<Prepared & { setupCommand?: string; isSetUp: boolean }>
+  outcome?: PreparationOutcome
+  isClaimed: boolean
+}
 type Launch = {
   id?: string
   agent?: {
@@ -284,6 +301,7 @@ export const startAgent = ({
   browserDirectory = '/usr/local/lib/spyria/browser',
   homeDirectory = process.env.HOME ?? '/home/spyria',
   packageCacheDirectory = '/var/cache/spyria',
+  snapshotDirectory = '/var/lib/spyria/snapshot',
 }: {
   apiKey: string
   port: number
@@ -296,8 +314,10 @@ export const startAgent = ({
   browserDirectory?: string
   homeDirectory?: string
   packageCacheDirectory?: string
+  snapshotDirectory?: string
 }) => {
   const packageCacheEnvironment = packageCacheEnvironmentOf(packageCacheDirectory)
+  const checkoutDirectories = { snapshot: snapshotDirectory, home: homeDirectory }
   const toolEnvironmentWith = (secrets: Launch['secrets']) => ({
     ...toolEnvironmentOf({ ...inheritedEnvironmentOf(), ...packageCacheEnvironment }, homeDirectory),
     ...secretEnvironmentOf(secrets),
@@ -313,6 +333,7 @@ export const startAgent = ({
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
   const runningSetups = new Map<string, string>()
+  let preparation: Preparing | undefined
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {
     const givenBytes = Buffer.from(String(given ?? ''))
@@ -597,19 +618,62 @@ export const startAgent = ({
       })
     else if (exitCode !== 0)
       emitToCheckout(cwd, { sessionUpdate: 'setup_failed', command, exitCode, output: lastLinesOf(output) })
+    return exitCode
   }
 
   const setUpOnce = (conversation: Conversation, command: string) => {
     const { cwd } = conversation
     const running = runningSetups.get(cwd)
     if (running) emit(conversation, setupStartOf(running))
-    const setup =
-      setups.get(cwd) ??
-      setUp(cwd, command).catch((error) =>
-        log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }),
-      )
+    const setup = setups.get(cwd) ?? loggedSetup(setUp(cwd, command))
     setups.set(cwd, setup)
     return setup
+  }
+
+  const loggedSetup = (setup: Promise<unknown>) =>
+    setup.then(
+      () => undefined,
+      (error) => log.warn({ event: 'agent.setup', body: 'The setup script could not run', error }),
+    )
+
+  const prepared = async ({ repository }: { repository: Preparation }) => {
+    const cwd = workspaceDirectory
+    const checkout = await prepare(cwd, repository, inheritedEnvironmentOf(), checkoutDirectories)
+    const setupCommand = repository.setup_command?.trim()
+    if (checkout.failure || !setupCommand) return { ...checkout, setupCommand, isSetUp: !checkout.failure }
+    const setup = setUp(cwd, setupCommand)
+    setups.set(cwd, loggedSetup(setup))
+    const isSetUp = (await setup.catch(() => undefined)) === 0
+    if (!isSetUp) setups.delete(cwd)
+    return { ...checkout, setupCommand, isSetUp }
+  }
+
+  const startPreparing = (body: { repository?: Partial<Preparation> }) => {
+    const { url, token, setup_command } = body.repository ?? {}
+    if (typeof url !== 'string' || typeof token !== 'string')
+      return Response.json({ error: 'repository.url and repository.token must be strings' }, { status: 400 })
+    if (!preparation) {
+      const done = prepared({ repository: { url, token, ...(typeof setup_command === 'string' && { setup_command }) } })
+      const started: Preparing = { done, isClaimed: false }
+      preparation = started
+      done.then(
+        ({ failure, branch, isRestored, isSetUp }) => {
+          started.outcome = failure ? { state: 'failed', failure } : { state: 'ready', branch, isRestored, isSetUp }
+        },
+        (error) => {
+          started.outcome = { state: 'failed', failure: errorUpdateOf(error).message }
+        },
+      )
+    }
+    return Response.json(preparation.outcome ?? { state: 'preparing' }, { status: 202 })
+  }
+
+  const forgetPreparedSetupIfMoved = async (cwd: string, setupCommand: string | undefined) => {
+    if (!preparation || preparation.isClaimed || cwd !== workspaceDirectory) return
+    preparation.isClaimed = true
+    const { head, setupCommand: preparedCommand } = await preparation.done
+    const isUnchanged = preparedCommand === setupCommand && head === (await headOf(cwd, inheritedEnvironmentOf()))
+    if (!isUnchanged) setups.delete(cwd)
   }
 
   const isStoppedWhileStarting = (conversation: Conversation) =>
@@ -640,7 +704,14 @@ export const startAgent = ({
   }
 
   const checkedOut = (id: string, cwd: string, repository: Repository) => {
-    const checkout = checkouts.get(id) ?? checkOut(cwd, repository, inheritedEnvironmentOf())
+    const checkout =
+      checkouts.get(id) ??
+      (async () => {
+        await preparation?.done
+        const checkout = await checkOut(cwd, repository, inheritedEnvironmentOf(), checkoutDirectories)
+        if (!checkout.failure) await forgetPreparedSetupIfMoved(cwd, checkout.setupCommand)
+        return checkout
+      })()
     checkouts.set(id, checkout)
     return checkout.finally(() => checkouts.delete(id))
   }
@@ -913,6 +984,11 @@ export const startAgent = ({
 
   const route = async (method: string, { pathname, searchParams }: URL, request: Request) => {
     if (method === 'POST' && pathname === '/api/conversations') return create(await request.json())
+    if (pathname === '/api/prepare' && method === 'POST') return startPreparing(await request.json())
+    if (pathname === '/api/prepare' && method === 'GET')
+      return preparation
+        ? Response.json(preparation.outcome ?? { state: 'preparing' })
+        : Response.json({ error: 'Not found' }, { status: 404 })
     const [, read] = workspaceRoute.exec(pathname) ?? []
     if (read && method === 'GET') return readWorkspace(read, searchParams)
     const [, workspaceAction] = workspaceActionRoute.exec(pathname) ?? []

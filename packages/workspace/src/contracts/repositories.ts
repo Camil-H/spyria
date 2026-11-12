@@ -92,6 +92,7 @@ export type InvitationRepository = {
 
 export type MemberAccess = {
   revoke(memberId: MemberId): Promise<void>
+  endSessions(memberId: MemberId): Promise<void>
   stopTurnsLater(change: { memberId: MemberId; actorId: MemberId }): Promise<void>
   regrantToolsLater(memberId: MemberId): Promise<void>
 }

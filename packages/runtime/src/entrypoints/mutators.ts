@@ -7,6 +7,7 @@ import { haltChatRuntime } from '../operations/halt-chat-runtime.ts'
 import { removeChatRuntime } from '../operations/remove-chat-runtime.ts'
 import { removeMemberMachine } from '../operations/remove-member-machine.ts'
 import { removeRuntimeHost } from '../operations/remove-runtime-host.ts'
+import { refillWarmPools, removeWarmRuntimes } from '../operations/remove-warm-runtimes.ts'
 import { setLocalSessions } from '../operations/set-local-sessions.ts'
 import { stopChatRuntime } from '../operations/stop-chat-runtime.ts'
 
@@ -53,6 +54,14 @@ export const haltChatRuntimeOnServer = async (tx: Transaction, workspaceId: Work
 export const stopChatRuntimeOnServer = async (tx: Transaction, workspaceId: WorkspaceId, chatId: ChatId) => {
   if (tx.location === 'server')
     await stopChatRuntime({ transactor: createZeroTransactor(tx) }, { workspaceId, chatId, now: Date.now() })
+}
+
+export const removeWarmRuntimesOnServer = async (tx: Transaction, workspaceId: WorkspaceId) => {
+  if (tx.location === 'server') await removeWarmRuntimes({ transactor: createZeroTransactor(tx) }, workspaceId)
+}
+
+export const refillWarmPoolsOnServer = async (tx: Transaction, workspaceId: WorkspaceId) => {
+  if (tx.location === 'server') await refillWarmPools({ transactor: createZeroTransactor(tx) }, workspaceId)
 }
 
 export const removeMemberMachineOnServer = async (tx: Transaction, workspaceId: WorkspaceId, memberId: MemberId) =>
