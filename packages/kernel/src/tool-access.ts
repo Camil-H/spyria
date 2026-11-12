@@ -27,6 +27,9 @@ type GrantedServer = Readonly<{
   tools: readonly ConnectionTool[]
 }>
 
+export const ownValueOf = <Value>(record: Readonly<Record<string, Value>> | undefined, key: string) =>
+  record && Object.hasOwn(record, key) ? record[key] : undefined
+
 export const isAllowedAtLevel = (level: AccessLevel, tool: ConnectionTool) =>
   level === accessLevels.write || (level === accessLevels.read && tool.readOnly)
 
@@ -40,7 +43,9 @@ export const holderAccessOf = (
 }
 
 export const toolsAllowedBy = (tools: readonly ConnectionTool[], access: ToolServerAccess | undefined) =>
-  access ? tools.filter((tool) => access.toolChanges[tool.name] ?? isAllowedAtLevel(access.level, tool)) : []
+  access
+    ? tools.filter((tool) => ownValueOf(access.toolChanges, tool.name) ?? isAllowedAtLevel(access.level, tool))
+    : []
 
 export const grantedToolsOf = (server: GrantedServer, accessRows: readonly ToolServerAccess[], holder: ToolHolder) =>
   server.setupId === null && server.isReviewed
@@ -63,7 +68,7 @@ export const toolApprovalOf = (
   server: Pick<GrantedServer, 'signIn'>,
   tool: ConnectionTool,
   preference?: ToolApprovalPreference,
-) => preference?.toolApprovals[tool.name] ?? defaultToolApprovalOf(server, tool, preference)
+) => ownValueOf(preference?.toolApprovals, tool.name) ?? defaultToolApprovalOf(server, tool, preference)
 
 export const approvalChoicesOf = (server: Pick<GrantedServer, 'signIn'>): readonly ToolApproval[] =>
   server.signIn === 'shared'
