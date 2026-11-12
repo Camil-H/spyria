@@ -88,6 +88,11 @@ const mcpServerOf = (endpoint: AgentEndpoint, path: string, token: string) => ({
   headers: { Authorization: `Bearer ${token}` },
 })
 
+const toolsSecretsOf = (gatewayUrl: string, token: string) => ({
+  SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: token },
+  SPYRIA_TOOLS_URL: { kind: 'StaticSecret', value: gatewayUrl.replace(/\/v1$/, catalogueToolsPath) },
+})
+
 const harnessConversationOf = (
   endpoint: AgentEndpoint,
   llmToken: string,
@@ -106,7 +111,7 @@ const harnessConversationOf = (
     ...(adapterModel && { acp_model: adapterModel }),
     ...(effort && { acp_thought_level: effort }),
   },
-  secrets: {},
+  secrets: toolsSecretsOf(endpoint.transport.gatewayUrl, llmToken),
 })
 
 const piSettings = {
@@ -114,6 +119,7 @@ const piSettings = {
   enableInstallTelemetry: false,
   retry: { enabled: false },
   extensions: ['/usr/local/lib/spyria/pi/spyria-compaction.ts', '/usr/local/lib/spyria/pi/spyria-tools.ts'],
+  skills: ['/usr/local/lib/spyria/skills'],
 }
 const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) => ({
   baseUrl,
@@ -208,7 +214,7 @@ const piConversationOf = (
   },
   secrets: {
     SPYRIA_LLM_TOKEN: { kind: 'StaticSecret', value: llmToken },
-    SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: llmToken },
+    ...toolsSecretsOf(endpoint.transport.gatewayUrl, llmToken),
   },
 })
 

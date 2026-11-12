@@ -14,6 +14,7 @@ import {
   modelNotAllowedNoticeOf,
   publicModelNameOf,
   routerTools,
+  spyriaCommandInstructions,
   spyriaTools,
   spyriaToolsPath,
   type ToolCallDecision,
@@ -415,7 +416,8 @@ export const createModelCallRelay = ({
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
       const rpc = jsonOf(body) as RouterCall | undefined
       if (Array.isArray(rpc)) return answerRpc(null, methodNotFound)
-      if (rpc?.method !== 'tools/call' || rpc.id === undefined) return answerSpyriaServer(rpc, 'spyria', spyriaTools)
+      if (rpc?.method !== 'tools/call' || rpc.id === undefined)
+        return answerSpyriaServer(rpc, 'spyria', spyriaTools, spyriaCommandInstructions)
       const { chat, prompterId, ownerId } = turn
       if (!prompterId) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
       const toolName = String(rpc.params?.name ?? '')

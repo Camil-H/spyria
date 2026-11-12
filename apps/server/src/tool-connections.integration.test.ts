@@ -127,7 +127,7 @@ test('a member acts only on their own key: unknown servers are refused, a member
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
 })
 
-test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only the gateway’s tools outside a turn but calls them only during one, Spyria’s own tools list on /mcp/spyria alone, and both refuse another host’s token', async () => {
+test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only the gateway’s tools outside a turn but calls them only during one, Spyria’s own tools list on /mcp/spyria alone with a pointer to the spyria command, and both refuse another host’s token', async () => {
   await connectAlice(aliceCookie)
   const host = await fakeHost('Tools host')
   const otherHost = await fakeHost('Other tools host')
@@ -146,6 +146,15 @@ test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only 
   expect(listedNames).not.toContain('open_page')
   const spyriaListed = await mcpCall(host, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')
   expect(spyriaListed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(['open_page', 'take_screenshot'])
+  const spyriaInitialized = await mcpCall(
+    host,
+    token,
+    rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }),
+    {},
+    undefined,
+    '/mcp/spyria',
+  )
+  expect(spyriaInitialized.result.instructions).toContain('run `spyria` to list them')
   expect((await mcpCall(otherHost, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')).status).toBe(401)
   const duringTurn = await mcpCall(host, token, whoami)
   expect(textOf(duringTurn.result)).toBe(`you are ${aliceAccount}`)
