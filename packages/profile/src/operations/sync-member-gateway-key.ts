@@ -2,7 +2,7 @@ import { type GatewayKey, log } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ActingMember, ProfileTransactor } from '../contracts/transactor.ts'
 import type { LlmCredential } from '../domain/llm-credential.ts'
-import { grantMemberTools } from './grant-tools.ts'
+import { grantMemberTools, releaseLostSignIns } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }
 
@@ -81,6 +81,8 @@ export const runGatewaySync = async (
   { key, isLeaving }: Pick<GatewaySyncJob, 'key' | 'isLeaving'>,
 ) => {
   await syncMemberGatewayKey(dependencies, { isLeaving })
+  const { workspaceId, memberId } = dependencies.transactor.member
+  if (!isLeaving) await releaseLostSignIns(dependencies, workspaceId, { memberIds: [memberId] })
   if (key) await dependencies.gateway.removeProviderKey(key)
 }
 
