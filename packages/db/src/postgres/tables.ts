@@ -600,10 +600,6 @@ export const connectionAccess = table(
     index().on(table.workspaceId, table.userId),
     check('connection_access_subject', sql`num_nonnulls(${table.roleId}, ${table.userId}) = 1`),
     check('connection_access_level', sql`${table.level} in ('none', 'read', 'write')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
       'cascade',
     ),
@@ -623,10 +619,6 @@ export const toolApprovals = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.userId, table.connectionId] }),
     check('tool_approvals_server_approval', sql`${table.serverApproval} in ('never', 'always', 'guest')`),
-    tenantReference(
-      [table.workspaceId, table.connectionId],
-      [workspaceConnections.workspaceId, workspaceConnections.id],
-    ).onDelete('cascade'),
     memberReference(table, table.userId),
   ],
 )
