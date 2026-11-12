@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "142c719a-493a-4741-9672-a93e253dc89d",
-  "prevIds": [
-    "c62a7215-0706-4b4c-96ee-b80be42d6426"
-  ],
+  "prevIds": ["c62a7215-0706-4b4c-96ee-b80be42d6426"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -6005,14 +6003,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "account_identities_user_id_users_id_fkey",
@@ -6022,14 +6016,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "audit_settings_workspace_id_workspaces_workspace_id_fkey",
@@ -6039,16 +6029,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "browser_pages_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6058,14 +6042,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "budget_alerts_workspace_id_workspaces_workspace_id_fkey",
@@ -6075,16 +6055,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "member_id"
-      ],
+      "columns": ["workspace_id", "member_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "budget_alerts_cstUFxQXHeIi_fkey",
@@ -6094,14 +6068,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "budgets_workspace_id_workspaces_workspace_id_fkey",
@@ -6111,16 +6081,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "member_id"
-      ],
+      "columns": ["workspace_id", "member_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "budgets_B4t8yjaLqPxh_fkey",
@@ -6130,16 +6094,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chat_participants_1eaBIKlSavtm_fkey",
@@ -6149,16 +6107,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chat_participants_T8dmJy7zh6nz_fkey",
@@ -6168,16 +6120,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "role_id"
-      ],
+      "columns": ["workspace_id", "role_id"],
       "schemaTo": "public",
       "tableTo": "chat_roles",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chat_participants_ylkN3lOK63Td_fkey",
@@ -6187,14 +6133,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chat_roles_workspace_id_workspaces_workspace_id_fkey",
@@ -6204,16 +6146,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "project_id"
-      ],
+      "columns": ["workspace_id", "project_id"],
       "schemaTo": "public",
       "tableTo": "projects",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chats_workspace_id_project_id_projects_workspace_id_id_fkey",
@@ -6223,16 +6159,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "owner_user_id"
-      ],
+      "columns": ["workspace_id", "owner_user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chats_iiNiPXwLfxXz_fkey",
@@ -6242,16 +6172,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "owner_service_identity_id"
-      ],
+      "columns": ["workspace_id", "owner_service_identity_id"],
       "schemaTo": "public",
       "tableTo": "service_identities",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chats_FEkcSURTyRc9_fkey",
@@ -6261,16 +6185,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "origin_chat_id"
-      ],
+      "columns": ["workspace_id", "origin_chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "chats_workspace_id_origin_chat_id_chats_workspace_id_id_fkey",
@@ -6280,16 +6198,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "role_id"
-      ],
+      "columns": ["workspace_id", "role_id"],
       "schemaTo": "public",
       "tableTo": "workspace_roles",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "connection_access_2p5ZmUNQVYh8_fkey",
@@ -6299,16 +6211,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "connection_access_f7TgzULFd5vz_fkey",
@@ -6318,16 +6224,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "delegations_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6337,16 +6237,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "deleted_message_texts_tTgfAVYRSxoB_fkey",
@@ -6356,16 +6250,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "deleted_by"
-      ],
+      "columns": ["workspace_id", "deleted_by"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "deleted_message_texts_3Nx86RU1h2UM_fkey",
@@ -6375,16 +6263,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "events_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6394,14 +6276,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "github_apps_workspace_id_workspaces_workspace_id_fkey",
@@ -6411,16 +6289,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "github_connections_NRbMuXzI0sJP_fkey",
@@ -6430,14 +6302,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "github_apps",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "github_webhook_deliveries_MGZJOa7aeFzl_fkey",
@@ -6447,16 +6315,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "identities_eIXAJt821ZMi_fkey",
@@ -6466,14 +6328,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "invitations_workspace_id_workspaces_workspace_id_fkey",
@@ -6483,16 +6341,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "invited_by"
-      ],
+      "columns": ["workspace_id", "invited_by"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "invitations_dhezOQEmFv1k_fkey",
@@ -6502,14 +6354,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "jobs_workspace_id_workspaces_workspace_id_fkey",
@@ -6519,16 +6367,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "llm_credentials_UUt7TxskVuNc_fkey",
@@ -6538,14 +6380,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "machine_counts_workspace_id_workspaces_workspace_id_fkey",
@@ -6555,16 +6393,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "member_gateway_keys_ZnC0Q45Z6VHm_fkey",
@@ -6574,16 +6406,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "member_onboarding_yCETkLVxb9FQ_fkey",
@@ -6593,14 +6419,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "memberships_workspace_id_workspaces_workspace_id_fkey",
@@ -6610,14 +6432,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "memberships_user_id_users_id_fkey",
@@ -6627,16 +6445,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "role"
-      ],
+      "columns": ["workspace_id", "role"],
       "schemaTo": "public",
       "tableTo": "workspace_roles",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "memberships_W6V6Me0w2fna_fkey",
@@ -6646,16 +6458,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "message_attachments_wUJlUhk27pLJ_fkey",
@@ -6665,16 +6471,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "uploader_id"
-      ],
+      "columns": ["workspace_id", "uploader_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "message_attachments_yBzSkfPwIAbL_fkey",
@@ -6684,16 +6484,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "message_id"
-      ],
+      "columns": ["workspace_id", "message_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "message_attachments_MpsSQJFxhMpn_fkey",
@@ -6703,16 +6497,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6722,16 +6510,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "author_id"
-      ],
+      "columns": ["workspace_id", "author_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_Ps26ckhBb1cg_fkey",
@@ -6741,16 +6523,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "reply_to_id"
-      ],
+      "columns": ["workspace_id", "reply_to_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_workspace_id_reply_to_id_messages_workspace_id_id_fkey",
@@ -6760,16 +6536,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "thread_root_id"
-      ],
+      "columns": ["workspace_id", "thread_root_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_3vmeRlAcBGif_fkey",
@@ -6779,16 +6549,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "quoted_message_id"
-      ],
+      "columns": ["workspace_id", "quoted_message_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_Ol4c5GLLZdnM_fkey",
@@ -6798,14 +6562,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "model_calls_workspace_id_workspaces_workspace_id_fkey",
@@ -6815,14 +6575,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "projects_workspace_id_workspaces_workspace_id_fkey",
@@ -6832,16 +6588,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "read_markers_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6851,16 +6601,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "read_markers_94CbVBHMKb3y_fkey",
@@ -6870,16 +6614,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "routing_decisions_4alXUacnKj9B_fkey",
@@ -6889,16 +6627,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "created_by"
-      ],
+      "columns": ["workspace_id", "created_by"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_hosts_ZKO4tV2XfLRR_fkey",
@@ -6908,16 +6640,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "owner_id"
-      ],
+      "columns": ["workspace_id", "owner_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_hosts_J8opGRJBt3iQ_fkey",
@@ -6927,16 +6653,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_origins_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -6946,16 +6666,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "runtime_chat_id"
-      ],
+      "columns": ["workspace_id", "runtime_chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_origins_LxTF6TU0R9qs_fkey",
@@ -6965,16 +6679,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "message_id"
-      ],
+      "columns": ["workspace_id", "message_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_origins_6xs8QR0CnyyT_fkey",
@@ -6984,16 +6692,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "started_by"
-      ],
+      "columns": ["workspace_id", "started_by"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtime_origins_X9y7yxzzCq2c_fkey",
@@ -7003,16 +6705,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtimes_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -7022,16 +6718,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "host_id"
-      ],
+      "columns": ["workspace_id", "host_id"],
       "schemaTo": "public",
       "tableTo": "runtime_hosts",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "runtimes_IWzUWcrQFW3H_fkey",
@@ -7041,14 +6731,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "service_identities_workspace_id_workspaces_workspace_id_fkey",
@@ -7058,16 +6744,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "sessions_2hh7S2reKhGn_fkey",
@@ -7077,16 +6757,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "sources_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -7096,16 +6770,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "thread_read_markers_togPiyHMBi5U_fkey",
@@ -7115,16 +6783,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "thread_read_markers_FzeOFqBMpoKT_fkey",
@@ -7134,16 +6796,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "thread_root_id"
-      ],
+      "columns": ["workspace_id", "thread_root_id"],
       "schemaTo": "public",
       "tableTo": "messages",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "thread_read_markers_0MLRhzHVzBMC_fkey",
@@ -7153,16 +6809,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "tool_approvals_cOxWj3KyzHvH_fkey",
@@ -7172,16 +6822,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "tool_calls_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -7191,16 +6835,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "connection_id"
-      ],
+      "columns": ["workspace_id", "connection_id"],
       "schemaTo": "public",
       "tableTo": "workspace_connections",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "tool_connections_A08BI1hSPkpX_fkey",
@@ -7210,16 +6848,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "tool_connections_4LjMoJm85a4k_fkey",
@@ -7229,16 +6861,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "schemaTo": "public",
       "tableTo": "chats",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "usage_entries_workspace_id_chat_id_chats_workspace_id_id_fkey",
@@ -7248,16 +6874,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "memberships",
-      "columnsTo": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columnsTo": ["workspace_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "usage_entries_IDWiWwU5ZZsW_fkey",
@@ -7267,14 +6887,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "usage_sync_marks_workspace_id_workspaces_workspace_id_fkey",
@@ -7284,14 +6900,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspace_connections_workspace_id_workspaces_workspace_id_fkey",
@@ -7301,14 +6913,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspace_events_workspace_id_workspaces_workspace_id_fkey",
@@ -7318,14 +6926,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspace_onboarding_workspace_id_workspaces_workspace_id_fkey",
@@ -7335,16 +6939,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "role_id"
-      ],
+      "columns": ["workspace_id", "role_id"],
       "schemaTo": "public",
       "tableTo": "workspace_roles",
-      "columnsTo": [
-        "workspace_id",
-        "id"
-      ],
+      "columnsTo": ["workspace_id", "id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "workspace_role_permissions_YYXfGqC0q9PS_fkey",
@@ -7354,14 +6952,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspace_roles_workspace_id_workspaces_workspace_id_fkey",
@@ -7371,14 +6965,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "schemaTo": "public",
       "tableTo": "workspaces",
-      "columnsTo": [
-        "workspace_id"
-      ],
+      "columnsTo": ["workspace_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspace_sso_workspace_id_workspaces_workspace_id_fkey",
@@ -7388,14 +6978,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "created_by"
-      ],
+      "columns": ["created_by"],
       "schemaTo": "public",
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "workspaces_created_by_users_id_fkey",
@@ -7404,10 +6990,7 @@
       "table": "workspaces"
     },
     {
-      "columns": [
-        "issuer",
-        "subject"
-      ],
+      "columns": ["issuer", "subject"],
       "nameExplicit": false,
       "name": "account_identities_pkey",
       "entityType": "pks",
@@ -7415,11 +6998,7 @@
       "table": "account_identities"
     },
     {
-      "columns": [
-        "workspace_id",
-        "chat_id",
-        "url"
-      ],
+      "columns": ["workspace_id", "chat_id", "url"],
       "nameExplicit": false,
       "name": "browser_pages_pkey",
       "entityType": "pks",
@@ -7427,10 +7006,7 @@
       "table": "browser_pages"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "budget_alerts_pkey",
       "entityType": "pks",
@@ -7438,11 +7014,7 @@
       "table": "budget_alerts"
     },
     {
-      "columns": [
-        "workspace_id",
-        "chat_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "chat_id", "user_id"],
       "nameExplicit": false,
       "name": "chat_participants_pkey",
       "entityType": "pks",
@@ -7450,10 +7022,7 @@
       "table": "chat_participants"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "chat_roles_pkey",
       "entityType": "pks",
@@ -7461,10 +7030,7 @@
       "table": "chat_roles"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "chats_pkey",
       "entityType": "pks",
@@ -7472,11 +7038,7 @@
       "table": "chats"
     },
     {
-      "columns": [
-        "workspace_id",
-        "connection_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "connection_id", "id"],
       "nameExplicit": false,
       "name": "connection_access_pkey",
       "entityType": "pks",
@@ -7484,10 +7046,7 @@
       "table": "connection_access"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "delegations_pkey",
       "entityType": "pks",
@@ -7495,10 +7054,7 @@
       "table": "delegations"
     },
     {
-      "columns": [
-        "workspace_id",
-        "message_id"
-      ],
+      "columns": ["workspace_id", "message_id"],
       "nameExplicit": false,
       "name": "deleted_message_texts_pkey",
       "entityType": "pks",
@@ -7506,10 +7062,7 @@
       "table": "deleted_message_texts"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "events_pkey",
       "entityType": "pks",
@@ -7517,10 +7070,7 @@
       "table": "events"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "nameExplicit": false,
       "name": "github_connections_pkey",
       "entityType": "pks",
@@ -7528,10 +7078,7 @@
       "table": "github_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "delivery_id"
-      ],
+      "columns": ["workspace_id", "delivery_id"],
       "nameExplicit": false,
       "name": "github_webhook_deliveries_pkey",
       "entityType": "pks",
@@ -7539,11 +7086,7 @@
       "table": "github_webhook_deliveries"
     },
     {
-      "columns": [
-        "workspace_id",
-        "issuer",
-        "subject"
-      ],
+      "columns": ["workspace_id", "issuer", "subject"],
       "nameExplicit": false,
       "name": "identities_pkey",
       "entityType": "pks",
@@ -7551,10 +7094,7 @@
       "table": "identities"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "invitations_pkey",
       "entityType": "pks",
@@ -7562,10 +7102,7 @@
       "table": "invitations"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "entityType": "pks",
@@ -7573,10 +7110,7 @@
       "table": "jobs"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "llm_credentials_pkey",
       "entityType": "pks",
@@ -7584,9 +7118,7 @@
       "table": "llm_credentials"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "machine_counts_pkey",
       "entityType": "pks",
@@ -7594,10 +7126,7 @@
       "table": "machine_counts"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "nameExplicit": false,
       "name": "member_gateway_keys_pkey",
       "entityType": "pks",
@@ -7605,11 +7134,7 @@
       "table": "member_gateway_keys"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id",
-        "task"
-      ],
+      "columns": ["workspace_id", "user_id", "task"],
       "nameExplicit": false,
       "name": "member_onboarding_pkey",
       "entityType": "pks",
@@ -7617,10 +7142,7 @@
       "table": "member_onboarding"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id"
-      ],
+      "columns": ["workspace_id", "user_id"],
       "nameExplicit": false,
       "name": "memberships_pkey",
       "entityType": "pks",
@@ -7628,10 +7150,7 @@
       "table": "memberships"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "message_attachments_pkey",
       "entityType": "pks",
@@ -7639,10 +7158,7 @@
       "table": "message_attachments"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "messages_pkey",
       "entityType": "pks",
@@ -7650,10 +7166,7 @@
       "table": "messages"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "model_calls_pkey",
       "entityType": "pks",
@@ -7661,10 +7174,7 @@
       "table": "model_calls"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "projects_pkey",
       "entityType": "pks",
@@ -7672,11 +7182,7 @@
       "table": "projects"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "user_id", "chat_id"],
       "nameExplicit": false,
       "name": "read_markers_pkey",
       "entityType": "pks",
@@ -7684,10 +7190,7 @@
       "table": "read_markers"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "routing_decisions_pkey",
       "entityType": "pks",
@@ -7695,10 +7198,7 @@
       "table": "routing_decisions"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "runtime_hosts_pkey",
       "entityType": "pks",
@@ -7706,10 +7206,7 @@
       "table": "runtime_hosts"
     },
     {
-      "columns": [
-        "workspace_id",
-        "runtime_chat_id"
-      ],
+      "columns": ["workspace_id", "runtime_chat_id"],
       "nameExplicit": false,
       "name": "runtime_origins_pkey",
       "entityType": "pks",
@@ -7717,10 +7214,7 @@
       "table": "runtime_origins"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "runtimes_pkey",
       "entityType": "pks",
@@ -7728,10 +7222,7 @@
       "table": "runtimes"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "service_identities_pkey",
       "entityType": "pks",
@@ -7739,10 +7230,7 @@
       "table": "service_identities"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "sessions_pkey",
       "entityType": "pks",
@@ -7750,11 +7238,7 @@
       "table": "sessions"
     },
     {
-      "columns": [
-        "workspace_id",
-        "chat_id",
-        "name"
-      ],
+      "columns": ["workspace_id", "chat_id", "name"],
       "nameExplicit": false,
       "name": "sources_pkey",
       "entityType": "pks",
@@ -7762,11 +7246,7 @@
       "table": "sources"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id",
-        "thread_root_id"
-      ],
+      "columns": ["workspace_id", "user_id", "thread_root_id"],
       "nameExplicit": false,
       "name": "thread_read_markers_pkey",
       "entityType": "pks",
@@ -7774,11 +7254,7 @@
       "table": "thread_read_markers"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id",
-        "connection_id"
-      ],
+      "columns": ["workspace_id", "user_id", "connection_id"],
       "nameExplicit": false,
       "name": "tool_approvals_pkey",
       "entityType": "pks",
@@ -7786,10 +7262,7 @@
       "table": "tool_approvals"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "tool_calls_pkey",
       "entityType": "pks",
@@ -7797,11 +7270,7 @@
       "table": "tool_calls"
     },
     {
-      "columns": [
-        "workspace_id",
-        "user_id",
-        "connection_id"
-      ],
+      "columns": ["workspace_id", "user_id", "connection_id"],
       "nameExplicit": false,
       "name": "tool_connections_pkey",
       "entityType": "pks",
@@ -7809,13 +7278,7 @@
       "table": "tool_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "month",
-        "chat_id",
-        "user_id",
-        "model"
-      ],
+      "columns": ["workspace_id", "month", "chat_id", "user_id", "model"],
       "nameExplicit": false,
       "name": "usage_entries_pkey",
       "entityType": "pks",
@@ -7823,10 +7286,7 @@
       "table": "usage_entries"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "workspace_connections_pkey",
       "entityType": "pks",
@@ -7834,10 +7294,7 @@
       "table": "workspace_connections"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "workspace_events_pkey",
       "entityType": "pks",
@@ -7845,10 +7302,7 @@
       "table": "workspace_events"
     },
     {
-      "columns": [
-        "workspace_id",
-        "task"
-      ],
+      "columns": ["workspace_id", "task"],
       "nameExplicit": false,
       "name": "workspace_onboarding_pkey",
       "entityType": "pks",
@@ -7856,11 +7310,7 @@
       "table": "workspace_onboarding"
     },
     {
-      "columns": [
-        "workspace_id",
-        "role_id",
-        "permission"
-      ],
+      "columns": ["workspace_id", "role_id", "permission"],
       "nameExplicit": false,
       "name": "workspace_role_permissions_pkey",
       "entityType": "pks",
@@ -7868,10 +7318,7 @@
       "table": "workspace_role_permissions"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "nameExplicit": false,
       "name": "workspace_roles_pkey",
       "entityType": "pks",
@@ -7879,9 +7326,7 @@
       "table": "workspace_roles"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "audit_settings_pkey",
       "schema": "public",
@@ -7889,9 +7334,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "github_apps_pkey",
       "schema": "public",
@@ -7899,9 +7342,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "usage_sync_marks_pkey",
       "schema": "public",
@@ -7909,9 +7350,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "users_pkey",
       "schema": "public",
@@ -7919,9 +7358,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "workspace_sso_pkey",
       "schema": "public",
@@ -7929,9 +7366,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "nameExplicit": false,
       "name": "workspaces_pkey",
       "schema": "public",
@@ -7940,10 +7375,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "workspace_id",
-        "member_id"
-      ],
+      "columns": ["workspace_id", "member_id"],
       "nullsNotDistinct": true,
       "name": "budgets_scope_key",
       "entityType": "uniques",
@@ -7952,10 +7384,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "chat_id",
-        "seq"
-      ],
+      "columns": ["chat_id", "seq"],
       "nullsNotDistinct": false,
       "name": "events_chat_id_seq_unique",
       "entityType": "uniques",
@@ -7964,10 +7393,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "chat_id",
-        "seq"
-      ],
+      "columns": ["chat_id", "seq"],
       "nullsNotDistinct": false,
       "name": "messages_chat_id_seq_unique",
       "entityType": "uniques",
@@ -7976,10 +7402,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "chat_id"
-      ],
+      "columns": ["workspace_id", "chat_id"],
       "nullsNotDistinct": false,
       "name": "runtimes_workspace_id_chat_id_unique",
       "entityType": "uniques",
@@ -7988,10 +7411,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "workspace_id",
-        "name"
-      ],
+      "columns": ["workspace_id", "name"],
       "nullsNotDistinct": false,
       "name": "workspace_connections_workspace_id_name_unique",
       "entityType": "uniques",
@@ -8000,9 +7420,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "claim_code_hash"
-      ],
+      "columns": ["claim_code_hash"],
       "nullsNotDistinct": false,
       "name": "runtime_hosts_claim_code_hash_key",
       "schema": "public",
@@ -8011,9 +7429,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "token_hash"
-      ],
+      "columns": ["token_hash"],
       "nullsNotDistinct": false,
       "name": "runtime_hosts_token_hash_key",
       "schema": "public",
@@ -8022,9 +7438,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "email"
-      ],
+      "columns": ["email"],
       "nullsNotDistinct": false,
       "name": "users_email_key",
       "schema": "public",
@@ -8033,9 +7447,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "gateway_name"
-      ],
+      "columns": ["gateway_name"],
       "nullsNotDistinct": false,
       "name": "workspace_connections_gateway_name_key",
       "schema": "public",
