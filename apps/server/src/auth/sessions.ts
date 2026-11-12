@@ -14,12 +14,15 @@ export const openSessions = (
   userId: string,
   workspaceId?: string,
   through: SignedInThrough = 'account',
+  userAgent = '',
+  signedInAt?: string,
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
-      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, created_at, expires_at)
-      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, now(),
-        now() + interval '7 days'
+      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, user_agent, signed_in_at,
+        created_at, expires_at)
+      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, ${userAgent},
+        coalesce(${signedInAt ?? null}::timestamptz, now()), now(), now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
         and exists(select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id)
@@ -50,6 +53,32 @@ export const findLiveSessions = async (database: Database, sessionIdByWorkspace:
 
 export const deleteSession = (database: Database, workspaceId: string, sessionId: string) =>
   database.$client`delete from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
+
+export const findMemberSessions = (database: Database, workspaceId: string, userId: string) =>
+  database.$client<{ sessionId: string; userAgent: string; signedInAt: number }[]>`
+    select id as "sessionId", user_agent as "userAgent",
+      (extract(epoch from created_at) * 1000)::float8 as "signedInAt" from sessions
+    where workspace_id = ${workspaceId} and user_id = ${userId} and expires_at > now()
+    order by created_at desc`
+
+export const signOutMemberEverywhere = (database: Database, workspaceId: string, userId: string) =>
+  database.$client`
+    with ended as (delete from sessions where workspace_id = ${workspaceId} and user_id = ${userId})
+    insert into member_sign_outs (workspace_id, user_id, signed_out_at) values (${workspaceId}, ${userId}, now())
+    on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
+
+export const signedInAtOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
+  const [session] = await database.$client<{ signedInAt: string }[]>`
+    select signed_in_at as "signedInAt" from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
+  return session?.signedInAt
+}
+
+export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: string) => {
+  const [signedOut] = await database.$client`
+    select 1 from member_sign_outs where workspace_id = ${workspaceId} and user_id = ${userId}
+      and signed_out_at >= ${signedInAt}::timestamptz`
+  return signedOut !== undefined
+}
 
 export const findMemberIn =
   (databaseOf: (databaseName: string | undefined) => Database | undefined): FindMember =>

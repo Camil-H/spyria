@@ -113,6 +113,16 @@ export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =
 export const deleteMemberSessions = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'delete from sessions where workspace_id = $1 and user_id = $2', [workspaceId, userId])
 
+export const signOutMemberEverywhere = async (tx: Transaction, workspaceId: string, userId: string) => {
+  await deleteMemberSessions(tx, workspaceId, userId)
+  await onServer(
+    tx,
+    `insert into member_sign_outs (workspace_id, user_id, signed_out_at) values ($1, $2, now())
+     on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`,
+    [workspaceId, userId],
+  )
+}
+
 export const deleteGitHubConnection = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'delete from github_connections where workspace_id = $1 and user_id = $2', [workspaceId, userId])
 
@@ -818,6 +828,7 @@ export const workspaceTablesInPurgeOrder = [
   'member_gateway_keys',
   'member_onboarding',
   'sessions',
+  'member_sign_outs',
   'memberships',
   'workspace_role_permissions',
   'workspace_roles',

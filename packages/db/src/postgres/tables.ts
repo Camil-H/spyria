@@ -264,11 +264,27 @@ export const sessions = table(
     id: text().notNull(),
     userId: text().notNull(),
     openedThroughWorkspaceSso: boolean().notNull().default(false),
+    userAgent: text().notNull().default(''),
+    signedInAt: instant().notNull().defaultNow(),
     createdAt: instant().notNull(),
     expiresAt: instant().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
+    index('sessions_member_index').on(table.workspaceId, table.userId),
+    memberReference(table, table.userId).onDelete('cascade'),
+  ],
+)
+
+export const memberSignOuts = table(
+  'member_sign_outs',
+  {
+    ...tenant,
+    userId: text().notNull(),
+    signedOutAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
     memberReference(table, table.userId).onDelete('cascade'),
   ],
 )

@@ -9,6 +9,7 @@ import {
   bob,
   bobInAcme,
   failedWith,
+  globex,
   inviteToAcme,
   issueTestSession,
   jobDone,
@@ -155,6 +156,46 @@ test('two admins demoting each other at once leave one admin: the last-admin gua
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
 })
 
+test('an admin signs a member out everywhere in the workspace, which is recorded, keeps their membership and cannot be undone from their other workspaces; a member signs nobody out', async () => {
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${globex}, ${bob}, 'member', 'Bob')`
+  const bobInGlobex = await issueTestSession(database, globex, bob)
+  const bobSessions = [await issueTestSession(database, acme, bob), await issueTestSession(database, acme, bob)]
+  const aliceToken = (await issueTestSession(database, acme, alice)).token
+  const endSessionsOf = (member: typeof aliceInAcme, memberId: string) =>
+    resultOf(member, 'workspace.endMemberSessions', { workspaceId: acme, memberId })
+
+  expect(await endSessionsOf(bobInAcme, alice)).toEqual(cannotManageMembers)
+  expect((await queryAs(aliceToken)).status).toBe(200)
+
+  expect(await endSessionsOf(aliceInAcme, bob)).toEqual(succeeded)
+  for (const { token, sessionId } of bobSessions) {
+    expect((await queryAs(token)).status).toBe(401)
+    expect((await renewWith(sessionId)).status).toBe(401)
+  }
+  expect(await membershipOf(bob)).toEqual({ role: 'member', removed_at: null })
+  expect((await workspaceEventsOf(database)).at(-1)).toEqual({
+    type: 'member.sessions_ended',
+    actorId: alice,
+    payload: { memberId: bob },
+  })
+  expect((await queryAs(aliceToken)).status).toBe(200)
+  const openFrom = (token: string, workspaceId: string) =>
+    app.request('/auth/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ workspaceId }),
+    })
+  expect((await openFrom(bobInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openFrom(bobInGlobex.token, globex)
+  expect(relayedThroughGlobex.status).toBe(200)
+  const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
+  expect((await openFrom(relayedToken, acme)).status).toBe(403)
+  expect((await queryAs(bobInGlobex.token)).status).toBe(200)
+  expect((await queryAs((await issueTestSession(database, acme, bob)).token)).status).toBe(200)
+  await database.$client`delete from memberships where workspace_id = ${globex} and user_id = ${bob}`
+})
+
 test('removing a member ends their sessions, participations, keys and connections (their GitHub one too); their runtime chat freezes, their channel stays open', async () => {
   await addLlmKey(bob, 'openai')
   const [credential] = await database.$client`select secret_ref from llm_credentials where user_id = ${bob}`
@@ -236,6 +277,9 @@ test('removing a member ends their sessions, participations, keys and connection
   )
   expect(await sendTo(aliceInAcme, alicesChat, `message-${crypto.randomUUID()}`, 'Not frozen')).toEqual(succeeded)
   expect(await removeFromAcme(app, database, bob)).toEqual(failedWith(`${bob} is not a member of this workspace`))
+  expect(await resultOf(aliceInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob })).toEqual(
+    failedWith(`${bob} is not a member of this workspace`),
+  )
 })
 
 test("an admin transfers a removed member's chat to an active member, which unfreezes it; a chat of an active owner cannot be transferred", async () => {

@@ -144,6 +144,12 @@ test('a manager changes roles and invites only within their own permissions, nev
   expect(await resultOf(leeInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: alice })).toEqual(
     failedWith('Admin has permissions your own role does not have'),
   )
+  expect(await resultOf(leeInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: alice })).toEqual(
+    failedWith('Admin has permissions your own role does not have'),
+  )
+  expect(await resultOf(leeInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob })).toEqual(
+    succeeded,
+  )
   expect(await changeRole(leeInAcme, lee, 'member')).toEqual(
     failedWith('You can neither change your own role nor remove yourself'),
   )
