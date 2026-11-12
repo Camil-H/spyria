@@ -138,6 +138,36 @@ test('the tool server list is read once per short window, and again after a serv
   }
 })
 
+test('the tool server list reads every page the gateway answers, so a server past the first page is not lost', async () => {
+  const clients = Array.from({ length: 5 }, (_, index) => ({
+    config: { client_id: `c${index}`, name: `server_${index}` },
+  }))
+  const pageSize = 2
+  const listings: string[] = []
+  const pagedServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname, searchParams } = new URL(request.url)
+      if (pathname !== '/api/mcp/clients') return Response.json({})
+      listings.push(searchParams.get('offset') ?? '')
+      const offset = Number(searchParams.get('offset') ?? 0)
+      const page = clients.slice(offset, offset + Math.min(pageSize, Number(searchParams.get('limit') ?? pageSize)))
+      return Response.json({ clients: page, count: page.length, limit: pageSize, offset, total_count: clients.length })
+    },
+  })
+  const pagedGateway = createLlmGateway({
+    url: `http://localhost:${pagedServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    expect((await pagedGateway.toolServers()).map(({ name }) => name)).toEqual(clients.map(({ config }) => config.name))
+    expect(listings).toEqual(['0', '2', '4'])
+  } finally {
+    pagedServer.stop(true)
+  }
+})
+
 test('an admin read answering 503 once is retried; a 400 and a failing creation are not', async () => {
   const requests: string[] = []
   const flakyServer = Bun.serve({
