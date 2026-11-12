@@ -54,6 +54,10 @@ Next to the chip, a circle shows how full the agent's context is: the tokens of 
 
 The agent can ask the member a question with suggested answers and a free answer. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
 
+## Tools the agent sees
+
+Spyria's own tools (`open_page`, `take_screenshot`, `web_search`, delegation, the dev chat's GitHub tools, and Pi's `ask_member`) are declared to the agent from its first call. The servers of the workspace's tools catalogue come through a separate server, and Pi does not declare their tools up front: it lists the server in its system prompt and loads the tools it needs with `tool_search`, so a large server (GitHub's has over a hundred tools, about 38,000 tokens of descriptions) does not weigh on every model call. A call to a loaded tool is one call through the gateway, with the same restrictions, approvals and audit as before. Claude Code searches tool servers' tools the same way by default.
+
 ## Tool approvals
 
 A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the member whose account answers for the call answers it: the prompter on servers each member signs in to and on GitHub, the chat owner on shared-login servers. Everyone else sees whom it waits for. Each member chooses which calls wait in **Profile > Tool connections > Approvals for** *server* (and **Approvals for GitHub**, under their GitHub account): a default for the server's write tools and a choice per tool, in a searchable list grouped into read and write tools:
