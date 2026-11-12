@@ -70,7 +70,7 @@ test.describe('Tool connections', () => {
     })
 
     await test.step('shows each server I sign in to as not connected, with Connect', async () => {
-      for (const tool of ['Jira', 'Slack', 'Notion', 'Linear', 'fake']) {
+      for (const tool of ['Figma', 'Slack', 'Notion', 'Linear', 'fake']) {
         await expect(toolRowOf(page, tool)).toContainText('Not connected')
         await expect(toolRowOf(page, tool).getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
       }
