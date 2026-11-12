@@ -180,12 +180,17 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
     payload: { memberId: bob },
   })
   expect((await queryAs(aliceToken)).status).toBe(200)
-  const reopened = await app.request('/auth/sessions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${bobInGlobex.token}` },
-    body: JSON.stringify({ workspaceId: acme }),
-  })
-  expect(reopened.status).toBe(403)
+  const openFrom = (token: string, workspaceId: string) =>
+    app.request('/auth/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ workspaceId }),
+    })
+  expect((await openFrom(bobInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openFrom(bobInGlobex.token, globex)
+  expect(relayedThroughGlobex.status).toBe(200)
+  const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
+  expect((await openFrom(relayedToken, acme)).status).toBe(403)
   expect((await queryAs(bobInGlobex.token)).status).toBe(200)
   expect((await queryAs((await issueTestSession(database, acme, bob)).token)).status).toBe(200)
   await database.$client`delete from memberships where workspace_id = ${globex} and user_id = ${bob}`

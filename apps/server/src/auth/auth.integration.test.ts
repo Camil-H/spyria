@@ -416,17 +416,21 @@ test("a member sees by device where they are signed in to a workspace, never a s
   expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: globex })).status).toBe(200)
   expect((await queryWith(bobToken)).status).toBe(200)
 
-  const reopenAcmeWith = (token: string) =>
+  const openFrom = (token: string, workspaceId: string) =>
     app.request('/auth/sessions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ workspaceId: acme }),
+      body: JSON.stringify({ workspaceId }),
     })
-  expect((await reopenAcmeWith(laptopInGlobex.token)).status).toBe(403)
+  expect((await openFrom(laptopInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openFrom(laptopInGlobex.token, globex)
+  expect(relayedThroughGlobex.status).toBe(200)
+  const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
+  expect((await openFrom(relayedToken, acme)).status).toBe(403)
   const [laterInGlobex] = await openSessions(database, alice, globex)
   if (!laterInGlobex) throw new Error('missing session')
   const laterToken = (await issueSessionToken(testAuthSettings.tokenSecret, laterInGlobex)).token
-  expect((await reopenAcmeWith(laterToken)).status).toBe(200)
+  expect((await openFrom(laterToken, acme)).status).toBe(200)
   expect(
     (await sessionsOf((await signInAs('alice@example.com')).cookie)).sessions.map(({ workspaceId }) => workspaceId),
   ).toEqual([acme, globex])
