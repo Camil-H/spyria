@@ -2,6 +2,7 @@ import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
 import { type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
+import type { ConnectionSignIn } from '../domain/workspace-connection.ts'
 import { toolConsentChannel } from '../integrations/http-tool-connections.ts'
 import { createTransactingZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { addLlmCredential } from '../operations/add-llm-credential.ts'
@@ -9,7 +10,6 @@ import { isModelAllowed } from '../operations/ai-providers.ts'
 import { grantMemberTools } from '../operations/grant-tools.ts'
 import { toolKeyValueOf, virtualKeyValueOf } from '../operations/sync-member-gateway-key.ts'
 import {
-  availableTools,
   checkToolConnections,
   disconnectTool,
   flagToolConnection,
@@ -22,6 +22,7 @@ import {
   addWorkspaceConnection,
   allowConnectionTools,
   editWorkspaceConnection,
+  finishWorkspaceConnection,
   removeWorkspaceConnection,
   restrictConnectionMember,
 } from '../operations/workspace-connections.ts'
@@ -72,10 +73,6 @@ export const toolConnectionFromRequest = (
   return act?.({ transactor: createTransactingZeroTransactor(transact, context), gateway }, { tool })
 }
 
-export const availableToolsFromRequest = async (gateway: ToolGateway) => ({
-  available: await availableTools({ gateway }),
-})
-
 export const checkToolConnectionsFromRequest = (transact: Transact, context: ZeroContext, gateway: ToolGateway) =>
   checkToolConnections({ transactor: createTransactingZeroTransactor(transact, context), gateway })
 
@@ -121,8 +118,10 @@ export const workspaceConnectionFromRequest = (
     url: textOf(fields.url),
     secretHeader: secretHeaderOf(fields.secretHeader),
   }
+  const signIn = textOf(fields.signIn) as ConnectionSignIn
   const actions: Record<string, () => Promise<unknown>> = {
-    add: () => addWorkspaceConnection(dependencies, { ...target, ...connection }),
+    add: () => addWorkspaceConnection(dependencies, { ...target, ...connection, signIn }),
+    finish: () => finishWorkspaceConnection(dependencies, target),
     edit: () => editWorkspaceConnection(dependencies, { ...target, ...connection }),
     remove: () => removeWorkspaceConnection(dependencies, target),
     tools: () => allowConnectionTools(dependencies, { ...target, allowedTools: textListOf(fields.allowedTools) }),

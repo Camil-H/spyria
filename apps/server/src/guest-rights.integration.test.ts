@@ -66,15 +66,15 @@ const refused = (answer: { status: number | undefined; result: { content?: { tex
   text: textOf(answer.result),
 })
 
-test('on a guest’s prompt the owner’s personal connection is refused before the gateway, and the owner’s own prompt uses it; every call is audited', async () => {
+test('on a guest’s prompt a server the owner signed in to with their own account is refused before the gateway, and the owner’s own prompt uses it; every call is audited', async () => {
   await connectAlice(aliceCookie)
-  const host = await fakeHost('Guest personal host')
+  const host = await fakeHost('Guest own-account host')
   const { chatId, token } = await runtimeTurn(host, bob)
   const callsBefore = fakeMcp.records.length
 
   const guestCall = await mcpCall(host, token, whoami)
   expect(guestCall).toMatchObject({ status: 200, result: { isError: true } })
-  expect(textOf(guestCall.result)).toBe("fake is Alice's personal connection, used only on Alice's own prompts")
+  expect(textOf(guestCall.result)).toBe("fake signs in with Alice's own account, so only Alice's prompts can use it")
   expect(fakeMcp.records.slice(callsBefore)).toEqual([])
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
 

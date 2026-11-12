@@ -274,7 +274,7 @@ test('filters by person, grouped type and date range, and the CSV holds the same
       ${minutesAgo(1).toISOString()}::timestamptz)`
 
   expect((await auditPageOf({ person: alice })).entries.map(summaryOf)).toEqual([
-    'System, for Alice | Removed a shared connection | CRM',
+    'System, for Alice | Removed a tool server | CRM',
     'Alice | Configured SSO | https://login.example.com',
     'Alice | Invited a member | nina@example.com',
     'Alice | Removed a member | Bob',

@@ -121,7 +121,7 @@ The `tools.manage` chat permission is defined and shown in the roles editor, but
 
 When a participant other than the owner prompts the agent, the agent still acts as the owner, but with less reach, so it never exceeds what the prompter could do and the owner is never answerable for actions they did not approve:
 
-- The owner's **personal connections** are not available on a guest's prompt.
+- A tool server the owner signed in to with their **own account** is not available on a guest's prompt.
 - A **workspace connection** is available only if both the owner and the prompter may use it.
 - A tool call that is not read-only (the tool does not declare the MCP `readOnlyHint`) waits for the **owner's approval**, except Spyria's own `open_page` and `take_screenshot`, which use none of the owner's connections. The owner sees a **Tool approval** card with Approve and Deny; everyone else sees that it is waiting. Without an answer within 5 minutes the call expires. Deny, expiry or **Stop** answer the agent that the owner did not approve the call.
 - Model calls always run on the **prompter's own key**, never the owner's (see [Agents](./agents.md)).
@@ -148,7 +148,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the workspace and personal connections the agent can use; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the catalogue servers the agent can use, with the owner's sign-in status on those each member signs in to; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 

@@ -169,7 +169,7 @@ type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origi
 type ToolConnectionRow = {
   workspaceId: WorkspaceId
   memberId: MemberId
-  tool: string
+  connectionId: string
   status: string
 }
 type LlmCredentialRow = {
@@ -190,12 +190,15 @@ type MemberOnboardingRow = {
   isSkipped: boolean
 }
 export type ConnectionToolRow = { name: string; readOnly: boolean }
+export type ConnectionSignIn = 'member' | 'shared'
 type WorkspaceConnectionRow = {
   workspaceId: WorkspaceId
   id: string
   name: string
   gatewayName: string
   url: string
+  signIn: ConnectionSignIn
+  setupId: string | null
   headerName: string | null
   tools: readonly ConnectionToolRow[]
   allowedTools: readonly string[]
@@ -282,6 +285,16 @@ export const memberToolsIn = (snapshot: Snapshot, connection: WorkspaceConnectio
   )
   return connection.allowedTools.filter((tool) => restriction?.allowedTools.includes(tool) ?? true)
 }
+
+export const usableConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId, memberId: MemberId) =>
+  workspaceConnectionsIn(snapshot, workspaceId).flatMap((connection) => {
+    const tools = memberToolsIn(snapshot, connection, memberId)
+    if (connection.setupId !== null || tools.length === 0) return []
+    const signedIn = snapshot.toolConnections.find(
+      (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === connection.id,
+    )
+    return [{ id: connection.id, name: connection.name, signIn: connection.signIn, tools, status: signedIn?.status }]
+  })
 
 export const memberNamesIn = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
   const nameByMemberId = new Map(
