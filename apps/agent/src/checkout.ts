@@ -15,7 +15,8 @@ export type Repository = {
 export type Preparation = { url: string; token: string; setup_command?: string }
 export type Checkout = { failure?: string; setupCommand?: string }
 export type Prepared = { failure?: string; branch?: string; head?: string; isRestored?: boolean }
-export type CheckoutDirectories = { snapshot: string; home: string }
+type SnapshotDirectories = { snapshot: string; home: string }
+export type CheckoutDirectories = SnapshotDirectories & { isPrepared: boolean }
 type Environment = Record<string, string>
 
 const withSetup = (repository: Pick<Repository, 'setup_command'>): Checkout => {
@@ -72,7 +73,7 @@ const clone = async (cwd: string, url: string, token: string, environment: Envir
   return cloned.exitCode === 0 ? undefined : `The repository could not be cloned: ${lastLinesOf(cloned.output)}`
 }
 
-const restored = async (cwd: string, { snapshot, home }: CheckoutDirectories, environment: Environment) => {
+const restored = async (cwd: string, { snapshot, home }: SnapshotDirectories, environment: Environment) => {
   if (!existsSync(join(snapshot, 'complete'))) return false
   mkdirSync(cwd, { recursive: true })
   const project = await run(['cp', '-a', `${join(snapshot, 'project')}/.`, cwd], cwd, environment)
@@ -115,10 +116,13 @@ const checkoutOf = async (
   environment: Environment,
   directories: CheckoutDirectories,
 ): Promise<Checkout> => {
-  if (hasClone(cwd) && (await isRef(cwd, `refs/heads/${repository.working_branch}`, environment)))
-    return withSetup(repository)
-  if (hasClone(cwd) || (await restored(cwd, directories, environment)))
-    return fetchedAndBranched(cwd, repository, environment)
+  if (hasClone(cwd)) {
+    const hasWorkingBranch = await isRef(cwd, `refs/heads/${repository.working_branch}`, environment)
+    return directories.isPrepared && !hasWorkingBranch
+      ? fetchedAndBranched(cwd, repository, environment)
+      : withSetup(repository)
+  }
+  if (await restored(cwd, directories, environment)) return fetchedAndBranched(cwd, repository, environment)
   const failure = await clone(cwd, repository.url, repository.token, environment, repository.base_branch)
   return failure ? { failure } : branched(cwd, repository, environment)
 }
@@ -154,7 +158,7 @@ export const prepare = async (
   cwd: string,
   preparation: Preparation,
   environment: Environment,
-  directories: CheckoutDirectories,
+  directories: SnapshotDirectories,
 ): Promise<Prepared> => {
   const isRestored = !hasClone(cwd) && (await restored(cwd, directories, environment))
   const failure = isRestored

@@ -617,3 +617,16 @@ test('a new runtime with a complete snapshot of its repository restores it, then
   expect(existsSync(join(warm.workspaceDirectory, 'after-snapshot.txt'))).toBe(true)
   expect(runCount()).toBe(runsBefore + 1)
 })
+
+test('a chat’s existing clone is kept as it is, uncommitted edits included, even when its working branch is gone: only a prepared or restored clone is branched anew', async () => {
+  const url = bareRepository('kept', { 'README.md': '# kept\n' })
+  const { create } = started()
+  const { launch, workingDirectory } = launchIn('kept', url)
+  await create({ ...launch, id: 'first' })
+  git(workingDirectory, 'checkout', '-q', '-b', 'renamed-by-the-agent')
+  git(workingDirectory, 'branch', '-q', '-D', 'spyria/fix-totals-1a2b3c')
+  writeFileSync(join(workingDirectory, 'README.md'), '# edited\n')
+  await create({ ...launch, id: 'second' })
+  expect(branchOf(workingDirectory)).toBe('renamed-by-the-agent')
+  expect(readFileSync(join(workingDirectory, 'README.md'), 'utf8')).toBe('# edited\n')
+})

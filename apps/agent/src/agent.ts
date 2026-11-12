@@ -698,7 +698,10 @@ export const startAgent = ({
       checkouts.get(id) ??
       (async () => {
         await preparation?.done
-        const checkout = await checkOut(cwd, repository, inheritedEnvironmentOf(), checkoutDirectories)
+        const checkout = await checkOut(cwd, repository, inheritedEnvironmentOf(), {
+          ...checkoutDirectories,
+          isPrepared: preparation !== undefined,
+        })
         if (!checkout.failure) await forgetPreparedSetupIfMoved(cwd, checkout.setupCommand)
         return checkout
       })()
