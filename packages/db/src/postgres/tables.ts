@@ -985,19 +985,9 @@ export const relations = defineRelations(
         memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
       },
       connectionAccess: {
-        ownedChats: r.many.chats({
-          from: [r.connectionAccess.workspaceId, r.connectionAccess.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
-        }),
         memberships: r.many.memberships({
           from: r.connectionAccess.workspaceId,
           to: r.memberships.workspaceId,
-        }),
-      },
-      toolConnections: {
-        ownedChats: r.many.chats({
-          from: [r.toolConnections.workspaceId, r.toolConnections.userId],
-          to: [r.chats.workspaceId, r.chats.ownerUserId],
         }),
       },
       chats: {
