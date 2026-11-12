@@ -20,6 +20,33 @@ test('a value sealed with a previous key still opens after the rotation, and sea
   expect(await createSecretBox(secretsKeyringOf(currentKey)).open(resealed)).toBe('client-secret')
 })
 
+const sealedWithoutKeyId = async (secretsKey: string, plaintext: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secretsKey))
+  const cipherKey = await crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt'])
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const sealed = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cipherKey, new TextEncoder().encode(plaintext))
+  return `${Buffer.from(iv).toString('base64url')}.${Buffer.from(sealed).toString('base64url')}`
+}
+
+test('a value sealed before sealed values named their key opens with the current or a previous key, and seals again under the current key', async () => {
+  const box = createSecretBox(secretsKeyringOf(currentKey, [previousKey]))
+  const sealedWithCurrent = await sealedWithoutKeyId(currentKey, 'github-token')
+  const sealedWithPrevious = await sealedWithoutKeyId(previousKey, 'client-secret')
+
+  expect(await box.open(sealedWithCurrent)).toBe('github-token')
+  expect(await box.open(sealedWithPrevious)).toBe('client-secret')
+  expect(box.isSealedWithCurrentKey(sealedWithCurrent)).toBe(false)
+  const resealed = await box.reseal(sealedWithCurrent)
+  expect(box.isSealedWithCurrentKey(resealed)).toBe(true)
+  expect(await box.open(resealed)).toBe('github-token')
+})
+
+test('a value sealed before sealed values named their key, with a key no longer in the keyring, is refused', async () => {
+  const sealed = await sealedWithoutKeyId(previousKey, 'client-secret')
+
+  expect(await errorOf(createSecretBox(secretsKeyringOf(currentKey)).open(sealed))).toBeInstanceOf(UnknownSecretsKey)
+})
+
 test('a value sealed with a key no longer in the keyring is refused with the id of that key', async () => {
   const keyring = secretsKeyringOf(previousKey)
   const sealed = await createSecretBox(keyring).seal('client-secret')

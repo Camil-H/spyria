@@ -27,6 +27,7 @@ export const secretsKeyringOf = (currentKey: string, previousKeys: readonly stri
   }
   return {
     currentKeyId: keyIdOf(currentKey),
+    keyIds: [...keyById.keys()],
     keyOf,
     derivedKeyOf: (keyId: string, purpose: string) =>
       createHmac('sha256', keyOf(keyId)).update(purpose).digest('base64url'),
@@ -67,8 +68,23 @@ export const createSecretBox = (keyring: SecretsKeyring) => {
     )
     return `${keyId}.${Buffer.from(iv).toString('base64url')}.${Buffer.from(sealed).toString('base64url')}`
   }
+  const openWithoutKeyId = async ([iv = '', data = '']: string[]) => {
+    for (const keyId of keyring.keyIds) {
+      const opened = await crypto.subtle
+        .decrypt(
+          { name: 'AES-GCM', iv: Buffer.from(iv, 'base64url') },
+          await cipherKeyOf(keyId),
+          Buffer.from(data, 'base64url'),
+        )
+        .catch(() => undefined)
+      if (opened) return new TextDecoder().decode(opened)
+    }
+    throw new UnknownSecretsKey('none')
+  }
   const open = async (sealed: string) => {
-    const [keyId = '', iv = '', data = ''] = sealed.split('.')
+    const parts = sealed.split('.')
+    if (parts.length === 2) return openWithoutKeyId(parts)
+    const [keyId = '', iv = '', data = ''] = parts
     const opened = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: Buffer.from(iv, 'base64url'), additionalData: encoder.encode(keyId) },
       await cipherKeyOf(keyId),
