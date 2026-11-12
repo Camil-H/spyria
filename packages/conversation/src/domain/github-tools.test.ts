@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
+import { githubTools } from '@spyria/kernel'
 import {
   checkRunsTextOf,
   githubToolCallOf,
-  githubTools,
-  isReadOnlyGitHubTool,
+  githubToolDefinitions,
   issuesTextOf,
   issueTextOf,
   reviewThreadsTextOf,
@@ -79,17 +79,9 @@ test('read tools take a positive number, issue filters default to open and every
     expect(githubToolCallOf(name, input)).toEqual({ refusal: `The arguments of ${name} are not valid` })
 })
 
-test('only the reading tools are read-only, and every tool is listed', () => {
-  expect(githubTools.filter(({ name }) => isReadOnlyGitHubTool(name)).map(({ name }) => name)).toEqual([
-    'read_review_threads',
-    'read_checks',
-    'list_issues',
-    'read_issue',
-  ])
-  expect(githubTools.map(({ name }) => name)).toEqual([
-    'push_branch',
-    'open_pull_request',
-    'update_pull_request',
+test('the agent gets every tool of the GitHub row, marked read-only when it changes nothing on GitHub', () => {
+  expect(githubToolDefinitions.map(({ name }) => name)).toEqual(githubTools.map(({ name }) => name))
+  expect(githubToolDefinitions.filter((tool) => 'annotations' in tool).map(({ name }) => name)).toEqual([
     'fetch_branch',
     'read_review_threads',
     'read_checks',
