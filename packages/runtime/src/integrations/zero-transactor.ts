@@ -1,12 +1,17 @@
 import type { Transaction } from '@rocicorp/zero'
 import {
+  deleteWarmRuntime,
   enqueueJob,
   expireRuntimeHostClaims,
   findRuntimeHostBySecretHash,
+  findWarmRuntimes,
+  insertWarmRuntime,
   lockMembership,
   lockRuntimeHost,
   lockRuntimeHostLoads,
   lockRuntimes,
+  lockWarmRuntimes,
+  lockWorkspaceHostLoads,
   refreshMachineCounts,
   rememberAgentConversation,
   runtimeChatOfLlmTokenHash,
@@ -14,6 +19,8 @@ import {
   setRuntimeHostSecretHash,
   setRuntimesHostOnline,
   setServerOnlyRuntimeValue,
+  updateWarmRuntime,
+  type WarmRuntimeRow,
 } from '@spyria/db/server-writes'
 import type { RuntimeHost as RuntimeHostRow, Runtime as RuntimeRow } from '@spyria/db/zero'
 import {
@@ -24,11 +31,23 @@ import {
   type ZeroContext,
   zql,
 } from '@spyria/db/zero-queries'
-import { chatId, harnessOf, memberId, runtimeHostId, runtimeId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import {
+  chatId,
+  harnessOf,
+  memberId,
+  runtimeHostId,
+  runtimeId,
+  setupCommandOf,
+  setupCommandsFrom,
+  type WorkspaceId,
+  warmPoolsOf,
+  workspaceId,
+} from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { HostNotFound, RuntimeNotFound } from '../domain/errors.ts'
 import type { Runtime } from '../domain/runtime.ts'
 import type { RuntimeHost } from '../domain/runtime-host.ts'
+import type { WarmRuntime } from '../domain/warm-runtime.ts'
 
 export const contextPermissionsOf = (tx: Transaction, context: ZeroContext) =>
   workspacePermissionsOf(tx, context.workspaceId, context.userId)
@@ -51,7 +70,20 @@ const runtimeOf = (row: RuntimeRow): Runtime => ({
   hostOnline: row.hostOnline === true,
 })
 
+const warmRuntimeOf = (row: WarmRuntimeRow): WarmRuntime => ({
+  ...row,
+  workspaceId: workspaceId(row.workspaceId),
+  id: runtimeId(row.id),
+  hostId: runtimeHostId(row.hostId),
+})
+
 export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
+  const setupCommandsOf = async (workspaceId: string) =>
+    setupCommandsFrom((await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.setupCommands)
+  const chatOf = (workspaceId: string, id: string) =>
+    tx.run(zql.chats.where('workspaceId', workspaceId).where('id', id).one())
+  const hostLoadsOf = (loads: { hostId: string; online: boolean; cap: number; running: number }[]) =>
+    loads.map((load) => ({ ...load, hostId: runtimeHostId(load.hostId) }))
   const hostOrUndefined = async (workspaceId: string, id: string) => {
     const row = await tx.run(zql.runtimeHosts.where('workspaceId', workspaceId).where('id', id).one())
     return row && hostOf(row)
@@ -86,11 +118,8 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const host = await hostOrUndefined(located.workspaceId, located.id)
         return host && { host, claimed: located.claimed }
       },
-      lockLoads: async (workspaceId, chatId) =>
-        (await lockRuntimeHostLoads(tx, workspaceId, chatId)).map((load) => ({
-          ...load,
-          hostId: runtimeHostId(load.hostId),
-        })),
+      lockLoads: async (workspaceId, chatId) => hostLoadsOf(await lockRuntimeHostLoads(tx, workspaceId, chatId)),
+      lockWorkspaceLoads: async (workspaceId) => hostLoadsOf(await lockWorkspaceHostLoads(tx, workspaceId)),
       listMachines: async (workspaceId) =>
         (
           await tx.run(
@@ -124,12 +153,23 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         return row && runtimeOf(row)
       },
       launchOptionsOf: async (runtime) => {
-        const chat = await tx.run(zql.chats.where('workspaceId', runtime.workspaceId).where('id', runtime.chatId).one())
+        const chat = await chatOf(runtime.workspaceId, runtime.chatId)
         const ownerId = chat?.ownerUserId ?? chat?.ownerServiceIdentityId
+        const setupCommand =
+          chat?.repository && !chat.localSession
+            ? setupCommandOf(await setupCommandsOf(runtime.workspaceId), chat.repository)
+            : null
         return {
           harness: chat?.localSession ? harnessOf(chat.harness) : undefined,
           packageCache: chat?.repository && ownerId ? { repository: chat.repository, ownerId } : undefined,
+          setupSnapshot: chat?.repository && setupCommand ? { repository: chat.repository, setupCommand } : undefined,
         }
+      },
+      claimScopeOf: async (workspaceId, chatId) => {
+        const chat = await chatOf(workspaceId, chatId)
+        if (!chat?.repository || !chat.baseBranch || chat.localSession) return undefined
+        const setupCommand = setupCommandOf(await setupCommandsOf(workspaceId), chat.repository)
+        return setupCommand ? { repository: chat.repository, baseBranch: chat.baseBranch, setupCommand } : undefined
       },
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),
@@ -158,6 +198,28 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         return id === undefined ? undefined : chatId(id)
       },
     },
+    warmRuntimes: {
+      lockAll: async (workspaceId) => (await lockWarmRuntimes(tx, workspaceId, 'all')).map(warmRuntimeOf),
+      lock: async (workspaceId, id) => {
+        const [row] = await lockWarmRuntimes(tx, workspaceId, 'id', id)
+        return row && warmRuntimeOf(row)
+      },
+      lockReady: async (workspaceId, repository) =>
+        (await lockWarmRuntimes(tx, workspaceId, 'ready', repository)).map(warmRuntimeOf),
+      lockOnHost: async (workspaceId, hostId) =>
+        (await lockWarmRuntimes(tx, workspaceId, 'host', hostId)).map(warmRuntimeOf),
+      findByIds: async (workspaceId, ids) =>
+        ids.length === 0 ? [] : (await findWarmRuntimes(tx, workspaceId, ids)).map(warmRuntimeOf),
+      add: async (warm) => {
+        await insertWarmRuntime(tx, warm)
+      },
+      save: async (warm) => {
+        await updateWarmRuntime(tx, warm)
+      },
+      delete: async (warm) => {
+        await deleteWarmRuntime(tx, warm.workspaceId, warm.id)
+      },
+    },
     secrets: {
       keepLlmTokenHash: async (runtime, hash) => {
         await setServerOnlyRuntimeValue(tx, runtime.workspaceId, runtime.id, 'llmTokenHash', hash)
@@ -178,6 +240,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
       localSessionsOf: async (workspaceId) =>
         (await tx.run(zql.workspaces.where('workspaceId', workspaceId).one()))?.localSessions ?? true,
       setLocalSessions: (workspaceId, isOn) => tx.mutate.workspaces.update({ workspaceId, localSessions: isOn }),
+      warmPoolsOf: async (workspaceId) => warmPoolsOf(await setupCommandsOf(workspaceId)),
     },
   }
   return transactorOver(tx, unitOfWork)

@@ -797,7 +797,15 @@ export const startAgentStack = async ({
 export type { ContainerAgent, FakeContainer, Launch, ModelCall }
 
 const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
-type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string; packageCacheKey?: string }
+type HostCommand = {
+  op: string
+  runtimeId?: string
+  image?: string
+  apiKey?: string
+  packageCacheKey?: string
+  snapshotKey?: string
+  keep?: string[]
+}
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 
 export const asMember = async (userId: string, method: string, path: string, body?: object, workspaceId = acme) => {

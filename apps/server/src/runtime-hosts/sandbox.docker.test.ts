@@ -438,3 +438,56 @@ test.skipIf(!hasImage)(
   },
   60_000,
 )
+
+test.skipIf(!hasImage)(
+  'a snapshot copies a running runtime’s project and home into a volume that the next runtimes of the repository mount read-only, and pruning removes it once nothing uses it',
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const provider = gateway.sandboxProvider
+    const setupSnapshot = { repository: 'acme/app', setupCommand: 'bun install' }
+    const [source, reader] = ['snapshot-source', 'snapshot-reader'].map((runtimeId) => ({ ...host, runtimeId }))
+    const isReady = (runtime: typeof host & { runtimeId: string }) =>
+      provider
+        .connect(runtime)
+        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
+        .then(
+          (response) => response.status === 200,
+          () => false,
+        )
+    const started = async (runtime: typeof host & { runtimeId: string }) => {
+      await provider.create({ ...runtime, image: spyriaImage, setupSnapshot })
+      await provider.start(runtime)
+      for (const deadline = Date.now() + 30_000; !(await isReady(runtime)); await Bun.sleep(100))
+        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
+      return `${prefix}rt-${runtime.runtimeId}`
+    }
+    if (!source || !reader) throw new Error('Two runtimes are needed')
+    const sourceContainer = await started(source)
+    docker(
+      'exec',
+      sourceContainer,
+      'sh',
+      '-c',
+      'mkdir -p /workspace/project/node_modules && echo installed > /workspace/project/node_modules/dependency && echo tool > /home/spyria/tool',
+    )
+    await provider.snapshot({ ...source, setupSnapshot })
+    expect(await provider.status(source)).toBe('running')
+    expect(await isReady(source)).toBe(true)
+    const snapshots = dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}snapshot-`).split('\n')
+    expect(snapshots).toHaveLength(1)
+
+    const readerContainer = await started(reader)
+    const read = (path: string) => dockerText('exec', readerContainer, 'cat', `/var/lib/spyria/snapshot/${path}`)
+    expect(read('project/node_modules/dependency')).toBe('installed')
+    expect(read('home/tool')).toBe('tool')
+    expect(docker('exec', readerContainer, 'test', '-f', '/var/lib/spyria/snapshot/complete').exitCode).toBe(0)
+    expect(docker('exec', readerContainer, 'touch', '/var/lib/spyria/snapshot/changed').exitCode).not.toBe(0)
+
+    await provider.pruneSnapshots({ ...host, keep: [] })
+    expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}snapshot-`)).toBe(snapshots[0] ?? '')
+    for (const runtime of [source, reader]) await provider.remove(runtime)
+    await provider.pruneSnapshots({ ...host, keep: [] })
+    expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}snapshot-`)).toBe('')
+  },
+  120_000,
+)

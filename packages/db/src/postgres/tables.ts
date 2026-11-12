@@ -28,7 +28,14 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
-import type { MessageAttachment, MessageStep, RuntimeFailure, RuntimeHostCapacity, RuntimeState } from '../schema.ts'
+import type {
+  MessageAttachment,
+  MessageStep,
+  RuntimeFailure,
+  RuntimeHostCapacity,
+  RuntimeState,
+  WarmRuntimeState,
+} from '../schema.ts'
 
 const table = snakeCase.table
 const auditedChatEventTypes = [
@@ -718,6 +725,32 @@ export const runtimes = table(
     tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
     index().on(table.workspaceId, table.hostId),
     index().on(table.workspaceId, table.state, table.lastActiveAt),
+  ],
+)
+
+export const warmRuntimes = table(
+  'warm_runtimes',
+  {
+    ...tenant,
+    id: text().notNull(),
+    repository: text().notNull(),
+    setupCommand: text().notNull(),
+    hostId: text().notNull(),
+    state: text().$type<WarmRuntimeState>().notNull(),
+    image: text().notNull(),
+    apiKeyId: text().notNull(),
+    baseBranch: text(),
+    agentVersion: text(),
+    agentProtocolVersion: integer(),
+    createdAt: instant().notNull(),
+    stateChangedAt: instant().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.id] }),
+    check('warm_runtimes_state', sql`${table.state} in ('creating', 'preparing', 'ready')`),
+    tenantReference([table.workspaceId, table.hostId], [runtimeHosts.workspaceId, runtimeHosts.id]),
+    index().on(table.workspaceId, table.repository, table.state),
+    index().on(table.workspaceId, table.hostId),
   ],
 )
 

@@ -11,7 +11,11 @@ import {
 import type { Transact } from '@spyria/db/zero-queries'
 import { chatId, log, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
 import { releaseWorkspaceConnectionsOnServer, removeMemberProfileOnServer } from '@spyria/profile/published'
-import { haltChatRuntimeOnServer, removeChatRuntimeOnServer } from '@spyria/runtime/published'
+import {
+  haltChatRuntimeOnServer,
+  removeChatRuntimeOnServer,
+  removeWarmRuntimesOnServer,
+} from '@spyria/runtime/published'
 import type { DeletedWorkspace } from '../contracts/repositories.ts'
 import type { DeletedWorkspaceTransactor } from '../contracts/transactor.ts'
 import { workspaceJobTypes } from '../domain/member.ts'
@@ -24,10 +28,12 @@ const deletedWorkspaceIn = (tx: ServerTransaction, workspaceId: WorkspaceId, act
   halt: async () => {
     for (const id of (await workspacePurgeTargetsOf(tx, workspaceId)).runtimeChatIds)
       await haltChatRuntimeOnServer(tx, workspaceId, chatId(id))
+    await removeWarmRuntimesOnServer(tx, workspaceId)
   },
   release: async () => {
     const { memberIds, runtimeChatIds } = await workspacePurgeTargetsOf(tx, workspaceId)
     for (const id of runtimeChatIds) await removeChatRuntimeOnServer(tx, workspaceId, chatId(id))
+    await removeWarmRuntimesOnServer(tx, workspaceId)
     for (const id of memberIds) await removeMemberProfileOnServer(tx, workspaceId, memberId(id))
     await releaseWorkspaceConnectionsOnServer(tx, workspaceId, actorId)
   },

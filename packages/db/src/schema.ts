@@ -76,6 +76,7 @@ export type RuntimeState =
   | 'removing'
   | 'removed'
   | 'failed'
+export type WarmRuntimeState = 'creating' | 'preparing' | 'ready'
 export type RuntimeFailure =
   | 'no_host'
   | 'no_capacity'
