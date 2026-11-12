@@ -52,7 +52,7 @@ Next to the chip, a circle shows how full the agent's context is: the tokens of 
 
 ## Questions
 
-The agent can ask the member a question with suggested answers and a free answer. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
+The agent can ask the member a question with suggested answers and a free answer; when only one answer is allowed, typing a free answer unticks the chosen suggestion. A question card appears in the chat; anyone who may prompt the chat answers it, and others see it read-only. Pending questions survive a page reload. A subagent cannot ask: its questions are answered automatically with "No member is available; decide yourself and state your assumption."
 
 ## Tool approvals
 
