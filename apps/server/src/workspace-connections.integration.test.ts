@@ -164,6 +164,11 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   const pending = await connectionRow(connectionId)
   expect(pending).toMatchObject({ name: 'Docs', signIn: 'member', tools: [], isReviewed: false })
   expect(pending?.setupId).not.toBeNull()
+  expect((await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/review`, { markings: [] })).status).toBe(
+    400,
+  )
+  expect(await setAccess(connectionId, { roleId: 'member' }, 'write')).toBe(400)
+
   const gatewayName = pending?.gatewayName ?? ''
 
   const consent = await consentThroughSpyria(authorizeUrl, `fake_mcp_user=admin-${crypto.randomUUID()}`)
