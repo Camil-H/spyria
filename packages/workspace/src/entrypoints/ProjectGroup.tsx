@@ -10,6 +10,7 @@ import { NameDialog } from './NameDialog.tsx'
 import { NewChatDialog } from './NewChatDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuTriggerClass } from './ui.ts'
+import { chatDropTargetClass, useChatDrop } from './useChatDrop.ts'
 
 export const ProjectGroup = ({
   workspaceId,
@@ -25,6 +26,7 @@ export const ProjectGroup = ({
   chatAdornment?: ChatAdornment
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
+  const chatDrop = useChatDrop({ workspaceId, projectId: project.id, chats: project.chats, chatAction })
   const commands = useWorkspaceCommands()
   const [openDialog, setOpenDialog] = useState<'chat' | 'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
@@ -33,7 +35,7 @@ export const ProjectGroup = ({
     closeDialog()
   }
   return (
-    <fieldset aria-label={project.name} className="m-0 min-w-0 border-0 p-0">
+    <fieldset {...chatDrop} aria-label={project.name} className={`m-0 min-w-0 border-0 p-0 ${chatDropTargetClass}`}>
       <div className="flex items-center">
         <button
           type="button"
