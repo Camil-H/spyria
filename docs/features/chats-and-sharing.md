@@ -17,7 +17,7 @@ A chat has one of two types. **New chat** asks questions instead of naming them,
 | **Channel** | members only | threads, "Start runtime from this message" |
 | **Runtime** | members and an agent | with or without GitHub access; with it, a dev chat on a repository |
 
-The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat acts with its owner's tool connections (the header says **Agent acts as** *owner*), so there is always one accountable identity for what the agent does. See [Security](../architecture/security.md).
+The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat runs in its owner's runtime (the header says **Agent acts as** *owner*), while each prompt's model and tool calls use the prompter's own key and accounts, so each call has one accountable identity. See [Security](../architecture/security.md).
 
 From a chat's menu in the sidebar, a member with the right permission can **Move to** another project (or **No project**), rename, **Make private** / **Make public**, **Archive chat**, or leave (**Leave channel**, **Leave chat**). Archiving a chat also removes its runtime. A project's menu offers **New chat**, which opens the new chat dialog with that project already chosen, **Rename project** and **Archive project**. **Archive project** offers two choices: **Archive with its chats**, or **Archive, keep chats**, which moves them to Loose chats.
 
@@ -119,13 +119,15 @@ The `tools.manage` chat permission is defined and shown in the roles editor, but
 
 ### Prompts from someone other than the owner
 
-When a participant other than the owner prompts the agent, the agent still acts as the owner, but with less reach, so it never exceeds what the prompter could do and the owner is never answerable for actions they did not approve:
+When a participant other than the owner prompts the agent, the agent runs in the owner's runtime but uses the **prompter's own accounts**, so it never exceeds what the prompter could do and nobody is answerable for a call on someone else's account ([decision 0032](../decisions/0032-tools-on-the-prompters-account.md)):
 
-- A tool server the owner signed in to with their **own account** is not available on a guest's prompt.
-- A **workspace connection** is available only if both the owner and the prompter may use it.
-- A write call on a shared-login server waits for the **owner's approval** unless the owner chose otherwise in their [tool approvals](./agents.md#tool-approvals) (read and write are what the admin confirmed for each tool). Spyria's own `open_page` and `take_screenshot` never wait, as they use none of the owner's connections. The owner sees a **Tool approval** card with Approve and Deny; everyone else sees that it is waiting. Without an answer within 5 minutes the call expires. Deny, expiry or **Stop** answer the agent that the owner did not approve the call.
-
+- A tool server **each member signs in to** answers with the prompter's own sign-in, never the owner's. A prompter who has not connected it does not get it: the step says "*Name* needs to connect *server*", and the **Connect** link shows to that prompter only.
+- A **shared-login** server is available only if both the owner and the prompter may use the tool.
+- **GitHub** pushes and opens pull requests with the prompter's own GitHub account, if their GitHub access in the Tools card allows it (see [Dev mode](./dev-mode.md#the-agents-github-tools)).
+- Which calls wait for approval is the choice of the member whose account answers for the call, in their [tool approvals](./agents.md#tool-approvals): the prompter on servers each member signs in to and on GitHub, the owner on shared-login servers, where a write call on a guest's prompt waits by default (read and write are what the admin confirmed for each tool). Spyria's own `open_page` and `take_screenshot` never wait, as they use no member's connections. That member sees a **Tool approval** card with Approve and Deny; everyone else sees whom it waits for. Without an answer within 5 minutes the call expires. Deny, expiry or **Stop** answer the agent that the call was not approved.
 - Model calls always run on the **prompter's own key**, never the owner's (see [Agents](./agents.md)).
+
+What a member's tools return is visible to everyone in the chat. Before a member's first prompt in a shared chat (a public chat, or one with other participants), a note above the text box says so; it goes once they have prompted there. Sessions on a member's own machine are unchanged: only the owner prompts there.
 
 Every tool call is recorded with its prompter, owner and approval decision, and appears in the audit log.
 
@@ -149,7 +151,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the catalogue servers the agent can use, with the owner's sign-in status on those each member signs in to; it shows only to the chat's participants, so a member reading a public channel does not see its owner's connections. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Browser**, **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the catalogue servers the agent can use on your own prompts, with your sign-in status on those each member signs in to. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 

@@ -34,28 +34,29 @@ The permissions and built-in roles are defined in `packages/kernel/src/workspace
 
 ## What the agent may do
 
-The agent of a chat acts for the chat's **owner**, and its model calls are paid by the member who **prompted**:
+The agent of a chat runs in the **owner**'s runtime, and its model and tool calls use the account of the member who **prompted** ([0032](../decisions/0032-tools-on-the-prompters-account.md)):
 
 - **Model calls** run on the prompter's own provider key, through the gateway. Each call records the chat, the prompter and the owner.
-- **Tool calls** (MCP) use the owner's access to the workspace's tools catalogue. On the owner's own prompt the agent may use the catalogue servers the owner can use: those with one shared login, and those the owner signed in to with their own account. An owner needs no provider key for this: their gateway key serves tools on its own ([0023](../decisions/0023-gateway-keys-serve-tools-without-model-keys.md)).
-- **On a guest's prompt** (an Editor or Prompter), the agent may use only the shared-login servers, with the tools both the owner and the guest can use, never a server the owner signed in to with their own account, and a write call waits for the owner's approval in the chat unless the owner chose otherwise ([0031](../decisions/0031-tool-access-levels-and-approvals.md)).
- Spyria's own `open_page` and `take_screenshot` are the exceptions: they use none of the owner's connections or credentials, the first only lists a page that members load themselves (and never one on their own machine or network), and the second only makes requests from inside the runtime, which the agent's shell can make anyway, including to cloud metadata addresses the runtime reaches. The agent never exceeds what the person prompting could do, and the owner is never answerable for an action they did not approve.
+- **Tool calls** (MCP) run on the prompter's gateway key and use the prompter's access to the workspace's tools catalogue: a server each member signs in to answers with the prompter's own sign-in, never the owner's, and the prompter's approval choices apply, with the prompter answering the approval card. A prompter needs no provider key for this: their gateway key serves tools on its own ([0023](../decisions/0023-gateway-keys-serve-tools-without-model-keys.md)).
+- **Shared-login servers on a guest's prompt** (an Editor or Prompter) need both the owner's and the guest's access to a tool, and a write call waits for the owner's approval in the chat unless the owner chose otherwise ([0031](../decisions/0031-tool-access-levels-and-approvals.md)).
+ Spyria's own `open_page` and `take_screenshot` are the exceptions: they use no member's connections or credentials, the first only lists a page that members load themselves (and never one on their own machine or network), and the second only makes requests from inside the runtime, which the agent's shell can make anyway, including to cloud metadata addresses the runtime reaches. The agent never exceeds what the person prompting could do, and nobody is answerable for a call on someone else's account.
+- **Results are shared.** What a member's tools return is visible to everyone in the chat; each member is told so before their first prompt in a shared chat.
 - **Sessions on a member's own machine** accept prompts from their owner only.
-- **Publishing to GitHub** is reserved to the chat owner, with the owner's own GitHub account (see below).
+- **Publishing to GitHub** uses the GitHub account of the member who prompted or clicked, if their GitHub access in the Tools card allows it (see below).
 
 ## Credentials
 
 | Credential | Where it lives | Who uses it |
 |---|---|---|
 | A member's provider API keys | The gateway, encrypted with its own key. Spyria stores a reference and the last four characters (at most half of a short key). | The server's relay, for that member's prompts only. |
-| A member's tool OAuth tokens | The gateway, against the member's key for that workspace. Disconnecting deletes the gateway's copy; the gateway never returns the token, so the grant at the provider stays until the member removes it there, which the profile tells them after a disconnect. | The relay, on that member's chats. |
+| A member's tool OAuth tokens | The gateway, against the member's key for that workspace. Disconnecting deletes the gateway's copy; the gateway never returns the token, so the grant at the provider stays until the member removes it there, which the profile tells them after a disconnect. | The relay, on that member's prompts in any chat. |
 | The token of the Admin who added a server each member signs in to | The gateway, against that server: the Admin signs in once when adding it. | The gateway, only to list the server's tools; members' calls use their own tokens. |
 | A shared-login server's secret header | The gateway, in plain text in its admin API: the gateway is reachable on the internal network only, and Spyria never logs or returns what that API answers. | The gateway, on calls to that tool server. |
 | The token a runtime holds | Issued by Spyria per runtime, stored as a hash. | Valid only through Spyria's relay, during an active turn, for that turn's prompter. A runtime never sees a real provider key. |
 | The key the server uses to reach a runtime's agent | Not stored: derived from a secrets key and the runtime's id when the runtime is created and on each call. The runtime records only the id of that key, so it keeps answering after a rotation until it is recreated with the current key. | The server, to talk to that runtime only. |
 | Claude Code and Codex sign-ins | Docker volumes on the member's own machine. | The member's own sessions there. |
 | SSO client secrets, GitHub App credentials | Postgres, sealed with AES-GCM under `SPYRIA_SECRETS_KEY`. Shown only as "set". | The server. |
-| A member's GitHub token | Postgres, sealed. | The server, to push and open pull requests for that member's chats. |
+| A member's GitHub token | Postgres, sealed. | The server, to push and open pull requests when that member prompts or clicks. |
 | A runtime host's pairing token | The host's state volume. | The host, to dial in. |
 
 ### Subscriptions stay on the member's machine
@@ -70,8 +71,8 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 ### GitHub tokens never enter a runtime
 
 - **Cloning** uses a short-lived installation token of the workspace's GitHub App, limited to reading that one repository. It is passed to `git` as a one-off header, so it is not left in the runtime's environment or in `.git/config`.
-- **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the owner's own token. A runtime has nothing it could push with.
-- **Workflows.** The GitHub App asks for the Workflows permission, so the agent can change files under `.github/workflows` and the server pushes them with the owner's token. A pushed workflow runs on GitHub with the repository's secrets. An admin who does not want agents to change workflows does not accept that permission on the installation; GitHub then refuses any push that changes one.
+- **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the GitHub token of the member who prompted or clicked (the owner's, for the quality gates), once the same check the agent's tools use allows that member to push. A runtime has nothing it could push with.
+- **Workflows.** The GitHub App asks for the Workflows permission, so the agent can change files under `.github/workflows` and the server pushes them with the publishing member's token. A pushed workflow runs on GitHub with the repository's secrets. An admin who does not want agents to change workflows does not accept that permission on the installation; GitHub then refuses any push that changes one.
 - **Fetching and reading** run on the server too: the agent's `fetch_branch` gets a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
 - **Webhooks** are accepted only with a valid `X-Hub-Signature-256` for the App's webhook secret; a delivery id already received is ignored.
 
