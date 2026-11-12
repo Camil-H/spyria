@@ -34,6 +34,7 @@ export default drizzleZeroConfig(tables, {
       agentTurnMessageId: true,
       contextTokens: true,
       contextWindow: true,
+      toolServersOff: true,
       archived: true,
       createdAt: true,
     },
