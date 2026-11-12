@@ -103,7 +103,6 @@ const readSnapshot = async () => {
       memberId: userId,
     })),
     toolApprovals: (await database.select().from(tables.toolApprovals)).map(userAsMember),
-
     toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
     chatRoles: await database.select().from(tables.chatRoles),

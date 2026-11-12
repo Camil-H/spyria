@@ -19,7 +19,6 @@ export type UnitOfWork = {
   gatewayJobs: GatewayJobs
   toolConnections: ToolConnectionRepository
   toolApprovals: ToolApprovalRepository
-
   workspaceConnections: WorkspaceConnectionRepository
   workspaceEvents: WorkspaceEventLog
 }

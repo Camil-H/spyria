@@ -53,7 +53,6 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
   const connectionRows = (id: WorkspaceId) => zql.workspaceConnections.where('workspaceId', inContextWorkspace(id))
   const ownToolConnections = zql.toolConnections.where('workspaceId', workspaceId).where('userId', userId)
   const ownToolApprovals = zql.toolApprovals.where('workspaceId', workspaceId).where('userId', userId)
-
   const gatewayKeys = async () =>
     (await gatewayKeyRefsOf(tx, workspaceId, userId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
   const unitOfWork: UnitOfWork = {

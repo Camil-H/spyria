@@ -367,7 +367,6 @@ test('an ownership change shows the access of Bob to the participants of a chat 
     ((await readAll(workspace, user)).get('connection_access') ?? [])
       .flatMap((row) => (row.user_id === null ? [] : [row.user_id]))
       .toSorted()
-
   expect(await restrictedOf(acme, lee)).toEqual([lee])
   await testDatabase.database.$client`update chats set owner_user_id = ${bob} where id = 'chat-invoice-bug'`
   expect(await restrictedOf(acme, lee)).toEqual([bob, lee])

@@ -39,7 +39,6 @@ import {
   workspacePermissions,
 } from '@spyria/kernel'
 import { regrantMemberToolsOnServer, removeMemberProfileOnServer } from '@spyria/profile/published'
-
 import {
   removeChatRuntimeOnServer,
   removeMemberMachineOnServer,

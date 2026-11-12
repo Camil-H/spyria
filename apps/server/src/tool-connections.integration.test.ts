@@ -212,7 +212,6 @@ test('a member signs in only to a finished, reviewed server of their workspace t
   } finally {
     await database.$client`update workspace_connections set is_reviewed = true where id = 'connection-fake'`
   }
-
   await database.$client`update workspace_connections set setup_id = 'setup-pending' where id = 'connection-fake'`
   try {
     expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
