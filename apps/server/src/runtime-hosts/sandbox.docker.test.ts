@@ -271,12 +271,20 @@ test.skipIf(!hasImage)(
     const freePort = Bun.serve({ port: 0, fetch: () => new Response() })
     const servicePort = freePort.port
     await freePort.stop(true)
-    docker('network', 'create', serviceNetwork)
-    docker(
+    expect(docker('network', 'create', serviceNetwork).exitCode).toBe(0)
+    const startedService = docker(
       ...['run', '-d', '--name', service, '--network', serviceNetwork, '-p', `127.0.0.1:${servicePort}:8080`],
       ...['--entrypoint', 'node', spyriaImage, '-e'],
       "require('node:http').createServer((request, response) => response.end('service')).listen(8080)",
     )
+    expect(startedService.exitCode).toBe(0)
+    const serviceAnswer = () =>
+      fetch(`http://127.0.0.1:${servicePort}/`).then(
+        (response) => response.text(),
+        () => '',
+      )
+    await waitFor(async () => (await serviceAnswer()) === 'service')
+    expect(reaches(service, `http://${addressOf(service)}:8080/`)).toBe('reached')
     await provider.create({ ...runtime, image: spyriaImage })
     await provider.start(runtime)
     const transport = provider.connect(runtime)
@@ -292,13 +300,11 @@ test.skipIf(!hasImage)(
     expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
     const operatingSystem = dockerOperatingSystem()
     if (operatingSystem === 'OrbStack' || operatingSystem === 'Docker Desktop')
-      console.warn(
-        `${operatingSystem} forwards host.docker.internal to the machine's loopback and joins Docker networks: the blocked checks are skipped`,
-      )
-    else {
-      expect(reaches(runtimeContainer, `http://host.docker.internal:${servicePort}/`)).toBe('blocked')
-      expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toBe('blocked')
-    }
+      console.warn(`${operatingSystem} forwards host.docker.internal to the machine's loopback: that check is skipped`)
+    else expect(reaches(runtimeContainer, `http://host.docker.internal:${servicePort}/`)).toBe('blocked')
+    if (operatingSystem === 'OrbStack')
+      console.warn('OrbStack accepts traffic between Docker networks: the address check of the service is skipped')
+    else expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toBe('blocked')
     await provider.remove(runtime)
     docker('rm', '-f', service)
     docker('network', 'rm', serviceNetwork)
