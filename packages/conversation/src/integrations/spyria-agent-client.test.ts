@@ -23,17 +23,14 @@ const endpoint: AgentConversation = {
     },
   },
 }
-const toolsSecretsOf = (token: string) => ({
-  SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: token },
-  SPYRIA_TOOLS_URL: { kind: 'StaticSecret', value: 'http://spyria-gateway-relay:4000/mcp' },
-})
+const toolsSecretsOf = (token: string) => ({ SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: token } })
 const createdBodyOf = async (harness: HarnessId, adapterModel?: string) => {
   requests.length = 0
   await createSpyriaAgentClient().createConversation(endpoint, 'runtime-token', { harness, adapterModel })
   return JSON.parse(requests[0]?.body ?? '{}')
 }
 
-test('a subscription session launches Claude Code without the relay, a model or an LLM credential, with only the tools token and address as secrets, and keeps Spyria tools and the catalogue as two servers', async () => {
+test('a subscription session launches Claude Code without the relay, a model or an LLM credential, with only the tools token as a secret and the tools address in its environment, and keeps Spyria tools and the catalogue as two servers', async () => {
   const created = await createdBodyOf('claude-code')
   const command: string[] = created.agent.acp_command
   expect(command.at(-1)).toEndWith('exec claude-agent-acp')
@@ -109,6 +106,7 @@ test('a Codex subscription session writes its config atomically and launches wit
   expect(script).toContain(`> ${temporary}; mv ${temporary} "$HOME/.codex/config.toml"`)
   expect(script).toEndWith('exec codex-acp')
   expect(created.secrets).toEqual(toolsSecretsOf('runtime-token'))
+  expect(command.slice(0, 2)).toEqual(['env', 'SPYRIA_TOOLS_URL=http://spyria-gateway-relay:4000/mcp'])
   expect(created.agent.mcp_config).toEqual({
     spyria: expect.objectContaining({ headers: { Authorization: 'Bearer runtime-token' } }),
     tools: expect.objectContaining({ headers: { Authorization: 'Bearer runtime-token' } }),
