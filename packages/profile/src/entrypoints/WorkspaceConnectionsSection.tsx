@@ -2,6 +2,8 @@ import { useQuery } from '@spyria/db/react'
 import {
   type AccessLevel,
   accessLevels,
+  builtInFeatures,
+  builtInTools,
   type ConnectionTool,
   isAllowedAtLevel,
   type MemberId,
@@ -22,13 +24,19 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
+import { Link } from 'react-router'
 import {
   type AccessSubject,
   type ConnectionInput,
   type ConnectionSignIn,
   connectionSignIns,
 } from '../domain/workspace-connection.ts'
-import { type ListedWorkspaceConnection, listWorkspaceConnections } from '../queries/list-workspace-connections.ts'
+import {
+  type ListedWorkspaceConnection,
+  listGitHubToolAccess,
+  listWorkspaceConnections,
+  type ServerAccessList,
+} from '../queries/list-workspace-connections.ts'
 import { useProfileCommands } from './providers.tsx'
 import { ToolList, toolCountsOf } from './ToolList.tsx'
 
@@ -214,7 +222,7 @@ const AccessRow = ({
   isNamedMember,
 }: {
   target: Target
-  connection: ListedWorkspaceConnection
+  connection: ServerAccessList
   subject: AccessSubject
   name: string
   access: ToolServerAccess | undefined
@@ -294,7 +302,7 @@ const AccessRow = ({
   )
 }
 
-const ServerAccess = ({ target, connection }: { target: Target; connection: ListedWorkspaceConnection }) => {
+const ServerAccess = ({ target, connection }: { target: Target; connection: ServerAccessList }) => {
   const commands = useProfileCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
   const addMember = (memberId: MemberId) =>
@@ -432,27 +440,83 @@ const ConnectionCard = ({
   )
 }
 
+const featureSettingOf = (workspaceId: WorkspaceId, feature: string | null) => {
+  if (feature === builtInFeatures.qualityGates)
+    return (
+      <Link to={`/w/${workspaceId}/settings/quality-gates`} className="text-xs text-ink underline">
+        Set in Quality gates
+      </Link>
+    )
+  if (feature === builtInFeatures.browser) return <span className="text-xs text-muted">Shown in the Browser tab</span>
+  return null
+}
+
+const BuiltInTools = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
+  <LabelledSection title="Built in">
+    <section aria-label="Spyria" className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
+      <p className="text-muted">
+        Spyria's own tools, which every agent has. Nothing to set here: their settings live with their feature.
+      </p>
+      <ul aria-label="Built-in tools" className="flex flex-col">
+        {builtInTools.map((tool) => (
+          <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
+            <span className="flex flex-col">
+              <span>{tool.name}</span>
+              <span className="text-xs text-muted">{tool.summary}</span>
+            </span>
+            {featureSettingOf(workspaceId, tool.feature)}
+          </li>
+        ))}
+      </ul>
+    </section>
+  </LabelledSection>
+)
+
+const GitHubServerCard = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const github = useQuery(listGitHubToolAccess, workspaceId)
+  const [isListOpen, setIsListOpen] = useState(false)
+  return (
+    <li aria-label={github.name} className="flex flex-col gap-3 rounded-lg border border-line p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-medium">{github.name}</span>
+        <span className="text-muted">Built in · {signInLabels.member}</span>
+        <Link to={`/w/${workspaceId}/settings/github`} className="ml-auto text-ink underline">
+          Set up in Connect GitHub
+        </Link>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span>{toolCountsOf(github.tools)}</span>
+        <button type="button" className={smallGhostButtonClass} onClick={() => setIsListOpen(!isListOpen)}>
+          What each tool does
+        </button>
+      </div>
+      {isListOpen && <ToolList label={`${github.name} tools`} tools={github.tools} controlOf={() => null} />}
+      <ServerAccess target={{ workspaceId, connectionId: github.id }} connection={github} />
+    </li>
+  )
+}
+
 export const WorkspaceConnectionsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useProfileCommands()
   const connections = useQuery(listWorkspaceConnections, workspaceId)
   const { errorMessage, isPending, run } = useGuardedAction()
   return (
-    <LabelledSection title="Servers">
-      {connections.length === 0 ? (
-        <p className="text-sm text-muted">No servers yet</p>
-      ) : (
+    <>
+      <BuiltInTools workspaceId={workspaceId} />
+      <LabelledSection title="Servers">
         <ul aria-label="Servers" className="flex flex-col gap-3">
+          <GitHubServerCard workspaceId={workspaceId} />
           {connections.map((connection) => (
             <ConnectionCard key={connection.id} workspaceId={workspaceId} connection={connection} />
           ))}
         </ul>
-      )}
-      <ConnectionForm
-        label="Add server"
-        onSubmit={(input) => run(() => commands.addWorkspaceConnection({ workspaceId, ...input }))}
-      />
-      {isPending && <p className="text-sm text-muted">Listing the server's tools…</p>}
-      <ErrorMessage message={errorMessage} />
-    </LabelledSection>
+        <ConnectionForm
+          label="Add server"
+          onSubmit={(input) => run(() => commands.addWorkspaceConnection({ workspaceId, ...input }))}
+        />
+        {isPending && <p className="text-sm text-muted">Listing the server's tools…</p>}
+        <ErrorMessage message={errorMessage} />
+      </LabelledSection>
+    </>
   )
 }

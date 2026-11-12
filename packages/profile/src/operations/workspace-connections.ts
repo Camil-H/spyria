@@ -1,4 +1,4 @@
-import { MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
+import { githubConnectionId, MemberNotFound, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -16,6 +16,7 @@ import {
   connectionSignIns,
   editedInputOf,
   gatewayNameOf,
+  githubConnectionIn,
   markedToolsOf,
   relistedToolsOf,
   requireListedTools,
@@ -33,6 +34,15 @@ const asConnectionManager = <Result>({ transactor }: Dependencies, work: (unitOf
     requirePermissionIn(await unitOfWork.members.permissions(), 'tools.manage')
     return work(unitOfWork)
   })
+
+export const accessibleConnectionOf = async (
+  workspaceConnections: WorkspaceConnectionRepository,
+  workspaceId: WorkspaceId,
+  connectionId: string,
+) =>
+  connectionId === githubConnectionId
+    ? githubConnectionIn(workspaceId)
+    : requireListedTools(await workspaceConnections.get(workspaceId, connectionId))
 
 const requireFreeName = async (
   workspaceConnections: WorkspaceConnectionRepository,
@@ -207,7 +217,7 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
       throw new MemberNotFound(subject.memberId)
     if (subject.roleId !== undefined && !(await members.roleIds(workspaceId)).includes(subject.roleId))
       throw new InvalidConnection(`The workspace has no role ${subject.roleId}`)
-    const connection = requireListedTools(await workspaceConnections.get(workspaceId, connectionId))
+    const connection = await accessibleConnectionOf(workspaceConnections, workspaceId, connectionId)
     const previous = (await workspaceConnections.accessOf(workspaceId)).find(
       (row) =>
         row.connectionId === connectionId &&
@@ -222,6 +232,7 @@ export const setConnectionAccess = async (dependencies: Dependencies, input: Con
       payload: { connectionId, ...subject, level: access?.level ?? null, toolChanges: access?.toolChanges ?? {} },
     })
   })
+  if (connectionId === githubConnectionId) return
   await grantWorkspaceTools(dependencies, workspaceId, subject.memberId && [subject.memberId])
   await releaseLostSignIns(dependencies, workspaceId, { connectionId })
 }

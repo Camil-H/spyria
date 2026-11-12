@@ -74,14 +74,17 @@ export const githubTools: readonly GitHubTool[] = [
 
 const githubServer = { signIn: 'member' } as const
 
-export const githubAccessOf = (accessRows: readonly ToolServerAccess[], holder: ToolHolder): ToolServerAccess =>
-  holderAccessOf(githubConnectionId, accessRows, holder) ?? {
+export const githubRoleAccessOf = (roleId: string, accessRows: readonly ToolServerAccess[]): ToolServerAccess =>
+  accessRows.find((access) => access.connectionId === githubConnectionId && access.roleId === roleId) ?? {
     connectionId: githubConnectionId,
-    roleId: holder.roleId,
+    roleId,
     memberId: null,
     level: accessLevels.write,
     toolChanges: {},
   }
+
+export const githubAccessOf = (accessRows: readonly ToolServerAccess[], holder: ToolHolder): ToolServerAccess =>
+  holderAccessOf(githubConnectionId, accessRows, holder) ?? githubRoleAccessOf(holder.roleId, accessRows)
 
 export const githubToolsOf = (accessRows: readonly ToolServerAccess[], holder: ToolHolder) =>
   toolsAllowedBy(githubTools, githubAccessOf(accessRows, holder)).map(({ name }) => name)
