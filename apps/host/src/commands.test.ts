@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
+import { type Command, containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
 import { type Docker, DockerError } from './docker.ts'
 import { harnessEnvironment } from './harnesses.ts'
 
@@ -229,6 +229,7 @@ test('removing a runtime never deletes the credentials volumes', async () => {
   const deleted = calls.filter((call) => call.method === 'DELETE').map((call) => call.path)
   expect(deleted).toEqual([
     '/containers/spyria-rt-runtime-1?force=true',
+    '/containers/spyria-rt-runtime-1-snapshot?force=true',
     '/volumes/spyria-rt-runtime-1-ws',
     '/volumes/spyria-rt-runtime-1-home',
     '/volumes/spyria-rt-runtime-1-tmp',
@@ -296,6 +297,7 @@ test('stop and remove of a runtime whose container is gone still release its net
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
   expect(calls).toEqual([
     'GET /containers/spyria-rt-runtime-1/json',
+    'DELETE /containers/spyria-rt-runtime-1-snapshot?force=true',
     'DELETE /volumes/spyria-rt-runtime-1-ws',
     'DELETE /volumes/spyria-rt-runtime-1-home',
     'DELETE /volumes/spyria-rt-runtime-1-tmp',
@@ -480,4 +482,148 @@ test('a recreate removes the managed container alone and creates it again on the
   ])
   expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
   expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
+})
+
+const snapshotKey = 'd'.repeat(32)
+const otherSnapshotKey = 'e'.repeat(32)
+const snapshotVolumeOf = (key: string, generation: string) => ({
+  Name: `spyria-snapshot-${key}-${generation}`,
+  Labels: { 'spyria.managed': '1', 'spyria.snapshot': key },
+})
+
+const snapshotDocker = ({
+  volumes = [] as ReturnType<typeof snapshotVolumeOf>[],
+  copyExitCode = 0,
+  inUse = [] as string[],
+} = {}) => {
+  const calls: { method: string; path: string; body?: unknown }[] = []
+  const docker = (async (method: string, path: string, body?: unknown) => {
+    calls.push({ method, path, body })
+    if (path.startsWith('/volumes?')) return { Volumes: volumes }
+    if (path.endsWith('/wait')) return { StatusCode: copyExitCode }
+    if (method === 'DELETE' && inUse.some((name) => path === `/volumes/${name}`))
+      throw new DockerError(409, 'volume is in use')
+    if (path.startsWith('/containers/') && path.endsWith('/json'))
+      return { Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    return {}
+  }) as Docker
+  return { docker, calls, requests: () => calls.map(({ method, path }) => `${method} ${path.split('?')[0]}`) }
+}
+
+test('accepts a snapshot of a runtime and a prune of the snapshots to keep, and refuses any other key or field', () => {
+  expect(parseCommand('create', { ...create, snapshotKey })).toEqual({ op: 'create', ...create, snapshotKey })
+  expect(parseCommand('snapshot', { runtimeId: 'runtime-1', snapshotKey })).toEqual({
+    op: 'snapshot',
+    runtimeId: 'runtime-1',
+    snapshotKey,
+  })
+  expect(parseCommand('prune_snapshots', { keep: [snapshotKey] })).toEqual({
+    op: 'prune_snapshots',
+    keep: [snapshotKey],
+  })
+  for (const refusedKey of ['../spyria-host', snapshotKey.toUpperCase(), `${snapshotKey}0`, 42]) {
+    expect(() => parseCommand('snapshot', { runtimeId: 'runtime-1', snapshotKey: refusedKey })).toThrow('refused')
+    expect(() => parseCommand('create', { ...create, snapshotKey: refusedKey })).toThrow('refused')
+    expect(() => parseCommand('prune_snapshots', { keep: [refusedKey] })).toThrow('refused')
+  }
+  expect(() => parseCommand('prune_snapshots', { keep: snapshotKey })).toThrow('refused')
+  expect(() => parseCommand('snapshot', { runtimeId: 'runtime-1', snapshotKey, path: '/' })).toThrow('refused')
+})
+
+test('a create with a snapshot key mounts the newest snapshot of that key read-only at the snapshot directory; without a snapshot on the host, none is mounted', async () => {
+  const mountsOfCreate = async (volumes: ReturnType<typeof snapshotVolumeOf>[]) => {
+    const { docker, calls } = snapshotDocker({ volumes })
+    await createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'create', ...create, snapshotKey })
+    const created = calls.find((call) => call.path.startsWith('/containers/create'))?.body as ReturnType<
+      typeof containerBodyOf
+    >
+    return created.HostConfig.Mounts.filter((mount) => mount.Target === '/var/lib/spyria/snapshot')
+  }
+  expect(
+    await mountsOfCreate([
+      snapshotVolumeOf(snapshotKey, '00mabc001'),
+      snapshotVolumeOf(snapshotKey, '00mabc002'),
+      { ...snapshotVolumeOf(snapshotKey, '00mabc009'), Name: `other-snapshot-${snapshotKey}-00mabc009` },
+    ]),
+  ).toEqual([
+    {
+      Type: 'volume',
+      Source: `spyria-snapshot-${snapshotKey}-00mabc002`,
+      Target: '/var/lib/spyria/snapshot',
+      ReadOnly: true,
+    },
+  ])
+  expect(await mountsOfCreate([])).toEqual([])
+})
+
+test('a snapshot pauses the runtime while a container with no network copies its project and home, read-only, into a new labelled volume, then removes the older snapshots of that repository only', async () => {
+  const { docker, calls, requests } = snapshotDocker({
+    volumes: [
+      snapshotVolumeOf(snapshotKey, '00mabc001'),
+      snapshotVolumeOf(snapshotKey, '00mzzz999'),
+      snapshotVolumeOf(otherSnapshotKey, '00mabc001'),
+    ],
+  })
+  await createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'snapshot', runtimeId: 'runtime-1', snapshotKey })
+  const created = calls.find((call) => call.path === '/volumes/create')?.body as { Name: string; Labels: object }
+  expect(created.Name).toMatch(new RegExp(`^spyria-snapshot-${snapshotKey}-[0-9a-z]{9}$`))
+  expect(created.Labels).toEqual({ 'spyria.managed': '1', 'spyria.snapshot': snapshotKey })
+  const copier = calls.find((call) => call.path === '/containers/create?name=spyria-rt-runtime-1-snapshot')
+    ?.body as ReturnType<typeof containerBodyOf> & { Entrypoint: string[] }
+  expect(copier.Image).toBe(image)
+  expect(copier.User).toBe('10001:10001')
+  expect(copier.HostConfig).toMatchObject({ NetworkMode: 'none', CapDrop: ['ALL'], ReadonlyRootfs: true })
+  expect(copier.HostConfig.Mounts).toEqual([
+    { Type: 'volume', Source: 'spyria-rt-runtime-1-ws', Target: '/workspace', ReadOnly: true },
+    { Type: 'volume', Source: 'spyria-rt-runtime-1-home', Target: '/home/spyria', ReadOnly: true },
+    { Type: 'volume', Source: created.Name, Target: '/var/lib/spyria/snapshot' },
+  ])
+  expect(copier.Entrypoint.at(-1)).toEndWith('touch /var/lib/spyria/snapshot/complete')
+  expect(requests().slice(requests().indexOf('POST /containers/spyria-rt-runtime-1/pause'))).toEqual([
+    'POST /containers/spyria-rt-runtime-1/pause',
+    'POST /containers/spyria-rt-runtime-1-snapshot/start',
+    'POST /containers/spyria-rt-runtime-1-snapshot/wait',
+    'POST /containers/spyria-rt-runtime-1/unpause',
+    'DELETE /containers/spyria-rt-runtime-1-snapshot',
+    'GET /volumes',
+    `DELETE /volumes/spyria-snapshot-${snapshotKey}-00mabc001`,
+  ])
+})
+
+test('a snapshot whose copy fails resumes the runtime, removes the half-copied volume and fails; a personal host refuses snapshots', async () => {
+  const { docker, requests } = snapshotDocker({ copyExitCode: 1 })
+  const failed = await createCommandRunner({ docker, prefix: 'spyria-' })
+    .run({ op: 'snapshot', runtimeId: 'runtime-1', snapshotKey })
+    .then(
+      () => undefined,
+      (error: Error) => error,
+    )
+  expect(failed?.message).toBe('Copying the snapshot failed with exit code 1')
+  expect(requests()).toContain('POST /containers/spyria-rt-runtime-1/unpause')
+  expect(requests().at(-1)).toMatch(new RegExp(`^DELETE /volumes/spyria-snapshot-${snapshotKey}-`))
+  const personal = createCommandRunner({ docker, prefix: 'spyria-', personal: true })
+  for (const command of [
+    { op: 'snapshot', runtimeId: 'runtime-1', snapshotKey },
+    { op: 'prune_snapshots', keep: [] },
+  ] satisfies Command[])
+    expect(await personal.run(command).catch((error: Error) => error.message)).toBe(
+      'refused: snapshots are taken only on a workspace host',
+    )
+})
+
+test('pruning keeps the newest snapshot of each kept repository and removes the rest, leaving a snapshot in use for later', async () => {
+  const inUse = `spyria-snapshot-${otherSnapshotKey}-00mabc002`
+  const { docker, requests } = snapshotDocker({
+    volumes: [
+      snapshotVolumeOf(snapshotKey, '00mabc001'),
+      snapshotVolumeOf(snapshotKey, '00mabc002'),
+      snapshotVolumeOf(otherSnapshotKey, '00mabc002'),
+    ],
+    inUse: [inUse],
+  })
+  await createCommandRunner({ docker, prefix: 'spyria-' }).run({ op: 'prune_snapshots', keep: [snapshotKey] })
+  expect(requests().filter((request) => request.startsWith('DELETE'))).toEqual([
+    `DELETE /volumes/${inUse}`,
+    `DELETE /volumes/spyria-snapshot-${snapshotKey}-00mabc001`,
+  ])
 })

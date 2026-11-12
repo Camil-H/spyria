@@ -35,4 +35,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0029](0029-account-sign-in-and-workspace-sso.md) | Sign in with an account; a workspace may enforce its own SSO |
 | [0030](0030-workspace-tools-catalogue.md) | Tools come from a per-workspace catalogue, signed in to by each member or through one shared login (access revised by 0031) |
 | [0031](0031-tool-access-levels-and-approvals.md) | Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals |
-
+| [0032](0032-runtimes-kept-ready-and-setup-snapshots.md) | Runtimes kept ready and setup snapshots per repository |

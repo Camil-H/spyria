@@ -54,7 +54,9 @@ const stepArgument = z.union([
   z.object({ kind: z.literal('pull_request') }),
   z.object({ kind: z.literal('ci'), fixes: z.number() }),
 ])
-export const setupCommandsArgument = z.array(z.object({ repository: z.nullable(z.string()), command: z.string() }))
+export const setupCommandsArgument = z.array(
+  z.object({ repository: z.nullable(z.string()), command: z.string(), warmRuntimes: z.optional(z.number()) }),
+)
 export const devLoopArgument = z.nullable(
   z.object({
     rules: z.array(
