@@ -6,7 +6,7 @@ import { schema } from '@spyria/db/zero'
 import type { Job, Transact } from '@spyria/db/zero-queries'
 import { errorSummaryOf, log, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { type createLlmGateway, createProfileJobs } from '@spyria/profile/server'
-import { createRuntimeJobs, type SandboxProvider } from '@spyria/runtime/server'
+import { createRuntimeJobs, type RepositoryAccess, type SandboxProvider } from '@spyria/runtime/server'
 import { auditJobs, createUsageJobs } from '@spyria/usage/server'
 import { createWorkspaceJobs } from '@spyria/workspace/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
@@ -49,6 +49,8 @@ export const startJobWorker = (
     failedCleanupRetryMilliseconds = 60 * 60_000,
     sandboxProvider,
     spyriaAgentImage,
+    repositoryAccess,
+    warmCheckMilliseconds,
     agentBridge,
     llmGateway,
     usageLogs,
@@ -62,6 +64,8 @@ export const startJobWorker = (
     failedCleanupRetryMilliseconds?: number
     sandboxProvider?: SandboxProvider
     spyriaAgentImage?: string
+    repositoryAccess?: RepositoryAccess
+    warmCheckMilliseconds?: number
     agentBridge?: AgentBridge
     llmGateway?: ReturnType<typeof createLlmGateway>
     usageLogs?: Parameters<typeof createUsageJobs>[0]
@@ -69,7 +73,12 @@ export const startJobWorker = (
 ) => {
   const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = sessionJobs
   const jobHandlers: Record<string, JobHandler | undefined> = {
-    ...(sandboxProvider && createRuntimeJobs(sandboxProvider, { currentImage: spyriaAgentImage })),
+    ...(sandboxProvider &&
+      createRuntimeJobs(sandboxProvider, {
+        currentImage: spyriaAgentImage,
+        repositories: repositoryAccess,
+        warmCheckMilliseconds,
+      })),
     ...agentBridge?.forDatabase(database).jobs,
     ...(llmGateway && createProfileJobs(llmGateway, announceToolListChange)),
     ...(usageLogs && createUsageJobs(usageLogs)),

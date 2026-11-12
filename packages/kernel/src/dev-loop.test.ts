@@ -11,6 +11,7 @@ import {
   rulesOf,
   setupCommandOf,
   setupCommandsFrom,
+  warmPoolsOf,
 } from './dev-loop.ts'
 
 const lint = { kind: 'command', name: 'Lint', command: 'bun run lint', timeoutMinutes: 10, fixes: 3 } as const
@@ -80,4 +81,25 @@ test('a repository runs its own setup command, else the default one, else none; 
   expect(isSetupCommands([{ repository: 'acme/app', command: ' ' }])).toBe(false)
   expect(isSetupCommands([...commands, { repository: null, command: 'make' }])).toBe(false)
   expect(setupCommandsFrom('bun install')).toEqual([])
+})
+
+test.each([
+  ['0 to 5 runtimes kept ready for a repository', [{ repository: 'acme/app', command: 'make', warmRuntimes: 5 }], true],
+  ['6 runtimes kept ready', [{ repository: 'acme/app', command: 'make', warmRuntimes: 6 }], false],
+  ['a negative count', [{ repository: 'acme/app', command: 'make', warmRuntimes: -1 }], false],
+  ['a fraction', [{ repository: 'acme/app', command: 'make', warmRuntimes: 1.5 }], false],
+  ['runtimes kept ready for the default command', [{ repository: null, command: 'make', warmRuntimes: 1 }], false],
+])('%s: valid %p', (_, commands, isValid) => {
+  expect(isSetupCommands(commands)).toBe(isValid)
+})
+
+test('only repositories with runtimes kept ready have a warm pool, with their own setup command', () => {
+  expect(
+    warmPoolsOf([
+      { repository: null, command: 'bun install' },
+      { repository: 'acme/app', command: 'make', warmRuntimes: 2 },
+      { repository: 'acme/site', command: 'npm ci', warmRuntimes: 0 },
+      { repository: 'acme/docs', command: 'true' },
+    ]),
+  ).toEqual([{ repository: 'acme/app', command: 'make', size: 2 }])
 })

@@ -25,7 +25,7 @@ test('the settings the page sends pass the mutators’ argument checks, so only 
   expect(devLoopArgument.safeParse(null).success).toBe(true)
   const commands = [
     { repository: null, command: 'bun install' },
-    { repository: 'acme/app', command: 'bun install && bun run db:migrate' },
+    { repository: 'acme/app', command: 'bun install && bun run db:migrate', warmRuntimes: 2 },
   ]
   expect(setupCommandsArgument.safeParse(commands)).toMatchObject({ success: true, data: commands })
 })

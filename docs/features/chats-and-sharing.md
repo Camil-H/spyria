@@ -119,7 +119,7 @@ The `tools.manage` chat permission is defined and shown in the roles editor, but
 
 ### Prompts from someone other than the owner
 
-When a participant other than the owner prompts the agent, the agent runs in the owner's runtime but uses the **prompter's own accounts**, so it never exceeds what the prompter could do and nobody is answerable for a call on someone else's account ([decision 0032](../decisions/0032-tools-on-the-prompters-account.md)):
+When a participant other than the owner prompts the agent, the agent runs in the owner's runtime but uses the **prompter's own accounts**, so it never exceeds what the prompter could do and nobody is answerable for a call on someone else's account ([decision 0033](../decisions/0033-tools-on-the-prompters-account.md)):
 
 - A tool server **each member signs in to** answers with the prompter's own sign-in, never the owner's. A prompter who has not connected it does not get it: the step says "*Name* needs to connect *server*", and the **Connect** link shows to that prompter only.
 - A **shared-login** server is available only if both the owner and the prompter may use the tool.

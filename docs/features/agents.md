@@ -8,7 +8,7 @@ A runtime chat pairs a conversation with an agent running in its own sandboxed *
 
 Prompts are handled one turn at a time. A prompt sent while the agent works waits and runs after the current turn, in order. A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs. In a dev chat with quality gates on, the server also sends prompts on the owner's behalf, marked as sent by quality gates; see [Dev mode](./dev-mode.md#quality-gates).
 
-The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt ([decision 0032](../decisions/0032-tools-on-the-prompters-account.md)). Every model call and tool call records both.
+The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt ([decision 0033](../decisions/0033-tools-on-the-prompters-account.md)). Every model call and tool call records both.
 
 ## Harnesses
 

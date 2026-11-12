@@ -3,6 +3,7 @@ import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { hashSecret } from '../domain/claim.ts'
 import { HostNotRegistered, HostOutOfDate, type HostRefused, HostRemoved } from '../domain/errors.ts'
 import { isHostOutOfDate } from '../domain/host-version.ts'
+import { runtimeJobTypes } from '../domain/runtime.ts'
 import {
   capacityOf,
   declarationRefusalOf,
@@ -40,7 +41,7 @@ export const recordHostHello = async (
   }: Input,
 ) => {
   const tokenHash = await hashSecret(token)
-  return transactor.run(async ({ runtimeHosts, runtimes }): Promise<ConnectedHost | { refusal: HostRefused }> => {
+  return transactor.run(async ({ runtimeHosts, runtimes, jobs }): Promise<ConnectedHost | { refusal: HostRefused }> => {
     const host = (await runtimeHosts.findBySecretHash('token', tokenHash))?.host
     if (!host) throw new HostNotRegistered()
     if (host.removedAt !== null) throw new HostRemoved()
@@ -64,6 +65,7 @@ export const recordHostHello = async (
       lastSeenAt: now,
     })
     await runtimes.setHostOnline(host.workspaceId, host.id, true)
+    if (!personal) await jobs.enqueue(host.workspaceId, runtimeJobTypes.warm, {})
     return connected
   })
 }

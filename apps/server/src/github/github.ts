@@ -11,6 +11,7 @@ import {
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { DomainError, log, memberActor, memberId } from '@spyria/kernel'
+import type { RepositoryAccess } from '@spyria/runtime/server'
 import {
   enteredSecretsOf,
   type GitHubMemberAccount,
@@ -522,6 +523,16 @@ const isActionsJob = ({ app }: GitHubCheckRun) => app?.slug === 'github-actions'
 const failedStepOf = (steps: GitHubJobStep[]) => steps.find(isFailing)?.name ?? null
 
 const isPermissionRefused = (error: unknown) => error instanceof GitHubRequestFailed && error.status === 422
+
+export const createRepositoryAccess = (database: Database, dependencies: GitHubDependencies): RepositoryAccess => ({
+  cloneOf: async (workspaceId, repository) => {
+    const credentials = await appCredentialsOf(database, dependencies, workspaceId)
+    const token = await githubCall(workspaceId, () =>
+      repositoryTokenOf(dependencies.api, credentials, repository, { contents: 'read' }),
+    )
+    return { url: dependencies.api.cloneUrlOf(repository), token }
+  },
+})
 
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies

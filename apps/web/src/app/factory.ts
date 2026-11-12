@@ -11,6 +11,7 @@ import { type ChatId, githubServerName, type MemberId, type WorkspaceId, workspa
 import { type OnboardingCommands, onboardingMutators } from '@spyria/onboarding/server'
 import type { PanelCommands } from '@spyria/panel'
 import {
+  createHttpActiveSessions,
   createHttpGitHubConnection,
   createHttpLlmCredentialAdder,
   createHttpToolConnections,
@@ -180,6 +181,7 @@ export const createApp = async (
   const toolConnections = createHttpToolConnections(fetchAsMember)
   const githubConnection = createHttpGitHubConnection(fetchAsMember)
   const githubCommands = createHttpGitHubCommands(postAsMember, fetchAsMember)
+  const activeSessions = createHttpActiveSessions(fetchAsMember)
   const ssoSettingsCommands = createHttpSsoSettingsCommands(postAsMember, fetchAsMember)
   const whenChatSynced = (chatId: ChatId) =>
     new Promise<void>((resolve) => {
@@ -243,6 +245,7 @@ export const createApp = async (
       revokeInvite: mutateConfirmed(workspaceMutators.workspace.revokeInvite),
       changeMemberRole: mutateConfirmed(workspaceMutators.workspace.changeMemberRole),
       removeMember: mutateConfirmed(workspaceMutators.workspace.removeMember),
+      endMemberSessions: mutateConfirmed(workspaceMutators.workspace.endMemberSessions),
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
       setDevLoop: mutateConfirmed(workspaceMutators.workspace.setDevLoop),
       setSetupCommands: mutateConfirmed(workspaceMutators.workspace.setSetupCommands),
@@ -286,6 +289,12 @@ export const createApp = async (
       ...toolConnections,
       ...createHttpWorkspaceConnections(postAsMember),
       ...githubConnection,
+      ...activeSessions,
+      signOutEverywhere: async (input) => {
+        await activeSessions.signOutEverywhere(input)
+        await store.signOut(input.workspaceId)
+        location.assign('/')
+      },
     }),
     runtimeCommands: commandsOf<RuntimeCommands>(runtimeMutators.runtime, createHttpRuntimeHostCommands(postAsMember)),
     usageCommands: {

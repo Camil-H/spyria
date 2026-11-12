@@ -609,7 +609,7 @@ test('a runtime whose spyria-agent answers ready with a protocol below the minim
   const current = await fakeHost('Current agent host')
   const freshChat = await newRuntimeChat()
   const running = await runningRuntime(freshChat)
-  expect(await runtimeOf(freshChat)).toMatchObject({ id: running.id, agent_version: 'test', agent_protocol_version: 1 })
+  expect(await runtimeOf(freshChat)).toMatchObject({ id: running.id, agent_version: 'test', agent_protocol_version: 2 })
   expect(current.containers.get(running.id)?.running).toBe(true)
 })
 

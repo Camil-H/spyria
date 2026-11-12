@@ -793,7 +793,15 @@ export const startAgentStack = async ({
 export type { ContainerAgent, FakeContainer, Launch, ModelCall }
 
 const fakeHostGatewayUrl = 'http://fake-gateway-relay.test:4000/v1'
-type HostCommand = { op: string; runtimeId?: string; image?: string; apiKey?: string; packageCacheKey?: string }
+type HostCommand = {
+  op: string
+  runtimeId?: string
+  image?: string
+  apiKey?: string
+  packageCacheKey?: string
+  snapshotKey?: string
+  keep?: string[]
+}
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 
 export const asMember = async (userId: string, method: string, path: string, body?: object, workspaceId = acme) => {
@@ -882,8 +890,8 @@ const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export const fakeHostVersion = 'test'
-export const fakeHostProtocolVersion = 3
-export const fakeAgentProtocolVersion = 1
+export const fakeHostProtocolVersion = 4
+export const fakeAgentProtocolVersion = 2
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()

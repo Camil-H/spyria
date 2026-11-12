@@ -28,8 +28,11 @@ const isPublishedImage = (image: string) => image.includes('@')
 const pullTimeoutMilliseconds = 10 * 60_000
 const runtimeIdPattern = /^[a-z0-9][a-z0-9-]{0,62}$/
 const apiKeyPattern = /^[A-Za-z0-9_-]{16,128}$/
-const packageCacheKeyPattern = /^[a-f0-9]{32}$/
+const volumeKeyPattern = /^[a-f0-9]{32}$/
 const packageCacheTarget = '/var/cache/spyria'
+const snapshotTarget = '/var/lib/spyria/snapshot'
+const snapshotTimeoutMilliseconds = 30 * 60_000
+const maximumKeptSnapshots = 100
 const spyriaAgentPort = 8000
 export const gatewayRelayAlias = 'spyria-gateway-relay'
 const gibibyte = 1024 ** 3
@@ -45,24 +48,37 @@ const operations = [
   'installed',
   'install',
   'list',
+  'snapshot',
+  'prune_snapshots',
 ] as const
 
 type Operation = (typeof operations)[number]
 type HarnessOperation = 'installed' | 'install'
 type CreateOperation = 'create' | 'recreate'
-type RuntimeOperation = Exclude<Operation, CreateOperation | 'prepare' | 'list' | HarnessOperation>
+type RuntimeOperation = Exclude<
+  Operation,
+  CreateOperation | 'prepare' | 'list' | HarnessOperation | 'snapshot' | 'prune_snapshots'
+>
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string>; Image?: string }
   State?: { Running?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
-type CreateRequest = { runtimeId: string; image: string; apiKey: string; packageCacheKey?: string }
+type CreateRequest = {
+  runtimeId: string
+  image: string
+  apiKey: string
+  packageCacheKey?: string
+  snapshotKey?: string
+}
 export type Command =
   | ({ op: CreateOperation } & CreateRequest)
   | { op: 'prepare'; image: string }
   | { op: 'list' }
   | { op: RuntimeOperation; runtimeId: string }
   | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
+  | { op: 'snapshot'; runtimeId: string; snapshotKey: string }
+  | { op: 'prune_snapshots'; keep: string[] }
 
 const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp, reason: string) => {
   const value = fields[name]
@@ -74,8 +90,10 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
   if (!operations.includes(op as Operation)) throw new Refused(`unknown command ${String(op)}`)
   const fields = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
   const allowedFields = {
-    create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
-    recreate: ['runtimeId', 'image', 'apiKey', 'packageCacheKey'],
+    create: ['runtimeId', 'image', 'apiKey', 'packageCacheKey', 'snapshotKey'],
+    recreate: ['runtimeId', 'image', 'apiKey', 'packageCacheKey', 'snapshotKey'],
+    snapshot: ['runtimeId', 'snapshotKey'],
+    prune_snapshots: ['keep'],
     prepare: ['image'],
     list: [],
     installed: ['runtimeId', 'harness'],
@@ -90,11 +108,22 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
   }
   if (op === 'prepare') return { op, image: imageOf() }
   if (op === 'list') return { op }
+  if (op === 'prune_snapshots') {
+    const { keep } = fields
+    const isKeepList =
+      Array.isArray(keep) &&
+      keep.length <= maximumKeptSnapshots &&
+      keep.every((key) => typeof key === 'string' && volumeKeyPattern.test(key))
+    if (!isKeepList) throw new Refused('invalid snapshot keys')
+    return { op, keep }
+  }
+  const volumeKeyOf = (name: string, reason: string) => fieldOf(fields, name, volumeKeyPattern, reason)
   const runtimeId = fieldOf(fields, 'runtimeId', runtimeIdPattern, 'invalid runtime id')
   if (op === 'installed' || op === 'install') {
     if (!harnessIds.includes(fields.harness as HarnessId)) throw new Refused('unknown harness')
     return { op, runtimeId, harness: fields.harness as HarnessId }
   }
+  if (op === 'snapshot') return { op, runtimeId, snapshotKey: volumeKeyOf('snapshotKey', 'invalid snapshot key') }
   if (op !== 'create' && op !== 'recreate') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
@@ -102,14 +131,30 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     image: imageOf(),
     apiKey: fieldOf(fields, 'apiKey', apiKeyPattern, 'invalid API key'),
     ...(fields.packageCacheKey !== undefined && {
-      packageCacheKey: fieldOf(fields, 'packageCacheKey', packageCacheKeyPattern, 'invalid package cache key'),
+      packageCacheKey: volumeKeyOf('packageCacheKey', 'invalid package cache key'),
     }),
+    ...(fields.snapshotKey !== undefined && { snapshotKey: volumeKeyOf('snapshotKey', 'invalid snapshot key') }),
   }
 }
 
 const containerNameOf = (prefix: string, runtimeId: string) => `${prefix}rt-${runtimeId}`
 const networkNameOf = (prefix: string, runtimeId: string) => `${containerNameOf(prefix, runtimeId)}-net`
 const packageCachePrefixOf = (prefix: string) => `${prefix}cache-`
+const snapshotPrefixOf = (prefix: string, snapshotKey: string) => `${prefix}snapshot-${snapshotKey}-`
+const snapshotLabel = 'spyria.snapshot'
+const snapshotCopierOf = (runtimeContainer: string) => `${runtimeContainer}-snapshot`
+const runtimeHardening = {
+  CapDrop: ['ALL'],
+  SecurityOpt: ['no-new-privileges'],
+  ReadonlyRootfs: true,
+  Privileged: false,
+  PublishAllPorts: false,
+  Memory: 2 * gibibyte,
+  MemorySwap: 2 * gibibyte,
+  NanoCpus: 2_000_000_000,
+  PidsLimit: 512,
+  RestartPolicy: { Name: 'no' },
+}
 
 export const containerBodyOf = ({
   prefix,
@@ -117,8 +162,9 @@ export const containerBodyOf = ({
   image,
   apiKey,
   packageCacheKey,
+  snapshotVolume,
   personal = false,
-}: CreateRequest & { prefix: string; personal?: boolean }) => {
+}: Omit<CreateRequest, 'snapshotKey'> & { prefix: string; snapshotVolume?: string; personal?: boolean }) => {
   const name = containerNameOf(prefix, runtimeId)
   return {
     Image: image,
@@ -136,16 +182,7 @@ export const containerBodyOf = ({
       Init: true,
       NetworkMode: networkNameOf(prefix, runtimeId),
       ExtraHosts: [hostMachineMapping],
-      CapDrop: ['ALL'],
-      SecurityOpt: ['no-new-privileges'],
-      ReadonlyRootfs: true,
-      Privileged: false,
-      PublishAllPorts: false,
-      Memory: 2 * gibibyte,
-      MemorySwap: 2 * gibibyte,
-      NanoCpus: 2_000_000_000,
-      PidsLimit: 512,
-      RestartPolicy: { Name: 'no' },
+      ...runtimeHardening,
       Mounts: [
         ...Object.entries(volumeTargets).map(
           ([suffix, target]): Mount => ({
@@ -163,8 +200,44 @@ export const containerBodyOf = ({
               } as const,
             ]
           : []),
+        ...(snapshotVolume
+          ? [{ Type: 'volume', Source: snapshotVolume, Target: snapshotTarget, ReadOnly: true } as const]
+          : []),
         ...(personal ? [...credentialsMountsOf(prefix), harnessesMountOf(prefix)] : []),
       ],
+    },
+  }
+}
+
+export const snapshotCopyBodyOf = ({
+  prefix,
+  runtimeId,
+  image,
+  snapshotVolume,
+}: {
+  prefix: string
+  runtimeId: string
+  image: string
+  snapshotVolume: string
+}) => {
+  const runtime = containerNameOf(prefix, runtimeId)
+  return {
+    Image: image,
+    User: '10001:10001',
+    Entrypoint: [
+      'sh',
+      '-c',
+      `cp -a ${volumeTargets.ws}/project ${snapshotTarget}/project && cp -a ${volumeTargets.home} ${snapshotTarget}/home && touch ${snapshotTarget}/complete`,
+    ],
+    Labels: { 'spyria.managed': '1' },
+    HostConfig: {
+      ...runtimeHardening,
+      NetworkMode: 'none',
+      Mounts: [
+        { Type: 'volume', Source: `${runtime}-ws`, Target: volumeTargets.ws, ReadOnly: true },
+        { Type: 'volume', Source: `${runtime}-home`, Target: volumeTargets.home, ReadOnly: true },
+        { Type: 'volume', Source: snapshotVolume, Target: snapshotTarget },
+      ] satisfies Mount[],
     },
   }
 }
@@ -272,20 +345,90 @@ export const createCommandRunner = ({
     const filters = encodeURIComponent(JSON.stringify({ name: [cachePrefix], dangling: ['true'] }))
     const { Volumes } = await docker<{ Volumes: { Name: string }[] | null }>('GET', `/volumes?filters=${filters}`)
     for (const { Name } of Volumes ?? [])
-      if (Name.startsWith(cachePrefix) && packageCacheKeyPattern.test(Name.slice(cachePrefix.length)))
+      if (Name.startsWith(cachePrefix) && volumeKeyPattern.test(Name.slice(cachePrefix.length)))
         await docker('DELETE', `/volumes/${Name}`).catch(ignoring(404, 409))
   }
-  const create = async (request: CreateRequest) => {
+  const snapshotVolumesOf = async (snapshotKey?: string) => {
+    const label = snapshotKey ? `${snapshotLabel}=${snapshotKey}` : snapshotLabel
+    const filters = encodeURIComponent(JSON.stringify({ label: [label] }))
+    const { Volumes } = await docker<{ Volumes: { Name: string; Labels: Record<string, string> | null }[] | null }>(
+      'GET',
+      `/volumes?filters=${filters}`,
+    )
+    return (Volumes ?? [])
+      .map(({ Name, Labels }) => ({ name: Name, snapshotKey: Labels?.[snapshotLabel] ?? '' }))
+      .filter(
+        ({ name, snapshotKey }) =>
+          volumeKeyPattern.test(snapshotKey) && name.startsWith(snapshotPrefixOf(prefix, snapshotKey)),
+      )
+      .toSorted((first, second) => second.name.localeCompare(first.name))
+  }
+  const removeSnapshots = async (isRemoved: (snapshotKey: string, isNewest: boolean) => boolean) => {
+    const keysSeen = new Set<string>()
+    for (const volume of await snapshotVolumesOf()) {
+      const isNewest = !keysSeen.has(volume.snapshotKey)
+      keysSeen.add(volume.snapshotKey)
+      if (isRemoved(volume.snapshotKey, isNewest))
+        await docker('DELETE', `/volumes/${volume.name}`).catch(ignoring(404, 409))
+    }
+  }
+  const copiedWhilePaused = async (runtime: string, copier: string) => {
+    await docker('POST', `/containers/${runtime}/pause`)
+    try {
+      await docker('POST', `/containers/${copier}/start`)
+      return (
+        await docker<{ StatusCode: number }>(
+          'POST',
+          `/containers/${copier}/wait`,
+          undefined,
+          snapshotTimeoutMilliseconds,
+        )
+      ).StatusCode
+    } finally {
+      await docker('POST', `/containers/${runtime}/unpause`).catch(ignoring(409))
+    }
+  }
+  const snapshot = async (runtimeId: string, snapshotKey: string) => {
+    if (personal) throw new Refused('snapshots are taken only on a workspace host')
+    const runtime = containerNameOf(prefix, runtimeId)
+    const image = (await managedContainer(runtimeId)).Config?.Image ?? ''
+    const snapshotVolume = `${snapshotPrefixOf(prefix, snapshotKey)}${Date.now().toString(36).padStart(9, '0')}`
+    await docker('POST', '/volumes/create', {
+      Name: snapshotVolume,
+      Labels: { 'spyria.managed': '1', [snapshotLabel]: snapshotKey },
+    })
+    const copier = snapshotCopierOf(runtime)
+    await docker('DELETE', `/containers/${copier}?force=true`).catch(ignoringMissing)
+    await docker(
+      'POST',
+      `/containers/create?name=${copier}`,
+      snapshotCopyBodyOf({ prefix, runtimeId, image, snapshotVolume }),
+    )
+    const exitCode = await copiedWhilePaused(runtime, copier).catch((error: Error) => error)
+    await docker('DELETE', `/containers/${copier}?force=true`).catch(ignoringMissing)
+    if (exitCode !== 0) {
+      await docker('DELETE', `/volumes/${snapshotVolume}`).catch(ignoring(404, 409))
+      throw exitCode instanceof Error ? exitCode : new Error(`Copying the snapshot failed with exit code ${exitCode}`)
+    }
+    await removeSnapshots((key, isNewest) => key === snapshotKey && !isNewest)
+  }
+  const create = async ({ snapshotKey, ...request }: CreateRequest) => {
     await Promise.all([createNetwork(networkNameOf(prefix, request.runtimeId)), prepare(request.image)])
+    const [newestSnapshot] = snapshotKey && !personal ? await snapshotVolumesOf(snapshotKey) : []
     await docker(
       'POST',
       `/containers/create?name=${containerNameOf(prefix, request.runtimeId)}`,
-      containerBodyOf({ prefix, ...request, personal }),
+      containerBodyOf({ prefix, ...request, snapshotVolume: newestSnapshot?.name, personal }),
     )
   }
   const run = async (command: Command) => {
     if (command.op === 'prepare') return void (await prepare(command.image))
     if (command.op === 'list') return runtimeIdsOf(true)
+    if (command.op === 'prune_snapshots') {
+      if (personal) throw new Refused('snapshots are taken only on a workspace host')
+      return removeSnapshots((key, isNewest) => !command.keep.includes(key) || !isNewest)
+    }
+    if (command.op === 'snapshot') return snapshot(command.runtimeId, command.snapshotKey)
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
     if (command.op === 'recreate') {
@@ -320,6 +463,7 @@ export const createCommandRunner = ({
       return removeNetwork(network)
     }
     if (container) await docker('DELETE', `/containers/${name}?force=true`)
+    await docker('DELETE', `/containers/${snapshotCopierOf(name)}?force=true`).catch(ignoringMissing)
     for (const suffix of Object.keys(volumeTargets))
       await docker('DELETE', `/volumes/${name}-${suffix}`).catch(ignoringMissing)
     await removeNetwork(network)

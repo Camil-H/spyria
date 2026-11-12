@@ -11,11 +11,13 @@ export const discardUnknownRuntimes = async (
   { workspaceId, hostId }: Input,
 ) => {
   const runtimeIdsOnHost = await provider.runtimeIdsOn({ workspaceId, hostId })
-  const known = await transactor.run(({ runtimes }) => runtimes.findByIds(workspaceId, runtimeIdsOnHost))
+  const { known, warmIds } = await transactor.run(async ({ runtimes, warmRuntimes }) => ({
+    known: await runtimes.findByIds(workspaceId, runtimeIdsOnHost),
+    warmIds: new Set((await warmRuntimes.findByIds(workspaceId, runtimeIdsOnHost)).map(({ id }) => id as string)),
+  }))
+  const notWarm = runtimeIdsOnHost.filter((runtimeId) => !warmIds.has(runtimeId))
   const removals = await Promise.allSettled(
-    unknownRuntimeIdsOf(runtimeIdsOnHost, known).map((runtimeId) =>
-      provider.remove({ workspaceId, hostId, runtimeId }),
-    ),
+    unknownRuntimeIdsOf(notWarm, known).map((runtimeId) => provider.remove({ workspaceId, hostId, runtimeId })),
   )
   const failed = removals.find((removal) => removal.status === 'rejected')
   if (failed) throw failed.reason
