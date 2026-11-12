@@ -6,6 +6,7 @@ type Problem = string
 
 const expectedServices = ['postgres', 'server', 'zero-cache', 'gateway']
 const loopbackAddresses = ['127.0.0.1', '::1']
+const everyAddress = ['', '0.0.0.0', '::']
 const minimumSecretLength = 32
 const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 
@@ -38,7 +39,7 @@ export const publishedPortProblemsOf = (states: readonly ServiceState[]): Proble
         .filter(({ URL = '', PublishedPort = 0 }) => PublishedPort > 0 && !loopbackAddresses.includes(URL))
         .map(
           ({ URL, PublishedPort }) =>
-            `${Service} publishes port ${PublishedPort} on ${URL || 'every address'}, reachable from other machines: publish it on 127.0.0.1 only`,
+            `${Service} publishes port ${PublishedPort} on ${everyAddress.includes(URL ?? '') ? 'every address' : URL}, reachable from other machines: publish it on 127.0.0.1 only`,
         ),
     ),
   ),
@@ -46,7 +47,7 @@ export const publishedPortProblemsOf = (states: readonly ServiceState[]): Proble
 
 export const environmentFileModeProblemOf = (mode: number): Problem | undefined =>
   (mode & 0o077) !== 0
-    ? `.env is readable by other users of this machine (mode ${(mode & 0o777).toString(8)}): run chmod 600 on it`
+    ? `.env is open to other users of this machine (mode ${(mode & 0o777).toString(8)}): run chmod 600 on it`
     : undefined
 
 export const credentialProblemsOf = (environment: Environment): Problem[] => [
@@ -54,7 +55,7 @@ export const credentialProblemsOf = (environment: Environment): Problem[] => [
     const value = environment[name] ?? ''
     if (value === '') return [`${name} is missing from .env: run spyria setup again, which generates it`]
     if (value.length < minimumSecretLength || isDevelopmentDefault(value))
-      return [`${name} is a default or short value: give it a random one of at least ${minimumSecretLength} characters`]
+      return [`${name} is a default or short value: replace it as the troubleshooting guide shows`]
     return []
   }),
   ...(isDevelopmentDefault(environment.SPYRIA_GATEWAY_ADMIN_USER ?? '')
