@@ -165,17 +165,17 @@ await testDatabase.database.$client`
   from messages message cross join (values (${alice}), (${bob}), (${lee})) as reader (user_id)
   where message.workspace_id = ${acme} and message.id in ('message-welcome-1', 'message-invoice-1')`
 await testDatabase.database.$client`
-  insert into workspace_connections (workspace_id, id, name, gateway_name, url, header_name, tools, allowed_tools)
-  values (${acme}, 'connection-acme-crm', 'CRM', 'crm_api001', 'http://crm/mcp', null, '[]', '["lookup"]'),
-    (${globex}, 'connection-globex-erp', 'ERP', 'erp_api001', 'http://erp/mcp', null, '[]', '[]')`
+  insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, header_name, tools, allowed_tools)
+  values (${acme}, 'connection-acme-crm', 'CRM', 'crm_api001', 'http://crm/mcp', 'shared', null, '[]', '["lookup"]'),
+    (${acme}, 'connection-acme-docs', 'Docs', 'docs_api001', 'http://docs/mcp', 'member', null, '[]', '["search"]'),
+    (${globex}, 'connection-globex-erp', 'ERP', 'erp_api001', 'http://erp/mcp', 'shared', null, '[]', '[]')`
 await testDatabase.database.$client`
   insert into connection_restrictions (workspace_id, connection_id, user_id, allowed_tools)
   values (${acme}, 'connection-acme-crm', ${bob}, '["lookup"]'), (${acme}, 'connection-acme-crm', ${lee}, '[]')`
 await testDatabase.database.$client`
-  insert into tool_connections (workspace_id, user_id, tool, status, position)
-  values (${acme}, ${alice}, 'Notion', 'Needs reconnection', 3), (${acme}, ${alice}, 'GitHub', 'Connected', 1),
-    (${acme}, ${alice}, 'Slack', 'Connected', 2),
-    (${acme}, ${bob}, 'Linear', 'Connected', 0)`
+  insert into tool_connections (workspace_id, user_id, connection_id, status)
+  values (${acme}, ${alice}, 'connection-acme-docs', 'Needs reconnection'),
+    (${acme}, ${bob}, 'connection-acme-docs', 'Connected')`
 const rowsByReader = new Map(
   await Promise.all(
     readers.map(async (reader) => [reader.name, await readAll(reader.workspace, reader.user)] as const),
@@ -305,7 +305,7 @@ test('workspace connections are visible to every member of their workspace, a re
       ?.get(table)
       ?.map((row) => row[column])
   for (const reader of ['Alice in Acme', 'Bob in Acme', 'Lee in Acme'])
-    expect(columnOf(reader, 'workspace_connections', 'name')).toEqual(['CRM'])
+    expect(columnOf(reader, 'workspace_connections', 'name')).toEqual(['CRM', 'Docs'])
   expect(columnOf('Alice in Globex', 'workspace_connections', 'name')).toEqual(['ERP'])
   expect(columnOf('Alice in Acme', 'connection_restrictions', 'user_id')?.toSorted()).toEqual([bob, lee])
   expect(columnOf('Bob in Acme', 'connection_restrictions', 'user_id')).toEqual([bob])
@@ -313,7 +313,7 @@ test('workspace connections are visible to every member of their workspace, a re
   expect(columnOf('Alice in Globex', 'connection_restrictions', 'user_id')).toEqual([])
 })
 
-test('personal connections are visible to their member and to participants of the chats they own, not to every reader of a public channel', () => {
+test('a member’s tool sign-ins are visible to them and to participants of the chats they own, not to every reader of a public channel', () => {
   const ownersOf = (reader: string) => [
     ...new Set(
       rowsByReader
@@ -365,16 +365,6 @@ test('an ownership change shows the restriction of Bob to the participants of a 
   expect(await restrictedOf(acme, lee)).toEqual([lee])
   expect(await restrictedOf(acme, bob)).toEqual([bob])
   expect(await restrictedOf(acme, alice)).toEqual([bob, lee])
-})
-
-test('the connections keep their position order', () => {
-  expect(
-    rowsByReader
-      .get('Alice in Acme')
-      ?.get('tool_connections')
-      ?.filter((row) => row.user_id === alice)
-      .map((row) => row.tool),
-  ).toEqual(['GitHub', 'Slack', 'Notion'])
 })
 
 test('crafted query arguments cannot reach another workspace or member', async () => {

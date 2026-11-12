@@ -484,6 +484,17 @@ test("an ACP harness whose Claude process dies mid-turn is restarted: the turn e
   }
 })
 
+test('a restart notice leaves out a command the agent asked to run, which a member cannot, and asks to restart the session instead', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:die-asking-command')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toEqual([
+    'The agent restarted; send your message again. If it happens again, restart the session',
+  ])
+})
+
 test('a session found dead before any output is restarted and the prompt is sent once more', async () => {
   const { open, create, prompt } = started()
   const id = await create(launchOf())
@@ -597,6 +608,23 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
   await prompt(id, 'hello')
   await socket.until(kindOf('turn_end'))
   expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('end_turn')
+})
+
+test('a conversation deleted while its timed-out adapter is still stopping logs no failure', async () => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    const { call, create } = started({ requestTimeoutMilliseconds: 300 })
+    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=1500'))
+    const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
+    await Bun.sleep(700)
+    expect((await call('DELETE', `/api/conversations/${id}`)).status).toBe(200)
+    await switching
+    await Bun.sleep(200)
+    expect(lines.filter((line) => line['event.name'] === 'agent.adapter_failed')).toStrictEqual([])
+  } finally {
+    await telemetry.shutdown()
+  }
 })
 
 test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {

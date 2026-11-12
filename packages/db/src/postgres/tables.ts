@@ -29,6 +29,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { defineRelations } from 'drizzle-orm/relations'
 import type {
+  ConnectionSignIn,
   MessageAttachment,
   MessageStep,
   RuntimeFailure,
@@ -573,11 +574,13 @@ export const workspaceConnections = table(
     name: text().notNull(),
     gatewayName: text().notNull().unique(),
     url: text().notNull(),
+    signIn: text().$type<ConnectionSignIn>().notNull(),
+    setupId: text(),
     headerName: text(),
     tools: jsonb().$type<ConnectionTool[]>().notNull(),
     allowedTools: jsonb().$type<string[]>().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.id] })],
+  (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), unique().on(table.workspaceId, table.name)],
 )
 
 export const connectionRestrictions = table(
@@ -603,13 +606,16 @@ export const toolConnections = table(
   {
     ...tenant,
     userId: text().notNull(),
-    tool: text().notNull(),
+    connectionId: text().notNull(),
     status: text().notNull(),
-    position: integer().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.userId, table.tool] }),
-    unique().on(table.workspaceId, table.userId, table.position),
+    primaryKey({ columns: [table.workspaceId, table.userId, table.connectionId] }),
+    index().on(table.workspaceId, table.connectionId),
+    tenantReference(
+      [table.workspaceId, table.connectionId],
+      [workspaceConnections.workspaceId, workspaceConnections.id],
+    ).onDelete('cascade'),
     memberReference(table, table.userId),
   ],
 )

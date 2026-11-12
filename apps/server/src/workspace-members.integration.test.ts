@@ -162,7 +162,7 @@ test('removing a member ends their sessions, participations, keys and connection
   const [gatewayKey] = await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${bob}`
   const virtualKeyId = String(gatewayKey?.virtual_key_id)
   await database.$client`
-    insert into tool_connections (workspace_id, user_id, tool, status, position) values (${acme}, ${bob}, 'fake', 'connected', 1)`
+    insert into tool_connections (workspace_id, user_id, connection_id, status) values (${acme}, ${bob}, 'connection-fake', 'Connected')`
   await database.$client`
     insert into connection_restrictions (workspace_id, connection_id, user_id, allowed_tools)
     values (${acme}, 'connection-crm', ${bob}, '["lookup"]')`

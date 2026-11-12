@@ -6,12 +6,14 @@ import { acme, alice, bob, lee } from '@spyria/db'
 import { type Database, events, jobs, resetDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import {
+  catalogueTestSignInServers,
   createTestDatabase,
   prepareSeededGatewayKeys,
   shareTestCrm,
   startTestGateway,
   startZeroCache,
   testGatewayAdmin,
+  testSignInServers,
 } from '@spyria/db/testing'
 import {
   type ChatId,
@@ -183,6 +185,7 @@ const integrationGatewayPort = 4880
 const integrationAppPort = 4882
 const integrationFakeMcpPort = 4883
 export const sharedMcpUrl = `http://host.docker.internal:${integrationFakeMcpPort}/shared/mcp`
+export const memberMcpUrl = `http://host.docker.internal:${integrationFakeMcpPort}/mcp`
 export const llmGatewayAt = (url: string) =>
   createLlmGateway({ url, adminUser: testGatewayAdmin.user, adminPassword: testGatewayAdmin.password })
 
@@ -246,15 +249,7 @@ const startSharedTestApp = async () => {
     await stopServerAndDatabase()
     throw zeroCache.status === 'rejected' ? zeroCache.reason : (gateway as PromiseRejectedResult).reason
   }
-  await llmGateway.setUpToolServer(
-    { name: 'fake', url: `http://host.docker.internal:${fakeMcpServer.port}/mcp` },
-    logInToFakeToolServer(llmGateway),
-  )
-  await llmGateway.setUpToolServer({
-    name: sharedToolServer,
-    url: `http://host.docker.internal:${fakeMcpServer.port}/shared/mcp`,
-    isShared: true,
-  })
+  await setUpTestToolServers(llmGateway, `http://host.docker.internal:${fakeMcpServer.port}`)
   const resultOf = (member: { workspaceId: string; userId: string }, name: string, args: Record<string, unknown>) =>
     requestMutation(app, database, member, name, args)
   const eventsOf = async (chatId: string) =>
@@ -305,6 +300,7 @@ export const openSharedTestApp = async () => {
   await resetDatabase(testApp.database, async (transaction) => {
     await writeSeededGatewayKeys(transaction)
     await shareTestCrm(transaction)
+    await catalogueTestSignInServers(transaction)
   })
   if (testApp.llmGateway.listedModels().length === 0) await testApp.llmGateway.refreshListedModels()
   return testApp
@@ -817,6 +813,19 @@ export const asMember = async (userId: string, method: string, path: string, bod
   })
   return { status: response.status, body: await response.text() }
 }
+export const setUpTestToolServers = async (gateway: ReturnType<typeof createLlmGateway>, fakeMcpOrigin: string) => {
+  const existing = (await gateway.toolServers()).map(({ name }) => name)
+  for (const { gatewayName } of testSignInServers.filter(({ gatewayName }) => !existing.includes(gatewayName))) {
+    const { setupId, authorizeUrl } = await gateway.startMemberToolServer({
+      name: gatewayName,
+      url: `${fakeMcpOrigin}/mcp`,
+    })
+    await logInToFakeToolServer(gateway)(authorizeUrl)
+    await gateway.finishMemberToolServer(gatewayName, setupId)
+  }
+  if (!existing.includes(sharedToolServer))
+    await gateway.addToolServer({ name: sharedToolServer, url: `${fakeMcpOrigin}/shared/mcp` })
+}
 export const logInToFakeToolServer =
   (gateway: { finishToolConsent(callbackQuery: string): Promise<boolean> }) => async (authorizeUrl: string) => {
     const authorized = await fetch(authorizeUrl, { redirect: 'manual' })
@@ -844,7 +853,10 @@ export const connectionRows = async () => [
   ...(await (
     await openedTestApp()
   ).database.$client`
-    select user_id, tool, status from tool_connections where tool = 'fake'`),
+    select signed_in.user_id, connection.name as tool, signed_in.status
+    from tool_connections signed_in join workspace_connections connection
+      on connection.workspace_id = signed_in.workspace_id and connection.id = signed_in.connection_id
+    where connection.id = 'connection-fake'`),
 ]
 export const rpcOf = (method: string, params: object = {}) => JSON.stringify({ jsonrpc: '2.0', id: 7, method, params })
 export const mcpCall = async (

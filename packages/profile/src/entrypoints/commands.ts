@@ -11,7 +11,7 @@ type ConnectionCommand<Input> = Command<Input & { connectionId: string }>
 
 export type ProfileCommands = {
   addWorkspaceConnection: Command<ConnectionInput>
-  editWorkspaceConnection: ConnectionCommand<ConnectionInput>
+  editWorkspaceConnection: ConnectionCommand<Omit<ConnectionInput, 'signIn'>>
   removeWorkspaceConnection: ConnectionCommand<object>
   allowConnectionTools: ConnectionCommand<{ allowedTools: string[] }>
   restrictConnectionMember: ConnectionCommand<{ memberId: MemberId; allowedTools: string[] | null }>
@@ -21,7 +21,6 @@ export type ProfileCommands = {
   setAiProviders: Command<{ allowList: AiProviderAllowList | null }>
   connectTool: Command<{ tool: string }>
   disconnectTool: Command<{ tool: string }>
-  availableTools: (input: { workspaceId: WorkspaceId }) => Promise<string[]>
   checkTools: Command<object>
   addLlmCredential: Command<{ provider: string; secret: Secret }>
   readGitHubConnection: (input: { workspaceId: WorkspaceId }) => Promise<GitHubConnection>

@@ -58,7 +58,7 @@ A context exposes up to three entries in its `package.json`:
 | `workspace` | The organization: workspaces, members, roles, projects, the chat list, sign-in settings and integrations set up by admins. |
 | `conversation` | Everything inside a chat: messages, threads and the agent's turns. |
 | `runtime` | Where agents run: runtime hosts, members' own machines and the runtimes on them. |
-| `profile` | What belongs to one member: their profile, keys and personal connections. |
+| `profile` | What belongs to one member: their profile, keys and tool sign-ins, and the workspace's tools catalogue. |
 | `usage` | Metering: usage, spend, budgets and the audit log. |
 | `onboarding` | The setup checklist: the tasks each member sees, which are done for good and which they skipped. It owns only its records and reads the facts it checks (a GitHub App, a key…) through the shared Zero schema. |
 | `panel` | The chat's side panel, a read-only view over the other contexts' data. |

@@ -209,22 +209,7 @@ Webhooks arrive on `/api/github/webhooks`; Spyria checks each delivery's `X-Hub-
 
 ## Tool servers in the gateway
 
-Members connect tools (MCP servers) in **Profile > Tool connections**; their OAuth tokens stay in the gateway. A tool server is set up once per deployment by an operator before members see it. The setup prints a login URL: log in once with your own account (the gateway uses it only to discover the server's tools), approve, then press Enter. When a member connects, Spyria first deletes the member's sign-in to that server and checks none is left, then starts a new one by calling a tool the server marks read-only, or its first tool when it marks none. With no sign-in, the gateway asks for one before the call reaches the server.
-
-- **GitHub:** create a GitHub OAuth App with the callback URL `<origin>/gateway-oauth/api/oauth/callback`, then run:
-
-  ```sh
-  docker compose --env-file .env.prod -f compose.prod.yml exec \
-    -e GITHUB_MCP_CLIENT_ID=<client id> -e GITHUB_MCP_CLIENT_SECRET=<client secret> \
-    server bun apps/server/src/operator-cli.ts tools-setup github
-  ```
-
-  The scopes are `repo read:org read:user`. The secret goes to the gateway, encrypted there, never to Spyria's database.
-- **Notion:** nothing to register:
-
-  ```sh
-  docker compose --env-file .env.prod -f compose.prod.yml exec server bun apps/server/src/operator-cli.ts tools-setup notion
-  ```
+Admins add tool servers (MCP) to each workspace's catalogue in **Workspace settings > Tools**, and members connect those they sign in to in **Profile > Tool connections**; their OAuth tokens stay in the gateway (see [Admin](../features/admin.md#tools)). Nothing is set up per deployment. The OAuth redirect goes through `<origin>/gateway-oauth/api/oauth/callback`. When a member connects, Spyria first deletes the member's sign-in to that server and checks none is left, then starts a new one by calling one of the tools the member may use, a read-only one when the server marks any. With no sign-in, the gateway asks for one before the call reaches the server. A server members sign in to must let the gateway register itself (OAuth dynamic client registration), as Notion's does; one that needs a pre-registered OAuth app, such as GitHub's, cannot be added yet.
 
 ## Upgrading
 

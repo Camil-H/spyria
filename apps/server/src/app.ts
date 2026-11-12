@@ -44,7 +44,6 @@ import {
 import { onboardingMutators } from '@spyria/onboarding/server'
 import {
   addLlmCredentialFromRequest,
-  availableToolsFromRequest,
   checkToolConnectionsFromRequest,
   type createLlmGateway,
   createMemberKeyReader,
@@ -709,9 +708,6 @@ export const createApp = ({
         ownBudgetFromRequest(context.get('transact'), context.get('zeroContext')),
       ),
     )
-    .get(toolConnectionsPath, () =>
-      endpointResponse('Listing tool servers', 200, () => availableToolsFromRequest(gatewayOf())),
-    )
     .post(`${toolConnectionsPath}/check`, (context) =>
       endpointResponse('Checking tool connections', 204, () =>
         checkToolConnectionsFromRequest(context.get('transact'), context.get('zeroContext'), gatewayOf()),
@@ -730,7 +726,7 @@ export const createApp = ({
       )
     })
     .post(workspaceConnectionsPath, (context) => workspaceConnectionResponse(context, 'add', ''))
-    .post(`${workspaceConnectionsPath}/:connectionId/:action{edit|remove|tools|restrict}`, (context) =>
+    .post(`${workspaceConnectionsPath}/:connectionId/:action{edit|remove|tools|restrict|finish}`, (context) =>
       workspaceConnectionResponse(context, context.req.param('action'), context.req.param('connectionId')),
     )
     .get(ssoSettingsPath, (context) =>
