@@ -258,12 +258,12 @@ export const lockRuntimeHostLoads = (tx: Transaction, workspaceId: string, chatI
     tx,
     `${hostLoads} and owner_id is not distinct from
        (select case when local_session then owner_user_id end from chats where workspace_id = $1 and id = $2)
-     for update`,
+     order by id for update`,
     [workspaceId, chatId],
   )
 
 export const lockWorkspaceHostLoads = (tx: Transaction, workspaceId: string) =>
-  onServer<HostLoadRow>(tx, `${hostLoads} and owner_id is null for update`, [workspaceId])
+  onServer<HostLoadRow>(tx, `${hostLoads} and owner_id is null order by id for update`, [workspaceId])
 
 export type WarmRuntimeRow = {
   workspaceId: string
@@ -286,10 +286,11 @@ const warmRuntimeColumns = `workspace_id as "workspaceId", id, repository, setup
   (extract(epoch from created_at) * 1000)::float8 as "createdAt",
   (extract(epoch from state_changed_at) * 1000)::float8 as "stateChangedAt"`
 const warmRuntimeLocks = {
-  all: 'true for update',
+  all: 'true order by id for update',
   id: 'id = $2 for update',
-  ready: "repository = $2 and state = 'ready' order by created_at for update skip locked",
-  host: 'host_id = $2 for update',
+  claimable: `repository = $2 and base_branch = $3 and setup_command = $4 and image = $5 and state = 'ready'
+    order by created_at limit 1 for update skip locked`,
+  host: 'host_id = $2 order by id for update',
 }
 
 export const lockWarmRuntimes = (

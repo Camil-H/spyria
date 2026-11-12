@@ -321,3 +321,21 @@ test('a warm-up job never removes the container of a runtime a chat owns', async
   expect(removedOn(host, id)).toBe(false)
   expect(host.containers.get(id)?.running).toBe(true)
 })
+
+test('two dev chats starting at once each take a ready runtime, and chats that take none never deadlock with a fill', async () => {
+  const agent = preparingAgent()
+  agent.finish({ state: 'ready', branch: 'main', isSetUp: false })
+  await fakeHost('Busy host', { memoryGibibytes: 16, containerAgent: agent.containerAgent })
+  await warmJobsSettled()
+  await keepReady([{ repository: 'acme/app', command: 'bun install', warmRuntimes: 2 }])
+  await fill()
+  await warmIn('ready', 2)
+  const ready = (await warmRuntimes()).map(({ id }) => id)
+  const [first, second] = await Promise.all([ensure(await devChat('acme/app')), ensure(await devChat('acme/app'))])
+  expect([String(first?.id), String(second?.id)].toSorted()).toEqual(ready.toSorted())
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const [placed] = await Promise.all([ensure(await devChat('acme/app', 'develop')), fill()])
+    expect(placed).toMatchObject({ state: 'creating' })
+  }
+})

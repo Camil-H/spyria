@@ -55,7 +55,7 @@ export type RuntimeRepository = {
 export type WarmRuntimeRepository = {
   lockAll(workspaceId: WorkspaceId): Promise<WarmRuntime[]>
   lock(workspaceId: WorkspaceId, id: RuntimeId): Promise<WarmRuntime | undefined>
-  lockReady(workspaceId: WorkspaceId, repository: string): Promise<WarmRuntime[]>
+  lockClaimable(workspaceId: WorkspaceId, scope: ClaimScope, image: string): Promise<WarmRuntime | undefined>
   lockOnHost(workspaceId: WorkspaceId, hostId: RuntimeHostId): Promise<WarmRuntime[]>
   findByIds(workspaceId: WorkspaceId, ids: readonly string[]): Promise<WarmRuntime[]>
   add(warm: WarmRuntime): Promise<void>
