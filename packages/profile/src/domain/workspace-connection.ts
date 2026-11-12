@@ -2,6 +2,9 @@ import {
   type AccessLevel,
   accessLevels,
   type ConnectionTool,
+  githubConnectionId,
+  githubServerName,
+  githubTools,
   grantedToolsOf,
   isAllowedAtLevel,
   type MemberId,
@@ -134,3 +137,16 @@ export const requireListedTools = (connection: WorkspaceConnection) => {
     throw new InvalidConnection(`Finish signing in to ${connection.name} first: its tools are not listed yet`)
   return connection
 }
+
+export const githubConnectionIn = (workspaceId: WorkspaceId): WorkspaceConnection => ({
+  workspaceId,
+  id: githubConnectionId,
+  name: githubServerName,
+  gatewayName: githubConnectionId,
+  url: '',
+  signIn: connectionSignIns.member,
+  setupId: null,
+  headerName: null,
+  tools: githubTools.map(({ name, readOnly, destructive }) => ({ name, readOnly, destructive })),
+  isReviewed: true,
+})

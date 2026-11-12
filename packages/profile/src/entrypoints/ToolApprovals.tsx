@@ -9,7 +9,7 @@ import {
   type WorkspaceId,
 } from '@spyria/kernel'
 import { ErrorMessage, fieldClass, labelClass, useGuardedAction } from '@spyria/ui'
-import type { ConnectionSignIn } from '../domain/workspace-connection.ts'
+import { type ConnectionSignIn, connectionSignIns } from '../domain/workspace-connection.ts'
 import { useProfileCommands } from './providers.tsx'
 import { ToolList } from './ToolList.tsx'
 
@@ -67,8 +67,10 @@ export const ToolApprovals = ({
       className="flex flex-col gap-3 rounded-md border border-line p-2"
     >
       <p className="text-muted">
-        Choose which calls wait for your approval before they run on your chats. Read tools default to Never, and tools
-        the server marks destructive to Always.
+        {server.signIn === connectionSignIns.member
+          ? 'Choose which calls wait for your approval before they run with your account, on your prompts in any chat.'
+          : 'Choose which calls wait for your approval before they run in the chats you own, whoever prompts.'}{' '}
+        Read tools default to Never, and tools the server marks destructive to Always.
       </p>
       <div className={`${labelClass} w-fit`}>
         Write tools of {server.name}
