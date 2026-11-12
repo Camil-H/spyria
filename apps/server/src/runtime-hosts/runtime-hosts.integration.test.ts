@@ -393,6 +393,47 @@ test('a host gets a request body and answers in base64 chunks, and its stream is
   expect(received.map((data) => data.length)).toEqual([400_000, 200_000])
 })
 
+test('a host cannot answer another host’s requests or streams, an unknown status is refused, and a malformed frame closes only its own connection', async () => {
+  const { id: trustedId, host: trusted } = await pairedHost('Trusted host')
+  const { id: forgerId, host: forger } = await pairedHost('Forging host')
+  const sandbox = { workspaceId: acme, hostId: runtimeHostId(trustedId), runtimeId: 'trusted-runtime' }
+  const transport = gateway.sandboxProvider.connect(sandbox)
+
+  const relayed = transport.fetch({ method: 'GET', path: '/api/conversations' })
+  const { frame: request } = (await trusted.frameOrClose('http_end')) as { frame: Frame }
+  forger.send({ type: 'http_res', sid: request.sid, status: 200, headers: {}, body: 'forged' })
+  await Bun.sleep(100)
+  trusted.send({ type: 'http_res', sid: request.sid, status: 200, headers: {}, body: 'genuine' })
+  expect((await relayed).body).toBe('genuine')
+
+  const received: string[] = []
+  transport.openSocket('/sockets/events/trusted-runtime', {
+    onOpen: () => {},
+    onMessage: (data) => received.push(data),
+    onClose: () => {},
+  })
+  const { frame: connect } = (await trusted.frameOrClose('ws_connect')) as { frame: Frame }
+  forger.send({ type: 'ws_open', sid: connect.sid })
+  forger.send({ type: 'ws_msg', sid: connect.sid, data: 'forged event' })
+  trusted.send({ type: 'ws_open', sid: connect.sid })
+  trusted.send({ type: 'ws_msg', sid: connect.sid, data: 'genuine event' })
+  await waitFor(() => received.length > 0)
+  await Bun.sleep(100)
+  expect(received).toEqual(['genuine event'])
+
+  const status = gateway.sandboxProvider.status(sandbox)
+  await waitFor(() => trusted.frames.some((frame) => frame.op === 'status'))
+  const statusCommand = trusted.frames.find((frame) => frame.op === 'status')
+  trusted.send({ type: 'res', id: statusCommand?.id, data: { running: true } })
+  expect((await rejectionOf(status)).message).toBe(`Runtime host ${trustedId} answered an unknown status`)
+
+  forger.send({ type: 'http_res', sid: request.sid, status: '200', headers: {}, body: '' })
+  expect(await forger.closed).toEqual({ code: 1008, reason: 'Invalid frame' })
+  await waitFor(async () => (await hostRow(forgerId)).status === 'offline')
+  expect(trusted.socket.readyState).toBe(WebSocket.OPEN)
+  expect((await hostRow(trustedId)).status).toBe('online')
+})
+
 test('closing the connection marks the host offline', async () => {
   const { id, host } = await pairedHost()
   host.socket.close()
