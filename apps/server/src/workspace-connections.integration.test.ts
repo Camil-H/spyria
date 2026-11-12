@@ -557,7 +557,7 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
 test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
   const host = await fakeHost('Chat tool switch host')
   const { chatId, token } = await runtimeTurn(host, alice)
-  const [ledger, billing] = [await register('Ledger'), await register('Billing')]
+  const [ledger, billing] = [await register('Payroll'), await register('Invoicing')]
   await openToEveryRole(ledger.connectionId)
   await openToEveryRole(billing.connectionId)
   const ledgerName = (await connectionRow(ledger.connectionId))?.gatewayName ?? ''
@@ -595,7 +595,7 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   expect(await listedServers()).toContain(billingName)
   const refused = await mcpCall(host, token, rpcOf('tools/call', { name: `${ledgerName}-lookup`, arguments: {} }))
   expect(refused.result).toMatchObject({ isError: true })
-  expect(textOf(refused.result)).toBe('Ledger is off for this chat')
+  expect(textOf(refused.result)).toBe('Payroll is off for this chat')
   const billed = await mcpCall(host, token, rpcOf('tools/call', { name: `${billingName}-lookup`, arguments: {} }))
   expect(textOf(billed.result)).toBe('ran lookup')
   expect([
