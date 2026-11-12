@@ -11,7 +11,12 @@ export type GitHubSettingsInput = {
 export type GitHubSettings = { appId: string; clientId: string }
 export type GitHubSecrets = Required<Pick<GitHubSettingsInput, 'clientSecret' | 'privateKey' | 'webhookSecret'>>
 export type GitHubRepository = { fullName: string; defaultBranch: string }
-export type GitHubSettingsView = GitHubSettings & { repositories: GitHubRepository[]; listingFailure: string | null }
+export type GitHubMemberAccount = { name: string; login: string | null; needsReconnection: boolean }
+export type GitHubSettingsView = GitHubSettings & {
+  repositories: GitHubRepository[]
+  listingFailure: string | null
+  memberAccounts: GitHubMemberAccount[]
+}
 export type DevChatInput = {
   name: string
   projectId: string | null

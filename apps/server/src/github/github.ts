@@ -13,6 +13,7 @@ import type { Database } from '@spyria/db/postgres'
 import { DomainError, log, memberActor, memberId } from '@spyria/kernel'
 import {
   enteredSecretsOf,
+  type GitHubMemberAccount,
   GitHubNotConfigured,
   GitHubPermissionMissing,
   GitHubRefused,
@@ -189,6 +190,14 @@ export const isGitHubConfigured = async (database: Database, member: Member) => 
   return (await appRowOf(database, member.workspaceId)) !== undefined
 }
 
+const memberAccountsOf = (database: Database, workspaceId: string) =>
+  database.$client<GitHubMemberAccount[]>`
+    select m.display_name as name, g.login, coalesce(g.needs_reconnection, false) as "needsReconnection"
+    from memberships m
+    left join github_connections g on g.workspace_id = m.workspace_id and g.user_id = m.user_id
+    where m.workspace_id = ${workspaceId} and m.removed_at is null
+    order by m.display_name`
+
 export const readGitHubSettings = async (
   database: Database,
   dependencies: GitHubDependencies,
@@ -201,7 +210,12 @@ export const readGitHubSettings = async (
     (repositories) => ({ repositories, listingFailure: null }),
     (error: Error) => ({ repositories: [], listingFailure: error.message }),
   )
-  return { appId: row.appId, clientId: row.clientId, ...listing }
+  return {
+    appId: row.appId,
+    clientId: row.clientId,
+    ...listing,
+    memberAccounts: [...(await memberAccountsOf(database, member.workspaceId))],
+  }
 }
 
 export const saveGitHubSettings = async (
