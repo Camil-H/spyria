@@ -16,7 +16,6 @@ export type ProfileCommands = {
   removeWorkspaceConnection: ConnectionCommand<object>
   reviewConnectionTools: ConnectionCommand<{ markings: ToolMarking[] }>
   setConnectionAccess: ConnectionCommand<AccessInput>
-  setConnectionCodeMode: ConnectionCommand<{ isOn: boolean }>
   setToolApproval: ConnectionCommand<{ tool: string | null; approval: ToolApproval | null }>
   renameMember: Command<{ name: DisplayName }>
   changeAvatar: Command<{ avatar: Avatar | null }>

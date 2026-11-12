@@ -295,10 +295,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       isSkipped: skippedAt != null,
     }),
   )
-  const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => ({
-    ...connection,
-    codeMode: connection.codeMode ?? false,
-  }))
+  const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
   const connectionAccessOf = mappedRows(({ userId, ...access }: ZeroRows['connectionAccess'][number]) => ({
     ...access,
     memberId: userId,

@@ -77,7 +77,6 @@ export type PiLaunch = Readonly<{
   models: readonly PiModel[]
   compactionModel: string
   compaction?: Readonly<{ reserveTokens: number; keepRecentTokens: number }>
-  codeModeServers?: readonly string[]
 }>
 export type SubConversation = Readonly<{ parentConversationId: string }>
 export type RepositoryCheckout = Readonly<{

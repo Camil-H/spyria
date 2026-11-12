@@ -598,7 +598,6 @@ export const workspaceConnections = table(
     headerName: text(),
     tools: jsonb().$type<ConnectionTool[]>().notNull(),
     isReviewed: boolean().notNull(),
-    codeMode: boolean().notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.id] }), unique().on(table.workspaceId, table.name)],
 )

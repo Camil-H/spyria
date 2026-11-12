@@ -59,17 +59,10 @@ const register = async (name: string, secret?: string, url = sharedMcpUrl) => {
 const connectionRow = async (connectionId: string) =>
   (
     await database.$client<
-      {
-        name: string
-        gatewayName: string
-        signIn: string
-        setupId: string | null
-        headerName: string | null
-        codeMode: boolean
-      }[]
+      { name: string; gatewayName: string; signIn: string; setupId: string | null; headerName: string | null }[]
     >`
       select name, gateway_name as "gatewayName", sign_in as "signIn", setup_id as "setupId", header_name as "headerName",
-        tools, is_reviewed as "isReviewed", code_mode as "codeMode"
+        tools, is_reviewed as "isReviewed"
       from workspace_connections where id = ${connectionId}`
   )[0]
 const accessPath = (connectionId: string) => `${connectionsPath}/${connectionId}/access`
@@ -559,24 +552,6 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
   closing.abort()
   await stream
-})
-
-test('a member who manages the tools catalogue puts a server in code mode, recorded for the audit, and a member without that right is refused', async () => {
-  const { connectionId } = await register('Errors')
-  await openToEveryRole(connectionId)
-  const switchCodeMode = (memberId: string, isOn: boolean) =>
-    asMember(memberId, 'POST', `${connectionsPath}/${connectionId}/code-mode`, { isOn })
-  expect((await switchCodeMode(bob, true)).status).toBe(403)
-  expect((await connectionRow(connectionId))?.codeMode).toBe(false)
-  expect((await switchCodeMode(alice, true)).status).toBe(200)
-  expect((await connectionRow(connectionId))?.codeMode).toBe(true)
-  expect((await workspaceEventsOf(database)).at(-1)).toEqual({
-    type: 'connection.code_mode_changed',
-    actorId: alice,
-    payload: { connectionId, name: 'Errors', codeMode: true },
-  })
-  expect((await switchCodeMode(alice, false)).status).toBe(200)
-  expect((await connectionRow(connectionId))?.codeMode).toBe(false)
 })
 
 test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
