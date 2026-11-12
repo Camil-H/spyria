@@ -584,11 +584,28 @@ type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
 export const testCrmConnection = { id: 'connection-crm', name: 'CRM', gatewayName: 'crm' }
 export const shareTestCrm = (writer: SeedWriter) =>
   writer.execute(
-    sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, header_name, tools, allowed_tools)
+    sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, header_name, tools, allowed_tools)
       values (${aliceSeededCredential.workspaceId}, ${testCrmConnection.id}, ${testCrmConnection.name},
-        ${testCrmConnection.gatewayName}, 'http://fake-mcp/shared/mcp', null,
+        ${testCrmConnection.gatewayName}, 'http://fake-mcp/shared/mcp', 'shared', null,
         '[{"name":"lookup","readOnly":true},{"name":"update","readOnly":false}]', '["lookup","update"]')`,
   )
+
+export const testSignInServers = [
+  ...['fake', 'GitHub', 'Slack', 'Notion', 'Linear'].map((name) => ({
+    workspaceId: aliceSeededCredential.workspaceId,
+    name,
+    gatewayName: name,
+  })),
+  { workspaceId: 'workspace-globex', name: 'fake', gatewayName: 'fakeglobex' },
+]
+export const catalogueTestSignInServers = async (writer: SeedWriter) => {
+  for (const { workspaceId, name, gatewayName } of testSignInServers)
+    await writer.execute(
+      sql`insert into workspace_connections (workspace_id, id, name, gateway_name, url, sign_in, tools, allowed_tools)
+        values (${workspaceId}, ${`connection-${gatewayName}`}, ${name}, ${gatewayName}, 'http://fake-mcp/mcp', 'member',
+          '[{"name":"whoami","readOnly":true}]', '["whoami"]')`,
+    )
+}
 
 type SeededGatewayKeys = ((writer: SeedWriter) => Promise<void>) & { keyId: string; virtualKeyId: string }
 const isUntouched = async (gateway: TestGateway, { keyId, virtualKeyId }: SeededGatewayKeys) => {

@@ -64,7 +64,7 @@ When the runtime is **Ready**, the chat's owner and Editors can open the status 
 
 While the agent is working, both ask for confirmation, because they stop the current turn. Other participants see the status without the menu, and the server refuses both actions to them.
 
-When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. That output is redacted like the rest of the agent's output and kept in the agent's logs.
+When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. When that line asks to run a command, which a member cannot do in a runtime, the chat says "If it happens again, restart the session" instead. That output is redacted like the rest of the agent's output and kept in the agent's logs.
 
 Each runtime has three volumes (its workspace, its home and its temporary directory), plus, for a dev chat, the package cache its owner shares across their runtimes on the same repository (`<deployment>-cache-*`) and, read-only, the newest snapshot of its repository on that host (`<deployment>-snapshot-*`), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
 

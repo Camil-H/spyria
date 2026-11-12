@@ -7,7 +7,7 @@ A dev chat is a runtime chat attached to a GitHub repository: the agent works in
 | Piece | Who sets it up | What it is used for |
 |---|---|---|
 | The workspace's GitHub App | An admin (**Workspace settings** > **Connect GitHub**) | Lists the repositories the workspace may use, clones them and fetches base branches with short-lived read-only installation tokens, receives webhooks |
-| A member's GitHub account | Each member (**Profile** > **Tool connections** > **My connections** > **Connect GitHub account**) | Pushes and pull requests, so GitHub shows the member as the author |
+| A member's GitHub account | Each member (**Profile** > **Tool connections** > **Connect GitHub account**) | Pushes and pull requests, so GitHub shows the member as the author |
 | The runtime | Started by the chat's first prompt | Holds the clone; the agent edits, builds and commits there |
 | The Spyria server | Always | Pushes the branch and talks to GitHub's API; GitHub tokens never enter a runtime |
 
@@ -66,7 +66,7 @@ A repository's own setup command, in **Workspace settings > Connect runtime > Se
 - Each runtime kept ready counts as a runtime on its host, and never takes a host's last place, so a chat always finds room. Spyria replaces one after a day, or when its setup command or Spyria's runtime image changes, and removes them all when the count goes back to 0, then the snapshots too. A runtime that could not be prepared, for example because the clone was refused, is removed and tried again an hour later. A host going offline drops its runtimes kept ready; they start again when it is back.
 - Keep secrets out of what setup writes to disk: the snapshot hands it to every chat of the repository on that host.
 
-See [decision 0030](../decisions/0030-runtimes-kept-ready-and-setup-snapshots.md).
+See [decision 0031](../decisions/0031-runtimes-kept-ready-and-setup-snapshots.md).
 
 ## The side panel
 
@@ -75,7 +75,7 @@ Dev chats use the right panel's **Changes** and **Files** tabs; **Changes** come
 - **Files:** the repository tree, loaded one folder at a time, with `.git` and ignored files hidden, and changed files marked (A, M, D; a dot on a folder holding changes). Files open read-only with syntax highlighting. A folder lists at most 500 entries and a file shows its first 256 KB.
 - **Changes:** the diff of the working branch against the base branch, split top to bottom into the files not staged (edits, new files and deleted files), the files staged but not committed, then each commit since the base under its id and title, with its author, time and description, newest first. A merge commit shows only how its conflicts were resolved, so a clean merge, like an empty commit, is listed without files. One collapsible section per file with line numbers on both sides, shown side by side in two equal halves, long lines wrapping within their half, when the panel is at least 560px wide, and unified when narrower; every file starts collapsed when all the groups together have more than 400 lines, and **Collapse all** (or **Open all** once every file is closed) in the tab header closes or opens them all at once. Each part is cut at 400,000 characters, with a "Diff truncated" marker under the group that was cut; at most the latest 200 commits are listed, with a note when there are more. A status line shows `working branch → base`, how far it is ahead of or behind the base and the pushed branch, the number of uncommitted files and the last push. The panel keeps the last changes it read, so coming back to the tab shows them at once while it reads them again; it also reads them again when a turn or a file-changing step ends, and on **Refresh**, whose icon spins until everything is read again and a toast then says "Changes refreshed".
 
-When the runtime is asleep, the panel shows "Runtime asleep · showing the last snapshot": the tree root, the changes, the commits and the status as they were at the end of the last turn. Reading never wakes a runtime; **Wake** does (it needs the right to post in the chat).
+When the runtime is asleep, the panel shows "Runtime asleep · showing the last snapshot": the tree root, the changes, the commits and the status as they were at the end of the last turn. Reading never wakes a runtime; **Wake** does (it needs the right to post in the chat). While the runtime is still stopping, the panel says "Runtime going to sleep" and offers **Wake** once it has stopped.
 
 The agent's shell commands and their output appear as steps in the conversation, live while a command runs, rather than in a separate terminal.
 

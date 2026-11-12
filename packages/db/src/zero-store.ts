@@ -64,7 +64,6 @@ const materializedTables = Object.keys(queries).filter(
 const isoOf = (time: number) => new Date(time).toISOString()
 const isoOrNull = (time: number | null) => (time === null ? null : isoOf(time))
 const withMemberId = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
-const withoutPosition = <Row extends { position: number }>({ position, ...row }: Row) => row
 const withoutCreatedAt = <Row extends { createdAt: number }>({ createdAt, ...row }: Row) => row
 const uniqueBy = <Row>(rows: readonly Row[], keyOf: (row: Row) => string) => [
   ...new Map(rows.map((row) => [keyOf(row), row])).values(),
@@ -272,9 +271,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const usageEntriesOf = mappedRows(withMemberId<ZeroRows['usageEntries'][number]>)
   const budgetAlertsOf = mappedRows(({ reachedAt, ...alert }: ZeroRows['budgetAlerts'][number]) => alert)
   const sourcesOf = mappedRows((source: ZeroRows['sources'][number]) => source)
-  const toolConnectionsOf = mappedRows((connection: ZeroRows['toolConnections'][number]) =>
-    withoutPosition(withMemberId(connection)),
-  )
+  const toolConnectionsOf = mappedRows(withMemberId<ZeroRows['toolConnections'][number]>)
   const chatMembersOf = mappedRows(withMemberId<ZeroRows['chatParticipants'][number]>)
   const chatRolesOf = mappedRows((role: ZeroRows['chatRoles'][number]) => role)
   const llmCredentialsOf = mappedRows(withMemberId<ZeroRows['llmCredentials'][number]>)

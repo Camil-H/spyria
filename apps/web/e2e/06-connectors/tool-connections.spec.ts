@@ -3,10 +3,10 @@ import { fakeMcpUrl, gatewayUrl } from '../stack-ports'
 import {
   accountOf,
   addLlmKey,
-  connectedRowOf,
   connectFake,
   connectionsOf,
   expect,
+  fakeRowOf,
   inPopup,
   lastToolResultOf,
   logInAtFakeProvider,
@@ -28,6 +28,7 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
   const { virtual_key } = await workerStack.gateway<{ virtual_key: { value: string } }>(
     `/api/governance/virtual-keys/${row?.virtual_key_id}`,
   )
+  const gatewayName = workspace === 'workspace-acme' ? 'fake' : 'fakeglobex'
   const response = await fetch(`${gatewayUrl}/mcp`, {
     method: 'POST',
     headers: {
@@ -39,68 +40,41 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
-      params: { name: 'fake-whoami', arguments: {} },
+      params: { name: `${gatewayName}-whoami`, arguments: {} },
     }),
   })
   return JSON.stringify(await response.json())
 }
 
-const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
-const connectionsTabOf = (page: Page, tabName: 'Shared with me' | 'My connections') =>
-  sectionOf(page, 'Tool connections').getByRole('tab', { name: tabName })
-const connectionsPanelOf = (page: Page) => sectionOf(page, 'Tool connections').getByRole('tabpanel')
-const openMyConnectionsTab = async (page: Page) => {
-  await connectionsTabOf(page, 'My connections').click()
-  await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
-}
+const toolRowOf = (page: Page, name: string) =>
+  connectionsOf(page).getByRole('list', { name: 'Tools' }).getByRole('listitem', { name, exact: true })
 
-test.describe('Personal tools', () => {
+test.describe('Tool connections', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
   })
 
-  test('As a member, I see the connections shared with me read-only, and mine with their status and matching actions', async ({
+  test('As a member, I see the workspace’s tools in one list: a shared login with the tools I may use, and each server I sign in to with its status and Connect', async ({
     page,
   }) => {
     await openProfile(page)
 
-    await test.step('shows the two tabs with My connections selected first', async () => {
-      await expect(sectionOf(page, 'Tool connections').getByRole('tablist', { name: 'Tool connections' })).toBeVisible()
-      await expect(sectionOf(page, 'Tool connections').getByRole('tab')).toHaveText([
-        'My connections',
-        'Shared with me',
-      ])
-      await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
-      await expect(connectionsPanelOf(page)).toContainText('GitHub')
+    await test.step('lists my GitHub account and every tool of the catalogue, without tabs', async () => {
+      await expect(connectionsOf(page)).toContainText('GitHub account')
+      await expect(connectionsOf(page).getByRole('tab')).toHaveCount(0)
     })
 
-    await test.step('lists the shared connections with the tools of the member, read-only', async () => {
-      await connectionsTabOf(page, 'Shared with me').click()
-      const sharedSection = connectionsPanelOf(page)
-      await expect(sharedSection.getByRole('listitem')).toHaveText(['CRMlookup, update'])
-      await expect(sharedSection.getByRole('button')).toHaveCount(0)
+    await test.step('shows the shared-login server with my tools and nothing to connect', async () => {
+      await expect(toolRowOf(page, 'CRM')).toHaveText('CRMShared login: lookup, update')
+      await expect(toolRowOf(page, 'CRM').getByRole('button')).toHaveCount(0)
     })
 
-    await test.step('switches tabs with the mouse and the arrow keys', async () => {
-      await connectionsTabOf(page, 'My connections').click()
-      await expect(connectionsPanelOf(page)).toContainText('GitHub')
-      await expect(connectionsPanelOf(page)).not.toContainText('lookup, update')
-      await connectionsTabOf(page, 'My connections').focus()
-      await page.keyboard.press('ArrowRight')
-      await expect(connectionsTabOf(page, 'Shared with me')).toBeFocused()
-      await expect(connectionsTabOf(page, 'Shared with me')).toHaveAttribute('aria-selected', 'true')
-      await page.keyboard.press('ArrowLeft')
-      await expect(connectionsTabOf(page, 'My connections')).toHaveAttribute('aria-selected', 'true')
-    })
-
-    await test.step('lists every server of the catalog as not connected, each with Connect', async () => {
-      await openMyConnectionsTab(page)
-      const personalSection = connectionsPanelOf(page)
-      for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear']) {
-        await expect(personalSection.getByRole('group', { name: tool, exact: true })).toContainText('Not connected')
-        await expect(personalSection.getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
+    await test.step('shows each server I sign in to as not connected, with Connect', async () => {
+      for (const tool of ['GitHub', 'Slack', 'Notion', 'Linear', 'fake']) {
+        await expect(toolRowOf(page, tool)).toContainText('Not connected')
+        await expect(toolRowOf(page, tool).getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
       }
-      await expect(personalSection.getByRole('button', { name: /^(Disconnect|Reconnect) / })).toHaveCount(0)
+      await expect(connectionsOf(page).getByRole('button', { name: /^(Disconnect|Reconnect) / })).toHaveCount(0)
     })
   })
 
@@ -108,35 +82,34 @@ test.describe('Personal tools', () => {
     page,
   }) => {
     await openProfile(page)
-    await openMyConnectionsTab(page)
 
-    await test.step('connects a tool of the catalog', async () => {
+    await test.step('connects a server of the catalogue', async () => {
       await inPopup(page, () =>
-        connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true }).click(),
+        toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true }).click(),
       )
-      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toContainText(
-        'Connected',
+      await expect(toolRowOf(page, 'Linear')).toContainText('Connected')
+      await expect(toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true })).toHaveCount(
+        0,
       )
-      await expect(connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true })).toHaveCount(0)
     })
 
     await test.step('shows it in the chat’s Connected tools panel', async () => {
       await openPanelTab(page, 'Invoice bug', 'Connected tools')
-      const personalGroup = tabPanelOf(page).getByRole('region', { name: 'Personal' })
-      await expect(personalGroup.getByRole('listitem').filter({ hasText: 'Linear' })).toContainText('Connected')
+      await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toHaveText('LinearConnected')
     })
 
     await test.step('disconnects it and offers to connect it again', async () => {
       await openProfile(page)
-      await openMyConnectionsTab(page)
-      await connectionsPanelOf(page).getByRole('button', { name: 'Disconnect Linear' }).click()
-      await expect(connectionsPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toHaveCount(0)
-      await expect(connectionsPanelOf(page).getByRole('button', { name: 'Connect Linear', exact: true })).toBeVisible()
+      await toolRowOf(page, 'Linear').getByRole('button', { name: 'Disconnect Linear' }).click()
+      await expect(toolRowOf(page, 'Linear')).toContainText('Not connected')
+      await expect(toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true })).toBeVisible()
     })
 
     await test.step('reflects the disconnection in the panel', async () => {
       await openPanelTab(page, 'Invoice bug', 'Connected tools')
-      await expect(tabPanelOf(page).getByRole('region', { name: 'Personal' })).toContainText('No personal connections')
+      await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'Linear' })).toHaveText(
+        'LinearNot connected',
+      )
     })
   })
 
@@ -147,7 +120,7 @@ test.describe('Personal tools', () => {
     await connectFake(page, account)
     await fetch(`${fakeMcpUrl}/_admin/expire?user=${account}`, { method: 'POST' })
     await openMyConnections(page)
-    await expect(connectedRowOf(page)).toContainText('Needs reconnection')
+    await expect(fakeRowOf(page)).toContainText('Needs reconnection')
     await expect(connectionsOf(page).getByRole('button', { name: 'Reconnect fake' })).toBeVisible()
   })
 
@@ -190,13 +163,12 @@ test.describe('Personal tools', () => {
     const account = accountOf('alice-acme')
     await connectFake(page, account)
     await connectionsOf(page).getByRole('button', { name: 'Disconnect fake' }).click()
-    await expect(connectedRowOf(page)).toHaveCount(0)
+    await expect(fakeRowOf(page)).toContainText('Not connected')
     await expect(
       connectionsOf(page)
         .getByRole('status')
         .filter({ hasText: 'remove it in your fake settings to revoke it there too' }),
     ).toBeVisible()
-    await expect(connectionsOf(page).getByRole('group', { name: 'fake' })).toContainText('Not connected')
     await expect(connectionsOf(page).getByRole('button', { name: 'Connect fake', exact: true })).toBeVisible()
     await promptTool(page, agentScript, 'Who am I after disconnecting?')
     await expect(messageItemsOf(page).getByRole('button', { name: 'Connect fake', exact: true })).toBeVisible()
@@ -206,9 +178,9 @@ test.describe('Personal tools', () => {
     await promptTool(page, agentScript, 'Who am I after expiry?')
     await expect(messageItemsOf(page).getByRole('button', { name: 'Reconnect fake' })).toBeVisible()
     await openMyConnections(page)
-    await expect(connectedRowOf(page)).toContainText('Needs reconnection')
+    await expect(fakeRowOf(page)).toContainText('Needs reconnection')
     await inPopup(page, () => connectionsOf(page).getByRole('button', { name: 'Reconnect fake' }).click())
-    await expect(connectedRowOf(page)).not.toContainText('Needs reconnection')
-    await expect(connectedRowOf(page)).toContainText('Connected')
+    await expect(fakeRowOf(page)).not.toContainText('Needs reconnection')
+    await expect(fakeRowOf(page)).toContainText('Connected')
   })
 })

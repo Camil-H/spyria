@@ -261,8 +261,7 @@ export const queries = defineQueries({
   toolConnections: defineQuery(({ ctx }) =>
     zql.toolConnections
       .where('workspaceId', ctx.workspaceId)
-      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', takenPartInBy(ctx.userId))))
-      .orderBy('position', 'asc'),
+      .where(({ or, cmp, exists }) => or(cmp('userId', ctx.userId), exists('ownedChats', takenPartInBy(ctx.userId)))),
   ),
   chatBrowserPages: defineQuery(z.object({ chatId: id }), ({ ctx, args }) =>
     zql.browserPages

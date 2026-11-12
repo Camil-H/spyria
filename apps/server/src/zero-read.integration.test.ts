@@ -22,7 +22,7 @@ import {
 const { database } = await openSharedTestApp()
 await database.$client`delete from workspace_connections`
 
-const collectionsInStoredOrder = ['messages', 'terminalLines', 'toolConnections']
+const collectionsInStoredOrder = ['messages', 'terminalLines']
 
 const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonly WorkspaceId[]): Snapshot => {
   const inWorkspaces = <Row extends { workspaceId: WorkspaceId }>(rows: readonly Row[]) =>
