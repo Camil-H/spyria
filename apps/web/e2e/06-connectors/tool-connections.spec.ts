@@ -64,9 +64,9 @@ test.describe('Tool connections', () => {
       await expect(connectionsOf(page).getByRole('tab')).toHaveCount(0)
     })
 
-    await test.step('shows the shared-login server with my tools and nothing to connect', async () => {
-      await expect(toolRowOf(page, 'CRM')).toHaveText('CRMShared login: lookup, update')
-      await expect(toolRowOf(page, 'CRM').getByRole('button')).toHaveCount(0)
+    await test.step('shows the shared-login server with the count of my tools, nothing to connect and my approvals', async () => {
+      await expect(toolRowOf(page, 'CRM')).toHaveText('CRMShared login: 2 tools · 1 read · 1 writeApprovals for CRM')
+      await expect(toolRowOf(page, 'CRM').getByRole('button')).toHaveText(['Approvals for CRM'])
     })
 
     await test.step('shows each server I sign in to as not connected, with Connect', async () => {
