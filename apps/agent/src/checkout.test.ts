@@ -683,3 +683,35 @@ test('a fork that takes a prepared clone starts from the base when its start bra
   expect(branchOf(cwd)).toBe('spyria/fork-4d5e6f')
   expect(existsSync(join(cwd, 'old-work.txt'))).toBe(false)
 })
+
+const snapshotOf = (name: string, url: string, change: (project: string) => void) => {
+  const snapshot = join(directory, `${name}-snapshot`)
+  mkdirSync(join(snapshot, 'home'), { recursive: true })
+  git(directory, 'clone', '-q', url, join(snapshot, 'project'))
+  change(join(snapshot, 'project'))
+  writeFileSync(join(snapshot, 'complete'), '')
+  return snapshot
+}
+
+test('a runtime prepared from a snapshot taken before the default branch was renamed follows the remote’s default branch', async () => {
+  const { url } = warmRepository('renamed-default')
+  const snapshot = snapshotOf('renamed-default', url, (project) => {
+    git(project, 'checkout', '-q', '-b', 'master')
+    git(project, 'update-ref', 'refs/remotes/origin/master', 'HEAD')
+    git(project, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master')
+    git(project, 'branch', '-q', '-D', 'main')
+  })
+  const warm = warmAgent('renamed-default-warm', snapshot)
+  await warm.call('POST', '/api/prepare', { repository: { url, token } })
+  expect(await preparedOf(warm.call)).toMatchObject({ state: 'ready', branch: 'main', isRestored: true })
+  expect(branchOf(warm.workspaceDirectory)).toBe('main')
+})
+
+test('a runtime whose snapshot cannot be brought up to date clones the repository afresh', async () => {
+  const { url } = warmRepository('broken-snapshot')
+  const snapshot = snapshotOf('broken-snapshot', url, (project) => rmSync(join(project, '.git', 'HEAD')))
+  const warm = warmAgent('broken-snapshot-warm', snapshot)
+  await warm.call('POST', '/api/prepare', { repository: { url, token } })
+  expect(await preparedOf(warm.call)).toMatchObject({ state: 'ready', branch: 'main', isRestored: false })
+  expect(branchOf(warm.workspaceDirectory)).toBe('main')
+})
