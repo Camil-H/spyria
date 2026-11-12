@@ -16,6 +16,7 @@ import {
   workspaces,
 } from '@spyria/db/postgres'
 import {
+  catalogueTestSignInServers,
   createTestDatabase,
   dropDatabase,
   httpStatusOf,
@@ -294,6 +295,7 @@ export const test = base.extend<TestOptions, { workerStack: WorkerStack }>({
           resetDatabase(testDatabase.database, async (transaction) => {
             await writeSeededGatewayKeys(transaction)
             if (options.sharedCrm) await shareTestCrm(transaction)
+            await catalogueTestSignInServers(transaction)
             await transaction.insert(users).values({ id: barrierMemberId, email: 'e2e-barrier@example.com' })
             await transaction.insert(workspaces).values({
               workspaceId: barrierWorkspaceId,

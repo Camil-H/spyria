@@ -27,7 +27,7 @@ export const NotOwnProfile = errorKind(
 )
 export const ToolNotInCatalog = errorKind(
   'tool_not_in_catalog',
-  (tool: string) => `Tool ${tool} is not in the catalog`,
+  (tool: string) => `${tool} is not in this workspace's tools catalogue`,
   ProfileError,
 )
 export const ToolStillConnected = errorKind(
@@ -54,5 +54,15 @@ export const SecretRequired = errorKind(
 export const InvalidAvatar = errorKind(
   'invalid_avatar',
   () => 'A profile picture must be a small PNG, JPEG or WebP image',
+  ProfileError,
+)
+export const DuplicateConnectionName = errorKind(
+  'duplicate_connection_name',
+  (name: string) => `The catalogue already has a server named ${name}`,
+  ProfileError,
+)
+export const ConnectionSetupFailed = errorKind(
+  'connection_setup_failed',
+  (name: string) => `${name} listed no tools after your sign-in: add it again and finish signing in`,
   ProfileError,
 )

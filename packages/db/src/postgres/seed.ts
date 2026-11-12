@@ -17,11 +17,6 @@ const createdInOrder = <Row>(row: Row, index: number) => ({
 
 const withUserId = <Row extends { memberId: string }>({ memberId, ...row }: Row) => ({ ...row, userId: memberId })
 
-const withUserIdAndPosition = <Row extends { memberId: string }>(row: Row, index: number) => ({
-  ...withUserId(row),
-  position: index + 1,
-})
-
 const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
   const creatorByWorkspace = new Map(
     snapshot.memberships.toReversed().map((membership) => [membership.workspaceId, membership.memberId]),
@@ -112,8 +107,6 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
         secretRef: `gateway:${credential.id}`,
       })),
     )
-  if (snapshot.toolConnections.length > 0)
-    await transaction.insert(tables.toolConnections).values(snapshot.toolConnections.map(withUserIdAndPosition))
   await transaction
     .insert(tables.browserPages)
     .values(snapshot.browserPages.map((page) => ({ ...page, openedAt: new Date(page.openedAt) })))

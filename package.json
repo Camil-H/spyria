@@ -36,7 +36,6 @@
     "db:rebuild-messages": "bun --env-file=.env.dev apps/server/src/operator-cli.ts rebuild-messages",
     "jobs:failed": "bun --env-file=.env.dev apps/server/src/operator-cli.ts failed-jobs",
     "jobs:retry": "bun --env-file=.env.dev apps/server/src/operator-cli.ts retry-jobs",
-    "tools:setup": "bun --env-file=.env.dev apps/server/src/operator-cli.ts tools-setup",
     "operator": "bun --env-file=.env.dev apps/server/src/operator-cli.ts"
   },
   "devDependencies": {

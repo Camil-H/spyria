@@ -32,6 +32,7 @@ export const internalError = -32603
 export const liveOutputCharacters = 4_000
 export const keptErrorOutputLines = 50
 const permissionPreference = ['allow_always', 'allow_once']
+const outputDrainWaitMilliseconds = 1_000
 
 const permissionAnswerOf = (params: Json | undefined) => {
   const options = (params?.options ?? []) as { optionId: string; kind?: string }[]
@@ -65,7 +66,9 @@ export const spawnJsonLines = (
   }
   child.stdin.on('error', () => {})
   child.on('error', () => exit(null))
-  child.on('exit', (code) => exit(code))
+  child.on('exit', (code) =>
+    Promise.race([closed.promise, Bun.sleep(outputDrainWaitMilliseconds)]).then(() => exit(code)),
+  )
   child.on('close', () => closed.resolve())
   const decoder = new TextDecoder()
   const readLines = lineReaderOf((line) => {

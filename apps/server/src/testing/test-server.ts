@@ -30,7 +30,7 @@ import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { startTelemetry } from '../telemetry.ts'
 import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './fake-github.ts'
 import { createFakeLlm, type FakeLlmScript } from './fake-llm.ts'
-import { createFakeMcp, sharedToolServer } from './fake-mcp.ts'
+import { createFakeMcp } from './fake-mcp.ts'
 import { serveWithLifecycleLogs } from './process-lifecycle.ts'
 import { createSpyriaAgentRelay } from './spyria-agent-relay.ts'
 import {
@@ -38,14 +38,13 @@ import {
   createHolds,
   type FakeHost,
   issueTestSession,
-  logInToFakeToolServer,
+  setUpTestToolServers,
   testAuthSettings,
   testSecretsKeyring,
 } from './testing.ts'
 
 const port = Number(process.env.PORT ?? 3100)
 const fakeMcpPort = Number(process.env.SPYRIA_FAKE_MCP_PORT ?? 3101)
-const testToolServers = ['fake', 'GitHub', 'Slack', 'Notion', 'Linear']
 Bun.serve({ port: fakeMcpPort, fetch: createFakeMcp().fetch })
 const fakeGitHub = startFakeGitHub()
 const github = { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKeyring) }
@@ -373,16 +372,7 @@ const app = createApp({
     return context.body(null, 204)
   })
   .post('/test/tool-servers', async (context) => {
-    for (const name of testToolServers)
-      await llmGateway.setUpToolServer(
-        { name, url: `http://host.docker.internal:${fakeMcpPort}/mcp` },
-        logInToFakeToolServer(llmGateway),
-      )
-    await llmGateway.setUpToolServer({
-      name: sharedToolServer,
-      url: `http://host.docker.internal:${fakeMcpPort}/shared/mcp`,
-      isShared: true,
-    })
+    await setUpTestToolServers(llmGateway, `http://host.docker.internal:${fakeMcpPort}`)
     return context.body(null, 204)
   })
   .get('/test/github-app', (context) =>

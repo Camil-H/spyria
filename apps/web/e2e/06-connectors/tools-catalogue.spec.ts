@@ -1,12 +1,15 @@
 import { openPageAs, type WorkerStack } from '../stack'
 import { fakeMcpUrl } from '../stack-ports'
 import {
+  accountOf,
   addLlmKey,
   addParticipant,
   connectionsOf,
   expect,
+  inPopup,
   type Locator,
   llmSectionOf,
+  logInAtFakeProvider,
   mainOf,
   messageItemsOf,
   openChat,
@@ -21,26 +24,28 @@ import {
   workingIndicatorOf,
 } from './fixtures'
 
-test.describe('Shared tools', () => {
+test.describe('Tools catalogue', () => {
   test.use({ sharedCrm: false })
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
   })
 
   const crmUrl = `http://host.docker.internal:${new URL(fakeMcpUrl).port}/shared/mcp`
-  const settingsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
-  const crmCardOf = (page: Page) =>
-    settingsSectionOf(page).getByRole('list', { name: 'Workspace connections' }).getByRole('listitem', { name: 'CRM' })
+  const settingsSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Servers' })
+  const serverCardOf = (page: Page, name: string) =>
+    settingsSectionOf(page).getByRole('list', { name: 'Servers' }).getByRole('listitem', { name })
+  const crmCardOf = (page: Page) => serverCardOf(page, 'CRM')
   const notOffered = (serverName: string, tool: string) => `Tool ${serverName}-${tool} not found`
 
   const registerCrm = async (page: Page, workerStack: WorkerStack) => {
-    await openSettings(page, 'MCP tools')
-    const form = settingsSectionOf(page).getByRole('form', { name: 'Add connection' })
+    await openSettings(page, 'Tools')
+    const form = settingsSectionOf(page).getByRole('form', { name: 'Add server' })
     await form.getByLabel('Name').fill('CRM')
-    await form.getByLabel('MCP URL').fill(crmUrl)
+    await form.getByLabel('Address').fill(crmUrl)
+    await form.getByRole('radio', { name: 'One shared login' }).check()
     await form.getByLabel('Secret header').fill('x-crm-key')
     await form.getByLabel('Secret value').fill('crm-e2e-secret')
-    await form.getByRole('button', { name: 'Add connection' }).click()
+    await form.getByRole('button', { name: 'Add server' }).click()
     await expect(crmCardOf(page)).toBeVisible()
     const [row] = await workerStack.database.$client<{ gatewayName: string }[]>`
     select gateway_name as "gatewayName" from workspace_connections where name = 'CRM'`
@@ -86,17 +91,16 @@ test.describe('Shared tools', () => {
   }
   const restrictFor = (page: Page, memberName: string, tool: string) =>
     untick(crmCardOf(page).getByRole('checkbox', { name: `${tool} for ${memberName}` }))
-  const sharedWithMeOf = async (page: Page) => {
+  const profileCrmOf = async (page: Page) => {
     await openProfile(page)
-    await connectionsOf(page).getByRole('tab', { name: 'Shared with me' }).click()
-    return connectionsOf(page).getByRole('tabpanel')
+    return connectionsOf(page).getByRole('listitem', { name: 'CRM' })
   }
 
-  test('As a member who can manage MCP tools, I register CRM with a secret header: its tools are listed, the secret shows only as set, and Bob sees it shared with him and his agent uses it', {
+  test('As a member who can manage the tools catalogue, I register CRM with a secret header: its tools are listed, the secret shows only as set, and Bob sees it in his tool connections and his agent uses it', {
     tag: ['@spec-38', '@smoke'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
-    await expect(crmCardOf(page)).toContainText('x-crm-key: set')
+    await expect(crmCardOf(page)).toContainText('One shared login, x-crm-key: set')
     await expect(crmCardOf(page)).not.toContainText('crm-e2e-secret')
     const tools = crmCardOf(page).getByRole('group', { name: 'Tools of CRM' })
     await expect(tools).toContainText('lookupread-only')
@@ -106,13 +110,13 @@ test.describe('Shared tools', () => {
 
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
-    await expect((await sharedWithMeOf(bobPage)).getByRole('listitem')).toHaveText(['CRMlookup, update'])
+    await expect(await profileCrmOf(bobPage)).toHaveText('CRMShared login: lookup, update')
     const result = await promptIn(bobPage, agentScript, toolScriptOf(gatewayName, 'lookup', 'Found it.'), 'Look it up')
     await expect(result).toContainText('ran lookup')
     await bobPage.context().close()
   })
 
-  test('As a member who can manage MCP tools, I register CRM while a chat’s agent is running, and its next prompt uses CRM without a restart', {
+  test('As a member who can manage the tools catalogue, I register CRM while a chat’s agent is running, and its next prompt uses CRM without a restart', {
     tag: ['@spec-38'],
   }, async ({ page, workerStack, agentScript }) => {
     await agentScript(research, { text: 'Ready.' })
@@ -124,7 +128,7 @@ test.describe('Shared tools', () => {
     await expect(await promptIn(page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
   })
 
-  test('As a member who can manage MCP tools, I restrict Bob to lookup and his update is refused, also after he removes his LLM key and adds it again', {
+  test('As a member who can manage the tools catalogue, I restrict Bob to lookup and his update is refused, also after he removes his LLM key and adds it again', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -156,7 +160,7 @@ test.describe('Shared tools', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage MCP tools, I restrict a chat owner from update and a guest’s prompt in her chat cannot use it either, while lookup works', {
+  test('As a member who can manage the tools catalogue, I restrict a chat owner from update and a guest’s prompt in her chat cannot use it either, while lookup works', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -170,7 +174,7 @@ test.describe('Shared tools', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage MCP tools, I untick update for the workspace: it is refused on every prompt and the Connected tools tab shows CRM with lookup only', {
+  test('As a member who can manage the tools catalogue, I untick update for the workspace: it is refused on every prompt and the Connected tools tab shows CRM with lookup only', {
     tag: ['@spec-38'],
   }, async ({ page, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -182,24 +186,23 @@ test.describe('Shared tools', () => {
       await promptIn(page, agentScript, toolScriptOf(gatewayName, 'update', 'Tried to update.'), 'Update it'),
     ).toContainText(notOffered('CRM', 'update'))
     await openPanelTab(page, 'Research', 'Connected tools')
-    const workspaceGroup = tabPanelOf(page).getByRole('region', { name: 'Workspace' })
-    await expect(workspaceGroup.getByRole('listitem')).toHaveText(['CRMlookup'])
+    await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveText(['CRMlookup'])
   })
 
-  test('As a member who can manage MCP tools, I remove CRM: it leaves Shared with me and the Connected tools tab, and its calls are refused', {
+  test('As a member who can manage the tools catalogue, I remove CRM: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    const bobShared = await sharedWithMeOf(bobPage)
-    await expect(bobShared.getByRole('listitem')).toHaveText(['CRMlookup, update'])
+    const bobCrm = await profileCrmOf(bobPage)
+    await expect(bobCrm).toHaveText('CRMShared login: lookup, update')
 
     await crmCardOf(page).getByRole('button', { name: 'Remove' }).click()
-    await page.getByRole('dialog', { name: 'Remove connection' }).getByRole('button', { name: 'Remove' }).click()
-    await expect(settingsSectionOf(page)).toContainText('No workspace connections')
-    await expect(bobShared).toContainText('No shared connections')
+    await page.getByRole('dialog', { name: 'Remove server' }).getByRole('button', { name: 'Remove' }).click()
+    await expect(crmCardOf(page)).toHaveCount(0)
+    await expect(bobCrm).toHaveCount(0)
     await openPanelTab(page, 'Research', 'Connected tools')
-    await expect(tabPanelOf(page).getByRole('region', { name: 'Workspace' })).toContainText('No workspace connections')
+    await expect(tabPanelOf(page).getByRole('listitem').filter({ hasText: 'CRM' })).toHaveCount(0)
     await expect(
       await promptIn(
         page,
@@ -209,6 +212,33 @@ test.describe('Shared tools', () => {
       ),
     ).toContainText(notOffered(gatewayName, 'lookup'))
     await expect(messageItemsOf(page).filter({ hasText: 'ran lookup' })).toHaveCount(0)
+    await bobPage.context().close()
+  })
+  test('As a member who can manage the tools catalogue, I add a server each member signs in to: I sign in once so its tools are listed, then Bob connects his own account from his tool connections', {
+    tag: ['@spec-38'],
+  }, async ({ page, browser, workerStack }) => {
+    await logInAtFakeProvider(page.context(), accountOf('alice-admin'))
+    await openSettings(page, 'Tools')
+    const form = settingsSectionOf(page).getByRole('form', { name: 'Add server' })
+    await form.getByLabel('Name').fill('Docs')
+    await form.getByLabel('Address').fill(`http://host.docker.internal:${new URL(fakeMcpUrl).port}/mcp`)
+    await expect(form.getByRole('radio', { name: 'Each member signs in' })).toBeChecked()
+    await expect(form.getByLabel('Secret value')).toHaveCount(0)
+    await inPopup(page, () => form.getByRole('button', { name: 'Add server' }).click())
+    await expect(serverCardOf(page, 'Docs')).toContainText('Each member signs in')
+    await expect(serverCardOf(page, 'Docs').getByRole('group', { name: 'Tools of Docs' })).toContainText(
+      'whoamiread-only',
+    )
+
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    const bobAccount = accountOf('bob')
+    await logInAtFakeProvider(bobPage.context(), bobAccount)
+    await openProfile(bobPage)
+    const docsRow = connectionsOf(bobPage).getByRole('listitem', { name: 'Docs' })
+    await expect(docsRow).toContainText('Not connected')
+    await inPopup(bobPage, () => docsRow.getByRole('button', { name: 'Connect Docs' }).click())
+    await expect(docsRow).toContainText('Connected')
+    await expect(docsRow.getByRole('button', { name: 'Disconnect Docs' })).toBeVisible()
     await bobPage.context().close()
   })
 })

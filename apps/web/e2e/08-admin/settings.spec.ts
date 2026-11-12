@@ -2,7 +2,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
   'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
-  'Setup your agents': ['Connect runtime', 'AI providers', 'MCP tools', 'Quality gates'],
+  'Setup your agents': ['Connect runtime', 'AI providers', 'Tools', 'Quality gates'],
   'Analyze usage': ['Analyze costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
@@ -11,7 +11,7 @@ const sectionShownBy: Record<string, string> = {
   'Roles and Permissions': 'Workspace roles',
   'Manage Team': 'Members',
   'Connect runtime': 'Runtime hosts',
-  'MCP tools': 'Connections',
+  Tools: 'Servers',
   'AI providers': 'AI providers',
   'Quality gates': 'Quality gates',
   'Analyze costs': 'Usage',
@@ -39,7 +39,7 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'Roles and Permissions')).toContainText('6 built-in roles')
     await expect(cardOf(page, 'Manage Team')).toContainText('3 members')
     await expect(cardOf(page, 'Connect runtime')).toContainText('1 runtime host')
-    await expect(cardOf(page, 'MCP tools')).toContainText('1 shared connection')
+    await expect(cardOf(page, 'Tools')).toContainText('6 servers')
     await expect(cardOf(page, 'AI providers')).toContainText('Every provider allowed')
     await expect(cardOf(page, 'Quality gates')).toContainText('Off')
     await expect(cardOf(page, 'Analyze costs')).toContainText(/\$\d+\.\d\d this month/)

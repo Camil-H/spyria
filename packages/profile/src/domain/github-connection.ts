@@ -1,4 +1,4 @@
-import { connectionStatuses, notConnectedStatus } from './personal-connection.ts'
+import { connectionStatuses, notConnectedStatus } from './tool-connection.ts'
 
 export type GitHubConnection = { login: string; state: 'connected' | 'needs_reconnection' } | null
 
