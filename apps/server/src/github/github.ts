@@ -192,7 +192,8 @@ export const isGitHubConfigured = async (database: Database, member: Member) => 
 
 const memberAccountsOf = (database: Database, workspaceId: string) =>
   database.$client<GitHubMemberAccount[]>`
-    select m.display_name as name, g.login, coalesce(g.needs_reconnection, false) as "needsReconnection"
+    select m.user_id as "memberId", m.display_name as name, g.login,
+      coalesce(g.needs_reconnection, false) as "needsReconnection"
     from memberships m
     left join github_connections g on g.workspace_id = m.workspace_id and g.user_id = m.user_id
     where m.workspace_id = ${workspaceId} and m.removed_at is null

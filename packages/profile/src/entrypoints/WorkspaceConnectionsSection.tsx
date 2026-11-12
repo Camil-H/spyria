@@ -11,6 +11,7 @@ import {
   type ToolServerAccess,
   type WorkspaceId,
 } from '@spyria/kernel'
+import { useSession } from '@spyria/session'
 import {
   buttonClass,
   Dialog,
@@ -23,7 +24,7 @@ import {
   smallGhostButtonClass,
   useGuardedAction,
 } from '@spyria/ui'
-import { type SubmitEvent, useState } from 'react'
+import { type ReactNode, type SubmitEvent, useState } from 'react'
 import { Link } from 'react-router'
 import {
   type AccessSubject,
@@ -31,6 +32,7 @@ import {
   type ConnectionSignIn,
   connectionSignIns,
 } from '../domain/workspace-connection.ts'
+import { getWorkspacePermissions } from '../queries/get-workspace-permissions.ts'
 import {
   type ListedWorkspaceConnection,
   listGitHubToolAccess,
@@ -440,49 +442,69 @@ const ConnectionCard = ({
   )
 }
 
-const featureSettingOf = (workspaceId: WorkspaceId, feature: string | null) => {
+const useMayManageGitHub = (workspaceId: WorkspaceId) =>
+  useQuery(getWorkspacePermissions, workspaceId, useSession().memberId).includes('github.manage')
+
+const SettingsCardLink = ({ to, isAllowed, children }: { to: string; isAllowed: boolean; children: ReactNode }) =>
+  isAllowed ? (
+    <Link to={to} className="text-ink underline">
+      {children}
+    </Link>
+  ) : (
+    <span className="text-muted">{children}</span>
+  )
+
+const featureSettingOf = (workspaceId: WorkspaceId, feature: string | null, mayManageGitHub: boolean) => {
   if (feature === builtInFeatures.qualityGates)
     return (
-      <Link to={`/w/${workspaceId}/settings/quality-gates`} className="text-xs text-ink underline">
-        Set in Quality gates
-      </Link>
+      <span className="text-xs">
+        <SettingsCardLink to={`/w/${workspaceId}/settings/quality-gates`} isAllowed={mayManageGitHub}>
+          Set in Quality gates
+        </SettingsCardLink>
+      </span>
     )
   if (feature === builtInFeatures.browser) return <span className="text-xs text-muted">Shown in the Browser tab</span>
   return null
 }
 
-const BuiltInTools = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
-  <LabelledSection title="Built in">
-    <section aria-label="Spyria" className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
-      <p className="text-muted">
-        Spyria's own tools, which every agent has. Nothing to set here: their settings live with their feature.
-      </p>
-      <ul aria-label="Built-in tools" className="flex flex-col">
-        {builtInTools.map((tool) => (
-          <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
-            <span className="flex flex-col">
-              <span>{tool.name}</span>
-              <span className="text-xs text-muted">{tool.summary}</span>
-            </span>
-            {featureSettingOf(workspaceId, tool.feature)}
-          </li>
-        ))}
-      </ul>
-    </section>
-  </LabelledSection>
-)
+const BuiltInTools = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const mayManageGitHub = useMayManageGitHub(workspaceId)
+  return (
+    <LabelledSection title="Built in">
+      <section aria-label="Spyria" className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
+        <p className="text-muted">
+          Spyria's own tools, which every agent has. Nothing to set here: their settings live with their feature.
+        </p>
+        <ul aria-label="Built-in tools" className="flex flex-col">
+          {builtInTools.map((tool) => (
+            <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
+              <span className="flex flex-col">
+                <span>{tool.name}</span>
+                <span className="text-xs text-muted">{tool.summary}</span>
+              </span>
+              {featureSettingOf(workspaceId, tool.feature, mayManageGitHub)}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </LabelledSection>
+  )
+}
 
 const GitHubServerCard = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const github = useQuery(listGitHubToolAccess, workspaceId)
+  const mayManageGitHub = useMayManageGitHub(workspaceId)
   const [isListOpen, setIsListOpen] = useState(false)
   return (
     <li aria-label={github.name} className="flex flex-col gap-3 rounded-lg border border-line p-3 text-sm">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-medium">{github.name}</span>
         <span className="text-muted">Built in · {signInLabels.member}</span>
-        <Link to={`/w/${workspaceId}/settings/github`} className="ml-auto text-ink underline">
-          Set up in Connect GitHub
-        </Link>
+        <span className="ml-auto">
+          <SettingsCardLink to={`/w/${workspaceId}/settings/github`} isAllowed={mayManageGitHub}>
+            Set up in Connect GitHub
+          </SettingsCardLink>
+        </span>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <span>{toolCountsOf(github.tools)}</span>

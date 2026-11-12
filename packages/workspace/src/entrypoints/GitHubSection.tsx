@@ -37,7 +37,7 @@ const MemberAccounts = ({ accounts }: { accounts: readonly GitHubMemberAccount[]
     </p>
     <ul aria-label="Members' accounts" className="flex flex-col gap-1 text-sm">
       {accounts.map((account) => (
-        <li key={account.name} className="flex gap-3">
+        <li key={account.memberId} className="flex gap-3">
           <span className="font-medium">{account.name}</span>
           <span className="text-muted">{accountStatusOf(account)}</span>
         </li>
@@ -59,6 +59,7 @@ export const useIsGitHubConfigured = (workspaceId: WorkspaceId, isShown: boolean
 
 export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useWorkspaceCommands()
+  const mayManageTools = useWorkspacePermissions(workspaceId).includes('tools.manage')
   const [settings, setSettings] = useState<GitHubSettingsView | null>()
   const [ids, setIds] = useState({ appId: '', clientId: '' })
   const [secrets, setSecrets] = useState(noSecrets)
@@ -93,9 +94,13 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
     <LabelledSection title="GitHub">
       <p className="text-sm text-muted">
         Who may use GitHub's tools, and which of them, is set with the other tools in{' '}
-        <Link to={`/w/${workspaceId}/settings/tools`} className="text-ink underline">
-          Tools
-        </Link>
+        {mayManageTools ? (
+          <Link to={`/w/${workspaceId}/settings/tools`} className="text-ink underline">
+            Tools
+          </Link>
+        ) : (
+          'Tools'
+        )}
         .
       </p>
       {settings && (
