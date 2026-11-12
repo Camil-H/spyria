@@ -104,7 +104,11 @@ test.each([
     const environmentQuestion = await prompt(chat, 'stub:env')
     const [, environment] = /env:(\[.*?\])/.exec((await finished(environmentQuestion, chat))[0]?.body ?? '') ?? []
     expect(environment).toBeDefined()
-    expect(environment).not.toMatch(/BASE_URL|API_KEY|TOKEN|ANTHROPIC|OPENAI/)
+    const variables = JSON.parse(environment ?? '[]') as string[]
+    expect(variables).toContain('SPYRIA_MCP_TOKEN')
+    expect(variables.filter((name) => name !== 'SPYRIA_MCP_TOKEN').join(' ')).not.toMatch(
+      /BASE_URL|API_KEY|TOKEN|ANTHROPIC|OPENAI/,
+    )
 
     const live = await messagesOf(chat)
     await zeroDrizzle(schema, database).transaction((tx) => rebuildMessages(tx, { chatId: chat }))
