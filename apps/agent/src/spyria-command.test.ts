@@ -68,6 +68,7 @@ test('arguments follow the tool’s types, take JSON for lists and --json for al
     'list_issues takes no --colour. Run with --help to see its arguments.',
   )
   expect(() => argumentsOf(listIssues, ['acme'])).toThrow(CommandError)
+  expect(() => argumentsOf(search, ['--filter', '{value'])).toThrow('{value is not valid JSON')
 })
 
 test('a JSON-RPC answer is read from plain JSON or from the event that carries it', () => {
@@ -121,6 +122,19 @@ test('a tool runs as one call through Spyria with the session’s token, and a r
   expect((await runSpyriaCommand([], session)).text).toStartWith('Connected services:')
   expect((await runSpyriaCommand(['github', 'list_issues', '--help'], session)).text).toContain('--repo <string>')
   expect(calls.filter(({ method }) => method === 'tools/call')).toHaveLength(2)
+})
+
+test('a call Spyria does not answer may still have run, and the command says to check before running it again', async () => {
+  const answering = globalThis.fetch
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) =>
+    String(init?.body).includes('"tools/call"')
+      ? Promise.reject(new TypeError('fetch failed'))
+      : answering(input, init)) as typeof fetch
+  const failure = await runSpyriaCommand(['github', 'get_me'], session).catch((error: unknown) => error)
+  globalThis.fetch = answering
+  expect(failure).toEqual(
+    new CommandError('Spyria did not answer: the call may still have run, so check its effect before running it again'),
+  )
 })
 
 test('outside a Spyria session the command says so', async () => {

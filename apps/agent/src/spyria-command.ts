@@ -79,10 +79,18 @@ export const toolHelpOf = (tool: Tool) => {
   ].join('\n')
 }
 
+const jsonArgumentOf = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new CommandError(`${text} is not valid JSON`)
+  }
+}
+
 const argumentValueOf = (schema: JsonSchema | undefined, text: string): unknown => {
   const types = [schema?.type ?? []].flat()
   if (types.includes('string') || types.length === 0) {
-    if (types.length === 0 && /^[[{]/.test(text)) return JSON.parse(text)
+    if (types.length === 0 && /^[[{]/.test(text)) return jsonArgumentOf(text)
     return text
   }
   if (types.includes('integer') || types.includes('number')) {
@@ -94,11 +102,7 @@ const argumentValueOf = (schema: JsonSchema | undefined, text: string): unknown 
     if (text !== 'true' && text !== 'false') throw new CommandError(`${text} is not true or false`)
     return text === 'true'
   }
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new CommandError(`${text} is not valid JSON`)
-  }
+  return jsonArgumentOf(text)
 }
 
 export const argumentsOf = (tool: Tool, words: readonly string[]) => {
@@ -151,7 +155,12 @@ const callGateway = async (url: string, token: string, method: string, params: o
     },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   }).catch(() => undefined)
-  if (!response) throw new CommandError('Spyria is unreachable from here, try again shortly')
+  if (!response)
+    throw new CommandError(
+      method === 'tools/call'
+        ? 'Spyria did not answer: the call may still have run, so check its effect before running it again'
+        : 'Spyria is unreachable from here, try again shortly',
+    )
   const answer = rpcAnswerOf(await response.text())
   if (!response.ok || answer.error)
     throw new CommandError(answer.error?.message ?? `Spyria answered ${response.status}`)
