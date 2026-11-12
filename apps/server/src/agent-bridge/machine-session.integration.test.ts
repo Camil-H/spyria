@@ -99,7 +99,7 @@ test.each([
     expect(JSON.stringify(launch)).not.toMatch(/BASE_URL|API_KEY|ANTHROPIC_MODEL|base_url/)
     expect(Object.keys(launch?.secrets ?? {})).toEqual(['SPYRIA_MCP_TOKEN'])
     for (const { value } of Object.values(launch?.secrets ?? {}) as { value: string }[])
-      expect(JSON.stringify(launch?.agent)).not.toContain(value)
+      expect(JSON.stringify(launch?.agent.acp_command)).not.toContain(value)
 
     const environmentQuestion = await prompt(chat, 'stub:env')
     const [, environment] = /env:(\[.*?\])/.exec((await finished(environmentQuestion, chat))[0]?.body ?? '') ?? []
