@@ -563,6 +563,7 @@ const turn = async (id, { sessionId, prompt }) => {
     }
     if (has('slow')) await lingerAs('slow')
     await say(`[t${session.prompts}] `)
+    if (has('system-prompt')) await say(`system-prompt:${JSON.stringify(systemPromptOptions)} `)
     if (has('env')) await say(`env:${JSON.stringify(Object.keys(process.env).sort())} `)
     if (has('ls')) await say(`files:${readdirSync('.').sort().join(',')} `)
     if (has('tools')) {
@@ -835,6 +836,7 @@ const turn = async (id, { sessionId, prompt }) => {
   }
 }
 
+let systemPromptOptions
 const opened = (sessionId, { prompts, history }) => {
   const session = {
     prompts,
@@ -861,8 +863,9 @@ const handlers = {
       authMethods: [],
     }
   },
-  'session/new': () => {
+  'session/new': ({ _meta }) => {
     if (process.env.STUB_FAIL_START) throw { code: -32000, message: 'Authentication required' }
+    systemPromptOptions = _meta?.systemPrompt
     return opened(randomUUID(), fresh())
   },
   'session/resume': ({ sessionId }) => {
