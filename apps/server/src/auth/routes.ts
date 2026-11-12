@@ -506,9 +506,9 @@ export const createAuthRoutes = ({
       asMember(context, async ({ context: { workspaceId, userId }, sessionId: currentSessionId, scope }) => {
         const sessions = await findMemberSessions(scope.database, workspaceId, userId)
         return context.json({
-          sessions: sessions.map(({ sessionId, userAgent, createdAt }) => ({
+          sessions: sessions.map(({ sessionId, userAgent, signedInAt }) => ({
             userAgent,
-            signedInAt: createdAt.getTime(),
+            signedInAt,
             isCurrent: sessionId === currentSessionId,
           })),
         })

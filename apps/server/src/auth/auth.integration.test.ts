@@ -258,13 +258,13 @@ test("the callback sends its login's PKCE verifier, so a code issued to another 
   const attackerLogin = await startLogin()
   challengeOfCode.set('code-1', attackerLogin.location.searchParams.get('code_challenge') ?? '')
   try {
-    nextIdToken = await signIdToken({ nonce: victimLogin.nonce, email: 'alice@example.com', email_verified: true })
+    nextIdToken = await verifiedEmail('alice@example.com')(victimLogin.nonce)
     const injected = await callback(victimLogin.state, victimLogin.cookie)
     expect(injected.status).toBe(400)
     expect(await injected.text()).toContain('"status":"failed"')
     expect(cookieHeaderOf(injected)).not.toContain('spyria_s_')
 
-    nextIdToken = await signIdToken({ nonce: attackerLogin.nonce, email: 'alice@example.com', email_verified: true })
+    nextIdToken = await verifiedEmail('alice@example.com')(attackerLogin.nonce)
     const own = await callback(attackerLogin.state, attackerLogin.cookie)
     expect(await own.text()).toContain('"status":"signed_in"')
   } finally {

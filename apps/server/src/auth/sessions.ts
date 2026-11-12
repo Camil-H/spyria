@@ -15,7 +15,7 @@ export const openSessions = (
   workspaceId?: string,
   through: SignedInThrough = 'account',
   userAgent = '',
-  signedInAt?: Date,
+  signedInAt?: string,
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
@@ -55,8 +55,9 @@ export const deleteSession = (database: Database, workspaceId: string, sessionId
   database.$client`delete from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
 
 export const findMemberSessions = (database: Database, workspaceId: string, userId: string) =>
-  database.$client<{ sessionId: string; userAgent: string; createdAt: Date }[]>`
-    select id as "sessionId", user_agent as "userAgent", created_at as "createdAt" from sessions
+  database.$client<{ sessionId: string; userAgent: string; signedInAt: number }[]>`
+    select id as "sessionId", user_agent as "userAgent",
+      (extract(epoch from created_at) * 1000)::float8 as "signedInAt" from sessions
     where workspace_id = ${workspaceId} and user_id = ${userId} and expires_at > now()
     order by created_at desc`
 
@@ -67,15 +68,15 @@ export const signOutMemberEverywhere = (database: Database, workspaceId: string,
     on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
 
 export const signedInAtOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
-  const [session] = await database.$client<{ signedInAt: Date }[]>`
+  const [session] = await database.$client<{ signedInAt: string }[]>`
     select signed_in_at as "signedInAt" from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
   return session?.signedInAt
 }
 
-export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: Date) => {
+export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: string) => {
   const [signedOut] = await database.$client`
     select 1 from member_sign_outs where workspace_id = ${workspaceId} and user_id = ${userId}
-      and signed_out_at >= ${signedInAt}`
+      and signed_out_at >= ${signedInAt}::timestamptz`
   return signedOut !== undefined
 }
 
