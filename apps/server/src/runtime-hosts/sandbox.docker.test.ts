@@ -94,6 +94,17 @@ const connectHost = async () => {
   )
   return id
 }
+const dockerOperatingSystem = () => dockerText('info', '-f', '{{.OperatingSystem}}')
+const addressOf = (name = '') =>
+  dockerText('inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', name)
+const reaches = (from = '', url: string) =>
+  dockerText(
+    'exec',
+    from,
+    'node',
+    '-e',
+    `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), () => console.log('blocked'))`,
+  )
 let connectedHostId: ReturnType<typeof connectHost> | undefined
 const hostId = () => {
   connectedHostId ??= connectHost()
@@ -238,22 +249,59 @@ test.skipIf(!hasImage)(
       for (const deadline = Date.now() + 30_000; !(await isReady(runtime)); await Bun.sleep(100))
         if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
     const [first, second] = runtimes.map(({ runtimeId }) => `${prefix}rt-${runtimeId}`)
-    const addressOf = (name = '') =>
-      dockerText('inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', name)
-    const reaches = (from = '', url: string) =>
-      dockerText(
-        'exec',
-        from,
-        'node',
-        '-e',
-        `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), () => console.log('blocked'))`,
-      )
     expect(docker('exec', String(first), 'getent', 'hosts', String(second)).exitCode).not.toBe(0)
     expect(reaches(first, `http://${addressOf(first)}:8000/ready`)).toBe('reached')
-    if (dockerText('info', '-f', '{{.OperatingSystem}}') === 'OrbStack')
+    if (dockerOperatingSystem() === 'OrbStack')
       console.warn('OrbStack accepts traffic between Docker networks: the address check between runtimes is skipped')
     else expect(reaches(first, `http://${addressOf(second)}:8000/ready`)).toBe('blocked')
     for (const runtime of runtimes) await provider.remove(runtime)
+  },
+  90_000,
+)
+
+test.skipIf(!hasImage)(
+  'a runtime reaches its model relay and the internet, but not a port the machine publishes on 127.0.0.1 nor a service on another Docker network',
+  async () => {
+    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const provider = gateway.sandboxProvider
+    const runtime = { ...host, runtimeId: 'reachability' }
+    const runtimeContainer = `${prefix}rt-reachability`
+    const service = `${prefix}service`
+    const serviceNetwork = `${prefix}services-net`
+    const freePort = Bun.serve({ port: 0, fetch: () => new Response() })
+    const servicePort = freePort.port
+    await freePort.stop(true)
+    docker('network', 'create', serviceNetwork)
+    docker(
+      ...['run', '-d', '--name', service, '--network', serviceNetwork, '-p', `127.0.0.1:${servicePort}:8080`],
+      ...['--entrypoint', 'node', spyriaImage, '-e'],
+      "require('node:http').createServer((request, response) => response.end('service')).listen(8080)",
+    )
+    await provider.create({ ...runtime, image: spyriaImage })
+    await provider.start(runtime)
+    const transport = provider.connect(runtime)
+    const isReady = () =>
+      transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
+        (response) => response.status === 200,
+        () => false,
+      )
+    for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
+      if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
+
+    expect(reaches(runtimeContainer, `${transport.gatewayUrl}/models`)).toBe('reached')
+    expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
+    const operatingSystem = dockerOperatingSystem()
+    if (operatingSystem === 'OrbStack' || operatingSystem === 'Docker Desktop')
+      console.warn(
+        `${operatingSystem} forwards host.docker.internal to the machine's loopback and joins Docker networks: the blocked checks are skipped`,
+      )
+    else {
+      expect(reaches(runtimeContainer, `http://host.docker.internal:${servicePort}/`)).toBe('blocked')
+      expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toBe('blocked')
+    }
+    await provider.remove(runtime)
+    docker('rm', '-f', service)
+    docker('network', 'rm', serviceNetwork)
   },
   90_000,
 )
