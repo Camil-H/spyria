@@ -236,7 +236,7 @@ test("through the claiming workspace's provider, an address at its domain opens 
   expect(throughTyrell.workspaceIds).toEqual(['tyrell'])
   const sideToken = await tokenThrough('side', ben, 'umbrella')
   expect((await requestAs(sideToken, '/api/workspace-creation')).body).toEqual({ isOpen: false })
-  expect(await openSessions(database, ben, 'tyrell', 'umbrella')).toEqual([])
+  expect(await openSessions(database, ben, 'tyrell', 'umbrella')).toHaveLength(0)
 })
 
 test('signing in to a workspace without its own SSO, from a browser signed in at a claimed domain, goes to the claiming provider', async () => {
@@ -259,7 +259,7 @@ test("once its workspace claimed a domain, the workspace's provider refuses addr
     'This workspace signs in only addresses at its own domains, and carl@gmail.com is not one of them',
   )
   expect(outside.workspaceIds).toEqual([])
-  expect(await openSessions(database, carl, 'umbrella', 'umbrella')).toEqual([])
+  expect(await openSessions(database, carl, 'umbrella', 'umbrella')).toHaveLength(0)
   const throughAccount = await signInThrough(accountIdp, 'provider=oidc', {
     sub: 'carl-account',
     email: 'carl@gmail.com',
