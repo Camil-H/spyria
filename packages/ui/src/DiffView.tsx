@@ -2,6 +2,7 @@ const lineStyles = {
   added: { marker: '+', className: 'bg-added' },
   removed: { marker: '-', className: 'bg-removed' },
   context: { marker: ' ', className: '' },
+  gap: { marker: '⋯', className: 'text-muted' },
 }
 
 export const DiffView = ({ lines }: { lines: readonly { kind: keyof typeof lineStyles; text: string }[] }) => (

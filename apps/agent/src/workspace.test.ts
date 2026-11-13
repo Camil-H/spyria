@@ -173,6 +173,55 @@ test('commits are the log since the base with each body and each patch, a merge 
   })
 })
 
+test('the changes diff with the histogram algorithm, so a function moved above another reads as one added block', async () => {
+  const moved = join(directory, 'moved')
+  git(directory, 'clone', '-q', source, moved)
+  git(moved, 'checkout', '-q', '-b', 'spyria/moved')
+  const frobnitz = [
+    '// Frobs foo heartily',
+    'int frobnitz(int foo)',
+    '{',
+    '    int i;',
+    '    for(i = 0; i < 10; i++)',
+    '    {',
+    '        printf("%d\\n", foo);',
+    '    }',
+    '}',
+  ]
+  const fact = [
+    'int fact(int n)',
+    '{',
+    '    if(n > 1)',
+    '    {',
+    '        return fact(n-1) * n;',
+    '    }',
+    '    return 1;',
+    '}',
+  ]
+  const fib = [
+    'int fib(int n)',
+    '{',
+    '    if(n > 2)',
+    '    {',
+    '        return fib(n-1) + fib(n-2);',
+    '    }',
+    '    return 1;',
+    '}',
+  ]
+  const main = (call: string) => ['int main(int argc, char **argv)', '{', `    frobnitz(${call}(10));`, '}']
+  const fileOf = (...blocks: string[][]) =>
+    `${['#include <stdio.h>', ...blocks.flatMap((block) => ['', ...block])].join('\n')}\n`
+  write(moved, { 'src/main.c': fileOf(frobnitz, fact, main('fact')) })
+  git(moved, 'add', '.')
+  git(moved, 'commit', '-q', '-m', 'Add main')
+  write(moved, { 'src/main.c': fileOf(fib, frobnitz, main('fib')) })
+  const { call } = started({ workspaceDirectory: moved })
+  const { body } = await call('GET', '/api/workspace/changes?base=main')
+  expect(String(body.unstaged)).toContain(
+    ` #include <stdio.h>\n \n${fib.map((line) => `+${line}`).join('\n')}\n+\n // Frobs`,
+  )
+})
+
 test('a diff longer than 400,000 characters is cut there, naming the parts cut', async () => {
   const large = join(directory, 'large')
   git(directory, 'clone', '-q', source, large)

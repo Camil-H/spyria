@@ -12,7 +12,7 @@ import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { Disclosure } from './Disclosure.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
 import { ForkButton } from './ForkButton.tsx'
-import { LazyMarkdown } from './LazyMarkdown.tsx'
+import { LazyMarkdown, LazyStreamedMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
 import { MessageActions } from './MessageActions.tsx'
 import { linkedMessageParam } from './message-link.ts'
@@ -185,16 +185,18 @@ export const MessageItem = ({
               <EditMessageForm messageId={message.id} initialText={message.body} onClose={close} />
             ) : message.isDeleted ? (
               <p className="text-sm text-muted italic">This message was deleted</p>
-            ) : !message.isStreamed ? (
-              <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
-                <LazyMarkdown
-                  text={message.body}
-                  keepsLineBreaks={message.kind === 'member'}
-                  mentionNames={mentionNames}
-                />
-              </Suspense>
             ) : (
-              <p className={plainTextClassName}>{message.body}</p>
+              <Suspense fallback={<p className={plainTextClassName}>{message.body}</p>}>
+                {message.isStreamed ? (
+                  <LazyStreamedMarkdown text={message.body} mentionNames={mentionNames} />
+                ) : (
+                  <LazyMarkdown
+                    text={message.body}
+                    keepsLineBreaks={message.kind === 'member'}
+                    mentionNames={mentionNames}
+                  />
+                )}
+              </Suspense>
             )}
             {!message.isDeleted && mode !== 'edit' && <AttachmentList attachments={message.attachments} />}
             {message.runtimes.length > 0 && <RuntimeLinks runtimes={message.runtimes} />}

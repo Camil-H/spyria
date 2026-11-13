@@ -29,7 +29,7 @@ const relayCollecting = () => {
     maximumQueuedMessages: 2,
   })
   const nextOf = (type: string) => nextFrameOf(sent, type)
-  return { relay, nextOf }
+  return { relay, nextOf, sent }
 }
 
 test('relays an HTTP call and answers with its status and body', async () => {
@@ -62,6 +62,15 @@ test('relays a WebSocket stream both ways and closes it', async () => {
   expect(await nextOf('ws_msg')).toEqual({ type: 'ws_msg', sid: 3, data: 'echo hello' })
   await relay.handle({ type: 'ws_close', sid: 3 })
   expect(await nextOf('ws_close')).toMatchObject({ type: 'ws_close', sid: 3 })
+})
+
+test('a stream closed while its runtime address is looked up is never opened', async () => {
+  const { relay, sent } = relayCollecting()
+  const connecting = relay.handle({ type: 'ws_connect', sid: 6, runtimeId: 'runtime-1', path: '/' })
+  await relay.handle({ type: 'ws_close', sid: 6 })
+  await connecting
+  await Bun.sleep(50)
+  expect(sent.filter((frame) => frame.sid === 6 && frame.type === 'ws_open')).toEqual([])
 })
 
 test('closes a stream whose queue before opening overflows', async () => {

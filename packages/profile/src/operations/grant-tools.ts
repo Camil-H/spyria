@@ -66,12 +66,17 @@ export const releaseLostSignIns = async (
     }),
   )
   if (connections.length === 0) return
-  const servers = await gateway.toolServers()
+  const serverByName = new Map((await gateway.toolServers()).map((server) => [server.name, server]))
+  const holderById = new Map(holders.map((holder) => [holder.memberId, holder]))
+  const accessRowsByConnection = Map.groupBy(accessRows, (access) => access.connectionId)
+  const keptMemberIds = memberIds && new Set(memberIds)
+  const keysOfMembers = virtualKeys.filter((key) => keptMemberIds?.has(key.memberId) ?? true)
   for (const connection of connections) {
-    const server = servers.find(({ name }) => name === connection.gatewayName)
-    for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true)) {
-      const holder = holders.find((candidate) => candidate.memberId === memberId)
-      if (holder && grantedToolsOf(connection, accessRows, holder).length > 0) continue
+    const server = serverByName.get(connection.gatewayName)
+    const accessToConnection = accessRowsByConnection.get(connection.id) ?? []
+    for (const { memberId, virtualKeyId } of keysOfMembers) {
+      const holder = holderById.get(memberId)
+      if (holder && grantedToolsOf(connection, accessToConnection, holder).length > 0) continue
       for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
         await gateway.removeToolSession(session.id)
       await transactor.run(({ workspaceConnections }) =>

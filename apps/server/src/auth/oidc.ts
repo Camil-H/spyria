@@ -1,4 +1,4 @@
-import { DomainError, withRetries } from '@spyria/kernel'
+import { createSingleflight, DomainError, withRetries } from '@spyria/kernel'
 import { createRemoteJWKSet, decodeJwt, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
@@ -25,29 +25,35 @@ const providerTimeoutMilliseconds = 10_000
 const tenantPlaceholder = '{tenantid}'
 const tenantIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
+const discoveriesInFlight = createSingleflight<oauth.AuthorizationServer>()
+
 const insecureOptionOf = (issuerUrl: URL) => ({ [oauth.allowInsecureRequests]: issuerUrl.protocol === 'http:' })
 
-export const discoverIssuer = async (issuer: string) => {
-  const issuerUrl = new URL(issuer)
-  const response = await oauth.discoveryRequest(issuerUrl, {
-    algorithm: 'oidc',
-    ...insecureOptionOf(issuerUrl),
-    [oauth.customFetch]: (url, options) =>
-      withRetries((signal) => fetch(url, { ...options, signal }), { timeoutMilliseconds: providerTimeoutMilliseconds }),
+export const discoverIssuer = (issuer: string) =>
+  discoveriesInFlight(`issuer ${issuer}`, async () => {
+    const issuerUrl = new URL(issuer)
+    const response = await oauth.discoveryRequest(issuerUrl, {
+      algorithm: 'oidc',
+      ...insecureOptionOf(issuerUrl),
+      [oauth.customFetch]: (url, options) =>
+        withRetries((signal) => fetch(url, { ...options, signal }), {
+          timeoutMilliseconds: providerTimeoutMilliseconds,
+        }),
+    })
+    return oauth.processDiscoveryResponse(issuerUrl, response)
   })
-  return oauth.processDiscoveryResponse(issuerUrl, response)
-}
 
-const discoverPerTenantIssuer = async (issuer: string) => {
-  const response = await withRetries((signal) => fetch(`${issuer}/.well-known/openid-configuration`, { signal }), {
-    timeoutMilliseconds: providerTimeoutMilliseconds,
+const discoverPerTenantIssuer = (issuer: string) =>
+  discoveriesInFlight(`tenant issuer ${issuer}`, async () => {
+    const response = await withRetries((signal) => fetch(`${issuer}/.well-known/openid-configuration`, { signal }), {
+      timeoutMilliseconds: providerTimeoutMilliseconds,
+    })
+    if (!response.ok) throw new Error(`The discovery of ${issuer} answered ${response.status}`)
+    const server = (await response.json()) as oauth.AuthorizationServer
+    if (server.issuer !== `${new URL(issuer).origin}/${tenantPlaceholder}/v2.0`)
+      throw new Error(`${issuer} does not name an issuer per tenant`)
+    return server
   })
-  if (!response.ok) throw new Error(`The discovery of ${issuer} answered ${response.status}`)
-  const server = (await response.json()) as oauth.AuthorizationServer
-  if (server.issuer !== `${new URL(issuer).origin}/${tenantPlaceholder}/v2.0`)
-    throw new Error(`${issuer} does not name an issuer per tenant`)
-  return server
-}
 
 const tenantIssuerOf = async (server: oauth.AuthorizationServer, tokenResponse: Response) => {
   const { id_token: idToken } = (await tokenResponse.json()) as { id_token?: string }
