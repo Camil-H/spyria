@@ -139,6 +139,51 @@ test('a prompt whose send answer is lost after the agent took it is sent again o
   expect(await repliesTo(next)).toEqual([replyOf(2)])
 })
 
+const agentHostLosingFirstPrompt = async () => {
+  const firstSend = Promise.withResolvers<void>()
+  const loseFirstPrompt = Promise.withResolvers<void>()
+  let isFirstSend = true
+  const host = await stack.agentHost('Agent host', {
+    holdUrl,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        if (!request.path.endsWith('/events') || !isFirstSend) return relay.containerAgent.respond(request, container)
+        isFirstSend = false
+        firstSend.resolve()
+        await loseFirstPrompt.promise
+        return { status: 500, body: '{"error":"Failed on purpose"}' }
+      },
+    }),
+  })
+  return { ...host, firstSend: firstSend.promise, loseFirstPrompt: loseFirstPrompt.resolve }
+}
+const chatWithPromptStoppedBeforeDelivery = async (host: Awaited<ReturnType<typeof agentHostLosingFirstPrompt>>) => {
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  await prompt(chat, 'Never delivered')
+  await host.firstSend
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
+  await turnEnded(chat)
+  host.loseFirstPrompt()
+  return { chat, viewer }
+}
+
+test('stopping a prompt that never reached the agent: the next prompt streams, is answered under itself, and its turn ends', async () => {
+  const host = await agentHostLosingFirstPrompt()
+  const { chat, viewer } = await chatWithPromptStoppedBeforeDelivery(host)
+
+  const next = await prompt(chat, 'Hello')
+  await answered(next)
+  await turnEnded(chat)
+  expect(await repliesTo(next)).toEqual([replyOf(1)])
+  const streamed = viewer.frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.text !== undefined)
+  expect(streamed.map((frame) => frame.text).join('')).toBe(replyOf(1).body)
+  expect(streamed.every((frame) => frame.promptId === next)).toBe(true)
+  expect(host.relay.prompts).toEqual(['Hello'])
+})
+
 test('starting a runtime from a runtime chat message is refused and that chat’s queued prompt still runs', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })

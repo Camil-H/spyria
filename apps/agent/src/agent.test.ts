@@ -129,6 +129,30 @@ test('an interrupt naming a prompt that already ended cancels nothing, one namin
   })
 })
 
+test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const cancelledTurnEnd = { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-unsent' }
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-unsent' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('turn_end'))?.update).toEqual(cancelledTurnEnd)
+
+  expect((await promptWithId('hello', 'prompt-unsent')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  await promptWithId('hello', 'prompt-next')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    cancelledTurnEnd,
+    cancelledTurnEnd,
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-next' },
+  ])
+  expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-default, mode bypassPermissions).')
+})
+
 test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())
