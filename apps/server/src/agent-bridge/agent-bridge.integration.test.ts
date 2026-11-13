@@ -139,7 +139,7 @@ test('a prompt whose send answer is lost after the agent took it is sent again o
   expect(await repliesTo(next)).toEqual([replyOf(2)])
 })
 
-const agentHostLosingFirstPrompt = async () => {
+const agentHostLosingFirstPrompt = async ({ ignoresStop = false } = {}) => {
   const firstSend = Promise.withResolvers<void>()
   const loseFirstPrompt = Promise.withResolvers<void>()
   let isFirstSend = true
@@ -148,6 +148,7 @@ const agentHostLosingFirstPrompt = async () => {
     containerAgentOf: (relay) => ({
       ...relay.containerAgent,
       respond: async (request, container) => {
+        if (ignoresStop && request.path.endsWith('/interrupt')) return { status: 200, body: '{}' }
         if (!request.path.endsWith('/events') || !isFirstSend) return relay.containerAgent.respond(request, container)
         isFirstSend = false
         firstSend.resolve()
@@ -182,6 +183,19 @@ test('stopping a prompt that never reached the agent: the next prompt streams, i
   expect(streamed.map((frame) => frame.text).join('')).toBe(replyOf(1).body)
   expect(streamed.every((frame) => frame.promptId === next)).toBe(true)
   expect(host.relay.prompts).toEqual(['Hello'])
+})
+
+test('a stop the agent ignores for a prompt it never received still lets the next prompt’s turn close, and the prompt after it is answered under itself', async () => {
+  const host = await agentHostLosingFirstPrompt({ ignoresStop: true })
+  const { chat } = await chatWithPromptStoppedBeforeDelivery(host)
+
+  await prompt(chat, 'Hello')
+  await waitFor(() => host.relay.prompts.length === 1)
+  await turnEnded(chat)
+  const after = await prompt(chat, 'Again')
+  await answered(after)
+  await turnEnded(chat)
+  expect(await repliesTo(after)).toEqual([replyOf(2)])
 })
 
 test('starting a runtime from a runtime chat message is refused and that chat’s queued prompt still runs', async () => {
