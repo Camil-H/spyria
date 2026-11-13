@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { memberId } from '@spyria/kernel'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
@@ -19,6 +20,8 @@ import {
   sessionTokenOf,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
@@ -279,3 +282,43 @@ test.each([
     expect(await boundKeyIdsOf(await virtualKeyIdOf(bob))).toContain(key.id)
   },
 )
+
+const newAcmeMember = async () => {
+  const userId = memberId(`member-${crypto.randomUUID()}`)
+  await database.$client`insert into users (id, email) values (${userId}, ${`${userId}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${userId}, 'member', 'Dana')`
+  return { workspaceId: acme, userId }
+}
+const postCredentialDuringRemoval = async (
+  member: typeof aliceInAcme,
+  body: object,
+  beforeRemovalCommits = async () => {},
+) => {
+  const authorization = `Bearer ${await tokenOf(member.workspaceId, member.userId)}`
+  let posted: ReturnType<typeof postCredential> | undefined
+  await database.$client.begin(async (removal) => {
+    await removal`
+      update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${member.userId}`
+    posted = postCredential(authorization, JSON.stringify(body))
+    await waitFor(() => waitingOnLock(database))
+    await beforeRemovalCommits()
+  })
+  return posted
+}
+const memberRemoved = (removedMemberId: string) => ({
+  status: 400,
+  text: JSON.stringify({ error: 'member_not_found', message: `${removedMemberId} is not a member of this workspace` }),
+})
+
+test('a credential added while its member is being removed is refused once the removal commits, and leaves no row, member key nor gateway key behind', async () => {
+  const dana = await newAcmeMember()
+  const keysBefore = await gatewayKeysOf('mistral')
+
+  expect(await postCredentialDuringRemoval(dana, { provider: 'Mistral', secret: secretValue })).toEqual(
+    memberRemoved(dana.userId),
+  )
+  expect((await credentialRows()).filter((row) => row.user_id === dana.userId)).toEqual([])
+  expect(await virtualKeyIdOf(dana.userId)).toBeUndefined()
+  expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
+})

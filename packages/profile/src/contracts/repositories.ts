@@ -25,6 +25,7 @@ export type MemberRepository = {
   save(member: Member): Promise<void>
   permissions(): Promise<readonly WorkspacePermission[]>
   isActive(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
+  lockActive(): Promise<void>
   holders(workspaceId: WorkspaceId): Promise<ToolHolder[]>
   roleIds(workspaceId: WorkspaceId): Promise<string[]>
 }
