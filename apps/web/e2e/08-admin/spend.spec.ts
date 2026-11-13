@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { seedSpend } from '@spyria/db/testing'
 import {
   addLlmKey,
@@ -38,8 +39,13 @@ test.describe('Spend', () => {
     }, async ({ page }) => {
       await openSettings(page, 'Costs')
       const section = usageSectionOf(page, 'Usage')
-      await expect(section.getByRole('combobox', { name: 'Period' })).toHaveValue('this_month')
-      await expect(section.getByRole('radio', { name: 'Day' })).toBeChecked()
+      await expect(section).toContainText(
+        "Sessions run on a member's own machine (Claude Code, Codex) use their own subscription and are not counted here.",
+      )
+      const filters = section.getByRole('group', { name: 'Filters' })
+      await expect(filters.getByRole('combobox', { name: 'Period' })).toHaveValue('this_month')
+      await expect(filters.getByRole('radio', { name: 'Day' })).toBeChecked()
+      await expect(filters.getByRole('combobox', { name: 'Narrow to' })).toHaveValue('')
       await expect(section.getByRole('img', { name: 'Spend over time by member' })).toBeVisible()
       await expect(legendOf(section)).toHaveText(['Alice$0.04', 'Bob$0.02', 'Lee$0.02'])
       const expectedRows = {
@@ -103,21 +109,33 @@ test.describe('Spend', () => {
       await expect(decomposition.getByRole('row').last()).toHaveCSS('font-weight', '600')
     })
 
-    test('As a member who can view costs, I narrow the decomposition to one model, open a factor’s daily line chart under it and close it again, and the same for the total', {
+    test('As a member who can view costs, I narrow the whole usage to one model, open a factor’s daily line chart by clicking its row and close it again, and the same for the total', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
       await openSettings(page, 'Costs')
       const section = usageSectionOf(page, 'Usage')
-      await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'Model' })
-      await section.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      const filters = section.getByRole('group', { name: 'Filters' })
+      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Model' })
+      await filters.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
       const decomposition = tableOf(section, 'Spend decomposition')
       await expect(rowOf(decomposition, 'Users').getByRole('cell').first()).toHaveText('1')
       expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
       await expect(decomposition.locator('tr[aria-current="true"]').getByRole('rowheader')).toHaveText(
         'Tokens per request · Biggest mover',
       )
+      await expect(section).toContainText('$0.03 · 3 requests')
+      expect(await cellTextsOf(rowOf(tableOf(section, 'Usage by member'), 'Alice'))).toEqual([
+        '3,000',
+        '$0.03',
+        '3',
+        '100%',
+      ])
+      await expect(rowOf(tableOf(section, 'Usage by member'), 'Bob')).toHaveCount(0)
+      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Whole workspace' })
       await expect(section).toContainText('$0.08 · 8 requests')
-      await expect(rowOf(tableOf(section, 'Usage by member'), 'Total')).toContainText('$0.08')
+      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Model' })
+      await filters.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      await expect(section).toContainText('$0.03 · 3 requests')
 
       const now = new Date()
       const dayOf = (day: number) =>
@@ -127,7 +145,7 @@ test.describe('Spend', () => {
           day: 'numeric',
         })
       const requestsPerTurn = decomposition.getByRole('button', { name: 'Requests per turn' })
-      await requestsPerTurn.click()
+      await rowOf(decomposition, 'Requests per turn').getByRole('cell').last().click()
       await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'true')
       await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toBeVisible()
       const requestsChart = decomposition.getByRole('table', { name: 'Requests per turn over time' })
@@ -137,25 +155,33 @@ test.describe('Spend', () => {
       await expect(requestsPerTurn).toHaveAttribute('aria-expanded', 'false')
       await expect(decomposition.getByRole('img', { name: 'Requests per turn over time' })).toHaveCount(0)
 
-      await decomposition.getByRole('button', { name: 'Total spend' }).click()
+      await rowOf(decomposition, 'Total spend').getByRole('cell').first().click()
       const totalChart = decomposition.getByRole('table', { name: 'Total spend over time' })
       await expect(rowOf(totalChart, dayOf(3))).toBeVisible()
       expect(await cellTextsOf(rowOf(totalChart, dayOf(2)))).toEqual(['$0.01'])
       expect(await cellTextsOf(rowOf(totalChart, dayOf(3)))).toEqual(['$0.02'])
     })
 
-    test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
+    test('As a member who can view costs, I see the cost per merged PR as its average over time and its distribution, and export each merged PR with its chat’s cost', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
       await openSettings(page, 'Costs')
       const mergedPulls = usageSectionOf(page, 'Cost per merged PR')
       await expect(mergedPulls).toContainText('$0.06 per merged PR · 1 merged · $0.06 spent in their chats')
-      const table = tableOf(mergedPulls, 'Merged pull requests')
-      expect(await cellTextsOf(rowOf(table, 'Invoice bug'))).toEqual(['acme/app#7 Fix the invoice total', '$0.06'])
-      await expect(table.getByRole('link', { name: 'acme/app#7' })).toHaveAttribute(
-        'href',
-        'https://github.com/acme/app/pull/7',
+      await expect(mergedPulls.getByRole('img', { name: 'Average cost per merged PR over time' })).toBeVisible()
+      await expect(mergedPulls.getByRole('img', { name: 'Merged PRs by chat cost' })).toBeVisible()
+      const distribution = tableOf(mergedPulls, 'Merged PRs by chat cost')
+      expect(await cellTextsOf(rowOf(distribution, '$0.05 to $0.06'))).toEqual(['1 merged PR'])
+      await expect(mergedPulls.getByRole('table', { name: 'Merged pull requests' })).toHaveCount(0)
+      const download = page.waitForEvent('download')
+      await mergedPulls.getByRole('button', { name: 'Export data' }).click()
+      const csv = await readFile(await (await download).path(), 'utf8')
+      const [header, row, ...others] = csv.trimEnd().split('\n')
+      expect(header).toBe('Merged at,Chat,Repository,Pull request,Title,URL,Chat cost (USD)')
+      expect(row).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z,Invoice bug,acme\/app,7,Fix the invoice total,https:\/\/github\.com\/acme\/app\/pull\/7,0\.060000$/,
       )
+      expect(others).toEqual([])
     })
 
     test.describe(() => {
@@ -180,7 +206,7 @@ test.describe('Spend', () => {
         expect(await cellTextsOf(rowOf(decomposition, 'Sessions'))).toEqual(['1', '1', '0%'])
         await expect(decomposition).not.toContainText('Sessions per user')
         await expect(usageSectionOf(page, 'Spend decomposition')).not.toContainText('Spend =')
-        await expect(section.getByRole('combobox', { name: 'For' }).getByRole('option')).toHaveText([
+        await expect(section.getByRole('combobox', { name: 'Narrow to' }).getByRole('option')).toHaveText([
           'All my usage',
           'Chat',
           'Model',

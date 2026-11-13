@@ -8,15 +8,17 @@ type Row = { key: string; name: string; costMicros: number; tokens: number; requ
 type Report = {
   total: { costMicros: number; tokens: number; requests: number }
   tables: Record<string, Row[]>
+  scopeChoices: Record<string, { key: string; name: string }[]>
   charts: Record<string, { buckets: string[]; series: { key: string; costs: number[] }[] }>
   decomposition: {
     factors: { name: string; current: number | null; previous: number | null; change: number | null }[]
     biggestMover: string | null
   }
   mergedPulls: {
-    pulls: { chatName: string; repository: string; number: number; costMicros: number }[]
+    pulls: { chatName: string; repository: string; number: number; mergedAt: string; costMicros: number }[]
     costMicros: number
     perPullMicros: number | null
+    trend: { bucket: string; perPullMicros: number | null }[]
   } | null
 }
 
@@ -109,16 +111,19 @@ test('the decomposition counts delegated calls in their parent turn and finds to
 
 test('cost per merged PR lists the PR merged this month with all its chat’s spend up to the period end', async () => {
   const { mergedPulls } = await reportOf('/api/spend')
+  const mergedAt = mergedPulls?.pulls[0]?.mergedAt ?? ''
+  expect(mergedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
   expect(mergedPulls).toMatchObject({
     costMicros: 60_000,
     perPullMicros: 60_000,
     pulls: [{ chatName: 'Invoice bug', repository: 'acme/app', number: 7, costMicros: 60_000 }],
   })
-  expect((await reportOf('/api/spend?period=last_month')).mergedPulls).toEqual({
-    pulls: [],
-    costMicros: 0,
-    perPullMicros: null,
-  })
+  expect(mergedPulls?.trend.filter((point) => point.perPullMicros !== null)).toEqual([
+    { bucket: mergedAt.slice(0, 10), perPullMicros: 60_000 },
+  ])
+  const lastMonth = (await reportOf('/api/spend?period=last_month')).mergedPulls
+  expect(lastMonth).toMatchObject({ pulls: [], costMicros: 0, perPullMicros: null })
+  expect(lastMonth?.trend.every((point) => point.perPullMicros === null)).toBe(true)
 })
 
 test('own usage holds only the requester’s calls, whatever member the request names', async () => {
@@ -142,15 +147,24 @@ test('own usage holds only the requester’s calls, whatever member the request 
 const factorsOf = (point: Pick<Report['decomposition'], 'factors'> | undefined) =>
   Object.fromEntries((point?.factors ?? []).map(({ name, current }) => [name, current]))
 
-test('a decomposition narrowed to one model leaves the total and the tables whole', async () => {
+test('a scope narrows the whole report to one model, the total, tables and charts included, while its choices stay every member, project, chat and model', async () => {
   const report = await reportOf('/api/spend?scope=model&scopeKey=anthropic/claude-sonnet')
   expect(report.decomposition.biggestMover).toBe('tokensPerRequest')
   expect(factorsOf(report.decomposition).users).toBe(1)
-  expect(report.total).toEqual({ costMicros: 80_000, tokens: 8000, requests: 8 })
-  expect(rowsOf(report.tables.member)).toEqual([
-    ['Alice', 40_000, 4],
-    ['Bob', 20_000, 2],
-    ['Lee', 20_000, 2],
+  expect(report.total).toEqual({ costMicros: 30_000, tokens: 3000, requests: 3 })
+  expect(rowsOf(report.tables.member)).toEqual([['Alice', 30_000, 3]])
+  expect(rowsOf(report.tables.model)).toEqual([['anthropic/claude-sonnet', 30_000, 3]])
+  expect(report.charts.member?.series.map((series) => series.key)).toEqual(['member-alice'])
+  expect(report.scopeChoices.member?.map(({ name }) => name)).toEqual(['Alice', 'Bob', 'Lee'])
+  expect(report.scopeChoices.model?.map(({ key }) => key)).toEqual([
+    'openai/gpt-5',
+    'anthropic/claude-sonnet',
+    'openai/gpt-5-mini',
+  ])
+  expect(report.scopeChoices.chat?.map(({ key }) => key)).toEqual([
+    'chat-invoice-bug',
+    'chat-research',
+    'chat-setup-helper',
   ])
 })
 

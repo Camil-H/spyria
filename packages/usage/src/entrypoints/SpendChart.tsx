@@ -1,6 +1,7 @@
 import { formatCost } from '@spyria/ui'
 import type { SpendChart as SpendChartData, SpendGranularity } from '../domain/spend.ts'
 import { formatBucket } from './format.ts'
+import { useChartWidth } from './useChartWidth.ts'
 
 const seriesColors = [
   'light-dark(#2a78d6, #3987e5)',
@@ -11,7 +12,6 @@ const seriesColors = [
   'light-dark(#008300, #008300)',
 ]
 const otherColor = 'light-dark(#a3a29d, #6f6e69)'
-const width = 640
 const height = 200
 const axisWidth = 56
 const labelHeight = 20
@@ -28,6 +28,7 @@ export const SpendChart = ({
   granularity: SpendGranularity
   label: string
 }) => {
+  const { ref, width } = useChartWidth<HTMLElement>()
   const bucketTotals = chart.buckets.map((_, bucketIndex) =>
     chart.series.reduce((sum, series) => sum + (series.costs[bucketIndex] ?? 0), 0),
   )
@@ -37,7 +38,7 @@ export const SpendChart = ({
   const barWidth = Math.max(Math.min(slotWidth * 0.7, 32), 2)
   const labelledBuckets = new Set([0, Math.floor((chart.buckets.length - 1) / 2), chart.buckets.length - 1])
   return (
-    <figure className="flex flex-col gap-2">
+    <figure ref={ref} className="flex flex-col gap-2">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={label}>
         {gridSteps.map((step) => (
           <g key={step}>

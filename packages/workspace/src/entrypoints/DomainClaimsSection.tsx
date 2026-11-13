@@ -70,9 +70,8 @@ export const DomainClaimsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
   return (
     <LabelledSection title="Domains" titleClass="text-sm font-medium">
       <p className="text-sm text-muted">
-        Claim your organization's email domains to prove they are yours. Addresses at a claimed domain then sign in only
-        through your provider, which opens every workspace they belong to on this Spyria; they cannot create or join
-        other workspaces. Once a domain is claimed, members at any other domain can no longer sign in to this workspace.
+        Prove your email domains with a DNS record. Their addresses then sign in only through your provider, and
+        addresses at other domains lose access to this workspace.
       </p>
       {claims === undefined ? (
         <p className="text-sm text-muted">Loading…</p>

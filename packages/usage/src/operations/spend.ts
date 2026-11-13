@@ -32,9 +32,23 @@ const requireScopeIn = (filter: SpendFilter, { tableDimensions }: View) => {
 const reportOf = async (ledger: SpendLedger, filter: SpendFilter, view: View) => {
   requireScopeIn(filter, view)
   const { prompterId, tableDimensions, chartDimensions } = view
+  const bothPeriods = { from: filter.previous.from, to: filter.current.to }
   return spendReportOf({
     filter,
-    rows: await ledger.rows(filter.current, filter.granularity, prompterId, { tableDimensions, chartDimensions }),
+    rows: await ledger.rows(
+      filter.current,
+      filter.granularity,
+      prompterId,
+      { tableDimensions, chartDimensions },
+      filter.scope,
+    ),
+    choiceRows: await ledger.rows(
+      bothPeriods,
+      filter.granularity,
+      prompterId,
+      { tableDimensions, chartDimensions: [] },
+      null,
+    ),
     counts: await ledger.counts(filter, prompterId),
     tableDimensions,
     chartDimensions,
