@@ -31,7 +31,6 @@ const emptyInstance = await createTestDatabase()
 await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKeyring = secretsKeyringOf('sso-integration-secrets-key-0123456789')
 
-
 const accountIdp = await startFakeIdp()
 const microsoftIdp = await startFakeIdp('/tenant-1/v2.0', { confirmsEmail: false })
 const hooliIdp = await startFakeIdp()
