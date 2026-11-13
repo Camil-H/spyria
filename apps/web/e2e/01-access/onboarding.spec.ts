@@ -48,7 +48,7 @@ test.describe('Onboarding', () => {
     })
   })
 
-  test('As a member, I follow the checklist from the sidebar to my profile, skip adding an AI key, and once my picture is added the checklist goes away', {
+  test('As a member, I follow the checklist from the sidebar to my AI key, skip it from my profile, and once my picture is added the checklist goes away', {
     tag: ['@spec-54'],
   }, async ({ browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -58,6 +58,8 @@ test.describe('Onboarding', () => {
     await expect(sidebarOf(bobPage).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
 
     await startLink.click()
+    await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'LLM keys' })).toBeVisible()
+    await mainOf(bobPage).getByRole('link', { name: 'Back to Profile' }).click()
     const checklist = checklistOf(bobPage, 'Set up your profile')
     await expect(checklist).toContainText("Spyria doesn't sell AI usage")
     await checklist.getByRole('button', { name: 'Skip Add your AI key' }).click()
@@ -65,12 +67,16 @@ test.describe('Onboarding', () => {
     await expect(startLink).toHaveAccessibleName('Get started: 0 of 1 done')
     await expect(startLink).toHaveAccessibleDescription('Next: Add a profile picture')
 
+    await checklist.getByRole('link', { name: 'Add a profile picture' }).click()
+    await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Account' })).toBeVisible()
     const fileChooser = bobPage.waitForEvent('filechooser')
     await mainOf(bobPage)
       .getByRole('region', { name: 'Profile picture' })
       .getByRole('button', { name: 'Add profile picture' })
       .click()
     await (await fileChooser).setFiles({ name: 'me.png', mimeType: 'image/png', buffer: onePixelPng })
+    await expect(mainOf(bobPage).getByRole('region', { name: 'Profile picture' }).locator('img')).toBeVisible()
+    await mainOf(bobPage).getByRole('link', { name: 'Back to Profile' }).click()
     await expect(checklist).toHaveCount(0)
     await expect(startLink).toHaveCount(0)
     await bobPage.context().close()

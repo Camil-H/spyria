@@ -15,7 +15,7 @@ export * from '../fixtures.ts'
 
 export const connectGitHub = async (page: Page) => {
   await openMyConnections(page)
-  const github = connectionsOf(page).getByRole('group', { name: 'GitHub account' })
+  const github = connectionsOf(page).getByRole('listitem', { name: 'GitHub account' })
   await inPopup(page, () => github.getByRole('button', { name: 'Connect GitHub account' }).click())
   await expect(github).toContainText('Connected (alice-martin)')
   await page.goto('/')

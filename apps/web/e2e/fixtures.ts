@@ -133,18 +133,23 @@ export const expectModelMetered = async (page: Page, workerStack: WorkerStack, m
   expect(Number(requests)).toBeGreaterThan(0)
 }
 
-export const openProfile = async (page: Page) => {
+export type ProfileCard = 'Account' | 'LLM keys' | 'My machine' | 'Connections' | 'Usage'
+export const openProfile = async (page: Page, card: ProfileCard) => {
   await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+  await mainOf(page).getByRole('link', { name: card, exact: true }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name: card })).toBeVisible()
 }
-export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM access' })
+export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM keys' })
+export const addKeyDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add LLM key' })
 export const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {
-  await llmSectionOf(page).getByLabel('Provider').fill(credential.provider)
-  await llmSectionOf(page).getByLabel('Secret').fill(credential.secret)
-  await llmSectionOf(page).getByRole('button', { name: 'Add' }).click()
+  await llmSectionOf(page).getByRole('button', { name: 'Add key' }).click()
+  await addKeyDialogOf(page).getByLabel('Provider').fill(credential.provider)
+  await addKeyDialogOf(page).getByLabel('Secret').fill(credential.secret)
+  await addKeyDialogOf(page).getByRole('button', { name: 'Add', exact: true }).click()
 }
 export const addLlmKey = async (page: Page, provider: string, secret = `fake-key-${crypto.randomUUID()}`) => {
-  await openProfile(page)
+  await openProfile(page, 'LLM keys')
   await addCredential(page, { provider, secret })
   await expect(
     llmSectionOf(page)
@@ -233,10 +238,17 @@ export const switchWorkspace = async (page: Page, workspaceName: string) => {
   await expect(switcherOf(page)).toContainText(workspaceName)
 }
 
-export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Tool connections' })
+export const connectionsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Connections' })
 export const openMyConnections = async (page: Page, workspace = 'workspace-acme') => {
-  await page.goto(`/w/${workspace}/profile`)
+  await page.goto(`/w/${workspace}/profile/connections`)
 }
+export const chooseConnectionAction = async (page: Page, name: string, action: 'Approvals' | 'Disconnect') => {
+  await connectionsOf(page)
+    .getByRole('button', { name: `Actions for ${name}`, exact: true })
+    .click()
+  await page.getByRole('menuitem', { name: action }).click()
+}
+export const approvalsOf = (page: Page, name: string) => page.getByRole('dialog', { name: `Approvals for ${name}` })
 export const inPopup = async (page: Page, open: () => Promise<void>) => {
   const popup = page.waitForEvent('popup')
   await open()

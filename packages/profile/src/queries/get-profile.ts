@@ -3,5 +3,5 @@ import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
 export const getProfile = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) => {
   const membership = snapshot.memberships.find(ownedBy(workspaceId, memberId))
-  return membership && { displayName: membership.displayName, avatar: membership.avatar }
+  return membership && { displayName: membership.displayName, avatar: membership.avatar, email: membership.email }
 }

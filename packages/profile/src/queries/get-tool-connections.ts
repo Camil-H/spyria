@@ -7,6 +7,7 @@ import {
   type MemberId,
   type WorkspaceId,
 } from '@spyria/kernel'
+import { connectionStatuses } from '../domain/tool-connection.ts'
 import { connectionSignIns } from '../domain/workspace-connection.ts'
 
 export const getToolConnections = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) =>
@@ -26,5 +27,19 @@ export const getGitHubApprovals = (workspaceId: WorkspaceId, memberId: MemberId)
     approvals: snapshot.toolApprovals.find(
       (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === githubConnectionId,
     ),
+  }
+}
+
+const githubStatusOf = (connection: { needsReconnection: boolean } | undefined) =>
+  connection && (connection.needsReconnection ? connectionStatuses.needsReconnection : connectionStatuses.connected)
+
+export const countConnectionStates = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) => {
+  const statuses = [
+    githubStatusOf(snapshot.githubConnections.find(ownedBy(workspaceId, memberId))),
+    ...usableConnectionsIn(snapshot, workspaceId, memberId).map(({ status }) => status),
+  ]
+  return {
+    connected: statuses.filter((status) => status === connectionStatuses.connected).length,
+    toReconnect: statuses.filter((status) => status === connectionStatuses.needsReconnection).length,
   }
 }

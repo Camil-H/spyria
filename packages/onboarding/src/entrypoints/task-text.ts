@@ -1,6 +1,6 @@
 import type { OnboardingTask } from '../domain/tasks.ts'
 
-type TaskText = Readonly<{ title: string; explanation: string; page: string; section?: string }>
+type TaskText = Readonly<{ title: string; explanation: string; page: string }>
 
 export const taskTextOf = (task: OnboardingTask): TaskText => {
   switch (task) {
@@ -23,8 +23,7 @@ export const taskTextOf = (task: OnboardingTask): TaskText => {
         title: 'Add your AI key',
         explanation:
           "Spyria doesn't sell AI usage: each member brings their own key (Anthropic, OpenAI…), and their prompts are billed to it. Only using Claude Code or Codex on your own machine? You can skip this.",
-        page: 'profile',
-        section: 'llm-access',
+        page: 'profile/llm-keys',
       }
     case 'invite-members':
       return {
@@ -37,15 +36,13 @@ export const taskTextOf = (task: OnboardingTask): TaskText => {
       return {
         title: 'Link your GitHub account',
         explanation: 'So the pushes and pull requests you make from Spyria show you as the author.',
-        page: 'profile',
-        section: 'connections',
+        page: 'profile/connections',
       }
     case 'add-profile-picture':
       return {
         title: 'Add a profile picture',
         explanation: 'Helps teammates tell who wrote what in shared chats.',
-        page: 'profile',
-        section: 'profile-picture',
+        page: 'profile/account',
       }
   }
 }

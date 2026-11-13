@@ -4,7 +4,7 @@ import { isAnyRuleOn, type WorkspaceId, type WorkspacePermission } from '@spyria
 import { ChecklistBlock } from '@spyria/onboarding'
 import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
 import { MemberLocalRuntimesSection, RuntimeHostsSection } from '@spyria/runtime'
-import { focusRing, formatCost, iconButtonClass, LabelledSection, useShortcut } from '@spyria/ui'
+import { formatCost, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
   DeleteWorkspaceSection,
@@ -17,17 +17,13 @@ import {
   useIsGitHubConfigured,
   useWorkspacePermissions,
 } from '@spyria/workspace'
-import { ArrowLeft } from 'lucide-react'
 import { type ComponentType, use } from 'react'
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
+import { useOutletContext, useParams } from 'react-router'
 import { sharedAuthMode } from './auth.ts'
+import { CardGrid, CardPage, countLabelOf, type PageCard, pagePaddingClass } from './card-pages.tsx'
 
-type SettingsCard = {
-  path: string
-  title: string
-  description: string
+type SettingsCard = PageCard & {
   permissions: readonly WorkspacePermission[]
-  isWide?: true
   Page: ComponentType<{
     workspaceId: WorkspaceId
     isDexSignIn: boolean
@@ -140,8 +136,6 @@ const aiProvidersStatusOf = (workspace: Snapshot['workspaces'][number] | undefin
   return allowList === null ? 'Every provider allowed' : countLabelOf(allowList.length, 'allowed provider')
 }
 
-const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
-
 const cardStatusesOf =
   (workspaceId: WorkspaceId, isDexSignIn: boolean) =>
   (snapshot: Snapshot): Readonly<Record<string, string>> => {
@@ -201,61 +195,39 @@ const SettingsRoute = () => {
     .filter((section) => section.cards.length > 0)
   const openCard = cardSections.flatMap(({ cards }) => cards).find(({ path }) => path === card)
   const settingsPath = `/w/${workspaceId}/settings`
-  const navigate = useNavigate()
-  useShortcut('escape', 'Back to Workspace settings', () => navigate(settingsPath), openCard !== undefined)
   if (openCard && !isAllowed(openCard))
     return <p className="p-6 text-muted">Your workspace role does not give access to this page</p>
   if (openCard)
     return (
-      <div className={`flex flex-col gap-6 px-6 py-6 md:px-12 xl:px-16 ${openCard.isWide ? '' : 'max-w-4xl'}`}>
-        <div className="flex items-center gap-2">
-          <Link to={settingsPath} aria-label="Back to Workspace settings" className={iconButtonClass}>
-            <ArrowLeft aria-hidden className="size-5" />
-          </Link>
-          <h1 className="text-2xl font-semibold">{openCard.title}</h1>
-        </div>
+      <CardPage backPath={settingsPath} backLabel="Back to Workspace settings" card={openCard}>
         <openCard.Page
           workspaceId={workspaceId}
           isDexSignIn={isDexSignIn}
           instanceApps={authMode.instanceApps}
           permissions={permissions}
         />
-      </div>
+      </CardPage>
     )
   return (
-    <div className="flex flex-col gap-8 px-6 py-6 md:px-12 xl:px-16">
+    <div className={`flex flex-col gap-8 ${pagePaddingClass}`}>
       <h1 className="text-2xl font-semibold">Workspace settings</h1>
       <ChecklistBlock workspaceId={workspaceId} scope="workspace" />
       {allowedSections.length > 0 ? (
         allowedSections.map(({ title, cards }) => (
           <LabelledSection key={title} title={title}>
-            <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-              {cards.map(({ path, title: cardTitle, description }) => (
-                <li key={path}>
-                  <Link
-                    to={`${settingsPath}/${path}`}
-                    aria-label={cardTitle}
-                    aria-describedby={`settings-card-${path}`}
-                    className={`flex h-full flex-col gap-1 rounded-lg border border-line bg-raised p-4 hover:bg-hover ${focusRing}`}
-                  >
-                    <span className="flex items-center justify-between gap-2 font-medium">
-                      {cardTitle}
-                      {path === 'costs' && budgetAlertCount > 0 && (
-                        <span className="rounded-full bg-removed px-2 py-0.5 text-xs font-medium">
-                          {countLabelOf(budgetAlertCount, 'budget alert')}
-                        </span>
-                      )}
-                    </span>
-                    <span id={`settings-card-${path}`} className="flex flex-1 flex-col gap-2 text-sm text-muted">
-                      {description}
-                      {statuses[path] && (path !== 'costs' || isMonthUsageComplete) && (
-                        <span className="mt-auto text-xs text-ink">{statuses[path]}</span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <CardGrid
+              basePath={settingsPath}
+              cards={cards}
+              statusOf={(path) => (path !== 'costs' || isMonthUsageComplete ? statuses[path] : undefined)}
+              badgeOf={(path) =>
+                path === 'costs' &&
+                budgetAlertCount > 0 && (
+                  <span className="rounded-full bg-removed px-2 py-0.5 text-xs font-medium">
+                    {countLabelOf(budgetAlertCount, 'budget alert')}
+                  </span>
+                )
+              }
+            />
           </LabelledSection>
         ))
       ) : (

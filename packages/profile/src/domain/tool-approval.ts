@@ -1,4 +1,4 @@
-import { approvalChoicesOf, type ToolApproval, type ToolApprovalPreference } from '@spyria/kernel'
+import { approvalChoicesOf, type ConnectionTool, type ToolApproval, type ToolApprovalPreference } from '@spyria/kernel'
 import { InvalidConnection } from './errors.ts'
 import type { WorkspaceConnection } from './workspace-connection.ts'
 
@@ -18,3 +18,25 @@ export const preferenceWith = (
   const { [tool]: _replaced, ...otherTools } = current.toolApprovals
   return { ...current, toolApprovals: approval === null ? otherTools : { ...otherTools, [tool]: approval } }
 }
+
+export const toolKinds = ['Read', 'Write', 'Destructive'] as const
+export type ToolKind = (typeof toolKinds)[number]
+
+export const toolKindOf = (tool: ConnectionTool): ToolKind =>
+  tool.destructive ? 'Destructive' : tool.readOnly ? 'Read' : 'Write'
+
+export const approvalChangesOf = (
+  tools: readonly ConnectionTool[],
+  choice: ToolApproval,
+  {
+    ownApprovalOf,
+    defaultApprovalOf,
+  }: {
+    ownApprovalOf: (tool: ConnectionTool) => ToolApproval | null
+    defaultApprovalOf: (tool: ConnectionTool) => ToolApproval
+  },
+): ApprovalChange[] =>
+  tools
+    .map((tool) => ({ tool, approval: choice === defaultApprovalOf(tool) ? null : choice }))
+    .filter(({ tool, approval }) => approval !== ownApprovalOf(tool))
+    .map(({ tool, approval }) => ({ tool: tool.name, approval }))

@@ -91,7 +91,7 @@ test('a member’s checklist rows and GitHub link reach only their replica, work
   await waitFor(() => aliceStore.read().workspaceOnboarding.length > 0)
   expect(aliceStore.read().memberOnboarding.map(({ memberId }) => memberId)).not.toContain(bob)
   expect(aliceStore.read().githubConnections).toEqual([])
-  expect(bobStore.read().githubConnections).toEqual([{ workspaceId: acme, memberId: bob }])
+  expect(bobStore.read().githubConnections).toEqual([{ workspaceId: acme, memberId: bob, needsReconnection: false }])
   expect(bobStore.read().githubApps).toEqual([{ workspaceId: acme }])
   expect(
     bobStore

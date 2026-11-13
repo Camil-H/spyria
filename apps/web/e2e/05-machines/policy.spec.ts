@@ -3,7 +3,6 @@ import {
   answerNewAiChat,
   chipOf,
   expect,
-  llmSectionOf,
   localRuntimesSectionOf,
   machineSectionOf,
   mainOf,
@@ -51,18 +50,19 @@ test.describe('Policy', () => {
     await page.goto('/')
   })
 
-  test('As a member who can manage runtime hosts, I turn sessions on members’ machines off: My machine shows the notice with no Add my machine and no Use Claude Code or Use Codex, an add is refused, and the chip offers no machine', {
+  test('As a member who can manage runtime hosts, I turn sessions on members’ machines off: My machine shows the notice with no Add my machine and no Set up for Claude Code or Codex, an add is refused, and the chip offers no machine', {
     tag: ['@spec-22'],
   }, async ({ page, browser, workerStack, machine }) => {
     await setLocalSessions(page, false)
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'My machine')
     await expect(machineSectionOf(bobPage)).toContainText(turnedOffNotice)
     await expect(machineSectionOf(bobPage).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
-    await expect(machineSectionOf(bobPage).getByRole('button', { name: /Use Claude Code|Use Codex/ })).toHaveCount(0)
+    await expect(
+      machineSectionOf(bobPage).getByRole('button', { name: /Set up Claude Code|Set up Codex/ }),
+    ).toHaveCount(0)
     await expect(machineSectionOf(bobPage)).not.toContainText('docker')
-    await expect(llmSectionOf(bobPage).getByRole('button', { name: /Claude Code|Codex/ })).toHaveCount(0)
 
     const response = await fetch(`${serverUrl}/api/runtime-hosts`, {
       method: 'POST',

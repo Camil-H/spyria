@@ -5,3 +5,4 @@ f0e31f0444ec9a36ad1be674b045a2ef102b3639:apps/server/src/auth/invited-address.in
 ba77b074b7a570ef7c593a9d5138a74d1c330ff0:apps/agent/src/output-tail.test.ts:jwt:5
 074c8f9bdc9017c90bc2cf45f6444fbbc8f635ad:apps/server/src/auth/secret-box.test.ts:generic-api-key:4
 12fc17c48528fe6001db327dea13d0c52b850592:apps/server/src/reseal-secrets.integration.test.ts:generic-api-key:17
+911218e074eda407ffefed3f17380bd72cc01cc9:apps/web/e2e/06-connectors/profile.spec.ts:generic-api-key:46

@@ -2,7 +2,6 @@ import { openPageAs } from '../stack'
 import {
   expect,
   hostsSectionOf,
-  llmSectionOf,
   localRuntimesSectionOf,
   machineSectionOf,
   machineToolOf,
@@ -15,6 +14,7 @@ import {
   type Page,
   sendMessage,
   sessionStarted,
+  setUpButtonOf,
   hostTest as test,
   urlOf,
   workingIndicatorOf,
@@ -28,7 +28,7 @@ const tools = [
 test.describe('My machine', () => {
   const useToolDialogOf = (page: Page, toolName: string) => page.getByRole('dialog', { name: `Use ${toolName}` })
   const addMachine = async (page: Page) => {
-    await openProfile(page)
+    await openProfile(page, 'My machine')
     await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add my machine' })
     const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
@@ -48,7 +48,7 @@ test.describe('My machine', () => {
     test('As a member, I add my own machine: it pairs as personal, shows online in my profile only and is counted for those who manage runtime hosts', {
       tag: ['@spec-20'],
     }, async ({ page, browser, workerStack, pair }) => {
-      await openProfile(page)
+      await openProfile(page, 'My machine')
       await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
       const dialog = page.getByRole('dialog', { name: 'Add my machine' })
       await expect(dialog).toContainText(
@@ -62,8 +62,8 @@ test.describe('My machine', () => {
 
       pair(urlOf(command), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
-      await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
-      await expect(machineToolOf(page, 'Codex')).toHaveText('Use Codex')
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
+      await expect(machineToolOf(page, 'Codex')).toHaveText('CodexNot signed inSet up')
       await expect(machineSectionOf(page)).not.toContainText('docker exec')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
 
@@ -74,7 +74,7 @@ test.describe('My machine', () => {
       )
       await expect(hostsSectionOf(adminPage).getByRole('listitem')).toHaveCount(0)
       await expect(hostsSectionOf(adminPage)).not.toContainText('My machine')
-      await openProfile(adminPage)
+      await openProfile(adminPage, 'My machine')
       await expect(machineSectionOf(adminPage).getByRole('button', { name: 'Add my machine' })).toBeVisible()
       await expect(machineSectionOf(adminPage)).not.toContainText('Online')
       await adminPage.context().close()
@@ -84,32 +84,30 @@ test.describe('My machine', () => {
   test.describe(() => {
     test.use({ signedInAs: 'member-bob' })
 
-    test('As a member, I find one My machine section apart from LLM access: my machine, its status and Remove, then Use Claude Code and Use Codex with their state', {
+    test('As a member, I find My machine on its own page, apart from my LLM keys: my machine, its status and Remove, then Claude Code and Codex with their sign-in state', {
       tag: ['@spec-25', '@stage-f'],
     }, async ({ page, pair }) => {
-      await openProfile(page)
-      await expect(llmSectionOf(page)).not.toContainText('Claude Code')
-      await expect(llmSectionOf(page)).not.toContainText('Codex')
+      await openProfile(page, 'My machine')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toBeVisible()
       for (const toolName of ['Claude Code', 'Codex'])
-        await expect(machineToolOf(page, toolName)).toHaveText(`Use ${toolName}`)
+        await expect(machineToolOf(page, toolName)).toHaveText(`${toolName}Not signed inSet up`)
 
       pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['codex'] })
       await expect(machineSectionOf(page).getByText('Online', { exact: true })).toHaveCount(1)
       await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
       const codexState = machineToolOf(page, 'Codex')
-      await expect(codexState).toHaveText('✓ Codex connected')
-      await expect(machineSectionOf(page).getByRole('button', { name: 'Use Codex' })).toHaveCount(0)
-      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Use Claude Code')
+      await expect(codexState).toHaveText('CodexSigned in')
+      await expect(machineSectionOf(page).getByRole('button', { name: 'Set up Codex' })).toHaveCount(0)
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeNot signed inSet up')
       await expect(machineSectionOf(page)).not.toContainText('Signed in to')
     })
 
     test('As a member without a machine, I use Claude Code through one command that starts my machine and signs in, and the dialog closes once Claude Code is ready', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
-      await openProfile(page)
-      await machineToolOf(page, 'Claude Code').click()
+      await openProfile(page, 'My machine')
+      await setUpButtonOf(page, 'Claude Code').click()
       const dialog = useToolDialogOf(page, 'Claude Code')
       await expect(dialog).toContainText(
         'signs in to Claude Code with your own plan. The sign-in never leaves this computer',
@@ -132,8 +130,8 @@ test.describe('My machine', () => {
 
       await expect(machineSectionOf(page)).toContainText('Online')
       await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
-      await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
-      await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
+      await expect(machineSectionOf(page).getByRole('button', { name: 'Set up Claude Code' })).toHaveCount(0)
       await expect(machineSectionOf(page)).toContainText('In a new Runtime chat, set Runs on to Local · Claude Code')
     })
 
@@ -158,19 +156,19 @@ test.describe('My machine', () => {
       pair(urlOf(command), { personal: true, signedIn: ['claude-code'] })
       await expect(dialog).toHaveCount(0)
       await expect(startButtonOf()).toHaveCount(0)
-      await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
     })
 
-    test('As a member whose machine is signed in to Claude only, I get only the Codex sign-in command for Use Codex', {
+    test('As a member whose machine is signed in to Claude only, I get only the Codex sign-in command when I set up Codex', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
       pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
-      await expect(machineToolOf(page, 'Claude Code')).toHaveText('✓ Claude Code connected')
-      await expect(machineSectionOf(page).getByRole('button', { name: 'Use Claude Code' })).toHaveCount(0)
-      await expect(machineToolOf(page, 'Codex')).toHaveText('Use Codex')
+      await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
+      await expect(machineSectionOf(page).getByRole('button', { name: 'Set up Claude Code' })).toHaveCount(0)
+      await expect(machineToolOf(page, 'Codex')).toHaveText('CodexNot signed inSet up')
       await expect(machineSectionOf(page)).not.toContainText('docker exec')
-      await machineToolOf(page, 'Codex').click()
+      await setUpButtonOf(page, 'Codex').click()
       const dialog = useToolDialogOf(page, 'Codex')
       await expect(dialog.getByRole('textbox', { name: 'Command' })).toHaveValue(
         'docker exec -it spyria-host spyria-host login codex',
@@ -200,10 +198,9 @@ test.describe('My machine', () => {
       await expect(mainOf(page).getByRole('alert')).toHaveCount(1)
       await expect(mainOf(page)).not.toContainText('OAuth session expired')
       await banner.getByRole('link', { name: 'Open profile' }).click()
-      await expect(page).toHaveURL(/\/profile#my-machine$/)
-      await expect(machineSectionOf(page)).toBeInViewport()
-      await expect(machineSectionOf(page).getByRole('button', { name: `Use ${tool.name}` })).toBeVisible()
-      await expect(machineSectionOf(page).getByRole('button', { name: `${tool.name} connected` })).toHaveCount(0)
+      await expect(page).toHaveURL(/\/profile\/machine$/)
+      await expect(machineToolOf(page, tool.name)).toContainText('Not signed in')
+      await expect(setUpButtonOf(page, tool.name)).toBeVisible()
     })
 
     test(`As a member whose machine is signed out of ${tool.name}, I get its sign-in notice on a prompt that reaches no agent`, {
