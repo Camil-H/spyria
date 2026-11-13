@@ -26,6 +26,7 @@ export type Draft = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId; memberI
 
 export type MessageRepository = {
   get(messageId: MessageId): Promise<Message>
+  lock(messageId: MessageId): Promise<Message>
   record(change: MessageChange): Promise<void>
   project(message: Message, seq: number): Promise<void>
   find(messageId: MessageId): Promise<Message | undefined>

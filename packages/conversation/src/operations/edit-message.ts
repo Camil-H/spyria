@@ -8,7 +8,7 @@ type Input = { messageId: MessageId; editorId: MemberId; text: string }
 
 export const editMessage = ({ transactor }: Dependencies, { messageId, editorId, text }: Input) =>
   transactor.run(async (unitOfWork) => {
-    const message = await unitOfWork.messages.get(messageId)
+    const message = await unitOfWork.messages.lock(messageId)
     await requireChatPermission(unitOfWork.chats, message.chatId, editorId, 'chat.post')
     await unitOfWork.messages.record({
       type: 'message.edited',
