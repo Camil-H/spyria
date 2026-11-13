@@ -64,6 +64,7 @@ const interruptPayload = z.object({
 const restartSessionPayload = z.object({
   chatId: z.pipe(id, z.transform(chatId)),
   memberId: z.pipe(id, z.transform(memberId)),
+  promptId: z.nullable(z.pipe(id, z.transform(messageId))),
 })
 const loopPayload = z.object({ loopId: z.pipe(id, z.transform(messageId)) })
 const memberRemovedPayload = z.object({
