@@ -257,7 +257,7 @@ test.describe('SSO', () => {
       await test.step('the workspace does not enforce SSO: members sign in with their own account', async () => {
         await expect(signInSectionOf(page)).toContainText(notEnforcedText)
         await expect(form.getByRole('button', { name: 'Enforce SSO' })).toBeVisible()
-        await expect(form.getByRole('button', { name: 'Stop enforcing SSO' })).toHaveCount(0)
+        await expect(signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' })).toHaveCount(0)
       })
 
       await test.step('signing in to the provider as someone else is refused and changes nothing', async () => {
@@ -290,7 +290,7 @@ test.describe('SSO', () => {
         )
         await expect(signInSectionOf(page)).toContainText(enforcedText)
         await expect(form.getByRole('button', { name: 'Save and sign in again' })).toBeVisible()
-        await expect(form.getByRole('button', { name: 'Stop enforcing SSO' })).toBeVisible()
+        await expect(signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' })).toBeVisible()
         await expect(form.getByLabel('Provider')).toHaveValue('oidc')
         await expect(form.getByLabel('Client id')).toHaveValue(providerClientId)
         await expect(form.getByText('Secret: set')).toBeVisible()
@@ -325,8 +325,8 @@ test.describe('SSO', () => {
       })
 
       await test.step('stopping SSO asks to confirm, and Cancel keeps it enforced', async () => {
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
-        const confirmation = providerFormOf(page).getByRole('group', { name: 'Stop enforcing SSO' })
+        await signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
+        const confirmation = page.getByRole('dialog', { name: 'Stop enforcing SSO' })
         await expect(confirmation).toContainText(
           'Everyone is signed out of this workspace, you included, and signs in again with their own account.',
         )
@@ -336,8 +336,11 @@ test.describe('SSO', () => {
       })
 
       await test.step('stopping SSO signs everyone out of the workspace, me included', async () => {
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing', exact: true }).click()
+        await signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
+        await page
+          .getByRole('dialog', { name: 'Stop enforcing SSO' })
+          .getByRole('button', { name: 'Stop enforcing', exact: true })
+          .click()
         await expect(switcherOf(page)).toContainText('Globex')
         await openMenu(page)
         await expect(page.getByRole('menuitem', { name: /^Acme/ })).toContainText('Signed out')
