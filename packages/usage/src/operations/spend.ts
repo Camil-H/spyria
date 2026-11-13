@@ -52,7 +52,7 @@ const reportOf = async (ledger: SpendLedger, filter: SpendFilter, view: View) =>
     counts: await ledger.counts(filter, prompterId),
     tableDimensions,
     chartDimensions,
-    mergedPulls: prompterId ? null : await ledger.mergedPulls(filter.current),
+    mergedPulls: await ledger.mergedPulls(filter.current, prompterId),
   })
 }
 

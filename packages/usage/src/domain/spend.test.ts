@@ -7,6 +7,7 @@ import {
   type SpendCounts,
   type SpendDimensionRow,
   type SpendTotals,
+  scopeKeysParameterOf,
   spendChartOf,
   spendFilterFrom,
   spendReportOf,
@@ -90,14 +91,19 @@ test.each([
   })
 })
 
-test('a scope narrows the filter to one member, project, chat or model, keys kept as given', () => {
-  expect(spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now).scope).toEqual({
+test('a scope narrows the filter to some members, projects, chats or models, keys kept as given once each', () => {
+  expect(spendFilterFrom({ scope: 'model', scopeKeys: 'openai/gpt-5' }, now).scope).toEqual({
     dimension: 'model',
-    key: 'openai/gpt-5',
+    keys: ['openai/gpt-5'],
   })
-  expect(spendFilterFrom({ scope: 'project', scopeKey: 'none' }, now).scope).toEqual({
+  expect(spendFilterFrom({ scope: 'project', scopeKeys: 'none' }, now).scope).toEqual({
     dimension: 'project',
-    key: 'none',
+    keys: ['none'],
+  })
+  const members = scopeKeysParameterOf(['member-alice', 'member-bob', 'member-alice'])
+  expect(spendFilterFrom({ scope: 'member', scopeKeys: members }, now).scope).toEqual({
+    dimension: 'member',
+    keys: ['member-alice', 'member-bob'],
   })
 })
 
@@ -115,9 +121,10 @@ test.each([
   { period: 'custom', from: '2026-10-05', to: 'soon' },
   { period: 'custom', from: '2026-10-05', to: '2026-10-04' },
   { period: 'custom', from: '2025-01-01', to: '2026-10-04' },
-  { scope: 'team', scopeKey: 'team-1' },
+  { scope: 'team', scopeKeys: 'team-1' },
   { scope: 'chat' },
-  { scopeKey: 'chat-research' },
+  { scope: 'chat', scopeKeys: ',' },
+  { scopeKeys: 'chat-research' },
 ])('the filter %p is refused', (query) => {
   expect(() => spendFilterFrom(query, now)).toThrow('The spend filter is not valid')
 })
@@ -270,7 +277,7 @@ test('the trend fills every bucket of the period with its counts, zero where not
 
 test('the report total sums the period from the tables the ledger read for the scope, not from the scoped counts', () => {
   const report = spendReportOf({
-    filter: { ...spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now) },
+    filter: { ...spendFilterFrom({ scope: 'model', scopeKeys: 'openai/gpt-5' }, now) },
     rows: [
       ...call({ costMicros: 30_000, tokens: 3000, requests: 3 }),
       ...call({ model: 'openai/gpt-5', costMicros: 10_000, tokens: 1000, requests: 1 }),
@@ -279,7 +286,7 @@ test('the report total sums the period from the tables the ledger read for the s
     counts: { current: counts({ costMicros: 10_000, tokens: 1000, requests: 1 }), previous: counts() },
     tableDimensions: ['member', 'model'],
     chartDimensions: [],
-    mergedPulls: null,
+    mergedPulls: [],
   })
   expect(report.total).toEqual({ costMicros: 40_000, tokens: 4000, requests: 4 })
   expect(report.decomposition.current.costMicros).toBe(10_000)
@@ -287,13 +294,13 @@ test('the report total sums the period from the tables the ledger read for the s
 
 test('the scope choices list every key of both periods, whatever the scope narrows the tables to', () => {
   const report = spendReportOf({
-    filter: { ...spendFilterFrom({ scope: 'member', scopeKey: 'member-alice' }, now) },
+    filter: { ...spendFilterFrom({ scope: 'member', scopeKeys: 'member-alice' }, now) },
     rows: call({}),
     choiceRows: [...call({}), ...call({ prompterId: 'member-bob', prompterName: 'Bob', costMicros: 20_000 })],
     counts: { current: counts(), previous: counts() },
     tableDimensions: ['member'],
     chartDimensions: [],
-    mergedPulls: null,
+    mergedPulls: [],
   })
   expect(report.tables.member?.map(({ name }) => name)).toEqual(['Alice'])
   expect(report.scopeChoices).toEqual({

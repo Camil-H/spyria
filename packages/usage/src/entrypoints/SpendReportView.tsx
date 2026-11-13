@@ -8,6 +8,7 @@ import {
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  MultiSelect,
   SegmentedChoice,
 } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
@@ -22,6 +23,7 @@ import {
   type SpendPeriod,
   type SpendReport,
   type SpendRow,
+  scopeKeysParameterOf,
   spendGranularities,
   spendPeriods,
 } from '../domain/spend.ts'
@@ -34,7 +36,8 @@ const CostHistogram = lazy(() =>
   import('./CostHistogram.tsx').then(({ CostHistogram }) => ({ default: CostHistogram })),
 )
 
-type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity; scope: string }
+type Scope = { scope: SpendDimension | ''; scopeKeys: string[] }
+type Search = Scope & { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity }
 
 const periodLabels: Record<SpendPeriod, string> = {
   this_month: 'This month',
@@ -63,13 +66,11 @@ const cellClass = 'px-2 py-1.5 text-right'
 const operatorClass = 'w-4 py-1.5 pl-2 text-center text-muted'
 const today = () => new Date().toISOString().slice(0, 10)
 
-const scopeSearchOf = (scope: string): Record<string, string> => {
-  const separator = scope.indexOf(':')
-  return separator < 0 ? {} : { scope: scope.slice(0, separator), scopeKey: scope.slice(separator + 1) }
-}
-const searchOf = ({ period, from, to, granularity, scope }: Search): Record<string, string> => ({
+const noScope: Scope = { scope: '', scopeKeys: [] }
+const isScoped = ({ scope, scopeKeys }: Scope) => scope !== '' && scopeKeys.length > 0
+const searchOf = ({ period, from, to, granularity, scope, scopeKeys }: Search): Record<string, string> => ({
   ...(period === 'custom' ? { period, from, to, granularity } : { period, granularity }),
-  ...scopeSearchOf(scope),
+  ...(isScoped({ scope, scopeKeys }) && { scope, scopeKeys: scopeKeysParameterOf(scopeKeys) }),
 })
 
 const usageRowsOf = (rows: readonly SpendRow[]) => rows.map((row) => ({ ...row, calls: row.requests }))
@@ -239,15 +240,26 @@ const MergedPulls = ({
   granularity,
   period,
   isScoped,
+  isPersonal,
 }: {
-  mergedPulls: NonNullable<SpendReport['mergedPulls']>
+  mergedPulls: SpendReport['mergedPulls']
   granularity: SpendGranularity
   period: { from: string; to: string }
   isScoped: boolean
+  isPersonal: boolean
 }) => (
   <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="font-medium">
+    {isPersonal && (
+      <p className="text-sm text-muted">
+        The pull requests merged from chats you prompted in, against what you spent in those chats
+      </p>
+    )}
     {isScoped && (
-      <p className="text-sm text-muted">Counted over the whole workspace, whatever the usage is narrowed to</p>
+      <p className="text-sm text-muted">
+        {isPersonal
+          ? 'Counted over all your usage, whatever it is narrowed to'
+          : 'Counted over the whole workspace, whatever the usage is narrowed to'}
+      </p>
     )}
     {mergedPulls.perPullMicros === null ? (
       <p className="text-sm text-muted">No pull request merged in this period</p>
@@ -255,7 +267,7 @@ const MergedPulls = ({
       <>
         <p className="text-sm">
           {formatCost(mergedPulls.perPullMicros)} per merged PR · {mergedPulls.pulls.length} merged ·{' '}
-          {formatCost(mergedPulls.costMicros)} spent in their chats
+          {formatCost(mergedPulls.costMicros)} {isPersonal ? 'you spent' : 'spent'} in their chats
         </p>
         <Suspense fallback={<p className="text-sm text-muted">Loading the charts…</p>}>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -294,6 +306,16 @@ const MergedPulls = ({
   </LabelledSection>
 )
 
+const scopeSummaryOf = (
+  rows: SpendReport['scopeChoices'][SpendDimension],
+  dimension: SpendDimension,
+  keys: readonly string[],
+) => {
+  const chosen = (rows ?? []).filter((row) => keys.includes(row.key))
+  if (chosen.length === 0) return `Choose ${dimensionLabels[dimension].toLowerCase()}s`
+  return chosen.length === 1 ? (chosen[0]?.name ?? '') : `${chosen.length} ${dimensionLabels[dimension].toLowerCase()}s`
+}
+
 const ScopePicker = ({
   choices,
   dimensions,
@@ -304,10 +326,10 @@ const ScopePicker = ({
   choices: SpendReport['scopeChoices']
   dimensions: readonly SpendDimension[]
   isPersonal: boolean
-  value: string
-  onChange: (scope: string) => void
+  value: Scope
+  onChange: (scope: Scope) => void
 }) => {
-  const dimension = (scopeSearchOf(value).scope ?? '') as SpendDimension | ''
+  const dimension = value.scope
   const rows = dimension ? (choices[dimension] ?? []) : []
   return (
     <>
@@ -318,7 +340,7 @@ const ScopePicker = ({
         onChange={(event) => {
           const picked = event.target.value as SpendDimension | ''
           const firstRow = picked ? choices[picked]?.[0] : undefined
-          onChange(firstRow ? `${picked}:${firstRow.key}` : '')
+          onChange(firstRow ? { scope: picked, scopeKeys: [firstRow.key] } : noScope)
         }}
       >
         <option value="">{isPersonal ? 'All my usage' : 'Whole workspace'}</option>
@@ -329,18 +351,13 @@ const ScopePicker = ({
         ))}
       </select>
       {dimension && (
-        <select
-          aria-label={dimensionLabels[dimension]}
-          className={fieldClass}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {rows.map((row) => (
-            <option key={row.key} value={`${dimension}:${row.key}`}>
-              {row.name}
-            </option>
-          ))}
-        </select>
+        <MultiSelect
+          label={dimensionLabels[dimension]}
+          summary={scopeSummaryOf(rows, dimension, value.scopeKeys)}
+          options={rows.map((row) => ({ value: row.key, label: row.name }))}
+          values={value.scopeKeys}
+          onChange={(scopeKeys) => onChange({ scope: dimension, scopeKeys })}
+        />
       )}
     </>
   )
@@ -370,7 +387,7 @@ export const SpendReportView = ({
     from: `${today().slice(0, 7)}-01`,
     to: today(),
     granularity: 'day',
-    scope: '',
+    ...noScope,
   })
   const [stack, setStack] = useState(chartDimensions[0] ?? 'model')
   const [report, setReport] = useState<SpendReport | null>(null)
@@ -401,7 +418,7 @@ export const SpendReportView = ({
           aria-label="Period"
           className={fieldClass}
           value={search.period}
-          onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, scope: '' })}
+          onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, ...noScope })}
         >
           {spendPeriods.map((period) => (
             <option key={period} value={period}>
@@ -418,7 +435,7 @@ export const SpendReportView = ({
                 className={fieldClass}
                 value={search[bound]}
                 onChange={(event) =>
-                  event.target.value && setSearch({ ...search, [bound]: event.target.value, scope: '' })
+                  event.target.value && setSearch({ ...search, [bound]: event.target.value, ...noScope })
                 }
               />
             </label>
@@ -436,8 +453,8 @@ export const SpendReportView = ({
             choices={report.scopeChoices}
             dimensions={tableDimensions}
             isPersonal={isPersonal}
-            value={search.scope}
-            onChange={(scope) => setSearch({ ...search, scope })}
+            value={search}
+            onChange={(scope) => setSearch({ ...search, ...scope })}
           />
         )}
       </fieldset>
@@ -493,14 +510,13 @@ export const SpendReportView = ({
             trendKey={JSON.stringify(searchOf(search))}
             readTrend={readTrend}
           />
-          {report.mergedPulls && (
-            <MergedPulls
-              mergedPulls={report.mergedPulls}
-              granularity={report.granularity}
-              period={report}
-              isScoped={search.scope !== ''}
-            />
-          )}
+          <MergedPulls
+            mergedPulls={report.mergedPulls}
+            granularity={report.granularity}
+            period={report}
+            isScoped={isScoped(search)}
+            isPersonal={isPersonal}
+          />
         </>
       )}
     </LabelledSection>

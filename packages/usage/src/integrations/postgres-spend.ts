@@ -10,14 +10,14 @@ import {
 } from '../domain/spend.ts'
 import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
-const scopeCondition = (dimension: string, key: string) => `
-  (${dimension}::text is null or ${key} = case ${dimension}
+const scopeCondition = (dimension: string, keys: string) => `
+  (${dimension}::text is null or case ${dimension}
     when 'member' then call.prompter_id
     when 'chat' then call.chat_id
     when 'model' then call.provider || '/' || call.model
     when 'project' then coalesce(
       (select chat.project_id from chats chat where chat.workspace_id = $1 and chat.id = call.chat_id), 'none')
-  end)`
+  end = any(${keys}::text[]))`
 
 const rowsStatement = `
   with grouped as (
@@ -78,10 +78,13 @@ const mergedPullsStatement = `
     coalesce(merged.step->>'url', '') as url,
     to_char(merged.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "mergedAt",
     coalesce((select sum(call.cost_micros) from model_calls call
-      where call.workspace_id = $1 and call.chat_id = merged.chat_id and call.called_at < $3), 0)::float8 as "costMicros"
+      where call.workspace_id = $1 and call.chat_id = merged.chat_id and call.called_at < $3
+        and ($4::text is null or call.prompter_id = $4)), 0)::float8 as "costMicros"
   from changes merged
   join chats chat on chat.workspace_id = $1 and chat.id = merged.chat_id
   where merged.step->>'state' = 'merged' and merged.previous_state is distinct from 'merged' and merged.created_at >= $2
+    and ($4::text is null or exists (select 1 from model_calls call
+      where call.workspace_id = $1 and call.chat_id = merged.chat_id and call.prompter_id = $4 and call.called_at < $3))
   order by merged.created_at`
 
 export const createPostgresSpendTransactor = (transact: Transact, workspaceId: WorkspaceId): SpendTransactor => ({
@@ -103,7 +106,7 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
             tableDimensions,
             chartDimensions,
             scope?.dimension ?? null,
-            scope?.key ?? null,
+            scope?.keys ?? null,
           ]),
         counts: async ({ current, previous, scope }, prompterId) => {
           const rows = await query<SpendCounts & { isCurrent: boolean }>(countsStatement, [
@@ -112,7 +115,7 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
             current.to.toISOString(),
             prompterId,
             scope?.dimension ?? null,
-            scope?.key ?? null,
+            scope?.keys ?? null,
           ])
           const countsOf = (isCurrent: boolean) => {
             const { isCurrent: _, ...counts } = rows.find((row) => row.isCurrent === isCurrent) ?? {
@@ -130,10 +133,10 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
             granularity,
             prompterId,
             scope?.dimension ?? null,
-            scope?.key ?? null,
+            scope?.keys ?? null,
           ]),
-        mergedPulls: (range) =>
-          query<MergedPull>(mergedPullsStatement, [range.from.toISOString(), range.to.toISOString()]),
+        mergedPulls: (range, prompterId) =>
+          query<MergedPull>(mergedPullsStatement, [range.from.toISOString(), range.to.toISOString(), prompterId]),
       })
     }),
 })
