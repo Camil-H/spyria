@@ -36,11 +36,11 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
   })
 
-  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (a tick, no creation form, the status on the settings card)", {
+  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (its status, no creation form, the status on the settings card)", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
     await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
-    const card = mainOf(page).getByRole('link', { name: 'Connect GitHub', exact: true })
+    const card = mainOf(page).getByRole('link', { name: 'GitHub', exact: true })
     await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with')
     await card.click()
     const appOrigin = new URL(page.url()).origin
@@ -82,10 +82,9 @@ test.describe('GitHub setup', () => {
     await expect(page.getByRole('heading', { name: `Install ${manifest.name}` })).toBeVisible()
     await page.getByRole('button', { name: 'Install' }).click()
 
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect GitHub' })).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'GitHub' })).toBeVisible()
     const connected = section.getByRole('status').filter({ hasText: 'GitHub App connected' })
     await expect(connected).toBeVisible()
-    await expect(connected).toHaveAttribute('title', 'GitHub App connected')
     await expect(creation).toHaveCount(0)
     await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
       'acme/appmain',
@@ -99,7 +98,7 @@ test.describe('GitHub setup', () => {
   test("As an admin, I choose to create the GitHub App manually and see how, with this workspace's webhook and callback URLs, folded until I open it", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
-    await openSettings(page, 'Connect GitHub')
+    await openSettings(page, 'GitHub')
     const section = githubSectionOf(page)
     const appOrigin = new URL(page.url()).origin
     await expect(section.getByText('How to create the GitHub App')).toHaveCount(0)
@@ -157,7 +156,7 @@ test.describe('GitHub setup', () => {
     await expect(dialog).not.toContainText('Loading…')
     await expect(dialog.getByRole('button', { name: 'Confirm' })).toBeDisabled()
     await connectLink.click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect GitHub' })).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'GitHub' })).toBeVisible()
     await expect(githubSectionOf(page)).toBeVisible()
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')

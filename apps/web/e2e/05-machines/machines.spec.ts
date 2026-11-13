@@ -54,7 +54,7 @@ hostTest.describe('Machines', () => {
     'As a member who can manage runtime hosts, I copy a new host’s command and the button reads ✓ Copied',
     async ({ page, context }) => {
       await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-      await openSettings(page, 'Connect runtime')
+      await openSettings(page, 'Runtimes')
       await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
       await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
       await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
@@ -71,7 +71,7 @@ hostTest.describe('Machines', () => {
       tag: ['@spec-07', '@spec-25', '@stage-f'],
     },
     async ({ page, hosts }) => {
-      await openSettings(page, 'Connect runtime')
+      await openSettings(page, 'Runtimes')
       hosts.fake(await addHost(page, 'Rooted box'), { rootless: false, limitsEnforced: true })
       hosts.fake(await addHost(page, 'Rootless box'), { rootless: true, limitsEnforced: false })
       await expectOnline(page, 'Rooted box')

@@ -4,6 +4,7 @@ import {
   addParticipant,
   agentReplyText,
   chipOf,
+  chooseRoleAction,
   createRole,
   deleteDialogOf,
   deleteRole,
@@ -19,9 +20,12 @@ import {
   openChat,
   openChatRoles,
   openPanelTab,
-  openSettings,
+  openRoles,
   type Page,
   panelTabOf,
+  permissionsOfRole,
+  permissionsOfRoleIn,
+  roleColumnIn,
   roleItemOf,
   sendButtonOf,
   sendMessage,
@@ -33,8 +37,7 @@ import {
 
 const readerNotice = 'You can read this chat'
 const workspaceRolesOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Workspace roles' })
-const workspaceRoleItemOf = (page: Page, name: string) =>
-  workspaceRolesOf(page).getByRole('list', { name: 'Workspace roles' }).getByRole('listitem', { name, exact: true })
+const workspaceRoleItemOf = (page: Page, name: string) => roleColumnIn(workspaceRolesOf(page), name)
 const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
 const memberRoleSelectOf = (page: Page, name: string) =>
   mainOf(page)
@@ -49,14 +52,15 @@ test.describe('Roles', () => {
     tag: ['@spec-47'],
   }, async ({ page }) => {
     await createRole(page, 'Reviewer', ['Choose the model and stop the agent'])
-    await expect(roleItemOf(page, 'Reviewer')).toContainText(
-      /^Reviewer\s*Read the chat\s*Choose the model and stop the agent\s*Edit\s*Delete$/,
-    )
+    await expect
+      .poll(() => permissionsOfRole(page, 'Reviewer'))
+      .toEqual(['Read the chat', 'Choose the model and stop the agent'])
+    await expect(roleItemOf(page, 'Reviewer').getByRole('button', { name: 'Actions for Reviewer' })).toBeVisible()
     for (const builtInName of ['Owner', 'Editor', 'Prompter', 'Reader'])
       await expect(roleItemOf(page, builtInName).getByRole('button')).toHaveCount(0)
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
-    await expect(mainOf(page).getByRole('link', { name: 'Roles and Permissions', exact: true })).toContainText(
-      '6 built-in roles · 1 custom role',
+    await expect(mainOf(page).getByRole('link', { name: 'Members and roles', exact: true })).toContainText(
+      '1 custom role',
     )
   })
 
@@ -97,7 +101,7 @@ test.describe('Roles', () => {
 
     await openChatRoles(page)
     await editRole(page, 'Reviewer', ['Post and prompt the agent'])
-    await expect(roleItemOf(page, 'Reviewer')).toContainText('Post and prompt the agent')
+    await expect.poll(() => permissionsOfRole(page, 'Reviewer')).toContain('Post and prompt the agent')
     await expect(mainOf(leePage)).not.toContainText(readerNotice)
     await sendMessage(leePage, 'Lee asks now')
     await expect(messageContaining(leePage, agentReplyText)).toHaveCount(1)
@@ -127,35 +131,35 @@ test.describe('Roles', () => {
     await expect(roleItemOf(page, 'Reviewer')).toHaveCount(0)
   })
 
-  test('As a member who can manage roles, I create a Finance workspace role with costs and budgets and give it to Bob: he sees only Analyze costs, without a reload, and is refused the other settings pages', {
+  test('As a member who can manage roles, I create a Finance workspace role with costs and budgets and give it to Bob: he sees only Costs, without a reload, and is refused the other settings pages', {
     tag: ['@spec-50', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await expect(sidebarOf(bobPage).getByRole('link', { name: 'Profile' })).toBeVisible()
     await expect(settingsLinkOf(bobPage)).toHaveCount(0)
 
-    await openSettings(page, 'Roles and Permissions')
+    await openRoles(page, 'Workspace roles')
     await workspaceRolesOf(page).getByRole('button', { name: 'New role' }).click()
-    const form = workspaceRolesOf(page).getByRole('form', { name: 'New role' })
+    const form = page.getByRole('form', { name: 'New role' })
     await form.getByRole('textbox', { name: 'Name' }).fill('Finance')
     for (const permissionLabel of ['View costs', 'Manage budgets']) await form.getByLabel(permissionLabel).check()
     await form.getByRole('button', { name: 'Save' }).click()
-    await expect(workspaceRoleItemOf(page, 'Finance')).toContainText(
-      /^Finance\s*View costs\s*Manage budgets\s*Edit\s*Delete$/,
-    )
+    await expect
+      .poll(() => permissionsOfRoleIn(workspaceRolesOf(page), 'Finance'))
+      .toEqual(['View costs', 'Manage budgets'])
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
-    await mainOf(page).getByRole('link', { name: 'Manage Team', exact: true }).click()
+    await mainOf(page).getByRole('link', { name: 'Members and roles', exact: true }).click()
     await memberRoleSelectOf(page, 'Bob').selectOption({ label: 'Finance' })
 
     await settingsLinkOf(bobPage).click()
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
     const bobsCards = mainOf(bobPage).getByRole('region').getByRole('link')
     await expect(bobsCards).toHaveCount(1)
-    await expect(bobsCards).toHaveAccessibleName('Analyze costs')
+    await expect(bobsCards).toHaveAccessibleName('Costs')
     await bobsCards.click()
     await expect(mainOf(bobPage).getByRole('region', { name: 'Budgets' })).toBeVisible()
     await expect(mainOf(bobPage).getByRole('region', { name: 'Usage' })).toBeVisible()
-    for (const card of ['team', 'roles', 'audit', 'runtime']) {
+    for (const card of ['team', 'audit', 'runtime']) {
       await bobPage.goto(`/w/workspace-acme/settings/${card}`)
       await expect(mainOf(bobPage)).toContainText('Your workspace role does not give access to this page')
     }
@@ -167,46 +171,78 @@ test.describe('Roles', () => {
   }, async ({ page, workerStack }) => {
     await insertWorkspaceRole(workerStack, 'role-finance', 'Finance', ['costs.view'])
     await giveWorkspaceRole(workerStack, 'member-bob', 'role-finance')
-    await openSettings(page, 'Roles and Permissions')
-    await workspaceRoleItemOf(page, 'Finance').getByRole('button', { name: 'Delete Finance' }).click()
+    await openRoles(page, 'Workspace roles')
+    await chooseRoleAction(workspaceRolesOf(page), 'Finance', 'Delete')
     await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
     await expect(deleteDialogOf(page)).toContainText('Finance is held by 1 member; change their role first')
     await deleteDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
     await expect(workspaceRoleItemOf(page, 'Finance')).toBeVisible()
 
-    await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
-    await mainOf(page).getByRole('link', { name: 'Manage Team', exact: true }).click()
+    await mainOf(page).getByRole('tab', { name: 'Members' }).click()
     await memberRoleSelectOf(page, 'Bob').selectOption({ label: 'Member' })
     await expect(memberRoleSelectOf(page, 'Bob')).toHaveValue('member')
-    await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
-    await mainOf(page).getByRole('link', { name: 'Roles and Permissions', exact: true }).click()
-    await workspaceRoleItemOf(page, 'Finance').getByRole('button', { name: 'Delete Finance' }).click()
+    await mainOf(page).getByRole('tab', { name: 'Roles' }).click()
+    await chooseRoleAction(workspaceRolesOf(page), 'Finance', 'Delete')
     await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
     await expect(workspaceRoleItemOf(page, 'Finance')).toHaveCount(0)
   })
 
-  test('As a member who can manage roles, I see Workspace roles and Chat roles as two lists whose built-in roles are read-only', {
+  test('As a member who can manage roles, I see Workspace roles and Chat roles as two permission grids whose built-in roles are read-only', {
     tag: ['@spec-50'],
   }, async ({ page }) => {
-    await openSettings(page, 'Roles and Permissions')
-    await expect(mainOf(page).getByRole('tab')).toHaveText(['Workspace roles', 'Chat roles'])
-    await expect(
-      workspaceRolesOf(page).getByRole('list', { name: 'Workspace roles' }).getByRole('listitem', { name: /.+/ }),
-    ).toHaveCount(2)
-    await expect(workspaceRoleItemOf(page, 'Admin')).toContainText(
-      /^Admin\s*Invite members\s*Change roles and remove members\s*Manage roles\s*Set up SSO\s*Connect GitHub\s*Manage the tools catalogue\s*Manage AI providers\s*Manage runtime hosts and local sessions\s*View costs\s*Manage budgets\s*View the audit log$/,
-    )
-    await expect(workspaceRoleItemOf(page, 'Member')).toHaveText(/^Member\s*No permissions$/)
+    await openRoles(page, 'Workspace roles')
+    await expect(mainOf(page).getByRole('radiogroup', { name: 'Role lists' }).getByRole('radio')).toHaveCount(2)
+    await expect(workspaceRolesOf(page).getByRole('table').getByRole('columnheader')).toHaveText([
+      'Permission',
+      /^Admin/,
+      /^Member/,
+    ])
+    await expect
+      .poll(() => permissionsOfRoleIn(workspaceRolesOf(page), 'Admin'))
+      .toEqual([
+        'Invite members',
+        'Change roles and remove members',
+        'Manage roles',
+        'Set up SSO',
+        'Connect GitHub',
+        'Manage the tools catalogue',
+        'Manage AI providers',
+        'Manage runtime hosts and local sessions',
+        'View costs',
+        'Manage budgets',
+        'View the audit log',
+      ])
+    await expect.poll(() => permissionsOfRoleIn(workspaceRolesOf(page), 'Member')).toEqual([])
     for (const builtInName of ['Admin', 'Member'])
       await expect(workspaceRoleItemOf(page, builtInName).getByRole('button')).toHaveCount(0)
 
-    await mainOf(page).getByRole('tab', { name: 'Chat roles' }).click()
+    await mainOf(page).getByRole('radio', { name: 'Chat roles' }).check()
     await expect(workspaceRolesOf(page)).toHaveCount(0)
-    const roles = mainOf(page).getByRole('list', { name: 'Chat roles' }).getByRole('listitem', { name: /.+/ })
-    await expect(roles).toHaveCount(4)
-    await expect(mainOf(page).getByRole('listitem', { name: 'Reader' })).toHaveText(/^Reader\s*Read the chat$/)
-    await expect(mainOf(page).getByRole('listitem', { name: 'Owner' })).toContainText('Change roles and remove people')
+    await expect(mainOf(page).getByRole('region', { name: 'Chat roles' }).getByRole('columnheader')).toHaveCount(5)
+    await expect.poll(() => permissionsOfRole(page, 'Reader')).toEqual(['Read the chat'])
+    await expect.poll(() => permissionsOfRole(page, 'Owner')).toContain('Change roles and remove people')
     for (const builtInName of ['Owner', 'Editor', 'Prompter', 'Reader'])
       await expect(roleItemOf(page, builtInName).getByRole('button')).toHaveCount(0)
+  })
+
+  test('As a member whose role only manages roles, I open Members and roles straight onto the permission grid, without a Members tab', {
+    tag: ['@spec-50'],
+  }, async ({ browser, workerStack }) => {
+    await insertWorkspaceRole(workerStack, 'role-keeper', 'Role keeper', ['roles.manage'])
+    await giveWorkspaceRole(workerStack, 'member-bob', 'role-keeper')
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await settingsLinkOf(bobPage).click()
+    const bobsCards = mainOf(bobPage).getByRole('region').getByRole('link')
+    await expect(bobsCards).toHaveCount(1)
+    await expect(bobsCards).toHaveAccessibleName('Members and roles')
+    await bobsCards.click()
+
+    await expect(mainOf(bobPage).getByRole('tablist', { name: 'Members and roles' })).toHaveCount(0)
+    await expect(mainOf(bobPage).getByRole('region', { name: 'Members' })).toHaveCount(0)
+    const workspaceRoles = mainOf(bobPage).getByRole('region', { name: 'Workspace roles' })
+    await expect(roleColumnIn(workspaceRoles, 'Role keeper')).toBeVisible()
+    await expect.poll(() => permissionsOfRoleIn(workspaceRoles, 'Role keeper')).toEqual(['Manage roles'])
+    await expect(workspaceRoles.getByRole('button', { name: 'New role' })).toBeVisible()
+    await bobPage.context().close()
   })
 })

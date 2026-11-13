@@ -14,7 +14,7 @@ test.describe('Setup commands', () => {
     tag: ['@spec-57'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     const section = sectionOf(page)
     await expect(tabOf(page, 'Default setup command')).toHaveAttribute('aria-selected', 'true')
     await commandOf(page).fill('bun install')

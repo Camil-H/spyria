@@ -60,7 +60,14 @@ export const giveWorkspaceRole = (workerStack: WorkerStack, memberId: string, ro
 export const membersSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Members' })
 export const pendingInvitesOf = (page: Page) =>
   membersSectionOf(page).getByRole('list', { name: 'Pending invites' }).getByRole('listitem')
+export const chooseMemberAction = async (page: Page, name: string, action: string) => {
+  await membersSectionOf(page)
+    .getByRole('button', { name: `Actions for ${name}` })
+    .click()
+  await page.getByRole('menuitem', { name: action }).click()
+}
 export const invite = async (page: Page, email: string) => {
+  await membersSectionOf(page).getByRole('button', { name: 'Invite member' }).click()
   const form = membersSectionOf(page).getByRole('form', { name: 'Invite member' })
   await form.getByRole('textbox', { name: 'Email' }).fill(email)
   await form.getByRole('combobox', { name: 'Role' }).selectOption('member')

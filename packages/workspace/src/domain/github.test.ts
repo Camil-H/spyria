@@ -57,7 +57,7 @@ test('the repository picker says whether repositories are loading, failed, missi
   const app = { fullName: 'acme/app', defaultBranch: 'main' }
   expect(repositoryPromptOf({ state: 'loading' }, 0, 'gates')).toBe('Listing repositories…')
   expect(repositoryPromptOf({ state: 'failed' }, 0, 'gates')).toBe(
-    'The repositories could not be listed: check Connect GitHub',
+    'The repositories could not be listed: check GitHub in Workspace settings',
   )
   expect(repositoryPromptOf({ state: 'listed', repositories: [] }, 0, 'gates')).toBe(
     'No repository yet: connect GitHub and grant it repositories',
