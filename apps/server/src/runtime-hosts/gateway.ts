@@ -37,6 +37,7 @@ type Connection = {
     gatewayUrl: string
   }
   missedPings: number
+  isReleased: boolean
   identifying: PromiseWithResolvers<void>
   pending: Map<number, PromiseWithResolvers<Frame>>
   streams: Map<number, SandboxSocketListener>
@@ -167,6 +168,7 @@ export const createRuntimeHostGateway = ({
 
   const release = (connection: Connection) => {
     const { pending, streams, identified, modelCalls } = connection
+    connection.isReleased = true
     connection.identifying.resolve()
     for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
     for (const call of modelCalls.values()) call.abort()
@@ -220,6 +222,7 @@ export const createRuntimeHostGateway = ({
       ),
     )
     if (connection.identified) connection.identified.database = database
+    if (connection.isReleased) return release(connection)
     connection.identifying.resolve()
     const logFailure = (event: string, body: string) => (error: unknown) =>
       log.error({ event, body, attributes: hostAttributesOf(host), error })
@@ -349,6 +352,7 @@ export const createRuntimeHostGateway = ({
     const connection: Connection = {
       socket: undefined as never,
       missedPings: 0,
+      isReleased: false,
       identifying: Promise.withResolvers(),
       pending: new Map(),
       streams: new Map(),

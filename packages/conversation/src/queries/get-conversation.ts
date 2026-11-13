@@ -141,24 +141,27 @@ const routerArgumentsOf = (message: ConversationMessage, name: 'delegate' | 'awa
 }
 
 const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopped: boolean) => {
-  const delegateActions = replies.filter((reply) => routerArgumentsOf(reply, 'delegate')?.task !== undefined)
+  const replyById = new Map<string, ConversationMessage>(replies.map((reply) => [reply.id, reply]))
+  const delegateActionsByTask = Map.groupBy(
+    replies.filter((reply) => routerArgumentsOf(reply, 'delegate')?.task !== undefined),
+    (reply) => routerArgumentsOf(reply, 'delegate')?.task,
+  )
+  const resumesByTaskId = Map.groupBy(
+    replies.filter((reply) => routerArgumentsOf(reply, 'await_task') ?? routerArgumentsOf(reply, 'check_task')),
+    (reply) => (routerArgumentsOf(reply, 'await_task') ?? routerArgumentsOf(reply, 'check_task'))?.taskId,
+  )
   const groupsByHostId = new Map<MessageId, ConversationMessage>()
   const resumeIds = new Set<MessageId>()
   for (const steps of Map.groupBy(replies, (reply) => delegationOf(reply)?.id).values()) {
     const firstStep = steps[0]
     const delegation = firstStep && delegationOf(firstStep)
     if (!delegation) continue
-    const actionIndex = delegateActions.findIndex(
-      (action) => routerArgumentsOf(action, 'delegate')?.task === delegation.task,
-    )
-    const host: ConversationMessage = replies.find((reply) => reply.id === delegation.id) ??
-      delegateActions.splice(actionIndex, actionIndex < 0 ? 0 : 1)[0] ?? {
+    const host: ConversationMessage = replyById.get(delegation.id) ??
+      delegateActionsByTask.get(delegation.task)?.shift() ?? {
         ...firstStep,
         step: { type: 'tool', name: 'delegate', arguments: '', result: firstStep.isRunning ? null : '' },
       }
-    const resumes = replies.filter((reply) =>
-      (['await_task', 'check_task'] as const).some((name) => routerArgumentsOf(reply, name)?.taskId === delegation.id),
-    )
+    const resumes = resumesByTaskId.get(delegation.id) ?? []
     for (const resume of resumes) resumeIds.add(resume.id)
     const reportOf = ({ step }: ConversationMessage) =>
       step?.type === 'tool' && step.name === 'check_task' ? taskReportOf(delegation.id, step.result) : undefined
@@ -232,9 +235,8 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
         (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
       )
       for (const reply of narration) itemsByStepId.set(reply.id, [])
-      const folded = replies.flatMap(
-        (reply) => steps.find((step) => step.id === reply.id) ?? (narration.includes(reply) ? [reply] : []),
-      )
+      const foldedIds = new Set([...steps, ...narration].map((reply) => reply.id))
+      const folded = replies.filter((reply) => foldedIds.has(reply.id))
       itemsByStepId.set(firstStep.id, [{ type: 'fold', promptId, label, steps: folded }])
     } else for (const step of steps) itemsByStepId.set(step.id, [{ type: 'message', message: step }])
   }

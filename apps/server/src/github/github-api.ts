@@ -1,5 +1,5 @@
-import { createPrivateKey, createSign } from 'node:crypto'
-import { withRetries } from '@spyria/kernel'
+import { createHash, createPrivateKey, createSign } from 'node:crypto'
+import { createBoundedCache, createSingleflight, withRetries } from '@spyria/kernel'
 import type { GitHubPullRequest } from './webhooks.ts'
 
 export type GitHubUrls = { apiUrl: string; webUrl: string }
@@ -75,6 +75,8 @@ const reviewThreadsQuery = `query($owner: String!, $name: String!, $number: Int!
   }
 }`
 const requestTimeoutMilliseconds = 15_000
+const maximumCachedReads = 300
+const maximumCachedReadLength = 128 * 1024
 const jwtLifetimeSeconds = 540
 const clockSkewSeconds = 60
 
@@ -102,8 +104,16 @@ export const appJwtOf = (appId: string, privateKey: string, now = Date.now()) =>
 
 export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
   const graphqlBaseUrl = apiUrl.replace(/\/v3$/, '')
-  const respond = async (path: string, { token, method = 'GET', body, baseUrl = apiUrl }: Requested) => {
-    const send = (signal: AbortSignal) =>
+  // GitHub's ETags vary with the Authorization header and it answers 304 only when the caller's own representation
+  // matches, so a cached read keyed by URL alone is never served to a token that would see something else.
+  const cachedReads = createBoundedCache<string, { etag: string; text: string }>(maximumCachedReads)
+  const readsInFlight = createSingleflight<string>()
+  const send = (
+    path: string,
+    { token, method = 'GET', body, baseUrl = apiUrl }: Requested,
+    headers: Record<string, string>,
+  ) => {
+    const sent = (signal: AbortSignal) =>
       fetch(`${baseUrl}${path}`, {
         method,
         headers: {
@@ -111,22 +121,43 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
           ...(token && { authorization: `Bearer ${token}` }),
           'x-github-api-version': '2022-11-28',
           ...(body && { 'content-type': 'application/json' }),
+          ...headers,
         },
         body: body && JSON.stringify(body),
         signal,
       })
-    const response =
-      method === 'GET' || path === '/graphql'
-        ? await withRetries(send, { timeoutMilliseconds: requestTimeoutMilliseconds })
-        : await send(AbortSignal.timeout(requestTimeoutMilliseconds))
-    if (!response.ok) {
-      const { message } = (await response.json().catch(() => ({}))) as { message?: string }
-      throw new GitHubRequestFailed(response.status, method, pathOf(path), message ?? response.statusText)
-    }
-    return response
+    return method === 'GET' || path === '/graphql'
+      ? withRetries(sent, { timeoutMilliseconds: requestTimeoutMilliseconds })
+      : sent(AbortSignal.timeout(requestTimeoutMilliseconds))
   }
-  const request = async <Result>(path: string, requested: Requested) =>
-    (await respond(path, requested).then((response) => response.json())) as Result
+  const failureOf = async (response: Response, method: string, path: string) => {
+    const { message } = (await response.json().catch(() => ({}))) as { message?: string }
+    return new GitHubRequestFailed(response.status, method, pathOf(path), message ?? response.statusText)
+  }
+  const read = (path: string, requested: Requested) => {
+    const url = `${requested.baseUrl ?? apiUrl}${path}`
+    const tokenDigest = createHash('sha256')
+      .update(requested.token ?? '')
+      .digest('base64url')
+    return readsInFlight(`${tokenDigest} ${url}`, async () => {
+      const cached = cachedReads.get(url)
+      const response = await send(path, requested, cached ? { 'if-none-match': cached.etag } : {})
+      if (cached && response.status === 304) return cached.text
+      if (!response.ok) throw await failureOf(response, 'GET', path)
+      const text = await response.text()
+      const etag = response.headers.get('etag')
+      if (etag && text.length <= maximumCachedReadLength) cachedReads.set(url, { etag, text })
+      else cachedReads.delete(url)
+      return text
+    })
+  }
+  const request = async <Result>(path: string, requested: Requested) => {
+    const { method = 'GET' } = requested
+    if (method === 'GET') return JSON.parse(await read(path, requested)) as Result
+    const response = await send(path, requested, {})
+    if (!response.ok) throw await failureOf(response, method, path)
+    return (await response.json()) as Result
+  }
   const userTokensOf = async (parameters: Record<string, string>): Promise<UserTokens> => {
     const response = await fetch(`${webUrl}/login/oauth/access_token`, {
       method: 'POST',
@@ -211,8 +242,8 @@ export const createGitHubApi = ({ apiUrl, webUrl }: GitHubUrls) => {
       }),
     job: (token: string, fullName: string, jobId: number) =>
       request<{ steps: GitHubJobStep[] }>(`/repos/${fullName}/actions/jobs/${jobId}`, { token }),
-    jobLog: async (token: string, fullName: string, jobId: number) =>
-      (await respond(`/repos/${fullName}/actions/jobs/${jobId}/logs`, { token })).text(),
+    jobLog: (token: string, fullName: string, jobId: number) =>
+      read(`/repos/${fullName}/actions/jobs/${jobId}/logs`, { token }),
     searchIssues: (token: string, query: string) =>
       request<{ items: GitHubIssue[] }>(
         `/search/issues?${new URLSearchParams({ q: query, sort: 'updated', order: 'desc', per_page: '30' })}`,

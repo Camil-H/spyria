@@ -1,5 +1,5 @@
 import type { Database } from '@spyria/db/postgres'
-import { DomainError } from '@spyria/kernel'
+import { createBoundedCache, DomainError } from '@spyria/kernel'
 import {
   type AccountProvider,
   accountIssuerOf,
@@ -89,6 +89,7 @@ type SignInProvider = { id: string; kind: SsoPreset; isWorkspaceSso: boolean }
 const sessionCookiePrefix = 'spyria_s_'
 const loginCookie = 'spyria_login'
 const accountCookie = 'spyria_account'
+const maximumCachedClients = 200
 const accountProviderCookie = 'spyria_account_provider'
 const accountCookieSeconds = 15 * 60
 const accountProviderCookieSeconds = 365 * 24 * 60 * 60
@@ -154,7 +155,7 @@ export const createAuthRoutes = ({
         issueSessionToken(tokenSecret, session, { databaseName, lifetimeSeconds: testSettings.tokenSeconds }),
     }
   }
-  const clients = new Map<string, Oidc>()
+  const clients = createBoundedCache<string, Oidc>(maximumCachedClients)
   const cachedClient = (key: string, create: () => Oidc) => {
     const client = clients.get(key) ?? create()
     clients.set(key, client)
