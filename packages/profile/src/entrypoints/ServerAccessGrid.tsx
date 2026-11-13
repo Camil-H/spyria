@@ -7,7 +7,7 @@ import {
   type WorkspaceId,
 } from '@spyria/kernel'
 import { ErrorMessage, useGuardedAction } from '@spyria/ui'
-import type { ReactNode } from 'react'
+import { type ReactNode, useLayoutEffect, useRef } from 'react'
 import type { ServerAccessList } from '../queries/list-workspace-connections.ts'
 import { useProfileCommands } from './providers.tsx'
 import { type TableTool, ToolTable } from './ToolTable.tsx'
@@ -32,19 +32,24 @@ export const AllToolsCheckbox = ({
   toolCount: number
   disabled: boolean
   onChange?: (isAllowed: boolean) => void
-}) => (
-  <input
-    type="checkbox"
-    aria-label={label}
-    title={label}
-    ref={(checkbox) => {
-      if (checkbox) checkbox.indeterminate = allowedCount > 0 && allowedCount < toolCount
-    }}
-    disabled={disabled || toolCount === 0}
-    checked={toolCount > 0 && allowedCount === toolCount}
-    onChange={() => onChange?.(allowedCount < toolCount)}
-  />
-)
+}) => {
+  const checkboxRef = useRef<HTMLInputElement>(null)
+  const isPartlyAllowed = allowedCount > 0 && allowedCount < toolCount
+  useLayoutEffect(() => {
+    if (checkboxRef.current) checkboxRef.current.indeterminate = isPartlyAllowed
+  })
+  return (
+    <input
+      ref={checkboxRef}
+      type="checkbox"
+      aria-label={label}
+      title={label}
+      disabled={disabled || toolCount === 0}
+      checked={toolCount > 0 && allowedCount === toolCount}
+      onChange={() => onChange?.(allowedCount < toolCount)}
+    />
+  )
+}
 
 export const RoleHeading = ({ name, children }: { name: string; children: ReactNode }) => (
   <span className="flex flex-col items-center gap-1">
