@@ -8,7 +8,7 @@ test.describe('AI providers', () => {
     await page.goto('/')
   })
 
-  test('As a member who can manage AI providers, I turn a provider off, a key for it is refused, and allowing every provider turns it back on', {
+  test('As a member who can manage AI providers, I turn a provider off, a key for it is refused, and allowing every provider turns it back on, while choosing only the ones turned on keeps every provider on as an allow-list', {
     tag: ['@spec-42'],
   }, async ({ page }) => {
     await openSettings(page, 'AI providers')
@@ -33,5 +33,15 @@ test.describe('AI providers', () => {
     await everyProvider.click()
     await expect(everyProvider).toBeChecked()
     await expect(providerSwitchOf(page, 'OpenAI')).toHaveAttribute('aria-checked', 'true')
+
+    const onlyTurnedOn = providersOf(page).getByRole('radio', { name: 'Only the ones turned on' })
+    await onlyTurnedOn.click()
+    await expect(onlyTurnedOn).toBeChecked()
+    await expect(providerSwitchOf(page, 'OpenAI')).toHaveAttribute('aria-checked', 'true')
+    await expect(providerSwitchOf(page, 'Mistral')).toHaveAttribute('aria-checked', 'true')
+    await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+    await expect(mainOf(page).getByRole('link', { name: 'AI providers', exact: true })).toContainText(
+      '10 allowed providers',
+    )
   })
 })
