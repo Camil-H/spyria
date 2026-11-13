@@ -14,3 +14,6 @@ export const menuContentClass = 'z-50 min-w-40 rounded-lg border border-line bg-
 export const iconButtonClass = `rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink ${focusRing}`
 export const tabTriggerClass = `border-b-2 border-transparent py-2 text-muted hover:text-ink data-[state=active]:border-accent data-[state=active]:text-ink ${focusRing}`
 export const tooltipClass = 'z-50 rounded-md border border-line bg-raised px-2 py-1 text-xs text-ink shadow-lg'
+export const cardClass = 'rounded-lg border border-line bg-raised'
+export const rowListClass = `flex flex-col divide-y divide-line ${cardClass}`
+export const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm'
