@@ -64,6 +64,20 @@ test('a Pi turn over RPC streams thought and text, a command with its output and
   expect(socket.events.at(-1)?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
 })
 
+test('a Pi prompt carries its image attachments as Pi images, and no other attachment, since Pi reads only images', async () => {
+  const { open, create, attach, promptWith } = started()
+  const id = await create(piLaunchOf())
+  const photo = await attach(id, 'a1', 'photo.png', 'png')
+  const report = await attach(id, 'a2', 'report.pdf', 'pdf!')
+  const socket = open(id)
+  await promptWith(id, 'What are these?', [
+    { path: photo, mimeType: 'image/png' },
+    { path: report, mimeType: 'application/pdf' },
+  ])
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toBe(`[t1] Saw image image/png 3 B. ${piHello(1).slice(5)}`)
+})
+
 test('a Pi provider error ends the turn with an error update and the next prompt continues', async () => {
   const { open, create, prompt } = started()
   const id = await create(piLaunchOf())

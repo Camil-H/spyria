@@ -738,11 +738,11 @@ export const startAgentStack = async ({
     },
     mutate,
     newRuntimeChat: newChat,
-    prompt: async (chat: ChatId, text: string, member = aliceInAcme) => {
+    prompt: async (chat: ChatId, text: string, member = aliceInAcme, attachments: object[] = []) => {
       const id = `message-${crypto.randomUUID()}`
-      expect(await mutate(member, 'conversation.sendMessage', { workspaceId: acme, id, chatId: chat, text })).toEqual(
-        succeeded,
-      )
+      expect(
+        await mutate(member, 'conversation.sendMessage', { workspaceId: acme, id, chatId: chat, text, attachments }),
+      ).toEqual(succeeded)
       return id
     },
     turnOf,

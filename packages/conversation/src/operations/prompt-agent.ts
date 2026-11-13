@@ -65,6 +65,21 @@ const quotedByPrompt = async ({ messages, members }: UnitOfWork, prompt: Message
   return { ...quoted, authorName } satisfies QuotedMessage
 }
 
+const savedAttachmentsOf = async (
+  { transactor, agentClient }: Pick<AgentDependencies, 'transactor' | 'agentClient'>,
+  conversation: AgentConversation,
+  prompt: Message,
+) => {
+  const savedPaths = new Map<string, string>()
+  for (const { id, name } of prompt.attachments) {
+    const content = await transactor.run(({ attachments }) => attachments.contentOf(prompt.chatId, id))
+    const path =
+      content && (await agentClient.saveAttachment(conversation, { id, name, content }).catch(() => undefined))
+    if (path) savedPaths.set(id, path)
+  }
+  return savedPaths
+}
+
 const reachableChatModelsOf = async (
   { transactor, classifier }: Pick<AgentDependencies, 'transactor' | 'classifier'>,
   prompterId: MemberId,
@@ -91,15 +106,27 @@ export const piLlmOf = async (
     adapterModel: piModelOf(model),
     effort: thoughtLevelOf(effort),
     pi: {
-      models: launched.map(({ id, name, contextWindow }) => ({ id, name, contextWindow, reasoning: true })),
+      models: await Promise.all(
+        launched.map(async ({ id, name, contextWindow }) => ({
+          id,
+          name,
+          contextWindow,
+          reasoning: true,
+          readsImages: (await dependencies.classifier?.readsImages(id)) ?? false,
+        })),
+      ),
       compactionModel: cheapestModelOf(models)?.id ?? model,
     },
   }
 }
 
-export const fixedPiLlmOf = (fixedModel: string): AgentLlmChoice => {
+export const fixedPiLlmOf = async (
+  { classifier }: Pick<AgentDependencies, 'classifier'>,
+  fixedModel: string,
+): Promise<AgentLlmChoice> => {
   const model = fixedModel.replace(/^openai\//, '')
-  const pi = { models: [{ id: model, name: model, reasoning: true }], compactionModel: model }
+  const readsImages = (await classifier?.readsImages(model)) ?? false
+  const pi = { models: [{ id: model, name: model, reasoning: true, readsImages }], compactionModel: model }
   return { adapterModel: piModelOf(model), pi }
 }
 
@@ -342,7 +369,7 @@ const conversationFor = async (
           ...(await piLlmOf(dependencies, prompterId, routed.choice.model.id, routed.choice.effort)),
           resumeSessionId: await transactor.run(({ agentEvents }) => agentEvents.lastSessionId(chat.chatId)),
         }
-      : fixedLlm && fixedPiLlmOf(fixedLlm.model)
+      : fixedLlm && (await fixedPiLlmOf(dependencies, fixedLlm.model))
   if (!llm)
     return {
       refusal: noLlmKeyNoticeOf(await transactor.run(({ members }) => members.displayNameOf(prompterId as MemberId))),
@@ -439,7 +466,16 @@ export const promptAgent = async (
       seed: await unitOfWork.messages.seedFor(prompt),
       quoted: await quotedByPrompt(unitOfWork, prompt),
     }))
-    await agentClient.sendMessage(conversation, agentPromptTextOf(prompt, seed, quoted), prompt.id)
+    const savedPaths = await savedAttachmentsOf(dependencies, conversation, prompt)
+    await agentClient.sendMessage(
+      conversation,
+      agentPromptTextOf(prompt, seed, quoted, savedPaths),
+      prompt.id,
+      prompt.attachments.flatMap(({ id, mediaType }) => {
+        const path = savedPaths.get(id)
+        return path ? [{ path, mediaType }] : []
+      }),
+    )
   } catch (error) {
     if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)
     if (!(error instanceof AgentStartFailure) && !isLastAttempt) {

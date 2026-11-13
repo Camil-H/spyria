@@ -85,6 +85,39 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(await repliesTo(question)).toEqual([replyOf(1)])
 })
 
+test('a prompt’s attachments are saved in the runtime and named to the agent by path, and Pi is shown the image but not the PDF', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat()
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82])
+  const pdf = new TextEncoder().encode('%PDF-1.7 report')
+  const upload = async (name: string, content: Uint8Array<ArrayBuffer>) =>
+    (await (
+      await app.request(`/api/chats/${chat}/attachments?${new URLSearchParams({ name })}`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
+        body: content,
+      })
+    ).json()) as { id: string }
+  const attachments = [await upload('chart.png', png), await upload('report.pdf', pdf)]
+  const question = await prompt(chat, 'What is this?', aliceInAcme, attachments)
+  await answered(question)
+  await turnEnded(chat)
+
+  const [text = ''] = relay.prompts
+  const savedPaths = [...text.matchAll(/(\/\S+\/(chart\.png|report\.pdf))/g)].map(([path]) => path)
+  expect(text).toBe(
+    `What is this?\n\nAttached files, saved in your workspace: ${savedPaths[0]} (image/png, 16 B), ${savedPaths[1]} (application/pdf, 15 B)`,
+  )
+  expect(savedPaths.map((path) => path.split('/').slice(-2).join('/'))).toEqual(
+    attachments.map(({ id }, index) => `${id}/${['chart.png', 'report.pdf'][index]}`),
+  )
+  expect(new Uint8Array(await Bun.file(savedPaths[0] ?? '').arrayBuffer())).toEqual(png)
+  expect(await Bun.file(savedPaths[1] ?? '').text()).toBe('%PDF-1.7 report')
+  expect(await repliesTo(question)).toEqual([
+    { kind: 'agent', body: `[t1] Saw image image/png 16 B. ${replyOf(1).body.slice(5)}` },
+  ])
+})
+
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
   const secondWorker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,

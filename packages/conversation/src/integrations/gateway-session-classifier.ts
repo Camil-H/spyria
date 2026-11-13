@@ -10,8 +10,10 @@ export const createGatewaySessionClassifier = ({
   headersOf,
   timeoutMilliseconds = 3000,
   listedModels,
+  readsImages,
 }: {
   listedModels(): readonly ListedModel[]
+  readsImages(modelId: string): Promise<boolean>
   gatewayUrl: () => string
   timeoutMilliseconds?: number
   virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | null | undefined>
@@ -19,6 +21,7 @@ export const createGatewaySessionClassifier = ({
   headersOf?: (chat: AgentChat) => Record<string, string>
 }): SessionClassifier => ({
   listedModels,
+  readsImages,
   classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
       if (await isBudgetUsedUp?.(chat.workspaceId, prompterId)) return { failure: 'monthly AI budget used up' }

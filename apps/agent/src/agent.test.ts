@@ -27,6 +27,32 @@ test('a session asks the harness to keep per-session details out of its system p
   expect(textOf(socket.events)).toContain('system-prompt:{"excludeDynamicSections":true}')
 })
 
+test('attachments saved in the runtime reach a harness inline when it declares it reads their kind, never a PDF, which it reads from its path, and a harness that declares none gets only the prompt text', async () => {
+  const { open, create, attach, promptWith } = started()
+  const id = await create(launchOf())
+  const photo = await attach(id, 'a1', 'photo.png', 'png')
+  const report = await attach(id, 'a2', 'report.pdf', 'pdf!')
+  const song = await attach(id, 'a3', 'song.mp3', 'mp3')
+  expect(photo).toBe(join(stateDirectory, 'attachments', 'a1', 'photo.png'))
+  expect(readFileSync(report, 'utf8')).toBe('pdf!')
+  const attachments = [
+    { path: photo, mimeType: 'image/png' },
+    { path: report, mimeType: 'application/pdf' },
+    { path: song, mimeType: 'audio/mpeg' },
+  ]
+  const socket = open(id)
+  await promptWith(id, 'What are these?', attachments)
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toStartWith('[t1] Saw image image/png 3 B. Hello')
+
+  const textOnlyCommand = [stubCommand[0] ?? 'env', 'STUB_TEXT_ONLY=1', ...stubCommand.slice(1)]
+  const textOnly = await create(launchOf({ acp_command: textOnlyCommand }))
+  const textOnlySocket = open(textOnly)
+  await promptWith(textOnly, 'What are these?', attachments)
+  await textOnlySocket.until(kindOf('turn_end'))
+  expect(textOf(textOnlySocket.events)).toStartWith('[t1] Hello')
+})
+
 test('a prompt streams chunks and ends its turn; Stop cancels the next turn and the session continues', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(launchOf({ acp_model: 'stub-large' }))
