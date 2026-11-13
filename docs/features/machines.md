@@ -23,7 +23,7 @@ A host runs only the runtime image the server names: on a published deployment t
 2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. On a published deployment the command runs the host image of Spyria's own version (`ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker); when Spyria's origin is `localhost` (local development), it builds the host image itself and points the container at `host.docker.internal`.
 3. The row turns **Online** within seconds, and the command dialog closes by itself. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
 
-Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine; the last two are amber, as risks. **Remove**, in the host's menu, disconnects a host and revokes its token.
+Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Rootless Docker** or **Docker runs as root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine; the last two are amber, as risks. **Remove**, in the host's menu, disconnects a host and revokes its token.
 
 ## Versions and updates
 
