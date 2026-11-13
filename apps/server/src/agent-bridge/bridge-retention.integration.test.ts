@@ -34,12 +34,12 @@ const keylessPrompt = async (chat: string) => {
   return promptId
 }
 
-test('every turn-closing path leaves no turn span, viewer, shown question, delegated text or streamed position behind', async () => {
+test('every turn-closing path, a turn closed after its runtime dropped it included, leaves no turn span, viewer, shown question, delegated text or streamed position behind', async () => {
   const hostless = await newRuntimeChat()
   await answered(await prompt(hostless, 'Nobody runs me'))
   await settlesEmpty()
 
-  const { host } = await stack.agentHost('Agent host', { holdUrl })
+  const { host, relay } = await stack.agentHost('Agent host', { holdUrl })
   const answeredChat = await newRuntimeChat()
   const viewer = await openStream(answeredChat)
   await viewer.subscribed
@@ -66,6 +66,13 @@ test('every turn-closing path leaves no turn span, viewer, shown question, deleg
   expect(retained().turnSpans).toBe(1)
   expect(await mutate(bobInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: stopped })).toEqual(succeeded)
   await turnIs(stopped, null)
+  await settlesEmpty()
+
+  const dropped = await newRuntimeChat()
+  const droppedPrompt = await prompt(dropped, 'stub:long Take your time')
+  await stack.commandShown(droppedPrompt, 20_000)
+  await relay.restart()
+  await turnIs(dropped, null)
   await settlesEmpty()
 
   host.failing('create')

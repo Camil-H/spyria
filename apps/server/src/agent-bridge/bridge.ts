@@ -133,7 +133,7 @@ export const createAgentBridge = ({
         close(): void
       }
     >()
-    const streamedSeqs = new Map<string, number>()
+    const streamedSeqs = new Map<string, { conversationId: string; seq: number }>()
     const viewers = new Map<string, Map<WSContext, MemberId>>()
     const watchedKeys = new Map<WSContext, Set<string>>()
     const streams = new Map<WSContext, StreamSession>()
@@ -158,6 +158,10 @@ export const createAgentBridge = ({
       for (const key of [...(watchedKeys.get(viewer) ?? [])]) unwatchChat(viewer, key)
     }
     const delegatedTexts = new Map<string, Map<string, DelegatedFrame>>()
+    const forgetStreamOf = (chat: AgentChat) => {
+      streamedSeqs.delete(keyOf(chat))
+      delegatedTexts.delete(keyOf(chat))
+    }
     const shownQuestions = new Map<string, Map<string, QuestionFrame>>()
     const sendText = (viewer: WSContext, text: string) => {
       if (((viewer.raw as ServerWebSocket | undefined)?.getBufferedAmount() ?? 0) <= slowViewerBytes)
@@ -217,7 +221,7 @@ export const createAgentBridge = ({
           delegatedTexts.delete(keyOf(chat))
           const socket = sockets.get(keyOf(chat))
           if (socket?.promptId !== promptId) return
-          streamedSeqs.delete(socket.conversationId)
+          streamedSeqs.delete(keyOf(chat))
           Object.assign(socket, {
             promptId: null,
             streamedText: '',
@@ -246,7 +250,8 @@ export const createAgentBridge = ({
       })
       if (target === null) return
       if (closedPromptId && target?.promptId !== closedPromptId) endTurn(chat, closedPromptId)
-      if (!target || sockets.has(keyOf(chat))) return
+      if (sockets.has(keyOf(chat))) return
+      if (!target) return forgetStreamOf(chat)
       await ensureOpen(chat, target.conversation, target.promptId)
       const { promptId, outcome } = target
       if (outcome)
@@ -297,6 +302,7 @@ export const createAgentBridge = ({
         if (chatSocket.isClosed || sockets.get(keyOf(chat)) !== chatSocket) return
         sockets.delete(keyOf(chat))
         if (chatSocket.promptId) reopenLater(chat, chatSocket.promptId)
+        else forgetStreamOf(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
@@ -310,9 +316,8 @@ export const createAgentBridge = ({
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId !== null) return
             if (promptAtEvent) endTurn(chat, promptAtEvent)
-            streamedSeqs.delete(conversation.conversationId)
+            forgetStreamOf(chat)
             chatSocket.streamedText = ''
-            delegatedTexts.delete(keyOf(chat))
           })
           .catch((error) =>
             log.error({
@@ -413,8 +418,9 @@ export const createAgentBridge = ({
             chatSocket.streamedText = (chatSocket.isReasoning === isReasoning ? chatSocket.streamedText : '') + text
             chatSocket.isReasoning = isReasoning
             const seq = Number(event.seq)
-            if (seq > (streamedSeqs.get(conversation.conversationId) ?? 0)) {
-              streamedSeqs.set(conversation.conversationId, seq)
+            const lastStreamed = streamedSeqs.get(keyOf(chat))
+            if (seq > (lastStreamed?.conversationId === conversation.conversationId ? lastStreamed.seq : 0)) {
+              streamedSeqs.set(keyOf(chat), { conversationId: conversation.conversationId, seq })
               broadcast(chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
             }
           }
