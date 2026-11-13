@@ -9,6 +9,7 @@ import { requestMutationWith, testAuthSettings, workspaceEventsOf } from '../tes
 import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
+import { confirmSsoSettings } from './sso.ts'
 
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
@@ -95,6 +96,11 @@ const requestAs = async (token: string, path: string, body?: object) => {
 }
 const claimAs = async (workspaceId: string, userId: string, action: '' | '/verify' | '/release', domain: string) =>
   requestAs(await tokenThrough(workspaceId, userId, workspaceId), `/api/domain-claims${action}`, { domain })
+const sessionRowsOf = async (...userIds: string[]) => [
+  ...(await database.$client`
+    select distinct workspace_id as "workspaceId", user_id as "userId", provider_workspace_id as "providerWorkspaceId"
+    from sessions where user_id in ${database.$client(userIds)} order by workspace_id, user_id`),
+]
 const claimsOf = async (workspaceId: string) => [
   ...(await database.$client`
     select domain, verified_at is not null as "isVerified" from domain_claims
@@ -147,7 +153,9 @@ const inviteAs = async (workspaceId: string, userId: string, email: string) =>
 const refusal = (message: string) =>
   expect.objectContaining({ error: 'app', message: expect.stringContaining(message) })
 
-test('an Admin claims a domain by a DNS TXT record: the claim waits until Spyria finds the record, then holds', async () => {
+test('an Admin claims a domain by a DNS TXT record: the claim waits until Spyria finds the record, then holds and ends the sessions it no longer trusts', async () => {
+  const benAccountToken = await tokenThrough('side', ben, null)
+  const carlUmbrellaToken = await tokenThrough('umbrella', carl, 'umbrella')
   const claimed = await claimAs('umbrella', ana, '', ' @Umbrella.COM ')
   const record = claimed.body.claims?.[0]?.record ?? ''
   expect(record).toMatch(/^spyria-verify=[0-9a-f]{32}$/)
@@ -169,6 +177,9 @@ test('an Admin claims a domain by a DNS TXT record: the claim waits until Spyria
   expect((await workspaceEventsOf(database, 'umbrella')).filter(({ type }) => type.startsWith('domain.'))).toEqual([
     { type: 'domain.claimed', actorId: ana, payload: { domain: 'umbrella.com' } },
   ])
+  for (const ended of [benAccountToken, carlUmbrellaToken])
+    expect((await requestAs(ended, '/api/workspace-creation')).status).toBe(401)
+  expect(await sessionRowsOf(ben, carl)).toEqual([])
 })
 
 test('claiming is refused without Setup SSO, to a workspace without its own provider, for what is not a domain, and for a domain another workspace holds', async () => {
@@ -327,18 +338,58 @@ test('releasing a claim frees the domain at once: the sessions its provider open
     { type: 'domain.released', actorId: ana, payload: { domain: 'umbrella.fr' } },
     { type: 'domain.released', actorId: ana, payload: { domain: 'umbrella.com' } },
   ])
+  expect(await sessionRowsOf(ben)).not.toContainEqual(expect.objectContaining({ providerWorkspaceId: 'umbrella' }))
   const throughAccount = await signInThrough(accountIdp, 'provider=oidc', {
     sub: 'ben-account',
     email: 'ben@umbrella.com',
   })
   expect(throughAccount.workspaceIds).toEqual(['side'])
+  expect((await claimAndVerify('umbrella', ana, 'umbrella.com')).status).toBe(200)
+  expect((await requestAs(sideToken, '/api/workspace-creation')).status).toBe(401)
+  expect(await sessionRowsOf(ben)).toEqual([{ workspaceId: 'tyrell', userId: ben, providerWorkspaceId: 'tyrell' }])
 })
 
-test("stopping a workspace's SSO and deleting the workspace release its claims", async () => {
-  expect((await claimAndVerify('umbrella', ana, 'umbrella.com')).status).toBe(200)
+test('a new issuer for the claiming workspace ends the sessions its former provider opened in other workspaces', async () => {
+  const sideToken = await tokenThrough('side', ben, 'umbrella')
+  const encryptedClientSecret = await createSecretBox(secretsKeyring).seal('new-umbrella-secret')
+  await confirmSsoSettings(
+    database,
+    {
+      workspaceId: 'umbrella',
+      userId: ana,
+      email: 'ana@umbrella.com',
+      provider: {
+        preset: 'oidc',
+        issuer: `${umbrellaIdp.issuer}/new`,
+        clientId: 'spyria-umbrella',
+        encryptedClientSecret,
+        usesInstanceApp: false,
+      },
+    },
+    { email: 'ana@umbrella.com', issuer: `${umbrellaIdp.issuer}/new`, subject: 'ana-new', canBindByEmail: true },
+  )
+  expect((await requestAs(sideToken, '/api/workspace-creation')).status).toBe(401)
+  expect(await sessionRowsOf(ben)).toEqual([{ workspaceId: 'tyrell', userId: ben, providerWorkspaceId: 'tyrell' }])
+  expect(await claimsOf('umbrella')).toEqual([{ domain: 'umbrella.com', isVerified: true }])
+})
+
+test("stopping a workspace's SSO and deleting the workspace release its claims and end the sessions their providers opened", async () => {
+  const sideToken = await tokenThrough('side', ben, 'umbrella')
   const stopped = await requestAs(await tokenThrough('umbrella', ana, 'umbrella'), '/api/sso-settings/stop', {})
   expect(stopped.status).toBe(204)
   expect(await claimsOf('umbrella')).toEqual([])
+  expect((await requestAs(sideToken, '/api/workspace-creation')).status).toBe(401)
+  expect(await sessionRowsOf(ben)).toEqual([{ workspaceId: 'tyrell', userId: ben, providerWorkspaceId: 'tyrell' }])
+  const events = await workspaceEventsOf(database, 'umbrella')
+  expect(events.filter(({ payload }) => payload.domain === 'umbrella.com').map(({ type }) => type)).toEqual([
+    'domain.claimed',
+    'domain.released',
+    'domain.claimed',
+    'domain.released',
+  ])
+  expect(events.filter(({ type }) => type === 'sso.removed')).toEqual([
+    { type: 'sso.removed', actorId: ana, payload: {} },
+  ])
   expect((await claimAndVerify('tyrell', dee, 'tyrell.com')).status).toBe(200)
   expect(
     await requestMutationWith(app, await tokenThrough('tyrell', dee, 'tyrell'), 'workspace.deleteWorkspace', {
