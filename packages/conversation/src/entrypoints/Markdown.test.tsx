@@ -123,3 +123,21 @@ test('a streamed answer renders as Markdown while it grows, an open code block a
   expect(html).toContain('Copy code')
   expect(renderToStaticMarkup(<StreamedMarkdown text="<b>raw</b>" />)).toContain('&lt;b&gt;raw&lt;/b&gt;')
 })
+
+test('a streamed answer loads its first four runtime images on their own across its blocks, as the stored answer does', () => {
+  const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
+  const text = Array.from(
+    { length: 6 },
+    (_, index) => `Shot ${index + 1}:\n\n![Shot ${index + 1}](out/${index + 1}.png)`,
+  )
+  const html = renderToStaticMarkup(
+    <ConversationProvider commands={commands} agentStream={{ subscribe: () => () => undefined }}>
+      <ChatMediaContext value={{ chatId: 'chat-1', isRuntime: true }}>
+        <StreamedMarkdown text={text.join('\n\n')} />
+      </ChatMediaContext>
+    </ConversationProvider>,
+  )
+  expect([...html.matchAll(/aria-label="Loading Shot \d"/g)].map(([label]) => label)).toEqual(
+    [1, 2, 3, 4].map((shot) => `aria-label="Loading Shot ${shot}"`),
+  )
+})
