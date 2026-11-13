@@ -31,7 +31,7 @@ Workspaces created before account sign-in keep their provider, with SSO enforced
 
 ## Claimed domains
 
-A workspace that enforces its own provider can claim its organization's email domains in **Setup SSO** › **Domains**: enter the domain, add the TXT record Spyria shows (`spyria-verify=…`) at that domain with your DNS provider, then **Check the record**. The DNS record is the only proof: no email and no setting of the provider counts. Nobody can add a record to `gmail.com` or `outlook.com`, so such domains always stay open to everyone.
+A workspace that enforces its own provider can claim its organization's email domains in **Workspace settings › Single sign-on** › **Domains**: enter the domain, add the TXT record Spyria shows (`spyria-verify=…`) at that domain with your DNS provider, then **Check the record**. The DNS record is the only proof: no email and no setting of the provider counts. Nobody can add a record to `gmail.com` or `outlook.com`, so such domains always stay open to everyone.
 
 Once a domain is claimed:
 
