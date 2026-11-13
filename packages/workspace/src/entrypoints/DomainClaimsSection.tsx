@@ -60,7 +60,7 @@ export const DomainClaimsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
   const [domain, setDomain] = useState('')
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readDomainClaims({ workspaceId }).then(setClaims)
+    commands.readDomainClaims({ workspaceId }).then(setClaims, () => setClaims([]))
   }, [commands, workspaceId])
   const change = (action: () => Promise<DomainClaimView[]>) => run(async () => setClaims(await action()))
   const claim = async (event: SubmitEvent<HTMLFormElement>) => {
