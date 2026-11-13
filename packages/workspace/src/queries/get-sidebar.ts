@@ -23,10 +23,10 @@ export const getSidebar =
   (workspaceId: WorkspaceId, viewerId: MemberId) =>
   (snapshot: Snapshot): Sidebar => {
     const permissionsOf = chatPermissionsIn(snapshot, workspaceId, viewerId)
-    const isParticipant = participantIn(snapshot, workspaceId, viewerId)
+    const participantOf = participantIn(snapshot, workspaceId, viewerId)
     const chatsByProjectId = new Map<ProjectId | null, ChatSummaryRow[]>()
     for (const chat of snapshot.chats) {
-      const participant = isParticipant(chat)
+      const participant = participantOf(chat)
       if (chat.workspaceId !== workspaceId || chat.archived || !participant) continue
       const projectChats = chatsByProjectId.get(chat.projectId) ?? []
       projectChats.push({

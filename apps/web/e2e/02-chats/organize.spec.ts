@@ -231,6 +231,8 @@ test.describe('Organize', () => {
 
     await test.step('leaves a chat I do not administer in place when dropped on a project', async () => {
       await chatRowIn(looseChatsOf(page), 'Standup').dragTo(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug'))
+      await page.reload()
+      await expect(looseChatNames).toHaveText([/Standup/, /Research/])
       await expect(chatRowIn(looseChatsOf(page), 'Standup')).toBeVisible()
       await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Standup')).toHaveCount(0)
     })

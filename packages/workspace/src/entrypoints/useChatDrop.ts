@@ -50,6 +50,7 @@ export const useChatDrop = (options: ChatDropOptions) => {
   const isMovingIn = () => canDropIn(options.group, draggedChat) && !options.group.chatIds.includes(draggedChat.id)
   return {
     'data-drop-target': isDropTarget || undefined,
+    onDropCapture: () => setIsDropTarget(false),
     onDragOver: (event: DragEvent) => {
       if (!isMovingIn()) return
       event.preventDefault()
