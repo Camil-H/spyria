@@ -203,7 +203,7 @@ test.describe('Team', () => {
     const otherBrowserPage = await openPageAs(browser, workerStack, 'member-alice')
     await openChatWithStream(otherBrowserPage, 'Welcome')
 
-    await openProfile(page)
+    await openProfile(page, 'Account')
     const sessions = mainOf(page).getByRole('list', { name: 'Sessions' }).getByRole('listitem')
     await expect(sessions.filter({ hasText: 'This device' })).toHaveCount(1)
     await expect(sessions.filter({ hasNotText: 'This device' }).first()).toContainText('Signed in')
@@ -214,7 +214,7 @@ test.describe('Team', () => {
       .getByRole('button', { name: 'Sign out everywhere' })
       .click()
     await expect(signedOutScreenOf(otherBrowserPage, 'Acme')).toBeVisible()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toHaveCount(0)
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Account' })).toHaveCount(0)
     await otherBrowserPage.context().close()
   })
 
@@ -306,7 +306,7 @@ test.describe('Team', () => {
     })
 
     test('As a member, I change my display name and it shows everywhere', async ({ page }) => {
-      await openProfile(page)
+      await openProfile(page, 'Account')
       await sectionOf(page, 'Display name').getByRole('textbox', { name: 'Display name' }).fill('Alice D.')
       await sectionOf(page, 'Display name').getByRole('button', { name: 'Save' }).click()
       await expect(sectionOf(page, 'Display name').getByText('Saved')).toBeVisible()
@@ -335,7 +335,7 @@ test.describe('Team', () => {
         await click()
         await (await fileChooser).setFiles(file)
       }
-      await openProfile(page)
+      await openProfile(page, 'Account')
 
       await test.step('shows my initials left of my display name until I click them to add a picture', async () => {
         await expect(pictureSection.locator('img')).toHaveCount(0)
@@ -374,7 +374,7 @@ test.describe('Team', () => {
       })
 
       await test.step('removes the picture', async () => {
-        await openProfile(page)
+        await openProfile(page, 'Account')
         await pictureSection.getByRole('button', { name: 'Edit profile picture' }).click()
         await page.getByRole('menuitem', { name: 'Remove picture' }).click()
         await expect(pictureSection.locator('img')).toHaveCount(0)

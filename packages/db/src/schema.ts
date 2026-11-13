@@ -186,7 +186,7 @@ type LlmCredentialRow = {
   last4: string
 }
 type GitHubAppRow = { workspaceId: WorkspaceId }
-type GitHubConnectionRow = { workspaceId: WorkspaceId; memberId: MemberId }
+type GitHubConnectionRow = { workspaceId: WorkspaceId; memberId: MemberId; needsReconnection: boolean }
 type WorkspaceOnboardingRow = { workspaceId: WorkspaceId; task: string }
 type MemberOnboardingRow = {
   workspaceId: WorkspaceId

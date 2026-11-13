@@ -80,11 +80,11 @@ Spyria does not filter runtimes' outbound traffic. On a cloud host, block the me
 
 A member can run Claude Code on their Claude subscription, or Codex on their ChatGPT plan, on their own computer. The sign-in stays on that computer: Spyria never sees it.
 
-1. Open **Profile**, **My machine**, then **Use Claude Code** or **Use Codex** (or **Add my machine**). Copy the command and run it on your computer. It ends with `spyria-host --personal <claim URL>`, followed by the sign-in command for the tool you chose.
+1. Open **Profile**, **My machine**, then **Set up** on the Claude Code or Codex row (or **Add my machine**). Copy the command and run it on your computer. It ends with `spyria-host --personal <claim URL>`, followed by the sign-in command for the tool you chose.
 2. Sign in once, in a terminal:
    - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code.
    - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first, in its **Security** settings.
-3. The dialog closes and the button turns to "✓ Claude Code connected" (or Codex) as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+3. The dialog closes and the tool's row reads **Signed in** as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
 
 The sign-in waits until `spyria-host --personal` has connected to Spyria once ("Waiting for spyria-host to connect to Spyria…"), since Spyria tells it which runtime image to sign in with. If it never connects, the sign-in stops after 15 minutes and points to `docker logs spyria-host`.
 

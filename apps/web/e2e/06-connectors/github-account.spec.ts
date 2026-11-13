@@ -10,12 +10,12 @@ test.describe('GitHub account', () => {
   }, async ({ page }) => {
     await configureGitHubApp(page)
     await openMyConnections(page)
-    const github = connectionsOf(page).getByRole('group', { name: 'GitHub account' })
+    const github = connectionsOf(page).getByRole('listitem', { name: 'GitHub account' })
     await expect(github).toContainText('Not connected')
     await inPopup(page, () => github.getByRole('button', { name: 'Connect GitHub account' }).click())
     await expect(github).toContainText('Connected (alice-martin)')
     await page.reload()
-    await expect(connectionsOf(page).getByRole('group', { name: 'GitHub account' })).toContainText(
+    await expect(connectionsOf(page).getByRole('listitem', { name: 'GitHub account' })).toContainText(
       'Connected (alice-martin)',
     )
   })

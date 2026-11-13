@@ -11,16 +11,24 @@ import {
   type WorkspaceId,
 } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { buttonClass, Dialog, ErrorMessage, ghostButtonClass, LabelledSection, useGuardedAction } from '@spyria/ui'
-import { useEffect, useState } from 'react'
+import {
+  buttonClass,
+  Dialog,
+  ErrorMessage,
+  ghostButtonClass,
+  rowClass,
+  rowListClass,
+  StatusBadge,
+  smallButtonClass,
+  smallGhostButtonClass,
+  useGuardedAction,
+} from '@spyria/ui'
+import { useState } from 'react'
 import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice, useCloseOnceDone } from './HostCommandDialog.tsx'
 import { HostVersion } from './HostVersion.tsx'
 import { useRuntimeCommands } from './providers.tsx'
-import { statusLabelOf } from './RuntimeHostsSection.tsx'
-
-const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1'
-const myMachineAnchor = 'my-machine'
+import { statusLabelOf, statusOf } from './RuntimeHostsSection.tsx'
 
 const StartMachine = ({
   workspaceId,
@@ -121,70 +129,85 @@ const UseToolDialog = ({
   )
 }
 
+const machineToneOf = (machine: RuntimeHostRow) => {
+  const status = statusOf(machine)
+  return status === 'online' ? 'ok' : status === 'offline' ? 'off' : 'attention'
+}
+
 export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
   const commands = useRuntimeCommands()
   const machine = useQuery(getMachine, workspaceId, memberId)
   const localSessions = useQuery(localSessionsOf, workspaceId)
   const [code, setCode] = useState<string | null>(null)
   const [openDialog, setOpenDialog] = useState<'add' | 'start' | 'remove' | HarnessId | null>(null)
-  useEffect(() => {
-    if (location.hash === `#${myMachineAnchor}`) document.getElementById(myMachineAnchor)?.scrollIntoView()
-  }, [])
   const isOnline = machine?.status === 'online'
-  const connectedTools = isOnline ? harnessIds.filter((tool) => machine.capacity?.signedIn?.includes(tool)) : []
+  const isSignedIn = (tool: HarnessId) => isOnline && machine.capacity?.signedIn?.includes(tool) === true
+  const connectedTools = harnessIds.filter(isSignedIn)
   const open = async (dialog: 'add' | HarnessId) => {
     setOpenDialog(dialog)
     if (!machine) setCode((await commands.addMachine({ workspaceId })).code)
   }
   const connectingTool = openDialog === 'add' || openDialog === 'start' || openDialog === 'remove' ? null : openDialog
   return (
-    <LabelledSection title="My machine" id={myMachineAnchor}>
-      {machine ? (
-        <div className={`${rowClass} text-sm`}>
-          <span className="font-medium">{machine.name}</span>
-          <span className="text-muted">{statusLabelOf(machine)}</span>
-          <HostVersion host={machine} />
-          <span className="ml-auto flex gap-2">
-            {!isOnline && (
-              <button type="button" className={buttonClass} onClick={() => setOpenDialog('start')}>
-                Start
-              </button>
+    <section aria-label="My machine" className="flex flex-col gap-3">
+      <p className="text-sm text-muted">
+        Run Claude Code and Codex on your own computer, signed in with your own subscription.
+      </p>
+      {(machine || localSessions) && (
+        <ul aria-label="Machine and tools" className={rowListClass}>
+          <li aria-label={machine ? machine.name : 'No machine'} className={rowClass}>
+            {machine ? (
+              <>
+                <span className="w-40 truncate font-medium">{machine.name}</span>
+                <StatusBadge tone={machineToneOf(machine)}>{statusLabelOf(machine)}</StatusBadge>
+                <HostVersion host={machine} />
+                <span className="ml-auto flex gap-2">
+                  {!isOnline && (
+                    <button type="button" className={smallButtonClass} onClick={() => setOpenDialog('start')}>
+                      Start
+                    </button>
+                  )}
+                  <button type="button" className={smallGhostButtonClass} onClick={() => setOpenDialog('remove')}>
+                    Remove
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-muted">No machine added yet</span>
+                <button type="button" className={`ml-auto ${smallButtonClass}`} onClick={() => open('add')}>
+                  Add my machine
+                </button>
+              </>
             )}
-            <button type="button" className={ghostButtonClass} onClick={() => setOpenDialog('remove')}>
-              Remove
-            </button>
-          </span>
-        </div>
-      ) : (
-        localSessions && (
-          <button type="button" className={`self-start ${buttonClass}`} onClick={() => open('add')}>
-            Add my machine
-          </button>
-        )
+          </li>
+          {localSessions &&
+            harnessIds.map((tool) => {
+              const toolName = harnesses[tool].name
+              return (
+                <li key={tool} aria-label={toolName} className={rowClass}>
+                  <span className="w-40 truncate font-medium">{toolName}</span>
+                  {isSignedIn(tool) ? (
+                    <StatusBadge tone="ok">Signed in</StatusBadge>
+                  ) : (
+                    <>
+                      <StatusBadge tone="off">Not signed in</StatusBadge>
+                      <button
+                        type="button"
+                        aria-label={`Set up ${toolName}`}
+                        className={`ml-auto ${smallGhostButtonClass}`}
+                        onClick={() => open(tool)}
+                      >
+                        Set up
+                      </button>
+                    </>
+                  )}
+                </li>
+              )
+            })}
+        </ul>
       )}
-      {localSessions ? (
-        <div className="flex flex-wrap gap-2">
-          {harnessIds.map((tool) => {
-            const isConnected = isOnline && machine.capacity?.signedIn?.includes(tool)
-            return (
-              <button
-                key={tool}
-                type="button"
-                className={
-                  isConnected
-                    ? `${ghostButtonClass} border-(--c) text-(--c)! [--c:light-dark(var(--color-green-900),var(--color-green-400))]`
-                    : buttonClass
-                }
-                onClick={() => open(tool)}
-              >
-                {isConnected ? `✓ ${harnesses[tool].name} connected` : `Use ${harnesses[tool].name}`}
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>
-      )}
+      {!localSessions && <p className="text-sm text-muted">Your workspace turned off sessions on members' machines</p>}
       {localSessions && connectedTools.length > 0 && (
         <p className="text-sm text-muted">
           In a new Runtime chat, set Runs on to{' '}
@@ -227,6 +250,6 @@ export const MyMachineSection = ({ workspaceId, memberId }: { workspaceId: Works
           </button>
         </Dialog>
       )}
-    </LabelledSection>
+    </section>
   )
 }

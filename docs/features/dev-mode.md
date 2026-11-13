@@ -7,7 +7,7 @@ A dev chat is a runtime chat attached to a GitHub repository: the agent works in
 | Piece | Who sets it up | What it is used for |
 |---|---|---|
 | The workspace's GitHub App | An admin (**Workspace settings** > **Connect GitHub**) | Lists the repositories the workspace may use, clones them and fetches base branches with short-lived read-only installation tokens, receives webhooks |
-| A member's GitHub account | Each member (**Profile** > **Tool connections** > **Connect GitHub account**) | Pushes and pull requests, so GitHub shows the member as the author |
+| A member's GitHub account | Each member (**Profile** > **Connections** > **Connect** on GitHub) | Pushes and pull requests, so GitHub shows the member as the author |
 | The runtime | Started by the chat's first prompt | Holds the clone; the agent edits, builds and commits there |
 | The Spyria server | Always | Pushes the branch and talks to GitHub's API; GitHub tokens never enter a runtime |
 
@@ -121,7 +121,7 @@ The runtime holds no GitHub credential, so `git fetch`, `git pull`, `git push`, 
 | `finish_work` | Built in: the owner's prompts and those of quality gates | Says the work is done, with the pull request's title and description; listed only when [quality gates](#quality-gates) are on |
 | `report_review` | Built in: the review prompt of quality gates | Reports the review's findings, each important, nit or pre-existing, and the ids of the findings it was asked to check that are not fixed |
 
-The GitHub commands are a row of **Workspace settings > Tools**: each role has a level (None, Read, Read and write) with single tools, a member can be named with their own, and Spyria marks each command read or write. A role without a setting reads and writes. The agent lists every command; on a prompt the server checks the prompter's access to the one called, then the prompter's approval choice for it (**Profile > Tool connections > Approvals for GitHub**: Never by default, or Always, which asks the prompter on a card before the call runs). `finish_work` and `report_review` belong to the quality gates, which set who they serve, and are listed under **Built in**.
+The GitHub commands are a row of **Workspace settings > Tools**: each role has a level (None, Read, Read and write) with single tools, a member can be named with their own, and Spyria marks each command read or write. A role without a setting reads and writes. The agent lists every command; on a prompt the server checks the prompter's access to the one called, then the prompter's approval choice for it (**Profile > Connections**, **Approvals** in GitHub's **⋯** menu: Never by default, or Always, which asks the prompter on a card before the call runs). `finish_work` and `report_review` belong to the quality gates, which set who they serve, and are listed under **Built in**.
 
 `fetch_branch` works like **Update from base**: the server fetches the branch with a read-only installation token and hands the runtime a git bundle (at most 12 MB) holding only that branch's commits the runtime lacks. Since pushes only fast-forward, the agent merges what it fetched rather than rebasing. The reading tools use read-only installation tokens too, never a member's token, and cut long texts; a prompter still needs Read on GitHub to call them. Every call is recorded like any tool call.
 

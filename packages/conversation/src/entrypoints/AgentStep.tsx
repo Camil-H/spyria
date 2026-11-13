@@ -143,7 +143,7 @@ const ErrorStep = ({ step }: { step: StepOf<'error'> }) => {
       {step.signIn && (
         <>
           {' '}
-          <Link to={`/w/${workspaceId}/profile#my-machine`} className={`underline ${focusRing}`}>
+          <Link to={`/w/${workspaceId}/profile/machine`} className={`underline ${focusRing}`}>
             Open profile
           </Link>
         </>

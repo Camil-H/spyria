@@ -31,7 +31,7 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
   const blockedNotice = (
     <>
       Connect an LLM key in your profile to prompt.{' '}
-      <Link to={`/w/${workspaceId}/profile`} className="underline">
+      <Link to={`/w/${workspaceId}/profile/llm-keys`} className="underline">
         Open profile
       </Link>
     </>
@@ -107,7 +107,7 @@ export const App = ({ app }: { app: Application }) => (
                             }
                           />
                           <Route
-                            path="profile"
+                            path="profile/:card?"
                             element={
                               <Suspense>
                                 <ProfileRoute />
