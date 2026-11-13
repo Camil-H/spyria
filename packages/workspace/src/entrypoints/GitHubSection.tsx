@@ -143,8 +143,11 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   return (
     <section aria-label="GitHub" className="flex max-w-3xl flex-col gap-6">
       {settings ? (
-        <div role="status" className={rowListClass}>
-          <SettingRow title="GitHub App connected" description="Dev chats clone, fetch and push through this App">
+        <div className={rowListClass}>
+          <SettingRow
+            title={<span role="status">GitHub App connected</span>}
+            description="Dev chats clone, fetch and push through this App"
+          >
             <StatusBadge tone="ok">Connected</StatusBadge>
             {manualToggle}
           </SettingRow>

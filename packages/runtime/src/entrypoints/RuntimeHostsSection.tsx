@@ -151,7 +151,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
           {hosts.map((host) => {
             const status = statusOf(host)
             return (
-              <li key={host.id} className={`${rowClass} flex-nowrap items-start`}>
+              <li key={host.id} className="flex items-start gap-x-3 px-4 py-3 text-sm">
                 <span className="flex w-48 shrink-0 flex-col gap-1">
                   <span className="truncate font-medium">{host.name}</span>
                   <StatusBadge tone={statusTones[status]}>{statusLabels[status]}</StatusBadge>
