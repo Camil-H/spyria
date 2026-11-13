@@ -440,6 +440,18 @@ test('closing the connection marks the host offline', async () => {
   await waitFor(async () => (await hostRow(id)).status === 'offline')
 })
 
+test('a host whose connection closes while its hello is being checked ends offline, not held by the closed connection', async () => {
+  const { id, token, host } = await pairedHost()
+  host.socket.close()
+  await waitFor(async () => (await hostRow(id)).status === 'offline')
+  const leaving = await connectFakeHost()
+  leaving.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
+  leaving.socket.close()
+  await leaving.closed
+  await Bun.sleep(500)
+  expect((await hostRow(id)).status).toBe('offline')
+})
+
 test('two missed pings close the connection and mark the host offline', async () => {
   const { id, host } = await pairedHost('Silent host', { answersPings: false })
   await host.closed
