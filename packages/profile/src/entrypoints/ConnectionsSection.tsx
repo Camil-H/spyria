@@ -37,7 +37,7 @@ export const ConnectionsSection = ({ workspaceId, memberId }: { workspaceId: Wor
       <p className="text-sm text-muted">
         The accounts agents use as you, and which of their calls wait for your approval.
       </p>
-      <ul aria-label="Connections" className={rowListClass}>
+      <ul aria-label="Your accounts and tools" className={rowListClass}>
         <GitHubConnectionRow
           workspaceId={workspaceId}
           onApprovals={github && github.tools.length > 0 ? () => setApprovalsServerId(github.id) : undefined}

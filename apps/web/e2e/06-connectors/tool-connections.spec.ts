@@ -3,6 +3,7 @@ import { fakeMcpUrl, gatewayUrl } from '../stack-ports'
 import {
   accountOf,
   addLlmKey,
+  approvalsOf,
   chooseConnectionAction,
   connectFake,
   connectionsOf,
@@ -48,7 +49,9 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
 }
 
 const toolRowOf = (page: Page, name: string) =>
-  connectionsOf(page).getByRole('list', { name: 'Connections' }).getByRole('listitem', { name, exact: true })
+  connectionsOf(page)
+    .getByRole('list', { name: 'Your accounts and tools' })
+    .getByRole('listitem', { name, exact: true })
 
 test.describe('Tool connections', () => {
   test.beforeEach(async ({ page }) => {
@@ -73,12 +76,53 @@ test.describe('Tool connections', () => {
       await page.keyboard.press('Escape')
     })
 
-    await test.step('shows each server I sign in to as not connected, with Connect', async () => {
+    await test.step('shows each server I sign in to as not connected, with Connect and nothing to disconnect', async () => {
       for (const tool of ['Figma', 'Slack', 'Notion', 'Linear', 'fake']) {
         await expect(toolRowOf(page, tool)).toContainText('Not connected')
         await expect(toolRowOf(page, tool).getByRole('button', { name: `Connect ${tool}`, exact: true })).toBeVisible()
       }
-      await expect(connectionsOf(page).getByRole('button', { name: /^(Disconnect|Reconnect) / })).toHaveCount(0)
+      await expect(connectionsOf(page).getByRole('button', { name: /^Reconnect / })).toHaveCount(0)
+      await toolRowOf(page, 'Linear').getByRole('button', { name: 'Actions for Linear' }).click()
+      await expect(page.getByRole('menuitem')).toHaveText(['Approvals'])
+      await page.keyboard.press('Escape')
+    })
+  })
+
+  test('As a member, I choose approvals for a shared-login server by kind of tool: all its read tools at once, and only my changes on demand', async ({
+    page,
+  }) => {
+    await openProfile(page, 'Connections')
+    await chooseConnectionAction(page, 'CRM', 'Approvals')
+    const approvals = approvalsOf(page, 'CRM')
+    const lookupApproval = approvals.getByRole('combobox', { name: 'Approval for lookup' })
+
+    await test.step('opens on the write tools, with a tab per kind of tool and its count', async () => {
+      await expect(approvals.getByRole('tab')).toHaveText(['Read 1', 'Write 1'])
+      await expect(approvals.getByRole('tab', { name: 'Write 1' })).toHaveAttribute('aria-selected', 'true')
+      await expect(
+        approvals
+          .getByRole('radiogroup', { name: 'Write tools of CRM' })
+          .getByRole('radio', { name: "On a guest's prompt" }),
+      ).toBeChecked()
+    })
+
+    await test.step('sets every read tool to Always at once, and shows only those I changed on demand', async () => {
+      await approvals.getByRole('tab', { name: 'Read 1' }).click()
+      await expect(lookupApproval).toHaveValue('default')
+      await approvals.getByRole('button', { name: 'Set all read tools to Always' }).click()
+      await expect(lookupApproval).toHaveValue('always')
+      await approvals.getByRole('checkbox', { name: 'Only my changes' }).check()
+      await expect(approvals.getByRole('list', { name: 'Read tools' }).getByRole('listitem')).toHaveCount(1)
+      await approvals.getByRole('tab', { name: 'Write 1' }).click()
+      await expect(approvals.getByRole('tabpanel')).toContainText('No tool matches')
+    })
+
+    await test.step('sets them back to their default, Never', async () => {
+      await approvals.getByRole('tab', { name: 'Read 1' }).click()
+      await approvals.getByRole('button', { name: 'Set all read tools to Never' }).click()
+      await expect(approvals.getByRole('tabpanel')).toContainText('No tool matches')
+      await approvals.getByRole('checkbox', { name: 'Only my changes' }).uncheck()
+      await expect(lookupApproval).toHaveValue('default')
     })
   })
 
