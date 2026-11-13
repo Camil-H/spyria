@@ -156,7 +156,7 @@ test.describe('Tools catalogue', () => {
 
     await giveResearchToBob(workerStack)
     const bobPage = await openAsBobWithKey(browser, workerStack)
-    await expect(await profileCrmOf(bobPage)).toContainText('Shared login: 2 tools · 1 read · 1 write')
+    await expect(await profileCrmOf(bobPage)).toContainText('Shared login · 2 tools · 1 read · 1 write')
     const result = await promptIn(
       workerStack,
       bobPage,
@@ -309,7 +309,7 @@ test.describe('Tools catalogue', () => {
     const gatewayName = await registerCrm(page, workerStack)
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     const bobCrm = await profileCrmOf(bobPage)
-    await expect(bobCrm).toContainText('Shared login: 2 tools · 1 read · 1 write')
+    await expect(bobCrm).toContainText('Shared login · 2 tools · 1 read · 1 write')
 
     await crmCardOf(page).getByRole('button', { name: 'Remove' }).click()
     await page.getByRole('dialog', { name: 'Remove server' }).getByRole('button', { name: 'Remove' }).click()
