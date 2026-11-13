@@ -283,7 +283,8 @@ test.describe('Team', () => {
     await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
     await expect(memberRowOf(bobPage, 'Alice').getByRole('button')).toHaveCount(0)
-    await expect(memberRowOf(page, 'Alice')).toContainText('Admin (you)')
+    await expect(memberRowOf(page, 'Alice')).toContainText('Alice (you)')
+    await expect(memberRowOf(page, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(page, 'Alice').getByRole('combobox')).toHaveCount(0)
 
     await memberRowOf(page, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Admin' })
