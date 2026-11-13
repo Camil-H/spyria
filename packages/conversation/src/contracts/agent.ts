@@ -127,7 +127,7 @@ export type AgentClient = {
   sendMessage(conversation: AgentConversation, text: string, promptId?: MessageId): Promise<void>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
-  interrupt(conversation: AgentConversation): Promise<void>
+  interrupt(conversation: AgentConversation, promptId?: MessageId): Promise<void>
   restartConversation(conversation: AgentConversation): Promise<string>
   deleteConversation(conversation: AgentConversation): Promise<void>
   readWorkspace(endpoint: AgentEndpoint, path: string): Promise<object | undefined>

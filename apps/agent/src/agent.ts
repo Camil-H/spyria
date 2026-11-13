@@ -1029,6 +1029,10 @@ export const startAgent = ({
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
+    if (action === 'interrupt') {
+      const { prompt_id: promptId } = (await request.json().catch(() => ({}))) as { prompt_id?: unknown }
+      if (typeof promptId === 'string' && conversation.turnEnds.get(promptId) !== undefined) return Response.json({})
+    }
     if (action === 'interrupt' && conversation.stopWaitingToStart) {
       conversation.stopWaitingToStart()
       return Response.json({})
