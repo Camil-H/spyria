@@ -32,10 +32,10 @@ const htmlOf = async (message: ConversationMessage) => {
   return new Response(prelude).text()
 }
 
-test('a streamed answer shows as plain text, the stored answer as Markdown', async () => {
+test('a streamed answer and the stored answer both show as Markdown', async () => {
   const streamed = await htmlOf({ ...answer, id: messageId('streamed-message-prompt'), isStreamed: true })
-  expect(streamed).toContain('The **total** is `42`')
-  expect(streamed).not.toContain('<strong>')
+  expect(streamed).toContain('<strong>total</strong>')
+  expect(streamed).not.toContain('**total**')
   const stored = await htmlOf(answer)
   expect(stored).toContain('<strong>total</strong>')
   expect(stored).toContain('<code>42</code>')
