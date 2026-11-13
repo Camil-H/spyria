@@ -10,7 +10,7 @@ Tool servers (MCP) reached members two ways. An operator set up a server once fo
   - **Each member signs in** (the default): each member connects their own account, and the gateway keeps their token against their key for that workspace. The Admin who adds the server signs in once, and the gateway uses that sign-in only to list the server's tools. Its address is fixed once added: members' sign-ins belong to it.
   - **One shared login**: an Admin-entered secret header that every member's calls use, only for servers without their own sign-in, such as API-key or internal servers.
 - Allowed tools and per-member restrictions apply to both modes, and each member's gateway key is granted exactly the catalogue's servers minus their restrictions.
-- Members see, in **Profile** > **Tool connections**, one list of the catalogue servers they may use, and click **Connect** on those they sign in to. Members cannot add servers of their own for now.
+- Members see, in **Profile** > **Connections**, one list of the catalogue servers they may use, and click **Connect** on those they sign in to. Members cannot add servers of their own for now.
 - The deployment-wide servers and the operator command that set them up are removed, with the sign-ins members had made to them.
 - On a guest's prompt, a server the owner signed in to with their own account stays refused, as the owner's personal connections were ([decision 0009](0009-agent-acts-as-the-owner.md)); a shared-login server follows the intersection of the owner's and the guest's tools.
 

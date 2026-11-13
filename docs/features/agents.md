@@ -62,7 +62,7 @@ Every agent can also use the catalogue from the shell with the `spyria` command 
 
 ## Tool approvals
 
-A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the member whose account answers for the call answers it: the prompter on servers each member signs in to and on GitHub, the chat owner on shared-login servers. Everyone else sees whom it waits for. Each member chooses which calls wait in **Profile > Tool connections > Approvals for** *server* (and **Approvals for GitHub**, under their GitHub account): a default for the server's write tools and a choice per tool, in a searchable list grouped into read and write tools:
+A tool call can wait for approval: a **Tool approval** card shows the tool, its arguments and whose prompt it is on, and only the member whose account answers for the call answers it: the prompter on servers each member signs in to and on GitHub, the chat owner on shared-login servers. Everyone else sees whom it waits for. Each member chooses which calls wait in **Profile > Connections**, with **Approvals** in a server's **⋯** menu (GitHub's too, when their access gives them GitHub tools). It opens a tab each for the read, write and destructive tools: the write tab sets a default for the server's write tools, **Set all to** gives every read or destructive tool the same choice, and each tool has its own choice, in a searchable list that can show only the tools you changed:
 
 - **Never**: the call runs at once.
 - **Always**: every call waits, on the member's own prompts too.
@@ -111,7 +111,7 @@ When a Pi session's context fills up, Pi compacts the earlier conversation into 
 
 Admins can set a monthly AI budget per member and a monthly total for the workspace (see [Admin](./admin.md)). As a member:
 
-- **Profile > My usage** shows your **Monthly AI budget** with a progress bar ("$0.70 of $1.00 (70%)" or "No monthly budget") and your own spend by chat and model, with its breakdown into factors, each with a line chart over time, for all your usage or one chat or model. You never see other members' spend there.
+- **Profile > Usage** shows your **Monthly AI budget** with a progress bar ("$0.70 of $1.00 (70%)" or "No monthly budget") and your own spend by chat and model, with its breakdown into factors, each with a line chart over time, for all your usage or one chat or model. You never see other members' spend there.
 - At 80%, a notice above the composer of agent chats says "You have used 80% of your monthly AI budget".
 - At 100%, your model calls are refused, including your subagent and routing calls: the chat shows "*Name*'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings" (or the workspace wording when the workspace total is reached). A raised or removed budget applies to the next call.
 
@@ -121,5 +121,5 @@ The **Usage** tab of a chat shows its spend per member and per model (tokens, co
 
 ## Keys
 
-A member adds their LLM API keys in **Profile > LLM access**, per workspace. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Tool connections** lists your GitHub account, with **Approvals for GitHub** when your access gives you GitHub tools, then, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
- and on those each member signs in to, **Connect** signs you in with your own account, which the agent uses on your prompts in any chat. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
+A member adds their LLM API keys in **Profile > LLM keys**, per workspace, with **Add key**. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Connections** lists your GitHub account, then, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
+ and on those each member signs in to, **Connect** signs you in with your own account, which the agent uses on your prompts in any chat; each row's **⋯** menu holds **Approvals** and **Disconnect**. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
