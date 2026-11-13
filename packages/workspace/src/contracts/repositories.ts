@@ -70,6 +70,7 @@ export type DeletedWorkspace = {
   deleteLater(delayMilliseconds: number): Promise<void>
   cleanup(): Promise<WorkspaceCleanup>
   reportFailedCleanup(cleanup: WorkspaceCleanup): Promise<void>
+  retryFailedCleanupLater(delayMilliseconds: number): Promise<void>
   deleteChunk(): Promise<number>
   deleteAll(): Promise<void>
 }

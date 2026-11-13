@@ -1054,6 +1054,16 @@ export const workspaceCleanupOf = async (tx: Transaction, workspaceId: string) =
   }
 }
 
+export const requeueFailedCleanup = async (tx: Transaction, workspaceId: string, delayMilliseconds: number) => {
+  await onServer(
+    tx,
+    `update jobs set state = 'queued', attempts = 0, finished_at = null,
+       run_at = now() + make_interval(secs => $3::double precision / 1000)
+     where workspace_id = $1 and type = any($2::text[]) and state = 'failed'`,
+    [workspaceId, workspaceCleanupJobTypes, delayMilliseconds],
+  )
+}
+
 const purgingWorkspace = (tx: Transaction, workspaceId: string) =>
   onServer(tx, `select set_config('spyria.purging_workspace', $1, true)`, [workspaceId])
 

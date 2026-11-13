@@ -77,6 +77,7 @@ export const scheduleWorkspaceDeletion = skippedOnClient
 export const lockDuePurge = async () => false
 export const isWorkspaceDeleted = async () => false
 export const workspaceCleanupOf = async () => ({ isPending: false, failed: [] })
+export const requeueFailedCleanup = skippedOnClient
 export const purgeWorkspaceChunk = async () => 0
 export const workspacePurgeTargetsOf = async () => ({ memberIds: [], runtimeChatIds: [] })
 export const purgeWorkspaceRows = skippedOnClient
