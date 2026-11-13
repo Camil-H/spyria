@@ -1,6 +1,6 @@
 # 0012. Per-workspace SSO
 
-Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): workspaces own no email domain, people sign in with an account at any provider the instance offers, and a workspace may enforce its own provider.
+Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): workspaces own no email domain, people sign in with an account at any provider the instance offers, and a workspace may enforce its own provider. Amended again by [decision 0035](0035-domain-claims.md): a workspace enforcing its provider may claim email domains, proven by a DNS record only.
 
 ## Context
 
