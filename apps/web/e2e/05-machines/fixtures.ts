@@ -10,7 +10,9 @@ export * from '../fixtures.ts'
 
 export const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
 export const machineToolOf = (page: Page, toolName: string) =>
-  machineSectionOf(page).getByRole('button', { name: new RegExp(`^(Use ${toolName}|✓ ${toolName} connected)$`) })
+  machineSectionOf(page).getByRole('listitem', { name: toolName, exact: true })
+export const setUpButtonOf = (page: Page, toolName: string) =>
+  machineToolOf(page, toolName).getByRole('button', { name: `Set up ${toolName}` })
 export const newMachineSession = async (page: Page, name: string, option = 'Local · Claude Code') => {
   const chatId = await newRuntimeChat(page, name, option)
   await expect(chipOf(page, 'any')).toHaveText(`${option.replace('Local · ', '')} · subscription`)
