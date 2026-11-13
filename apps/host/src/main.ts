@@ -251,6 +251,7 @@ const connect = () => {
     }
     if (frame.type === 'token') {
       writeFileSync(tokenPath, frame.token, { mode: 0o600 })
+      isTokenRefused = false
       return void hello(frame.token).catch(failHello)
     }
     if (frame.type === 'cmd') return void runCommand(frame)
