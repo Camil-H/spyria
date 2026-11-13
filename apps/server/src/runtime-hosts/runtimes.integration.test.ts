@@ -243,6 +243,30 @@ test('a stopped runtime resumes with start only; a missing container is recreate
   expect(await runtimeOf(chat)).not.toHaveProperty('api_key')
 })
 
+test('a runtime whose host drops while it starts goes back to stopped on that host and starts there again once it returns, keeping its container and volumes', async () => {
+  const host = await fakeHost('Dropping host')
+  const chat = await newRuntimeChat()
+  const runtime = await stoppedRuntime(chat)
+  host.hold('start')
+  host.commands.length = 0
+  await ensure(chat)
+  await waitFor(() => host.commands.some(({ op }) => op === 'start'))
+  const capturedConsole = captureConsole()
+  await host.disconnect()
+
+  await waitFor(async () => (await jobsOf('runtime.start', runtime.id)).some((job) => job.state === 'done'), 15_000)
+  capturedConsole.restore()
+  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, state: 'stopped', failure: null, host_id: host.id })
+  expect(await jobsOf('runtime.discard', runtime.id)).toEqual([])
+  expect(await ensure(chat)).toMatchObject({ id: runtime.id, state: 'stopped' })
+
+  await host.connect()
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  expect((await runtimeOf(chat)).id).toBe(runtime.id)
+  expect(host.commands.filter(({ runtimeId }) => runtimeId === runtime.id).map(({ op }) => op)).not.toContain('remove')
+})
+
 test('the sweep stops runtimes idle for more than an hour only, and touchRuntime postpones it', async () => {
   const host = await fakeHost('Sweeping host')
   const [idleChat, activeChat, touchedChat] = [await newRuntimeChat(), await newRuntimeChat(), await newRuntimeChat()]

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
@@ -56,6 +56,25 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
   expect((await call('GET', `/api/conversations/${id}`)).status).toBe(404)
 })
 
+test('a conversation stays running while a later prompt runs after an earlier one was stopped, and finishes with the last', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const statusOf = async () => (await call('GET', `/api/conversations/${id}`)).body.execution_status
+  const isRunningCall = (event: AgentEvent) => event.update.status === 'in_progress'
+  await prompt(id, 'stub:long')
+  await socket.until(isRunningCall)
+  await prompt(id, 'stub:long')
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  const stoppedTurnEnd = (await socket.until(kindOf('turn_end'))).findIndex(kindOf('turn_end'))
+  await socket.until((event) => socket.events.indexOf(event) > stoppedTurnEnd && isRunningCall(event))
+  expect(await statusOf()).toBe('running')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(await statusOf()).toBe('finished')
+})
+
 test('a prompt sent again with its id runs once: while it runs the repeat is ignored, once ended the repeat resends its turn end', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())
@@ -83,6 +102,31 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
     'prompt-2',
     'prompt-2',
   ])
+})
+
+test('an interrupt naming a prompt that already ended cancels nothing, one naming the running prompt cancels it', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
+  await promptWithId('hello', 'prompt-ended')
+  await socket.until(kindOf('turn_end'))
+  await promptWithId('stub:long', 'prompt-running')
+  await socket.until((event) => event.update.status === 'in_progress')
+
+  expect((await interrupt('prompt-ended')).status).toBe(200)
+  await Bun.sleep(100)
+  expect(socket.events.filter(kindOf('turn_end'))).toHaveLength(1)
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
+
+  expect((await interrupt('prompt-running')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({
+    stopReason: 'cancelled',
+    promptId: 'prompt-running',
+  })
 })
 
 test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
@@ -600,6 +644,50 @@ test.each([
     expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('error')
   },
 )
+
+test('an interrupt naming a prompt that waits for the session to start stops only that prompt, not a later one also waiting', async () => {
+  const { call, open, create } = started({ requestTimeoutMilliseconds: 1500 })
+  const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const restarting = call('POST', `/api/conversations/${id}/restart`)
+  for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
+    if (Date.now() > deadline) throw new Error('The session did not start reloading')
+  await promptWithId('hello', 'prompt-stopped')
+  await promptWithId('hello', 'prompt-next')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-stopped' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-stopped' },
+  ])
+  await restarting
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({ promptId: 'prompt-next' })
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).not.toBe('cancelled')
+})
+
+test('a Stop naming no prompt stops every prompt waiting for the session to start', async () => {
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 1500 })
+  const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
+  const socket = open(id)
+  const restarting = call('POST', `/api/conversations/${id}/restart`)
+  for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
+    if (Date.now() > deadline) throw new Error('The session did not start reloading')
+  await prompt(id, 'first')
+  await prompt(id, 'second')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.stopReason)).toEqual([
+    'cancelled',
+    'cancelled',
+  ])
+  await restarting
+})
 
 test('a restart while a timed-out adapter is still stopping brings the conversation back to a working session', async () => {
   const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })

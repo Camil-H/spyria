@@ -20,6 +20,8 @@ import {
   sendTo,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -154,6 +156,22 @@ test('two admins demoting each other at once leave one admin: the last-admin gua
   expect(admins).toHaveLength(1)
   if (admins[0]?.user_id === bob) expect(await changeRole(bobInAcme, alice, 'admin')).toEqual(succeeded)
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
+})
+
+test('a role change waiting on a removal in progress is refused once it commits, so the removal is never undone', async () => {
+  const dana = `member-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${dana}, 'member', 'Dana')`
+  let roleChange: ReturnType<typeof changeRole> | undefined
+  await database.$client.begin(async (removal) => {
+    await removal`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${dana}`
+    roleChange = changeRole(aliceInAcme, dana, 'admin')
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await roleChange).toEqual(failedWith(`${dana} is not a member of this workspace`))
+  expect((await membershipOf(dana))?.removed_at).not.toBeNull()
 })
 
 test('an admin signs a member out everywhere in the workspace, which is recorded, keeps their membership and cannot be undone from their other workspaces; a member signs nobody out', async () => {

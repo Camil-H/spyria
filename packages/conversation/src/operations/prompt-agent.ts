@@ -449,8 +449,8 @@ export const promptAgent = async (
     const notice = `${agentNotices.couldNotStart}: ${disclosableMessageOf(error)}`
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
-  if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) === null)
-    await agentClient.interrupt(conversation)
+  if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) !== prompt.id)
+    await agentClient.interrupt(conversation, prompt.id)
   await runtimes.touch(chat)
   return undefined
 }

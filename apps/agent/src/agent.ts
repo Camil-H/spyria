@@ -84,10 +84,11 @@ type Conversation = {
   lastSeq: number
   toolCalls: Map<string, ToolCallState>
   turnEnds: Map<string, Json | undefined>
+  promptsInFlight: number
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
   isSettingUp: boolean
-  stopWaitingToStart?: () => void
+  startWaiters: Map<string, () => void>
 }
 type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
 type TerminalMeta = {
@@ -677,16 +678,23 @@ export const startAgent = ({
     if (!isUnchanged) setups.delete(cwd)
   }
 
-  const isStoppedWhileStarting = (conversation: Conversation) =>
+  const isStoppedWhileStarting = (conversation: Conversation, waiterId: string) =>
     new Promise<boolean>((resolve) => {
-      conversation.stopWaitingToStart = () => resolve(true)
+      conversation.startWaiters.set(waiterId, () => resolve(true))
       conversation.started.then(
         () => resolve(false),
         () => resolve(false),
       )
     }).finally(() => {
-      conversation.stopWaitingToStart = undefined
+      conversation.startWaiters.delete(waiterId)
     })
+
+  const stopWaitingToStart = ({ startWaiters }: Conversation, promptId: string | undefined) => {
+    const stops = promptId === undefined ? [...startWaiters.values()] : [startWaiters.get(promptId)]
+    const waiting = stops.filter((stop) => stop !== undefined)
+    for (const stop of waiting) stop()
+    return waiting.length > 0
+  }
 
   const readWorkspace = async (read: string, parameters: URLSearchParams) => {
     const environment = inheritedEnvironmentOf()
@@ -838,9 +846,11 @@ export const startAgent = ({
       lastSeq: 0,
       toolCalls: new Map(),
       turnEnds: new Map(),
+      promptsInFlight: 0,
       sockets: new Set(),
       started: Promise.resolve(),
       isSettingUp: false,
+      startWaiters: new Map(),
       connection: unspawnedConnection,
     }
     conversations.set(id, conversation)
@@ -872,6 +882,11 @@ export const startAgent = ({
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
     if (promptId) rememberPrompt(conversation, promptId)
     conversation.status = 'running'
+    conversation.promptsInFlight += 1
+    const isLastInFlight = () => {
+      conversation.promptsInFlight -= 1
+      return conversation.promptsInFlight === 0
+    }
     const startedAt = performance.now()
     const promptParams = () => ({
       sessionId: conversation.sessionId,
@@ -895,7 +910,7 @@ export const startAgent = ({
     }
     const ended = (result: Json) => {
       turnEnded(result.stopReason)
-      conversation.status = 'finished'
+      if (isLastInFlight()) conversation.status = 'finished'
       closeQuestions(conversation, 'turn_end')
       endTurn(result.stopReason)
       void reportWorkspace(conversation)
@@ -910,8 +925,9 @@ export const startAgent = ({
         },
         error,
       })
+      const isLast = isLastInFlight()
       if (conversation.status !== 'error') {
-        conversation.status = 'finished'
+        if (isLast) conversation.status = 'finished'
         emit(conversation, errorUpdateOf(error))
       }
       closeQuestions(conversation, 'turn_end')
@@ -919,6 +935,7 @@ export const startAgent = ({
       void reportWorkspace(conversation)
     }
     const endedByRestart = () => {
+      isLastInFlight()
       turnEnded('restarted')
       endTurn('cancelled')
     }
@@ -943,7 +960,8 @@ export const startAgent = ({
       'agent.turn',
       { 'conversation.id': conversation.id },
       async () => {
-        if (await isStoppedWhileStarting(conversation)) return ended({ stopReason: 'cancelled' })
+        if (await isStoppedWhileStarting(conversation, promptId ?? crypto.randomUUID()))
+          return ended({ stopReason: 'cancelled' })
         if (!conversation.sessionId || conversation.status === 'error')
           return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
         conversation.status = 'running'
@@ -966,8 +984,18 @@ export const startAgent = ({
     return Response.json({})
   }
 
+  const interrupt = async (conversation: Conversation, { prompt_id }: { prompt_id?: unknown }) => {
+    const promptId = typeof prompt_id === 'string' ? prompt_id : undefined
+    if (promptId && conversation.turnEnds.get(promptId) !== undefined) return Response.json({})
+    if (stopWaitingToStart(conversation, promptId) || conversation.isSettingUp) return Response.json({})
+    await conversation.started
+    if (conversation.sessionId) conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
+    stopWaitingToStart(conversation, promptId)
+    closeQuestions(conversation, 'stopped')
+    return Response.json({})
+  }
+
   const actedWhileSettingUp = (conversation: Conversation, action: string | undefined, choice?: ModelChoice) => {
-    if (action === 'interrupt') return Response.json({})
     if (action === 'restart') return Response.json({ id: conversation.id, ...summaryOf(conversation) })
     if (action !== 'switch_acp_model' || !choice) return Response.json({ error: 'Not found' }, { status: 404 })
     const { model, thoughtLevel } = choice
@@ -1020,23 +1048,13 @@ export const startAgent = ({
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
-    if (action === 'interrupt' && conversation.stopWaitingToStart) {
-      conversation.stopWaitingToStart()
-      return Response.json({})
-    }
+    if (action === 'interrupt') return interrupt(conversation, await request.json().catch(() => ({})))
     const choice = action === 'switch_acp_model' ? ((await request.json()) as ModelChoice) : undefined
     if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, choice)
     await conversation.started
     if (action === 'restart') {
       await restart(conversation)
       return Response.json({ id: conversation.id, ...summaryOf(conversation) })
-    }
-    if (action === 'interrupt') {
-      if (conversation.sessionId)
-        conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
-      conversation.stopWaitingToStart?.()
-      closeQuestions(conversation, 'stopped')
-      return Response.json({})
     }
     if (choice) {
       await switchModel(conversation, choice.model, choice.thoughtLevel)
