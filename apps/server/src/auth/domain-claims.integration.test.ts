@@ -231,6 +231,18 @@ test('an address at a claimed domain is offered only the providers of its worksp
   expect(throughAccount.workspaceIds).toEqual([])
 })
 
+test('an address at a claimed domain that no workspace invited is told, through the claiming provider, that it needs an invite and cannot create a workspace', async () => {
+  const uninvited = await signInThrough(umbrellaIdp, 'provider=workspace-0&email=new@umbrella.com', {
+    sub: 'new-umbrella',
+    email: 'new@umbrella.com',
+  })
+  expect(uninvited.status).toBe(403)
+  expect(uninvited.page).toContain(
+    "umbrella.com belongs to your organization's workspace, which has not invited you: ask one of its Admins for an invite. Addresses at umbrella.com cannot create a workspace of their own.",
+  )
+  expect(uninvited.workspaceIds).toEqual([])
+})
+
 test("through the claiming workspace's provider, an address at its domain opens every workspace it belongs to, except one enforcing a provider of its own", async () => {
   const throughUmbrella = await signInThrough(umbrellaIdp, 'provider=workspace-0&email=ben@umbrella.com', {
     sub: 'ben-umbrella',
