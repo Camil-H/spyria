@@ -384,15 +384,22 @@ const storeUserTokens = async (
   tokens: UserTokens,
 ) => {
   const sealed = await sealedTokensOf(secretBox, tokens)
-  await database.$client`
-    insert into github_connections (workspace_id, user_id, login, encrypted_access_token, encrypted_refresh_token,
-      access_expires_at, needs_reconnection, updated_at)
-    values (${workspaceId}, ${userId}, ${login}, ${sealed.accessToken}, ${sealed.refreshToken},
-      ${sealed.accessExpiresAt}::timestamptz, false, now())
-    on conflict (workspace_id, user_id) do update set login = excluded.login,
-      encrypted_access_token = excluded.encrypted_access_token,
-      encrypted_refresh_token = excluded.encrypted_refresh_token, access_expires_at = excluded.access_expires_at,
-      needs_reconnection = false, updated_at = now()`
+  return database.$client.begin(async (sql) => {
+    const [activeMembership] = await sql`
+      select 1 from memberships where workspace_id = ${workspaceId} and user_id = ${userId} and removed_at is null
+      for share`
+    if (!activeMembership) return false
+    await sql`
+      insert into github_connections (workspace_id, user_id, login, encrypted_access_token, encrypted_refresh_token,
+        access_expires_at, needs_reconnection, updated_at)
+      values (${workspaceId}, ${userId}, ${login}, ${sealed.accessToken}, ${sealed.refreshToken},
+        ${sealed.accessExpiresAt}::timestamptz, false, now())
+      on conflict (workspace_id, user_id) do update set login = excluded.login,
+        encrypted_access_token = excluded.encrypted_access_token,
+        encrypted_refresh_token = excluded.encrypted_refresh_token, access_expires_at = excluded.access_expires_at,
+        needs_reconnection = false, updated_at = now()`
+    return true
+  })
 }
 
 const connectionWithTokenOf = async (
@@ -474,8 +481,7 @@ export const finishGitHubConnection = async (
   const tokens = await dependencies.api.exchangeCode(clientId, clientSecret, code).catch(failed)
   const login = tokens && (await dependencies.api.user(tokens.accessToken).catch(failed))?.login
   if (!tokens || !login) return false
-  await storeUserTokens(database, dependencies.secretBox, verified, login, tokens)
-  return true
+  return storeUserTokens(database, dependencies.secretBox, verified, login, tokens)
 }
 
 export const disconnectGitHub = (database: Database, member: Member) =>

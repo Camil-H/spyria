@@ -210,6 +210,27 @@ test('a refresh waiting on a disconnect in progress stores nothing, so the membe
   expect(await connectionRow()).toBeUndefined()
 })
 
+test('returning from GitHub while a removal is in progress stores no token once it commits, and the callback is refused', async () => {
+  const dana = `member-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${dana}, 'member', 'Dana')`
+  const callback = await githubCallbackOf(dana)
+  let returned: ReturnType<typeof app.request> | undefined
+  await database.$client.begin(async (removal) => {
+    await removal`
+      select 1 from memberships where workspace_id = ${acme} and user_id = ${dana} and removed_at is null for update`
+    await removal`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${dana}`
+    returned = app.request(callback)
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect((await returned)?.status).toBe(400)
+  expect(
+    await database.$client`select 1 from github_connections where workspace_id = ${acme} and user_id = ${dana}`,
+  ).toHaveLength(0)
+})
+
 test('a dev chat needs a granted repository and an existing base branch, and stores its working branch', async () => {
   const withGitHubCalls = async <Result>(action: () => Promise<Result>) => {
     const callsBefore = fakeGitHub.apiRequests.length
