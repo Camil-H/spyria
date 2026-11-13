@@ -18,6 +18,12 @@ test.describe('Workspace hosts', () => {
   const hostRowOf = (page: Page, hostName: string) =>
     hostsSectionOf(page).getByRole('listitem').filter({ hasText: hostName })
   const addDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add runtime host' })
+  const expectRuntimesCard = async (page: Page, status: string | RegExp) => {
+    await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+    const card = mainOf(page).getByRole('link', { name: 'Runtimes', exact: true })
+    await expect(card).toContainText(status)
+    await card.click()
+  }
   const commandOf = (page: Page, dialogName = 'Add runtime host') =>
     page.getByRole('dialog', { name: dialogName }).getByRole('textbox', { name: 'Command' })
 
@@ -101,6 +107,7 @@ test.describe('Workspace hosts', () => {
     await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
     await expect(addDialogOf(page)).toHaveCount(0)
     await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
+    await expectRuntimesCard(page, '1 runtime host · 1 not connected')
   })
 
   test('As a member who can manage runtime hosts, I follow a host’s lifecycle: online with its capacity, its code working once, offline and back with its stored token, then removed after confirmation and refused', {
@@ -130,8 +137,10 @@ test.describe('Workspace hosts', () => {
       await test.step('a stopped host goes Offline and comes back Online with its stored token', async () => {
         await firstRun.stop()
         await expect(hostRowOf(page, 'Home server')).toContainText('Offline', { timeout: 60_000 })
+        await expectRuntimesCard(page, '1 runtime host · 1 not connected')
         const run = hosts.start(url, stateDirectory)
         await expectOnline(page, 'Home server')
+        await expectRuntimesCard(page, /^\D*1 runtime host$/)
         return run
       })
     await test.step('removing an online host asks for confirmation, disconnects it and refuses it afterwards', async () => {

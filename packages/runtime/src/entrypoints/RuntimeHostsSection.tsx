@@ -45,12 +45,12 @@ const statusTones: Record<keyof typeof statusLabels, StatusTone> = {
 const machineUsageOf = ({ machines, claudeCode, codex }: Omit<MachineCountsRow, 'workspaceId'>) =>
   `${machines === 1 ? '1 member uses' : `${machines} members use`} their machine: ${claudeCode} signed in to Claude Code, ${codex} to Codex`
 
-export const statusOf = (host: RuntimeHostRow) =>
+export const hostStatusOf = (host: RuntimeHostRow) =>
   host.status === 'waiting' && host.claimExpiresAt !== null && isClaimExpired(host.claimExpiresAt, Date.now())
     ? 'expired'
     : host.status
 
-export const statusLabelOf = (host: RuntimeHostRow) => statusLabels[statusOf(host)]
+export const statusLabelOf = (host: RuntimeHostRow) => statusLabels[hostStatusOf(host)]
 
 const AddHostDialog = ({ add, onClose }: { add: (name: string) => Promise<void>; onClose: () => void }) => {
   const [name, setName] = useState('')
@@ -149,7 +149,7 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
       ) : (
         <ul aria-label="Hosts" className={rowListClass}>
           {hosts.map((host) => {
-            const status = statusOf(host)
+            const status = hostStatusOf(host)
             return (
               <li key={host.id} className="flex items-start gap-x-3 px-4 py-3 text-sm">
                 <span className="flex w-48 shrink-0 flex-col gap-1">
