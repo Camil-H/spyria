@@ -4,14 +4,7 @@ import { Type } from 'typebox'
 const other = 'Other…'
 const resultOf = (text: string) => ({ content: [{ type: 'text' as const, text }], details: {} })
 
-const inNameOrder = (pi: ExtensionAPI) => {
-  const active = pi.getActiveTools()
-  const sorted = active.toSorted()
-  if (sorted.some((name, index) => name !== active[index])) pi.setActiveTools(sorted)
-}
-
 export default (pi: ExtensionAPI) => {
-  pi.on('before_agent_start', () => inNameOrder(pi))
   pi.registerTool({
     name: 'ask_member',
     label: 'Ask',
