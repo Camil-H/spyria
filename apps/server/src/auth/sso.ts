@@ -16,7 +16,9 @@ import {
 import { addInstallHostIn } from '@spyria/runtime/server'
 import {
   type AccountProvider,
+  ClaimedDomainCannotCreate,
   displayNameFrom,
+  domainOfEmail,
   EmailNotConfirmed,
   type InstanceApps,
   InstanceBeingSetUp,
@@ -37,7 +39,7 @@ import {
 } from '@spyria/workspace/server'
 import { discoverIssuer } from './oidc.ts'
 import type { SecretBox } from './secret-box.ts'
-import { bindAccountByEmail, type Sql, type VerifiedIdentity } from './sessions.ts'
+import { bindAccountByEmail, claimedDomainsOf, type Sql, type VerifiedIdentity } from './sessions.ts'
 
 export type SsoProvider = {
   workspaceId: string
@@ -67,16 +69,21 @@ export const workspaceProviderOf = async (database: Database, workspaceId: strin
   )[0]
 
 export const workspaceProvidersForEmail = (database: Database, email: string) =>
-  database.$client<{ workspaceId: string; preset: SsoPreset }[]>`
-    select workspace_id as "workspaceId", preset from workspace_sso join workspaces using (workspace_id)
+  database.$client<{ workspaceId: string; preset: SsoPreset; isClaiming: boolean }[]>`
+    select workspace_id as "workspaceId", preset, claimed.is_claiming as "isClaiming"
+    from workspace_sso join workspaces using (workspace_id)
+      cross join lateral (select exists(select 1 from domain_claims
+        where domain_claims.workspace_id = workspace_sso.workspace_id and domain_claims.domain = ${domainOfEmail(email)}
+          and domain_claims.verified_at is not null) as is_claiming) as claimed
     where workspaces.deleted_at is null and (
-      exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
+      claimed.is_claiming
+      or exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
         and invitations.email = ${normalizedEmail(email)} and revoked_at is null and accepted_at is null
         and expires_at > now())
       or exists(select 1 from memberships join users on users.id = memberships.user_id
         where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
           and users.email = ${normalizedEmail(email)}))
-    order by workspaces.created_at, workspace_id`
+    order by claimed.is_claiming desc, workspaces.created_at, workspace_id`
 
 export const requireMemberPermission = async (
   sql: Sql,
@@ -293,6 +300,7 @@ export const createWorkspaceOfAccount = async (database: Database, userId: strin
   return database.$client.begin(async (sql) => {
     const [user] = await sql<{ email: string }[]>`select email from users where id = ${userId}`
     if (!user || (await hasNoWorkspace(sql))) throw new InstanceBeingSetUp()
+    if ((await claimedDomainsOf(sql, domainOfEmail(user.email))).length > 0) throw new ClaimedDomainCannotCreate()
     return insertWorkspace(sql, { userId, workspaceName, identity: user })
   })
 }

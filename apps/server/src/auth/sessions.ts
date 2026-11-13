@@ -1,32 +1,37 @@
 import type { ServerTransaction } from '@rocicorp/zero'
 import type { Database } from '@spyria/db/postgres'
 import { deleteAbandonedAttachments } from '@spyria/db/server-writes'
-import type { WorkspaceId } from '@spyria/kernel'
-import { AccountBoundElsewhere, displayNameFrom, normalizedEmail } from '@spyria/workspace/server'
+import type { SignedInThrough, WorkspaceId } from '@spyria/kernel'
+import {
+  AccountBoundElsewhere,
+  displayNameFrom,
+  domainOfEmail,
+  normalizedEmail,
+  OutsideClaimedDomains,
+  SignInThroughClaimingProvider,
+} from '@spyria/workspace/server'
 import type { FindMember, SessionClaims } from './session-tokens.ts'
 
 type LiveSession = SessionClaims & { createdAt: Date }
-export type SignedInThrough = 'account' | 'workspace sso'
 export type Sql = Parameters<Parameters<Database['$client']['begin']>[1]>[0]
 
 export const openSessions = (
   database: Database,
   userId: string,
   workspaceId?: string,
-  through: SignedInThrough = 'account',
+  providerWorkspaceId: string | null = null,
   userAgent = '',
   signedInAt?: string,
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
-      insert into sessions (workspace_id, id, user_id, opened_through_workspace_sso, user_agent, signed_in_at,
+      insert into sessions (workspace_id, id, user_id, provider_workspace_id, user_agent, signed_in_at,
         created_at, expires_at)
-      select workspace_id, gen_random_uuid()::text, user_id, ${through === 'workspace sso'}, ${userAgent},
+      select workspace_id, gen_random_uuid()::text, user_id, ${providerWorkspaceId}, ${userAgent},
         coalesce(${signedInAt ?? null}::timestamptz, now()), now(), now() + interval '7 days'
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
-        and exists(select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id)
-          = ${through === 'workspace sso'}
+        and provider_opens_workspace(${providerWorkspaceId}::text, memberships.workspace_id, memberships.user_id)
         and exists(select 1 from workspaces where workspaces.workspace_id = memberships.workspace_id
           and workspaces.deleted_at is null)
       returning workspace_id, id, user_id, created_at)
@@ -47,8 +52,7 @@ export const findLiveSessions = async (database: Database, sessionIdByWorkspace:
         select * from unnest(${sessionIdByWorkspace.map(([workspaceId]) => workspaceId)}::text[],
           ${sessionIdByWorkspace.map(([, sessionId]) => sessionId)}::text[]))
       and sessions.expires_at > now()
-      and sessions.opened_through_workspace_sso = exists(select 1 from workspace_sso
-        where workspace_sso.workspace_id = sessions.workspace_id)
+      and provider_opens_workspace(sessions.provider_workspace_id, sessions.workspace_id, sessions.user_id)
     order by workspaces.created_at`
 
 export const deleteSession = (database: Database, workspaceId: string, sessionId: string) =>
@@ -67,11 +71,15 @@ export const signOutMemberEverywhere = (database: Database, workspaceId: string,
     insert into member_sign_outs (workspace_id, user_id, signed_out_at) values (${workspaceId}, ${userId}, now())
     on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
 
-export const signedInAtOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
-  const [session] = await database.$client<{ signedInAt: string }[]>`
-    select signed_in_at as "signedInAt" from sessions where workspace_id = ${workspaceId} and id = ${sessionId}`
-  return session?.signedInAt
+export const signInOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
+  const [session] = await database.$client<{ signedInAt: string; providerWorkspaceId: string | null }[]>`
+    select signed_in_at as "signedInAt", provider_workspace_id as "providerWorkspaceId" from sessions
+    where workspace_id = ${workspaceId} and id = ${sessionId}`
+  return session
 }
+
+export const emailOfUser = async (database: Database, userId: string) =>
+  (await database.$client<{ email: string }[]>`select email from users where id = ${userId}`)[0]?.email ?? ''
 
 export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: string) => {
   const [signedOut] = await database.$client`
@@ -85,13 +93,16 @@ export const findMemberIn =
   async ({ workspaceId, userId, sessionId }, databaseName) => {
     const database = databaseOf(databaseName)
     if (!database) return undefined
-    const [member] = await database.$client<{ hasLiveSession: boolean; signedInThroughWorkspaceSso: boolean }[]>`
-      select removed_at is null and coalesce(session.opened_through_workspace_sso = exists(
-          select 1 from workspace_sso where workspace_sso.workspace_id = memberships.workspace_id), false)
-          as "hasLiveSession",
-        coalesce(session.opened_through_workspace_sso, false) as "signedInThroughWorkspaceSso"
+    const [member] = await database.$client<{ hasLiveSession: boolean; signedInThrough: SignedInThrough }[]>`
+      select removed_at is null and session.id is not null and provider_opens_workspace(
+          session.provider_workspace_id, memberships.workspace_id, memberships.user_id) as "hasLiveSession",
+        case when session.provider_workspace_id is null then 'account'
+          when exists(select 1 from domain_claims join users on users.id = memberships.user_id
+            where domain_claims.workspace_id = session.provider_workspace_id
+              and domain_claims.domain = split_part(users.email, '@', 2) and domain_claims.verified_at is not null)
+          then 'claimed domain' else 'workspace sso' end as "signedInThrough"
       from memberships left join lateral (
-        select opened_through_workspace_sso from sessions where sessions.workspace_id = memberships.workspace_id
+        select id, provider_workspace_id from sessions where sessions.workspace_id = memberships.workspace_id
           and sessions.user_id = memberships.user_id and sessions.id = ${sessionId} and sessions.expires_at > now()
       ) as session on true
       where workspace_id = ${workspaceId} and user_id = ${userId}
@@ -110,17 +121,25 @@ export type VerifiedIdentity = {
 }
 export type WorkspaceSignIn = { workspaceId: string; issuer: string; currentSubjectPattern?: string }
 
+export const claimedDomainsOf = async (sql: Sql, domain: string, workspaceId: string | null = null) =>
+  sql<{ workspaceId: string; domain: string }[]>`
+    select workspace_id as "workspaceId", domain from domain_claims
+    where verified_at is not null and (domain = ${domain} or workspace_id = ${workspaceId}::text)`
+
 const joinInvitedWorkspaces = async (
   sql: Sql,
-  { userId, email, name, workspaceId }: { userId: string; email: string; name?: unknown; workspaceId: string | null },
+  {
+    userId,
+    email,
+    name,
+    providerWorkspaceId,
+  }: { userId: string; email: string; name?: unknown; providerWorkspaceId: string | null },
 ) => {
   const invitations = await sql<{ workspaceId: string; id: string; role: string }[]>`
     select workspace_id as "workspaceId", id, role from invitations
     where email = ${email} and revoked_at is null and accepted_at is null and expires_at > now()
       and workspace_id in (select workspace_id from workspaces where deleted_at is null)
-      and case when ${workspaceId}::text is null
-        then not exists(select 1 from workspace_sso where workspace_sso.workspace_id = invitations.workspace_id)
-        else invitations.workspace_id = ${workspaceId} end
+      and provider_opens_workspace(${providerWorkspaceId}::text, invitations.workspace_id, ${userId})
     for update`
   for (const invitation of invitations) {
     const joined = await sql`
@@ -155,13 +174,14 @@ export const bindAccountByEmail = async (sql: Sql, { issuer, subject }: Verified
 export const signInWithAccount = (database: Database, identity: VerifiedIdentity) => {
   const email = normalizedEmail(identity.email)
   return database.$client.begin(async (sql) => {
+    if ((await claimedDomainsOf(sql, domainOfEmail(email))).length > 0) throw new SignInThroughClaimingProvider(email)
     const [bound] = await sql<{ userId: string }[]>`
       select user_id as "userId" from account_identities
       where issuer = ${identity.issuer} and subject = ${identity.subject}`
     const userId =
       bound?.userId ?? (identity.canBindByEmail ? await bindAccountByEmail(sql, identity, email) : undefined)
     if (!userId) return { email }
-    await joinInvitedWorkspaces(sql, { userId, email, name: identity.name, workspaceId: null })
+    await joinInvitedWorkspaces(sql, { userId, email, name: identity.name, providerWorkspaceId: null })
     return { userId, email }
   })
 }
@@ -170,6 +190,7 @@ const bindMemberByEmail = async (
   sql: Sql,
   { workspaceId, issuer, currentSubjectPattern }: WorkspaceSignIn,
   email: string,
+  isTrusted: boolean,
 ) => {
   const [candidate] = await sql<{ id: string; isMember: boolean; isBound: boolean }[]>`
     select users.id,
@@ -180,10 +201,10 @@ const bindMemberByEmail = async (
         and (${currentSubjectPattern ?? null}::text is null or identities.subject ~ ${currentSubjectPattern ?? null})) as "isBound"
     from users where email = ${email}`
   const [invitation] = await sql`
-    select 1 from invitations where workspace_id = ${workspaceId} and email = ${email} and revoked_at is null
-      and accepted_at is null and expires_at > now()`
+    select 1 from invitations where email = ${email} and revoked_at is null and accepted_at is null
+      and expires_at > now() and (workspace_id = ${workspaceId} or ${isTrusted})`
   if (candidate?.isBound) return undefined
-  if (candidate && (candidate.isMember || invitation)) return candidate.id
+  if (candidate && (candidate.isMember || invitation || isTrusted)) return candidate.id
   if (!invitation) return undefined
   const [created] = await sql<{ id: string }[]>`
     insert into users (id, email) values (${crypto.randomUUID()}, ${email}) returning id`
@@ -195,13 +216,17 @@ export const signInThroughWorkspace = (database: Database, signIn: WorkspaceSign
   const { workspaceId, issuer } = signIn
   const { subject, legacySubject = subject } = identity
   return database.$client.begin(async (sql) => {
+    const claims = await claimedDomainsOf(sql, domainOfEmail(email), workspaceId)
+    const isTrusted = claims.some((claim) => claim.workspaceId === workspaceId && claim.domain === domainOfEmail(email))
+    if (!isTrusted && claims.some((claim) => claim.workspaceId === workspaceId)) throw new OutsideClaimedDomains(email)
     const [bound] = await sql<{ userId: string }[]>`
       select user_id as "userId" from identities
       where workspace_id = ${workspaceId} and issuer = ${issuer} and subject in (${subject}, ${legacySubject})
       order by subject = ${subject} desc limit 1`
-    const userId = bound?.userId ?? (identity.canBindByEmail ? await bindMemberByEmail(sql, signIn, email) : undefined)
+    const userId =
+      bound?.userId ?? (identity.canBindByEmail ? await bindMemberByEmail(sql, signIn, email, isTrusted) : undefined)
     if (!userId) return { email }
-    await joinInvitedWorkspaces(sql, { userId, email, name: identity.name, workspaceId })
+    await joinInvitedWorkspaces(sql, { userId, email, name: identity.name, providerWorkspaceId: workspaceId })
     await sql`
       insert into identities (workspace_id, issuer, subject, user_id)
       select workspace_id, ${issuer}, ${subject}, user_id from memberships
