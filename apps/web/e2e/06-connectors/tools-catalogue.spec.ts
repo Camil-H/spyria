@@ -38,6 +38,11 @@ test.describe('Tools catalogue', () => {
   const serverCardOf = (page: Page, name: string) =>
     settingsSectionOf(page).getByRole('list', { name: 'Servers' }).getByRole('listitem', { name })
   const crmCardOf = (page: Page) => serverCardOf(page, 'CRM')
+  const openServer = async (page: Page, name: string) => {
+    const header = serverCardOf(page, name).getByRole('button', { name: new RegExp(`^${name}`) })
+    await header.click()
+    await expect(header).toHaveAttribute('aria-expanded', 'true')
+  }
   const notOffered = (serverName: string, tool: string) => `Tool ${serverName}-${tool} not found`
 
   const afterSaving = async (page: Page, action: () => Promise<unknown>) => {
@@ -233,20 +238,27 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I untick update in the Admin role’s tool list: it is refused on my prompts and the Connected tools tab shows CRM with lookup only', {
+  test('As a member who can manage the tools catalogue, I untick update for the Admin role in CRM’s Write tools: it is refused on my prompts and the Connected tools tab shows CRM with lookup only', {
     tag: ['@spec-38', '@spec-58'],
   }, async ({ page, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
-    const adminRow = crmCardOf(page).getByRole('list', { name: 'Roles' }).getByRole('listitem', { name: 'Admin' })
-    await adminRow.getByRole('button', { name: 'Single tools' }).click()
-    await adminRow.getByRole('searchbox', { name: 'Search tools for Admin' }).fill('upd')
-    await expect(adminRow.getByRole('checkbox', { name: 'lookup for Admin' })).toHaveCount(0)
-    await afterSaving(page, () => untick(adminRow.getByRole('checkbox', { name: 'update for Admin' })))
-    await expect(adminRow.getByRole('button', { name: '1 single change' })).toBeVisible()
-    await expect(adminRow.getByRole('switch', { name: 'Allow all write tools' })).toHaveAttribute(
-      'aria-checked',
-      'false',
+    const access = crmCardOf(page).getByRole('region', { name: 'Access to CRM' })
+    await access.getByRole('tab', { name: /^Write/ }).click()
+    const writeTools = access.getByRole('table', { name: 'Write tools of CRM' })
+    await expect(writeTools.getByRole('checkbox', { name: 'lookup for Admin' })).toHaveCount(0)
+    await afterSaving(page, () => untick(writeTools.getByRole('checkbox', { name: 'update for Admin' })))
+    await expect(writeTools.getByRole('checkbox', { name: 'update for Member' })).toBeChecked()
+    await page.reload()
+    await openServer(page, 'CRM')
+    await access.getByRole('tab', { name: /^Write/ }).click()
+    await expect(writeTools.getByRole('checkbox', { name: 'update for Admin' })).not.toBeChecked()
+    await expect(access.getByRole('combobox', { name: 'Access of Admin' }).locator('option:checked')).toHaveText(
+      'Read and write',
     )
+    await access.getByRole('tab', { name: /^Read/ }).click()
+    await expect(
+      access.getByRole('table', { name: 'Read tools of CRM' }).getByRole('checkbox', { name: 'lookup for Admin' }),
+    ).toBeChecked()
     await expect(
       await promptIn(
         workerStack,
@@ -342,7 +354,8 @@ test.describe('Tools catalogue', () => {
     await form.getByLabel('Address').fill(`http://host.docker.internal:${new URL(fakeMcpUrl).port}/mcp`)
     await expect(form.getByRole('radio', { name: 'Each member signs in' })).toBeChecked()
     await expect(form.getByLabel('Secret value')).toHaveCount(0)
-    await inPopup(page, () => form.getByRole('button', { name: 'Add server' }).click())
+    await expect(form).toContainText('A sign-in window opens: you sign in once so Spyria can list the tools.')
+    await inPopup(page, () => form.getByRole('button', { name: 'Sign in and add server' }).click())
     await expect(serverCardOf(page, 'Docs')).toContainText('Each member signs in')
     await expect(serverCardOf(page, 'Docs').getByRole('combobox', { name: 'What whoami does' })).toHaveValue('read')
     await confirmTools(page, 'Docs')
@@ -361,18 +374,28 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I find Spyria’s built-in tools with what they do and nothing to edit, and GitHub as a server with a level per role, linked both ways with GitHub settings', {
+  test('As a member who can manage the tools catalogue, I find Spyria’s built-in tools as the first server, folded, with what they do and nothing to edit, and GitHub as a server with a level per role, linked both ways with GitHub settings', {
     tag: ['@spec-58'],
   }, async ({ page, browser, workerStack }) => {
     await openSettings(page, 'Tools')
 
-    await test.step('lists the built-in tools with what they do, nothing to edit, and the quality gates’ tools set in Quality gates', async () => {
-      const builtIn = mainOf(page).getByRole('region', { name: 'Built in' })
+    await test.step('lists the built-in tools first, folded to one row, then with what they do, nothing to edit, and the quality gates’ tools set in Quality gates', async () => {
+      const servers = settingsSectionOf(page)
+        .getByRole('list', { name: 'Servers' })
+        .getByRole('listitem', {
+          name: /^(Spyria|GitHub)$/,
+        })
+      await expect(servers).toHaveCount(2)
+      await expect(servers.first()).toHaveAttribute('aria-label', 'Spyria')
+      const builtIn = serverCardOf(page, 'Spyria')
+      await expect(builtIn).toContainText('8 tools')
+      await expect(builtIn.getByRole('list', { name: 'Built-in tools' })).toHaveCount(0)
+      await openServer(page, 'Spyria')
       await expect(builtIn.getByRole('list', { name: 'Built-in tools' }).getByRole('listitem')).toHaveCount(8)
       await expect(builtIn).toContainText(
         "open_pageOpens a web page or a file of the project in the chat's Browser tab",
       )
-      await expect(builtIn.getByRole('button')).toHaveCount(0)
+      await expect(builtIn.getByRole('button', { name: 'Actions for Spyria' })).toHaveCount(0)
       await expect(builtIn.getByRole('combobox')).toHaveCount(0)
       await builtIn.getByRole('link', { name: 'Set in Quality gates' }).first().click()
       await expect(page).toHaveURL(/\/settings\/quality-gates$/)
@@ -380,8 +403,14 @@ test.describe('Tools catalogue', () => {
 
     await openSettings(page, 'Tools')
     const github = serverCardOf(page, 'GitHub')
-    await test.step('shows GitHub among the servers, every role on Read and write until set, with nothing to edit or remove', async () => {
+    await test.step('shows GitHub among the servers, folded, then every role on Read and write until set, with nothing to edit or remove', async () => {
       await expect(github).toContainText('8 tools · 5 read · 3 write')
+      await expect(github.getByRole('region', { name: 'Access to GitHub' })).toHaveCount(0)
+      await openServer(page, 'GitHub')
+      await expect(github.getByRole('tablist', { name: 'Tool kinds of GitHub' }).getByRole('tab')).toHaveText([
+        /^Read/,
+        /^Write/,
+      ])
       await expect(github.getByRole('combobox', { name: 'Access of Member' }).locator('option:checked')).toHaveText(
         'Read and write',
       )
