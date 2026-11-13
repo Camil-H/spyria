@@ -226,8 +226,8 @@ test.describe('Steps', () => {
       await sendMessage(page, 'Show the pricing')
 
       const reply = messageContaining(page, 'See the pricing')
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(reply.getByRole('table')).toBeVisible()
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
       await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')
       const copyCode = reply.getByRole('button', { name: 'Copy code' })
