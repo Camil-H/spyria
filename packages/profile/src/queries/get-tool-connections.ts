@@ -30,9 +30,12 @@ export const getGitHubApprovals = (workspaceId: WorkspaceId, memberId: MemberId)
   }
 }
 
+const githubStatusOf = (connection: { needsReconnection: boolean } | undefined) =>
+  connection && (connection.needsReconnection ? connectionStatuses.needsReconnection : connectionStatuses.connected)
+
 export const countConnectionStates = (workspaceId: WorkspaceId, memberId: MemberId) => (snapshot: Snapshot) => {
   const statuses = [
-    snapshot.githubConnections.some(ownedBy(workspaceId, memberId)) ? connectionStatuses.connected : undefined,
+    githubStatusOf(snapshot.githubConnections.find(ownedBy(workspaceId, memberId))),
     ...usableConnectionsIn(snapshot, workspaceId, memberId).map(({ status }) => status),
   ]
   return {

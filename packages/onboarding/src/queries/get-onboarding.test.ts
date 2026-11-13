@@ -20,7 +20,7 @@ test('facts come from synced rows of the same workspace and member only', () => 
   const withOtherRows: Snapshot = {
     ...snapshot,
     githubApps: [{ workspaceId: globex }],
-    githubConnections: [{ workspaceId: acme, memberId: bob }],
+    githubConnections: [{ workspaceId: acme, memberId: bob, needsReconnection: false }],
   }
   expect(statesOf(withOtherRows)).toMatchObject({ 'connect-github-app': 'open' })
   expect(statesOf({ ...withOtherRows, githubApps: [{ workspaceId: acme }] }, bob)['link-github-account']).toBe('done')
