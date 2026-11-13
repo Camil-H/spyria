@@ -8,6 +8,7 @@ import type {
   SpendFilter,
   SpendGranularity,
   SpendRange,
+  SpendScope,
 } from '../domain/spend.ts'
 
 export type SpendLedger = {
@@ -17,6 +18,7 @@ export type SpendLedger = {
     granularity: SpendGranularity,
     prompterId: MemberId | null,
     dimensions: { tableDimensions: readonly SpendDimension[]; chartDimensions: readonly SpendDimension[] },
+    scope: SpendScope | null,
   ): Promise<SpendDimensionRow[]>
   counts(filter: SpendFilter, prompterId: MemberId | null): Promise<{ current: SpendCounts; previous: SpendCounts }>
   bucketCounts(filter: SpendFilter, prompterId: MemberId | null): Promise<SpendBucketCounts[]>

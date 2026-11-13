@@ -8,6 +8,7 @@ type Row = { key: string; name: string; costMicros: number; tokens: number; requ
 type Report = {
   total: { costMicros: number; tokens: number; requests: number }
   tables: Record<string, Row[]>
+  scopeChoices: Record<string, { key: string; name: string }[]>
   charts: Record<string, { buckets: string[]; series: { key: string; costs: number[] }[] }>
   decomposition: {
     factors: { name: string; current: number | null; previous: number | null; change: number | null }[]
@@ -142,15 +143,24 @@ test('own usage holds only the requester’s calls, whatever member the request 
 const factorsOf = (point: Pick<Report['decomposition'], 'factors'> | undefined) =>
   Object.fromEntries((point?.factors ?? []).map(({ name, current }) => [name, current]))
 
-test('a decomposition narrowed to one model leaves the total and the tables whole', async () => {
+test('a scope narrows the whole report to one model, the total, tables and charts included, while its choices stay every member, project, chat and model', async () => {
   const report = await reportOf('/api/spend?scope=model&scopeKey=anthropic/claude-sonnet')
   expect(report.decomposition.biggestMover).toBe('tokensPerRequest')
   expect(factorsOf(report.decomposition).users).toBe(1)
-  expect(report.total).toEqual({ costMicros: 80_000, tokens: 8000, requests: 8 })
-  expect(rowsOf(report.tables.member)).toEqual([
-    ['Alice', 40_000, 4],
-    ['Bob', 20_000, 2],
-    ['Lee', 20_000, 2],
+  expect(report.total).toEqual({ costMicros: 30_000, tokens: 3000, requests: 3 })
+  expect(rowsOf(report.tables.member)).toEqual([['Alice', 30_000, 3]])
+  expect(rowsOf(report.tables.model)).toEqual([['anthropic/claude-sonnet', 30_000, 3]])
+  expect(report.charts.member?.series.map((series) => series.key)).toEqual(['member-alice'])
+  expect(report.scopeChoices.member?.map(({ name }) => name)).toEqual(['Alice', 'Bob', 'Lee'])
+  expect(report.scopeChoices.model?.map(({ key }) => key)).toEqual([
+    'openai/gpt-5',
+    'anthropic/claude-sonnet',
+    'openai/gpt-5-mini',
+  ])
+  expect(report.scopeChoices.chat?.map(({ key }) => key)).toEqual([
+    'chat-invoice-bug',
+    'chat-research',
+    'chat-setup-helper',
   ])
 })
 
