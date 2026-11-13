@@ -1,7 +1,6 @@
 import type { Transaction } from '@rocicorp/zero'
 import type { Transact } from '@spyria/db/zero-queries'
 import {
-  ChatArchived,
   createRuntimeTransactor,
   ensureRuntimeRunning,
   expireSignIn,
@@ -12,6 +11,7 @@ import {
   issueAgentLlmToken,
   keepWorkspaceSnapshot,
   listHostChats,
+  RuntimeChatArchived,
   type RuntimePlacement,
   readAgentAccess,
   readWorkspaceSnapshot,
@@ -48,7 +48,7 @@ export const createRuntimeAgentRuntimes = (
       const runtime = await inTransaction((dependencies) =>
         ensureRuntimeRunning({ ...dependencies, ...placement }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
       ).catch((error: unknown) => {
-        if (error instanceof ChatArchived) return undefined
+        if (error instanceof RuntimeChatArchived) return undefined
         throw error
       })
       if (!runtime) return { state: 'archived' }

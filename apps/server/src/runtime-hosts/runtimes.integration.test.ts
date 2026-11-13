@@ -364,7 +364,7 @@ test('a start or retry waiting on an archive in progress is refused once it comm
       placement = rejectionOf(placeDuringArchive(chat))
       await waitFor(() => waitingOnLock(database))
     })
-    expect(await placement).toMatchObject({ code: 'chat_archived' })
+    expect(await placement).toMatchObject({ code: 'runtime_chat_archived' })
   }
   expect(
     (await database.$client`select id from runtimes where chat_id in (${startedChat}, ${retriedChat})`).map(
