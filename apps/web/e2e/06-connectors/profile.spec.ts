@@ -51,6 +51,21 @@ test.describe('Profile', () => {
     await expect(cardOf(page, 'LLM keys')).toHaveAccessibleDescription('Your own keys, used when you prompt 2 keys')
   })
 
+  test('As a member, I find my display name prefilled on my Account page, and Save stays disabled while it is unchanged or blank', async ({
+    page,
+  }) => {
+    await openProfile(page, 'Account')
+    const displayName = mainOf(page).getByRole('region', { name: 'Display name' })
+    const displayNameBox = displayName.getByRole('textbox', { name: 'Display name' })
+    const saveButton = displayName.getByRole('button', { name: 'Save' })
+    await expect(displayNameBox).toHaveValue('Alice')
+    await expect(saveButton).toBeDisabled()
+    await displayNameBox.fill('   ')
+    await expect(saveButton).toBeDisabled()
+    await displayNameBox.fill('Alice D.')
+    await expect(saveButton).toBeEnabled()
+  })
+
   test('As a member, every field of my profile’s pages has an accessible label', async ({ page }) => {
     for (const card of ['Account', 'LLM keys', 'My machine', 'Connections', 'Usage'] as const) {
       await openProfile(page, card)
