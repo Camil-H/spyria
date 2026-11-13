@@ -1,5 +1,6 @@
 import type { RuntimeHostId, WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
+import { HostMarkedOffline } from '../domain/errors.ts'
 import { type HostDeclaration, signInsOf } from '../domain/runtime-host.ts'
 
 type Dependencies = { transactor: RuntimeTransactor }
@@ -20,6 +21,7 @@ export const recordHostHeartbeat = (
   transactor.run(async ({ runtimeHosts }) => {
     const host = await runtimeHosts.get(workspaceId, hostId)
     if (host.removedAt !== null) return
+    if (host.status !== 'online') throw new HostMarkedOffline()
     await runtimeHosts.save({
       ...host,
       capacity: host.capacity && {

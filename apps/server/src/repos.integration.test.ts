@@ -25,6 +25,7 @@ import {
   succeeded,
   testSecretsKeyring,
   waitFor,
+  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -61,6 +62,12 @@ const appRow = async () =>
   (await database.$client`select * from github_apps where workspace_id = ${acme}`)[0] as Record<string, string>
 const connectionRow = async () =>
   (await database.$client`select * from github_connections where workspace_id = ${acme} and user_id = ${alice}`)[0]
+const githubCallbackOf = async (userId: string) => {
+  const started = await request(userId, 'POST', '/api/github/connection/connect')
+  const authorized = await fetch(new URL(started.body.authorizeUrl), { redirect: 'manual' })
+  const callback = new URL(authorized.headers.get('location') ?? '')
+  return `${callback.pathname}${callback.search}`
+}
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
 test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
@@ -185,6 +192,71 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
   })
   expect(await request(alice, 'POST', '/api/github/connection/disconnect')).toMatchObject({ status: 200 })
   expect(await connectionRow()).toBeUndefined()
+})
+
+test('a refresh waiting on a disconnect in progress stores nothing, so the member stays disconnected', async () => {
+  expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
+  await database.$client`
+    update github_connections set access_expires_at = now() - interval '1 minute'
+    where workspace_id = ${acme} and user_id = ${alice}`
+  let connection: ReturnType<typeof request> | undefined
+  await database.$client.begin(async (disconnect) => {
+    await disconnect`delete from github_connections where workspace_id = ${acme} and user_id = ${alice}`
+    connection = request(alice, 'GET', '/api/github/connection')
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await connection).toMatchObject({ status: 200, body: { connection: null } })
+  expect(await connectionRow()).toBeUndefined()
+})
+
+test('a refresh waiting on a reconnection in progress leaves the new connection and its tokens alone', async () => {
+  expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
+  await database.$client`
+    update github_connections set access_expires_at = now() - interval '1 minute'
+    where workspace_id = ${acme} and user_id = ${alice}`
+  const reconnected = { login: 'other-account', accessToken: 'sealed-access-of-other-account' }
+  let connection: ReturnType<typeof request> | undefined
+  await database.$client.begin(async (reconnection) => {
+    await reconnection`
+      update github_connections set login = ${reconnected.login}, encrypted_access_token = ${reconnected.accessToken},
+        encrypted_refresh_token = 'sealed-refresh-of-other-account', access_expires_at = now() + interval '1 hour'
+      where workspace_id = ${acme} and user_id = ${alice}`
+    connection = request(alice, 'GET', '/api/github/connection')
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await connection).toMatchObject({
+    status: 200,
+    body: { connection: { login: reconnected.login, state: 'connected' } },
+  })
+  expect(await connectionRow()).toMatchObject({
+    login: reconnected.login,
+    encrypted_access_token: reconnected.accessToken,
+    encrypted_refresh_token: 'sealed-refresh-of-other-account',
+    needs_reconnection: false,
+  })
+})
+
+test('returning from GitHub while a removal is in progress stores no token once it commits, and the callback is refused', async () => {
+  const dana = `member-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${dana}, 'member', 'Dana')`
+  const callback = await githubCallbackOf(dana)
+  let returned: ReturnType<typeof app.request> | undefined
+  await database.$client.begin(async (removal) => {
+    await removal`
+      select 1 from memberships where workspace_id = ${acme} and user_id = ${dana} and removed_at is null for update`
+    await removal`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${dana}`
+    returned = app.request(callback)
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect((await returned)?.status).toBe(400)
+  expect(
+    await database.$client`select 1 from github_connections where workspace_id = ${acme} and user_id = ${dana}`,
+  ).toHaveLength(0)
 })
 
 test('a dev chat needs a granted repository and an existing base branch, and stores its working branch', async () => {

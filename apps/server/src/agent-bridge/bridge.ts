@@ -400,6 +400,7 @@ export const createAgentBridge = ({
           const endedPromptId = turnEndPromptIdOf(event)
           if (endedPromptId && endedPromptId !== chatSocket.promptId && endedPromptId !== chatSocket.drainingPromptId)
             return record(event, messageId(endedPromptId))
+          if (endedPromptId && endedPromptId === chatSocket.promptId) chatSocket.drainingPromptId = null
           const drainedPromptId = chatSocket.drainingPromptId ?? undefined
           if (update?.sessionUpdate === 'turn_end') {
             flushOutputs()

@@ -354,3 +354,41 @@ test(
   },
   testMilliseconds,
 )
+
+test(
+  'a host paired again after its token was refused says hello with its new token after its next disconnect',
+  async () => {
+    writeFileSync(join(directory, 'token'), 'refused-token')
+    const firstFrames: { type: string; token?: string }[] = []
+    let openedConnections = 0
+    const repairingSpyria = Bun.serve({
+      port: 0,
+      fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+      websocket: {
+        open: () => void openedConnections++,
+        message: (socket, message) => {
+          const frame = JSON.parse(String(message))
+          if (firstFrames.length < openedConnections) firstFrames.push(frame)
+          if (frame.type === 'hello' && frame.token === 'refused-token') socket.close(4001, 'Unknown token')
+          else if (frame.type === 'claim') socket.send(JSON.stringify({ type: 'token', token: 'new-token' }))
+          else if (frame.type === 'hello' && openedConnections === 2) socket.close(1011, 'Restarting')
+        },
+      },
+    })
+    const host = startHost(repairingSpyria.port)
+    try {
+      for (const deadline = Date.now() + startupMilliseconds; firstFrames.length < 3; await Bun.sleep(20))
+        if (Date.now() > deadline) throw new Error('The host did not connect a third time')
+      expect(firstFrames.map(({ type, token }) => ({ type, token }))).toEqual([
+        { type: 'hello', token: 'refused-token' },
+        { type: 'claim', token: undefined },
+        { type: 'hello', token: 'new-token' },
+      ])
+    } finally {
+      host.kill()
+      await host.exited
+      void repairingSpyria.stop(true)
+    }
+  },
+  testMilliseconds,
+)

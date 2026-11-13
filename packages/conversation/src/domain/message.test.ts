@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@spyria/kernel'
 import {
+  ChatArchived,
   ChatFrozen,
   InvalidQuotedMessage,
   InvalidThreadRoot,
@@ -13,9 +14,10 @@ import {
   deletedMessage,
   editedMessage,
   isAgentActivity,
+  isChangeableBy,
   type Message,
   quotedMessageOf,
-  requireNotFrozen,
+  requireOpenChat,
   threadRootOf,
 } from './message.ts'
 import { MessageBody } from './message-body.ts'
@@ -55,6 +57,21 @@ test('editedMessage and deletedMessage reject the owner on a prompt the quality 
   expect(() => deletedMessage(loopPrompt, alice, editedAt)).toThrow(NotMessageAuthor)
 })
 
+test('a member changes only their own messages: not a step card stored with them as author, nor a quality-gates prompt', () => {
+  const qualityGatesPrompt: Message = {
+    ...messageByAlice,
+    step: { type: 'dev_loop_prompt', loopId: messageId('loop'), phase: 'command' },
+  }
+  const stepCard: Message = { ...messageByAlice, kind: 'step' }
+  expect(isChangeableBy(messageByAlice, alice)).toBe(true)
+  expect(isChangeableBy(messageByAlice, bob)).toBe(false)
+  expect(isChangeableBy(stepCard, alice)).toBe(false)
+  expect(isChangeableBy(qualityGatesPrompt, alice)).toBe(false)
+  expect(isChangeableBy({ ...messageByAlice, kind: 'agent', authorId: null }, alice)).toBe(false)
+  expect(() => editedMessage(stepCard, alice, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
+  expect(() => deletedMessage(stepCard, alice, editedAt)).toThrow(NotMessageAuthor)
+})
+
 test('deletedMessage turns a live message into a tombstone that keeps its body and drops its attachments', () => {
   const photo = { id: 'attachment-1', name: 'photo.png', mediaType: 'image/png', size: 2048 }
   expect(deletedMessage({ ...messageByAlice, attachments: [photo] }, alice, editedAt)).toEqual({
@@ -84,6 +101,7 @@ const channel: ConversationChat = {
   baseBranch: null,
   toolServersOff: [],
   isOwnerRemoved: false,
+  archived: false,
 }
 
 test('threadRootOf accepts a top-level message of the same channel that is not deleted', () => {
@@ -105,10 +123,18 @@ test('threadRootOf refuses any root in a runtime chat', () => {
   )
 })
 
-test('requireNotFrozen refuses a runtime chat whose owner was removed and allows any other, channels included', () => {
-  expect(() => requireNotFrozen({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
-  expect(() => requireNotFrozen({ ...channel, type: 'runtime' })).not.toThrow()
-  expect(() => requireNotFrozen({ ...channel, isOwnerRemoved: true })).not.toThrow()
+test('requireOpenChat refuses a runtime chat whose owner was removed and allows any other, channels included', () => {
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime' })).not.toThrow()
+  expect(() => requireOpenChat({ ...channel, isOwnerRemoved: true })).not.toThrow()
+})
+
+test('requireOpenChat refuses an archived chat, channel or runtime, before checking whether it is frozen', () => {
+  expect(() => requireOpenChat({ ...channel, archived: true })).toThrow(ChatArchived)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', archived: true })).toThrow(ChatArchived)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', isOwnerRemoved: true, archived: true })).toThrow(
+    ChatArchived,
+  )
 })
 
 test('only what the agent wrote is agent activity: its replies and steps, not a member’s pull request card or messages', () => {

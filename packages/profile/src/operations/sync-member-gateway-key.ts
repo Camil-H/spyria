@@ -1,4 +1,4 @@
-import { type GatewayKey, log } from '@spyria/kernel'
+import { type GatewayKey, log, MemberNotFound } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import type { LlmCredential } from '../domain/llm-credential.ts'
@@ -36,6 +36,7 @@ export const syncMemberGatewayKey = (
         await memberGatewayKeys.setVirtualKey(null)
         await toolConnections.removeAll()
       })
+      if (added) throw new MemberNotFound(member.memberId)
       return undefined
     }
     const syncedKeys = added ? [...keys, added.key] : keys
@@ -45,12 +46,15 @@ export const syncMemberGatewayKey = (
       return savedId
     }
     try {
-      await transactor.run(async ({ llmCredentials, memberGatewayKeys }) => {
-        if (added) await llmCredentials.add(added.credential, added.key)
+      await transactor.run(async ({ llmCredentials, memberGatewayKeys, members }) => {
+        if (added) {
+          await members.lockActive()
+          await llmCredentials.add(added.credential, added.key)
+        }
         if (savedId !== virtualKeyId) await memberGatewayKeys.setVirtualKey(savedId)
       })
     } catch (error) {
-      if (savedId !== virtualKeyId) await gateway.removeVirtualKey(savedId)
+      if (savedId !== virtualKeyId || error instanceof MemberNotFound) await gateway.removeVirtualKey(savedId)
       else await gateway.saveVirtualKey({ id: virtualKeyId, keys })
       throw error
     }

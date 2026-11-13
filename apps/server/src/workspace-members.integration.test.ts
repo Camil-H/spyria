@@ -28,7 +28,13 @@ import {
 setDefaultTimeout(30_000)
 
 const { database, app, gateway, llmGateway, resultOf, changesOf } = await openSharedTestApp()
-const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
+const worker = startJobWorker(database, {
+  pollIntervalMilliseconds: 5,
+  retryDelayMilliseconds: 100,
+  cleanupRetryDelayMilliseconds: 100,
+  maximumCleanupRetryDelayMilliseconds: 400,
+  llmGateway,
+})
 afterAll(() => worker.stop())
 
 const cannotInvite = failedWith('Your workspace role does not allow this: Invite members')
@@ -172,6 +178,29 @@ test('a role change waiting on a removal in progress is refused once it commits,
 
   expect(await roleChange).toEqual(failedWith(`${dana} is not a member of this workspace`))
   expect((await membershipOf(dana))?.removed_at).not.toBeNull()
+})
+
+test('a revoke waiting on an acceptance in progress is refused once it commits, so the invite stays accepted and no revoke is recorded', async () => {
+  expect(await inviteToAcme(app, database, 'pia@example.com')).toEqual(succeeded)
+  const invitationId = String((await invitationsOf('pia@example.com'))[0]?.id)
+  let revoke: ReturnType<typeof resultOf> | undefined
+  await database.$client.begin(async (acceptance) => {
+    await acceptance`
+      select 1 from invitations where workspace_id = ${acme} and id = ${invitationId} and revoked_at is null for update`
+    await acceptance`update invitations set accepted_at = now() where workspace_id = ${acme} and id = ${invitationId}`
+    revoke = resultOf(aliceInAcme, 'workspace.revokeInvite', { workspaceId: acme, invitationId })
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await revoke).toEqual(failedWith(`Invite ${invitationId} is not pending`))
+  const [invitation] = await invitationsOf('pia@example.com')
+  expect(invitation?.accepted_at).not.toBeNull()
+  expect(invitation?.revoked_at).toBeNull()
+  expect(
+    (await workspaceEventsOf(database)).filter(
+      ({ type, payload }) => type === 'invite.revoked' && payload.invitationId === invitationId,
+    ),
+  ).toEqual([])
 })
 
 test('an admin signs a member out everywhere in the workspace, which is recorded, keeps their membership and cannot be undone from their other workspaces; a member signs nobody out', async () => {

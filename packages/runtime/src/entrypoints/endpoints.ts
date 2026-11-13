@@ -49,6 +49,7 @@ export const renewClaimCodeFromRequest = async (tx: Transaction, context: ZeroCo
 
 const boundedText = (maximumLength: number) => z.string().check(z.minLength(1), z.maxLength(maximumLength))
 const count = z.number().check(z.nonnegative())
+const maximumHeartbeatMilliseconds = 24 * 60 * 60_000
 const signedIn = z.optional(z.array(boundedText(32)).check(z.maxLength(8)))
 const credentialsChangedAt = z.optional(
   z.record(boundedText(32), count).check(z.refine((changes) => Object.keys(changes).length <= 8)),
@@ -70,6 +71,7 @@ const hostSessionFrame = z.discriminatedUnion('type', [
     personal: z.optional(z.boolean()),
     hostVersion: z.optional(boundedText(64)),
     protocolVersion: z.optional(z.int().check(z.nonnegative())),
+    heartbeatMilliseconds: z.optional(z.int().check(z.positive(), z.lte(maximumHeartbeatMilliseconds))),
     signedIn,
     credentialsChangedAt,
   }),
@@ -102,6 +104,7 @@ export const createHostSessionHandlers = (
       system: HostSystem
       hostVersion?: string
       protocolVersion?: number
+      heartbeatMilliseconds?: number
     },
     beforeOnline: (host: ConnectedHost) => void,
   ) => {

@@ -8,6 +8,7 @@ import {
   alice,
   aliceInAcme,
   bobInAcme,
+  captureLogs,
   failedWith,
   globex,
   issueTestSession,
@@ -24,6 +25,8 @@ const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp
 const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,
   retryDelayMilliseconds: 50,
+  cleanupRetryDelayMilliseconds: 50,
+  maximumCleanupRetryDelayMilliseconds: 200,
   cleanupPollMilliseconds: 20,
   failedCleanupRetryMilliseconds: 50,
   llmGateway,
@@ -225,5 +228,79 @@ test('once the last workspace of the instance is purged, its sign-in settings ar
   } finally {
     await instanceWorker?.stop()
     await instance.drop()
+  }
+})
+
+const cleanupJobsOf = (workspaceId: string) =>
+  database.$client<{ id: string; type: string; state: string; attempts: number; lastError: string | null }[]>`
+    select id, type, state, attempts, last_error as "lastError" from jobs
+    where workspace_id = ${workspaceId} and type in ('runtime.stop', 'runtime.remove', 'runtime.discard', 'profile.gateway-sync')
+    order by id`
+const deletedWorkspaceNamed = async (id: string, name: string) => {
+  expect(await resultOf(aliceInAcme, 'workspace.createWorkspace', { workspaceId: acme, id, name })).toEqual(succeeded)
+  expect(await deleteAs({ workspaceId: id, userId: alice })).toEqual(succeeded)
+  return id
+}
+
+test('the operator abandons the cleanup jobs that failed or wait for a retry after failing, and leaves those that never failed or are running', async () => {
+  const oscorp = await deletedWorkspaceNamed('workspace-oscorp', 'Oscorp')
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, last_error, claimed_at) values
+      (${oscorp}, 'removal-failed', 'runtime.remove', '{}', now(), 5, 'failed', 'Host offline', null),
+      (${oscorp}, 'stop-waiting-for-its-hourly-retry', 'runtime.stop', '{}', now() + interval '1 hour', 0, 'queued', 'Host offline', null),
+      (${oscorp}, 'discard-waiting-for-its-next-attempt', 'runtime.discard', '{}', now() + interval '1 hour', 2, 'queued', 'Host unreachable', null),
+      (${oscorp}, 'sync-never-failed', 'profile.gateway-sync', '{}', now() + interval '1 hour', 0, 'queued', null, null),
+      (${oscorp}, 'removal-running', 'runtime.remove', '{}', now() + interval '5 minutes', 1, 'running', 'Host offline', now())`
+
+  expect(
+    [...(await abandonFailedCleanup(database, oscorp))].toSorted((first, second) =>
+      first.type.localeCompare(second.type),
+    ),
+  ).toEqual([
+    { type: 'runtime.discard', lastError: 'Host unreachable' },
+    { type: 'runtime.remove', lastError: 'Host offline' },
+    { type: 'runtime.stop', lastError: 'Host offline' },
+  ])
+  expect((await cleanupJobsOf(oscorp)).map(({ id }) => id)).toEqual(['removal-running', 'sync-never-failed'])
+  expect((await workspaceOf(oscorp))?.isDeleted).toBe(true)
+
+  await database.$client`delete from jobs where workspace_id = ${oscorp} and id in ('removal-running', 'sync-never-failed')`
+  await purgeWorkspaceNow(database, oscorp)
+  await waitFor(async () => (await workspaceOf(oscorp)) === undefined)
+})
+
+test('the purge re-queues a failed cleanup job for an hour later and keeps the workspace, again after each failure, and erases the workspace once the job succeeds', async () => {
+  const stark = await deletedWorkspaceNamed('workspace-stark', 'Stark')
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, last_error)
+    values (${stark}, 'removal-on-a-lost-host', 'runtime.remove', '{}', now(), 5, 'failed', 'Host offline')`
+  const logged = captureLogs()
+  const purgeBlockedLogs = () =>
+    logged.events.filter(
+      ({ event, attributes }) => event === 'workspace.purge_blocked' && attributes?.['workspace.id'] === stark,
+    )
+  const removalOf = async () => (await cleanupJobsOf(stark)).find(({ id }) => id === 'removal-on-a-lost-host')
+  try {
+    await purgeWorkspaceNow(database, stark)
+    await waitFor(async () => (await removalOf())?.state === 'queued')
+    expect(await removalOf()).toMatchObject({ state: 'queued', attempts: 0, lastError: 'Host offline' })
+    expect(purgeBlockedLogs()).toHaveLength(1)
+    expect(purgeBlockedLogs()[0]?.attributes?.['job.types']).toBe('runtime.remove×1')
+    expect((await workspaceOf(stark))?.isDeleted).toBe(true)
+
+    await database.$client`
+      update jobs set state = 'failed', attempts = 5, last_error = 'Host still offline', finished_at = now()
+      where workspace_id = ${stark} and id = 'removal-on-a-lost-host'`
+    await waitFor(async () => (await removalOf())?.state === 'queued' && purgeBlockedLogs().length === 2)
+    expect(await removalOf()).toMatchObject({ state: 'queued', attempts: 0, lastError: 'Host still offline' })
+    expect((await workspaceOf(stark))?.isDeleted).toBe(true)
+
+    await database.$client`
+      update jobs set state = 'done', finished_at = now() where workspace_id = ${stark} and id = 'removal-on-a-lost-host'`
+    await waitFor(async () => (await workspaceOf(stark)) === undefined)
+    expect((await cleanupJobsOf(stark)).map(({ id }) => id)).toEqual([])
+    expect(purgeBlockedLogs()).toHaveLength(2)
+  } finally {
+    logged.restore()
   }
 })

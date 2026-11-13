@@ -73,6 +73,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       permissions: () => workspacePermissionsOf(tx, workspaceId, userId),
       isActive: (workspace, id) => isActiveMember(tx, inContextWorkspace(workspace), id),
+      lockActive: async () => {
+        await lockMembership(tx, workspaceId, userId)
+        if (!(await isActiveMember(tx, workspaceId, userId))) throw new MemberNotFound(userId)
+      },
       holders: async (workspace) =>
         (
           await tx.run(

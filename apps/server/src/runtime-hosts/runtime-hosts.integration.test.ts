@@ -1,8 +1,10 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { defaultDeployment, defaultHarness, runtimeHostId } from '@spyria/kernel'
-import { hostUpdateCommandOf, runtimeMutators } from '@spyria/runtime/server'
+import { createRuntimeJobs, hostUpdateCommandOf, runtimeMutators } from '@spyria/runtime/server'
 import { createApp } from '../app.ts'
 import {
   acme,
@@ -132,13 +134,16 @@ const refusalOf = async (outcome: Awaited<ReturnType<typeof claim>>['outcome']) 
 
 const hostVersions = { hostVersion: 'test', protocolVersion: 4 }
 
-const pairedHost = async (name = 'Home server', options?: { answersPings?: boolean }) => {
+const pairedHost = async (
+  name = 'Home server',
+  { heartbeatMilliseconds, ...options }: { answersPings?: boolean; heartbeatMilliseconds?: number } = {},
+) => {
   const { id, code } = await addedHost(name)
   const { host: claimingHost, token } = await claim(code)
   if (!token) throw new Error('Claiming failed')
   claimingHost.socket.close()
   const host = await connectFakeHost(options)
-  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions })
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, heartbeatMilliseconds })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   return { id, code, token, host }
 }
@@ -456,6 +461,62 @@ test('two missed pings close the connection and mark the host offline', async ()
   const { id, host } = await pairedHost('Silent host', { answersPings: false })
   await host.closed
   await waitFor(async () => (await hostRow(id)).status === 'offline')
+})
+
+const zeroDatabase = zeroDrizzle(schema, database)
+const sweep = () =>
+  createRuntimeJobs(gateway.sandboxProvider)['runtime.sweep']({
+    workspaceId: acme,
+    payload: {},
+    isLastAttempt: false,
+    transact: (work) => zeroDatabase.transaction(work),
+  })
+const runtimeOnHost = async (hostId: string) => {
+  const chat = `chat-${crypto.randomUUID()}`
+  const runtime = crypto.randomUUID()
+  await database.$client`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
+    values (${acme}, ${chat}, 'runtime', 'private', 'user', ${alice}, ${chat}, false, now())`
+  await database.$client`
+    insert into runtimes (workspace_id, id, chat_id, host_id, state, host_online, image, api_key_id, last_active_at,
+      created_at, state_changed_at)
+    values (${acme}, ${runtime}, ${chat}, ${hostId}, 'running', true, 'sha256:test', ${testSecretsKeyring.currentKeyId},
+      now(), now(), now())`
+  await database.$client`
+    insert into warm_runtimes (workspace_id, id, repository, setup_command, host_id, state, image, api_key_id,
+      created_at, state_changed_at)
+    values (${acme}, ${crypto.randomUUID()}, 'acme/app', 'bun install', ${hostId}, 'ready', 'sha256:test',
+      ${testSecretsKeyring.currentKeyId}, now(), now())`
+  return runtime
+}
+const hostOnlineOf = async (runtimeId: string) =>
+  (await database.$client`select host_online from runtimes where id = ${runtimeId}`)[0]?.host_online
+const warmRuntimesOn = async (hostId: string) =>
+  (await database.$client`select id from warm_runtimes where host_id = ${hostId}`).length
+
+test('the sweep marks a host unseen for three of its heartbeats offline with its runtimes and drops its warm runtimes, keeps a host within its declared heartbeat online, and a heartbeat after makes the host say hello again', async () => {
+  const unseen = await pairedHost('Unseen host')
+  const slow = await pairedHost('Slow host', { heartbeatMilliseconds: 5 * 60_000 })
+  expect((await hostRow(slow.id)).capacity).toMatchObject({ heartbeatMilliseconds: 5 * 60_000 })
+  const unseenRuntime = await runtimeOnHost(unseen.id)
+  const slowRuntime = await runtimeOnHost(slow.id)
+  await database.$client`update runtime_hosts set last_seen_at = now() - interval '2 minutes' where id = ${unseen.id}`
+  await database.$client`update runtime_hosts set last_seen_at = now() - interval '10 minutes' where id = ${slow.id}`
+
+  await sweep()
+
+  expect((await hostRow(unseen.id)).status).toBe('offline')
+  expect(await hostOnlineOf(unseenRuntime)).toBe(false)
+  expect(await warmRuntimesOn(unseen.id)).toBe(0)
+  expect((await hostRow(slow.id)).status).toBe('online')
+  expect(await hostOnlineOf(slowRuntime)).toBe(true)
+  expect(await warmRuntimesOn(slow.id)).toBe(1)
+
+  unseen.host.send({ type: 'heartbeat', memoryFreeBytes: gibibyte, running: 1 })
+  expect((await unseen.host.closed).code).toBe(1013)
+  expect((await hostRow(unseen.id)).status).toBe('offline')
+  await database.$client`delete from warm_runtimes where host_id = ${slow.id}`
+  slow.host.socket.close()
 })
 
 test('removing a host closes its connection and refuses its token afterwards', async () => {

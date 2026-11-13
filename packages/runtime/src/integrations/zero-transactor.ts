@@ -129,6 +129,12 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
               .where('removedAt', 'IS', null),
           )
         ).map(hostOf),
+      listOnline: async (workspaceId) =>
+        (
+          await tx.run(
+            zql.runtimeHosts.where('workspaceId', workspaceId).where('status', 'online').where('removedAt', 'IS', null),
+          )
+        ).map(hostOf),
       expireClaims: async (workspaceId, now) => {
         await expireRuntimeHostClaims(tx, workspaceId, now)
       },
@@ -171,6 +177,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const setupCommand = setupCommandOf(await setupCommandsOf(workspaceId), chat.repository)
         return setupCommand ? { repository: chat.repository, baseBranch: chat.baseBranch, setupCommand } : undefined
       },
+      isChatArchived: async (workspaceId, chatId) => (await chatOf(workspaceId, chatId))?.archived === true,
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),
       delete: (runtime) => tx.mutate.runtimes.delete(runtime),

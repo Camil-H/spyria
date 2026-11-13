@@ -86,7 +86,7 @@ Keep the previous key with the backups taken before step 3: the secrets in them 
 
 ## Jobs
 
-Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, with a growing delay, then marked failed with its last error. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
+Background work (starting and stopping runtimes, agent turns, sweeps, usage sync) runs from a job queue in Postgres. A job is retried up to 5 attempts in all, then marked failed with its last error. Most jobs wait 1, 2, 3 then 4 seconds between attempts, so a member soon hears that something could not start; the jobs that clean up after a deleted workspace (halting and erasing it, stopping, removing and discarding runtimes, syncing keys to the gateway and removing tool servers from it) wait 5 seconds, 25 seconds, 2 minutes then 5 minutes, in every workspace and not only a deleted one, so a host that is offline for a few minutes does not fail them for good. Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored; a dead one is scheduled again an hour after it failed. The operator CLI is in the server image:
 
 ```sh
 spyria compose exec server bun apps/server/src/operator-cli.ts failed-jobs

@@ -9,7 +9,7 @@ import {
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { type Attachment, maximumAttachmentsPerMessage } from '../domain/attachments.ts'
 import { AttachmentNotFound, NoLlmKey, RunsOnNotChosen, TooManyAttachments } from '../domain/errors.ts'
-import { newMessage, quotedMessageOf, requireNotFrozen, threadRootOf } from '../domain/message.ts'
+import { newMessage, quotedMessageOf, requireOpenChat, threadRootOf } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
 import { noLlmKeyNoticeOf } from '../domain/model-call-failures.ts'
 import { localSessionNotices, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
@@ -36,7 +36,7 @@ export const sendMessage = (
     const chat = await unitOfWork.chats.get(chatId)
     const { members } = unitOfWork
     await requireChatPermission(unitOfWork.chats, chatId, authorId, 'chat.post')
-    requireNotFrozen(chat)
+    requireOpenChat(chat)
     limitMessage?.(chat.type === 'runtime')
     const threadRoot = threadRootId ? threadRootOf(chat, chatId, await unitOfWork.messages.find(threadRootId)) : null
     const quoted = quotedMessageId ? quotedMessageOf(chatId, await unitOfWork.messages.find(quotedMessageId)) : null

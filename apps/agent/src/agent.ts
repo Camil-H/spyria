@@ -1000,8 +1000,17 @@ export const startAgent = ({
     return Response.json({})
   }
 
+  const cancelNeverReceived = (conversation: Conversation, promptId: string) => {
+    rememberPrompt(conversation, promptId)
+    const turnEnd = { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId }
+    conversation.turnEnds.set(promptId, turnEnd)
+    emit(conversation, turnEnd)
+    return Response.json({})
+  }
+
   const interrupt = async (conversation: Conversation, { prompt_id }: { prompt_id?: unknown }) => {
     const promptId = typeof prompt_id === 'string' ? prompt_id : undefined
+    if (promptId && !conversation.turnEnds.has(promptId)) return cancelNeverReceived(conversation, promptId)
     if (promptId && conversation.turnEnds.get(promptId) !== undefined) return Response.json({})
     if (stopWaitingToStart(conversation, promptId) || conversation.isSettingUp) return Response.json({})
     await conversation.started
