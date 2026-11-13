@@ -86,20 +86,31 @@ const runner = createCommandRunner({
   selfContainerId: isInContainer ? hostname() : undefined,
   personal: isPersonal,
 })
-let credentials: Credentials = { signedIn: [], secrets: [], credentialsChangedAt: {} }
+class SignInsNeverRead extends Error {
+  constructor() {
+    super('The sign-ins were never read, so their secrets cannot be redacted yet')
+  }
+}
+let lastReadCredentials: Credentials | undefined
+const credentialsRead = async () => {
+  lastReadCredentials = await readCredentials(docker, prefix).catch((error) => {
+    log.error({ event: 'host.sign_ins_unreadable', body: 'Reading the sign-ins failed', error })
+    return lastReadCredentials
+  })
+  if (!lastReadCredentials) throw new SignInsNeverRead()
+  return lastReadCredentials
+}
+const secrets = () => lastReadCredentials?.secrets ?? []
 const declaration = async () => {
   if (!isPersonal) return { personal: false }
-  credentials = await readCredentials(docker, prefix).catch((error) => {
-    log.error({ event: 'host.sign_ins_unreadable', body: 'Reading the sign-ins failed', error })
-    return credentials
-  })
+  const credentials = await credentialsRead()
   return { personal: true, signedIn: credentials.signedIn, credentialsChangedAt: credentials.credentialsChangedAt }
 }
 let sendToSpyria = (_frame: Frame) => false
 let sendSignInsNow: () => Promise<unknown> = declaration
 const modelRelay = createModelRelay({
   send: (frame) => sendToSpyria(frame),
-  redact: isPersonal ? (text) => redacted(text, credentials.secrets) : undefined,
+  redact: isPersonal ? (text) => redacted(text, secrets()) : undefined,
 })
 const modelRelayServer = Bun.serve({
   port: Number(process.env.SPYRIA_HOST_GATEWAY_PORT ?? (isInContainer ? 4000 : 0)),
@@ -166,8 +177,12 @@ const connect = () => {
     addressOf: runner.originOf,
     send,
     isBackedUp: () => socket.bufferedAmount > maximumBufferedBytes,
-    personal: isPersonal ? { secrets: () => credentials.secrets } : undefined,
+    personal: isPersonal ? { secrets } : undefined,
   })
+  const failHello = (error: unknown) => {
+    logHelloFailure(error)
+    socket.close()
+  }
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined
   const sendHeartbeat = async () => {
     const { signedIn, credentialsChangedAt } = await declaration()
@@ -221,7 +236,7 @@ const connect = () => {
   }
   socket.onopen = () => {
     const token = storedToken()
-    if (token && !isTokenRefused) return void hello(token).catch(logHelloFailure)
+    if (token && !isTokenRefused) return void hello(token).catch(failHello)
     if (claimCode) return send({ type: 'claim', code: claimCode })
     log.error({ event: 'host.unpaired', body: 'No stored token and no code in the URL' })
     exitForGood()
@@ -236,7 +251,7 @@ const connect = () => {
     }
     if (frame.type === 'token') {
       writeFileSync(tokenPath, frame.token, { mode: 0o600 })
-      return void hello(frame.token).catch(logHelloFailure)
+      return void hello(frame.token).catch(failHello)
     }
     if (frame.type === 'cmd') return void runCommand(frame)
     if (relayedFrameTypes.includes(frame.type)) return void relay.handle(frame)
