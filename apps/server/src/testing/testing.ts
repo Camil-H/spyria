@@ -638,6 +638,8 @@ export const startAgentStack = async ({
   const worker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,
     retryDelayMilliseconds: 100,
+    cleanupRetryDelayMilliseconds: 100,
+    maximumCleanupRetryDelayMilliseconds: 400,
     sandboxProvider: runtimeHosts.sandboxProvider,
     agentBridge,
   })

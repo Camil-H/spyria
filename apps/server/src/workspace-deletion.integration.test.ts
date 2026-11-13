@@ -24,6 +24,8 @@ const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp
 const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,
   retryDelayMilliseconds: 50,
+  cleanupRetryDelayMilliseconds: 50,
+  maximumCleanupRetryDelayMilliseconds: 200,
   cleanupPollMilliseconds: 20,
   failedCleanupRetryMilliseconds: 50,
   llmGateway,

@@ -28,7 +28,13 @@ import {
 setDefaultTimeout(30_000)
 
 const { database, app, gateway, llmGateway, resultOf, changesOf } = await openSharedTestApp()
-const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
+const worker = startJobWorker(database, {
+  pollIntervalMilliseconds: 5,
+  retryDelayMilliseconds: 100,
+  cleanupRetryDelayMilliseconds: 100,
+  maximumCleanupRetryDelayMilliseconds: 400,
+  llmGateway,
+})
 afterAll(() => worker.stop())
 
 const cannotInvite = failedWith('Your workspace role does not allow this: Invite members')
