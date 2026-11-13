@@ -103,7 +103,7 @@ export const issueTestSession = async (
 ) => {
   const [session] = [
     ...(await openSessions(database, userId, workspaceId)),
-    ...(await openSessions(database, userId, workspaceId, 'workspace sso')),
+    ...(await openSessions(database, userId, workspaceId, workspaceId)),
   ]
   if (!session) throw new Error(`${userId} is not a member of ${workspaceId}`)
   const issued = await issueSessionToken(testAuthSettings.tokenSecret, session, { databaseName, lifetimeSeconds })
@@ -160,16 +160,25 @@ export const createHolds = () => {
 const sharedAppId = 'spyriatest'
 const zeroConnectMilliseconds = 30_000
 
+type RequestingApp = { request: (path: string, init: RequestInit) => Response | Promise<Response> }
+
 export const requestMutation = async (
-  app: { request: (path: string, init: RequestInit) => Response | Promise<Response> },
+  app: RequestingApp,
   database: Database,
   { workspaceId, userId }: { workspaceId: string; userId: string },
+  name: string,
+  args: Record<string, unknown>,
+) => requestMutationWith(app, await sessionTokenOf(database, workspaceId, userId), name, args)
+
+export const requestMutationWith = async (
+  app: RequestingApp,
+  token: string,
   name: string,
   args: Record<string, unknown>,
 ) => {
   const response = await app.request(`/api/mutate?schema=${sharedAppId}_0&appID=${sharedAppId}`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${await sessionTokenOf(database, workspaceId, userId)}` },
+    headers: { authorization: `Bearer ${token}` },
     body: JSON.stringify({
       clientGroupID: crypto.randomUUID(),
       mutations: [{ type: 'custom', id: 1, clientID: crypto.randomUUID(), name, args: [args], timestamp: Date.now() }],

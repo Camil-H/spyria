@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { resolveTxt as dnsResolveTxt } from 'node:dns/promises'
 import { getMutator, mustGetMutator, mustGetQuery } from '@rocicorp/zero'
 import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
@@ -91,6 +92,9 @@ import {
   accountProvidersOf,
   createDevChatFromRequest,
   devChatsPath,
+  domainClaimReleasePath,
+  domainClaimsPath,
+  domainClaimVerificationPath,
   type GitHubSettingsInput,
   githubAppCreatedPath,
   githubAppManifestPath,
@@ -103,6 +107,7 @@ import {
   type InstanceApps,
   ssoSettingsPath,
   ssoStopPath,
+  workspaceCreationPath,
   workspaceMutators,
 } from '@spyria/workspace/server'
 import { type Context, Hono } from 'hono'
@@ -110,6 +115,13 @@ import { compress } from 'hono/compress'
 import { HTTPException } from 'hono/http-exception'
 import { routePath } from 'hono/route'
 import { type AgentBridge, createAgentBridge } from './agent-bridge/bridge.ts'
+import {
+  claimDomain,
+  listDomainClaims,
+  type ResolveTxt,
+  releaseDomainClaim,
+  verifyDomainClaim,
+} from './auth/domain-claims.ts'
 import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { isSameSecret } from './auth/same-secret.ts'
@@ -257,6 +269,7 @@ export const createApp = ({
   agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, deployment }),
   spyriaAgentImage,
   github,
+  resolveTxt = dnsResolveTxt,
   rateLimits = rateBudgets,
   rateLimiter: limit = createRateLimiter(rateLimits),
   trustedProxy,
@@ -278,6 +291,7 @@ export const createApp = ({
   agentBridge?: AgentBridge
   spyriaAgentImage?: string
   github?: GitHubDependencies
+  resolveTxt?: ResolveTxt
   rateLimits?: RateBudgets
   rateLimiter?: RateLimiter
   trustedProxy?: TrustedProxy
@@ -766,6 +780,32 @@ export const createApp = ({
           authMode === 'dex' || accountProvidersOf(instanceSignInApps ?? {}).length > 0,
         ),
       ),
+    )
+    .get(domainClaimsPath, (context) =>
+      endpointResponse('Reading the domain claims', 200, async () => ({
+        claims: await listDomainClaims(context.get('database'), context.get('zeroContext')),
+      })),
+    )
+    .post(domainClaimsPath, rateLimited('domainClaims'), async (context) => {
+      const body = await context.req.json().catch(() => null)
+      return endpointResponse('Claiming a domain', 200, async () => ({
+        claims: await claimDomain(context.get('database'), context.get('zeroContext'), body?.domain),
+      }))
+    })
+    .post(domainClaimVerificationPath, rateLimited('domainClaims'), async (context) => {
+      const body = await context.req.json().catch(() => null)
+      return endpointResponse('Verifying a domain claim', 200, async () => ({
+        claims: await verifyDomainClaim(context.get('database'), resolveTxt, context.get('zeroContext'), body?.domain),
+      }))
+    })
+    .post(domainClaimReleasePath, async (context) => {
+      const body = await context.req.json().catch(() => null)
+      return endpointResponse('Releasing a domain claim', 200, async () => ({
+        claims: await releaseDomainClaim(context.get('database'), context.get('zeroContext'), body?.domain),
+      }))
+    })
+    .get(workspaceCreationPath, (context) =>
+      context.json({ isOpen: (context.get('zeroContext').signedInThrough ?? 'account') === 'account' }),
     )
     .get(githubSettingsPath, (context) =>
       endpointResponse('Reading the GitHub settings', 200, async () => ({

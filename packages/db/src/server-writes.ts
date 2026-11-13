@@ -111,6 +111,14 @@ export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =
     )
   ).map((row) => row.userId)
 
+export const verifiedDomainClaimsOn = (tx: Transaction, workspaceId: string, domain: string) =>
+  onServer<{ workspaceId: string; domain: string }>(
+    tx,
+    `select workspace_id as "workspaceId", domain from domain_claims
+     where verified_at is not null and (workspace_id = $1 or domain = $2)`,
+    [workspaceId, domain],
+  )
+
 export const deleteMemberSessions = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, 'delete from sessions where workspace_id = $1 and user_id = $2', [workspaceId, userId])
 
@@ -937,6 +945,7 @@ export const workspaceTablesInPurgeOrder = [
   'github_apps',
   'jobs',
   'model_calls',
+  'domain_claims',
   'workspace_sso',
   'usage_sync_marks',
   'workspace_events',
@@ -984,7 +993,9 @@ export const scheduleWorkspaceDeletion = (tx: Transaction, workspaceId: string, 
     `with deleted as (
        update workspaces set deleted_at = now(), purge_at = to_timestamp($2::double precision / 1000)
        where workspace_id = $1 and deleted_at is null returning workspace_id),
-     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)),
+     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)
+       or provider_workspace_id in (select workspace_id from deleted)),
+     released_domains as (delete from domain_claims where workspace_id in (select workspace_id from deleted)),
      cancelled_jobs as (
        delete from jobs where workspace_id in (select workspace_id from deleted) and state = 'queued')
      select workspace_id from deleted`,
