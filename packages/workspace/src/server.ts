@@ -1,7 +1,19 @@
 export type { GitHubRepositories } from './contracts/repositories.ts'
 export {
+  ClaimableDomain,
+  type DomainClaimView,
+  domainOfEmail,
+  hasVerificationRecord,
+  requireOwnAddressInside,
+  verificationRecordOf,
+} from './domain/domain-claim.ts'
+export {
   AccountBoundElsewhere,
   BranchNotFound,
+  ClaimedDomainCannotCreate,
+  ClaimNeedsSso,
+  DomainClaimedElsewhere,
+  DomainClaimNotFound,
   EmailNotConfirmed,
   GitHubNotConfigured,
   GitHubPermissionMissing,
@@ -11,9 +23,12 @@ export {
   InvalidGitHubSettings,
   InvalidSsoSettings,
   NoAccountSignIn,
+  OutsideClaimedDomains,
   RepositoryNotGranted,
+  SignInThroughClaimingProvider,
   SsoAddressMismatch,
   SsoDiscoveryFailed,
+  VerificationRecordNotFound,
   WorkspaceCreationClosed,
 } from './domain/errors.ts'
 export {
@@ -60,6 +75,13 @@ export type { WorkspaceCommands } from './entrypoints/commands.ts'
 export { createDevChatFromRequest } from './entrypoints/endpoints.ts'
 export { createWorkspaceJobs } from './entrypoints/jobs.ts'
 export { workspaceMutators } from './entrypoints/mutators.ts'
+export {
+  createHttpDomainClaimCommands,
+  domainClaimReleasePath,
+  domainClaimsPath,
+  domainClaimVerificationPath,
+  workspaceCreationPath,
+} from './integrations/http-domain-claims.ts'
 export {
   createHttpGitHubCommands,
   devChatsPath,

@@ -159,6 +159,53 @@ export const AccountSignInRequired = errorKind(
   () => "Your organization's sign-in opens only its workspace: sign in with your own account to do this",
   WorkspaceError,
 )
+export const ClaimedDomainCannotCreate = errorKind(
+  'claimed_domain_cannot_create',
+  () => "Your address belongs to your organization's workspace: it cannot create another one",
+  WorkspaceError,
+)
+export const InvalidDomain = errorKind(
+  'invalid_domain',
+  (domain: string) => `${domain} is not a domain name, such as example.com`,
+  WorkspaceError,
+)
+export const DomainClaimedElsewhere = errorKind(
+  'domain_claimed_elsewhere',
+  (domain: string) => `${domain} belongs to another workspace of this Spyria: its addresses can join only that one`,
+  WorkspaceError,
+)
+export const OutsideClaimedDomains = errorKind(
+  'outside_claimed_domains',
+  (email: string) => `This workspace signs in only addresses at its own domains, and ${email} is not one of them`,
+  WorkspaceError,
+)
+export const ClaimWouldLockYouOut = errorKind(
+  'claim_would_lock_you_out',
+  (domain: string) =>
+    `Your own address is at ${domain}, which would be outside this workspace's domains: you could no longer sign in`,
+  WorkspaceError,
+)
+export const ClaimNeedsSso = errorKind(
+  'claim_needs_sso',
+  () => 'Enforce SSO first: a claimed domain signs in through your provider',
+  WorkspaceError,
+)
+export const DomainClaimNotFound = errorKind(
+  'domain_claim_not_found',
+  (domain: string) => `${domain} is not claimed by this workspace`,
+  WorkspaceError,
+)
+export const VerificationRecordNotFound = errorKind(
+  'verification_record_not_found',
+  (domain: string) =>
+    `The TXT record was not found at ${domain} yet: DNS changes can take a few minutes, sometimes hours. Try again later`,
+  WorkspaceError,
+)
+export const SignInThroughClaimingProvider = errorKind(
+  'sign_in_through_claiming_provider',
+  (email: string) => `${email} signs in through your organization's provider: enter your address to sign in`,
+  WorkspaceError,
+)
 export const NoAccountSignIn = errorKind(
   'no_account_sign_in',
   () =>
