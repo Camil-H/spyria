@@ -126,6 +126,17 @@ export const claimedDomainsOf = async (sql: Sql, domain: string, workspaceId: st
     select workspace_id as "workspaceId", domain from domain_claims
     where verified_at is not null and (domain = ${domain} or workspace_id = ${workspaceId}::text)`
 
+export const endSessionsNoLongerTrusted = (sql: Sql, workspaceId: string, domain: string) =>
+  sql`
+    delete from sessions using users
+    where users.id = sessions.user_id
+      and (sessions.workspace_id = ${workspaceId} or sessions.provider_workspace_id = ${workspaceId}
+        or split_part(users.email, '@', 2) = ${domain})
+      and not provider_opens_workspace(sessions.provider_workspace_id, sessions.workspace_id, sessions.user_id)`
+
+export const endSessionsOpenedThrough = (sql: Sql, workspaceId: string) =>
+  sql`delete from sessions where workspace_id = ${workspaceId} or provider_workspace_id = ${workspaceId}`
+
 const joinInvitedWorkspaces = async (
   sql: Sql,
   {
