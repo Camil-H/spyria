@@ -18,7 +18,7 @@ export const MultiSelect = ({
   onChange: (values: string[]) => void
 }) => (
   <Root modal={false}>
-    <Trigger aria-label={label} className={`${fieldClass} inline-flex items-center gap-2`}>
+    <Trigger aria-label={`${label}: ${summary}`} className={`${fieldClass} inline-flex items-center gap-2`}>
       {summary}
       <ChevronDown aria-hidden className="size-4 text-muted" />
     </Trigger>
