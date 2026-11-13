@@ -1,5 +1,7 @@
 # 0031. Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals
 
+Amended by [decision 0036](0036-tool-access-per-role-only.md): members are no longer named on a server with their own access, and the grid sets single tools per role, without a level control.
+
 ## Context
 
 [Decision 0030](0030-workspace-tools-catalogue.md) gave each catalogue server one list of allowed tools for the workspace, narrowed per member. A workspace with many members had to set each one by hand, a new member got every allowed tool, and nothing told reading tools from writing ones but the server's own `readOnlyHint`, which a server may set wrongly or leave out. Approvals existed only for a guest's write call on a shared-login server, always asked, and could not be turned off or extended to the owner's own calls.
