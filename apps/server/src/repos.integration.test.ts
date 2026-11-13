@@ -25,6 +25,7 @@ import {
   succeeded,
   testSecretsKeyring,
   waitFor,
+  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -61,6 +62,12 @@ const appRow = async () =>
   (await database.$client`select * from github_apps where workspace_id = ${acme}`)[0] as Record<string, string>
 const connectionRow = async () =>
   (await database.$client`select * from github_connections where workspace_id = ${acme} and user_id = ${alice}`)[0]
+const githubCallbackOf = async (userId: string) => {
+  const started = await request(userId, 'POST', '/api/github/connection/connect')
+  const authorized = await fetch(new URL(started.body.authorizeUrl), { redirect: 'manual' })
+  const callback = new URL(authorized.headers.get('location') ?? '')
+  return `${callback.pathname}${callback.search}`
+}
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
 test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
@@ -184,6 +191,22 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
     body: { connection: { login: fakeGitHubLogin, state: 'needs_reconnection' } },
   })
   expect(await request(alice, 'POST', '/api/github/connection/disconnect')).toMatchObject({ status: 200 })
+  expect(await connectionRow()).toBeUndefined()
+})
+
+test('a refresh waiting on a disconnect in progress stores nothing, so the member stays disconnected', async () => {
+  expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
+  await database.$client`
+    update github_connections set access_expires_at = now() - interval '1 minute'
+    where workspace_id = ${acme} and user_id = ${alice}`
+  let connection: ReturnType<typeof request> | undefined
+  await database.$client.begin(async (disconnect) => {
+    await disconnect`delete from github_connections where workspace_id = ${acme} and user_id = ${alice}`
+    connection = request(alice, 'GET', '/api/github/connection')
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await connection).toMatchObject({ status: 200, body: { connection: null } })
   expect(await connectionRow()).toBeUndefined()
 })
 
