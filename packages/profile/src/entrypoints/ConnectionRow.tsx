@@ -1,6 +1,5 @@
-import { rowClass } from '@spyria/ui'
+import { RowMenu, type RowMenuItem, rowClass } from '@spyria/ui'
 import type { ReactNode } from 'react'
-import { RowMenu, type RowMenuItem } from './RowMenu.tsx'
 
 export const ConnectionRow = ({
   label,
