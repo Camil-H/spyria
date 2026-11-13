@@ -21,6 +21,7 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { useState } from 'react'
+import { approvalChangesOf, type ToolKind, toolKindOf, toolKinds } from '../domain/tool-approval.ts'
 import { type ConnectionSignIn, connectionSignIns } from '../domain/workspace-connection.ts'
 import { useProfileCommands } from './providers.tsx'
 
@@ -39,25 +40,11 @@ const approvalLabels: Record<ToolApproval, string> = {
 }
 const defaultChoice = 'default'
 
-const toolGroups = [
-  {
-    title: 'Read',
-    isInGroup: (tool: ConnectionTool) => tool.readOnly && !tool.destructive,
-    note: 'By default, read tools run without waiting for your approval.',
-  },
-  {
-    title: 'Write',
-    isInGroup: (tool: ConnectionTool) => !tool.readOnly && !tool.destructive,
-    note: 'Write tools follow this choice, unless you choose otherwise for one below.',
-  },
-  {
-    title: 'Destructive',
-    isInGroup: (tool: ConnectionTool) => tool.destructive,
-    note: 'By default, tools the server marks destructive wait for your approval.',
-  },
-] as const
-
-type GroupTitle = (typeof toolGroups)[number]['title']
+const kindNotes: Record<ToolKind, string> = {
+  Read: 'By default, read tools run without waiting for your approval.',
+  Write: 'Write tools follow this choice, unless you choose otherwise for one below.',
+  Destructive: 'By default, tools the server marks destructive wait for your approval.',
+}
 
 export const ToolApprovals = ({
   workspaceId,
@@ -72,15 +59,14 @@ export const ToolApprovals = ({
   const { errorMessage, isPending, run } = useGuardedAction()
   const [search, setSearch] = useState('')
   const [isOnlyChanged, setIsOnlyChanged] = useState(false)
+  const [chosenKind, setChosenKind] = useState<ToolKind>('Write')
   const choices = approvalChoicesOf(server)
   const ownApprovalOf = (tool: ConnectionTool) => ownValueOf(server.approvals?.toolApprovals, tool.name) ?? null
   const defaultApprovalOf = (tool: ConnectionTool) => defaultToolApprovalOf(server, tool, server.approvals)
-  const groups = toolGroups
-    .map((group) => ({ ...group, tools: server.tools.filter(group.isInGroup) }))
+  const groups = toolKinds
+    .map((kind) => ({ kind, tools: server.tools.filter((tool) => toolKindOf(tool) === kind) }))
     .filter(({ tools }) => tools.length > 0)
-  const [openGroup, setOpenGroup] = useState<GroupTitle | undefined>(
-    () => (groups.find(({ title }) => title === 'Write') ?? groups[0])?.title,
-  )
+  const openKind = groups.some(({ kind }) => kind === chosenKind) ? chosenKind : groups[0]?.kind
   const setApproval = (tool: string | null, approval: ToolApproval | null) =>
     commands.setToolApproval({ workspaceId, connectionId: server.id, tool, approval })
   const chooseForTool = (tool: ConnectionTool, choice: string) =>
@@ -89,10 +75,8 @@ export const ToolApprovals = ({
     run(() => setApproval(null, choice === serverApprovalOf(server) ? null : choice))
   const chooseForAll = (tools: readonly ConnectionTool[], choice: ToolApproval) =>
     run(async () => {
-      const changes = tools
-        .map((tool) => ({ tool, approval: choice === defaultApprovalOf(tool) ? null : choice }))
-        .filter(({ tool, approval }) => approval !== ownApprovalOf(tool))
-      await Promise.all(changes.map(({ tool, approval }) => setApproval(tool.name, approval)))
+      const changes = approvalChangesOf(tools, choice, { ownApprovalOf, defaultApprovalOf })
+      await Promise.all(changes.map(({ tool, approval }) => setApproval(tool, approval)))
     })
   const searched = search.trim().toLowerCase()
   const isShown = (tool: ConnectionTool) =>
@@ -104,24 +88,25 @@ export const ToolApprovals = ({
           ? 'Choose which calls wait for your approval before they run with your account, on your prompts in any chat.'
           : 'Choose which calls wait for your approval before they run in the chats you own, whoever prompts.'}
       </p>
+      {groups.length === 0 && <p className="text-sm text-muted">You may use none of its tools</p>}
       <Root
-        value={openGroup}
-        onValueChange={(value) => setOpenGroup(value as GroupTitle)}
+        value={openKind}
+        onValueChange={(value) => setChosenKind(value as ToolKind)}
         className="flex flex-col gap-3"
       >
         <List aria-label="Tool kinds" className="flex gap-2 border-b border-line">
-          {groups.map(({ title, tools }) => (
-            <Trigger key={title} value={title} className={`${tabTriggerClass} px-3`}>
-              {title} <span className="text-xs text-muted">{tools.length}</span>
+          {groups.map(({ kind, tools }) => (
+            <Trigger key={kind} value={kind} className={`${tabTriggerClass} px-3`}>
+              {kind} <span className="text-xs text-muted">{tools.length}</span>
             </Trigger>
           ))}
         </List>
-        {groups.map(({ title, tools, note }) => {
+        {groups.map(({ kind, tools }) => {
           const shownTools = tools.filter(isShown)
           return (
-            <Content key={title} value={title} className="flex flex-col gap-3">
-              <p className="text-sm text-muted">{note}</p>
-              {title === 'Write' ? (
+            <Content key={kind} value={kind} className="flex flex-col gap-3">
+              <p className="text-sm text-muted">{kindNotes[kind]}</p>
+              {kind === 'Write' ? (
                 <SegmentedChoice
                   label={`Write tools of ${server.name}`}
                   name={`write-approval-${server.id}`}
@@ -137,7 +122,7 @@ export const ToolApprovals = ({
                     <button
                       key={choice}
                       type="button"
-                      aria-label={`Set all ${title.toLowerCase()} tools to ${approvalLabels[choice]}`}
+                      aria-label={`Set all ${kind.toLowerCase()} tools to ${approvalLabels[choice]}`}
                       disabled={isPending}
                       className={smallGhostButtonClass}
                       onClick={() => chooseForAll(tools, choice)}
@@ -150,7 +135,7 @@ export const ToolApprovals = ({
               <div className="flex flex-wrap items-center gap-3">
                 <input
                   type="search"
-                  aria-label={`Search ${title.toLowerCase()} tools`}
+                  aria-label={`Search ${kind.toLowerCase()} tools`}
                   placeholder="Search tools"
                   className={`${fieldClass} min-w-0 flex-1`}
                   value={search}
@@ -168,7 +153,7 @@ export const ToolApprovals = ({
               {shownTools.length === 0 ? (
                 <p className="text-sm text-muted">No tool matches</p>
               ) : (
-                <ul aria-label={`${title} tools`} className={rowListClass}>
+                <ul aria-label={`${kind} tools`} className={rowListClass}>
                   {shownTools.map((tool) => {
                     const ownApproval = ownApprovalOf(tool)
                     return (
