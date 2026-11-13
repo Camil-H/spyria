@@ -278,10 +278,13 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const chatRolesOf = mappedRows((role: ZeroRows['chatRoles'][number]) => role)
   const llmCredentialsOf = mappedRows(withMemberId<ZeroRows['llmCredentials'][number]>)
   const githubAppsOf = mappedRows(({ workspaceId }: ZeroRows['githubApps'][number]) => ({ workspaceId }))
-  const githubConnectionsOf = mappedRows(({ workspaceId, userId }: ZeroRows['githubConnections'][number]) => ({
-    workspaceId,
-    memberId: userId,
-  }))
+  const githubConnectionsOf = mappedRows(
+    ({ workspaceId, userId, needsReconnection }: ZeroRows['githubConnections'][number]) => ({
+      workspaceId,
+      memberId: userId,
+      needsReconnection: needsReconnection === true,
+    }),
+  )
   const workspaceOnboardingOf = mappedRows(({ workspaceId, task }: ZeroRows['workspaceOnboarding'][number]) => ({
     workspaceId,
     task,
