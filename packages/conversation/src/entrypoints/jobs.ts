@@ -151,7 +151,9 @@ export const createAgentHandlers = ({
     openEvents: async (chat: AgentChat, conversation: AgentConversation, listener: AgentEventListener) =>
       agentClient.openEvents(
         conversation,
-        (await transactorOf(chat.workspaceId).run(({ agentEvents }) => agentEvents.last(chat.chatId))) ?? null,
+        (await transactorOf(chat.workspaceId).run(({ agentEvents }) =>
+          agentEvents.lastOfConversation(chat.chatId, conversation.conversationId),
+        )) ?? null,
         listener,
       ),
     recordEvent: async (chat: AgentChat, event: AgentEvent, turnPromptId?: MessageId) => {

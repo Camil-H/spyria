@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { acme, alice } from './mock-data.ts'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from './postgres/testing.ts'
-import { activeAgentTurns, openTaskStepsOf, pendingPrompts } from './server-writes.ts'
+import { activeAgentTurns, lastConversationEvent, openTaskStepsOf, pendingPrompts } from './server-writes.ts'
 import { schema } from './zero.ts'
 import type { Transact } from './zero-queries.ts'
 
@@ -77,4 +77,33 @@ test('an active turn reports the time of its chat’s last event by sequence', a
 test('the open Task steps of a prompt are its Task tool steps without a result, in order', async () => {
   const steps = await inTransaction((tx) => openTaskStepsOf(tx, acme, 'prompt-4'))
   expect(steps.map((step) => step.id)).toEqual(['task-open-1', 'task-open-2'])
+})
+
+test('the last event of a conversation skips later delegation, approval and other conversations’ events', async () => {
+  const resumeChat = 'chat-resume'
+  await database.$client`
+    insert into chats (workspace_id, id, type, visibility, owner_kind, owner_user_id, name, archived, created_at)
+    values (${acme}, ${resumeChat}, 'runtime', 'private', 'user', ${alice}, 'Resume', false, now())`
+  const agentEvent = (seq: number, id: string, eventSeq: number) => ({
+    workspace_id: acme,
+    chat_id: resumeChat,
+    id,
+    seq: 100 + seq,
+    type: 'agent.event',
+    payload: JSON.stringify({ event: { id, seq: eventSeq, timestamp: `2026-01-01T00:00:0${seq}Z` } }),
+    created_at: new Date().toISOString(),
+  })
+  await database.$client`insert into events ${database.$client([
+    agentEvent(1, 'conversation-1:7', 7),
+    agentEvent(2, 'sub-conversation:3', 3),
+    agentEvent(3, 'approval-5f2c', 0),
+    agentEvent(4, 'conversation-10:9', 9),
+  ])}`
+
+  expect(await inTransaction((tx) => lastConversationEvent(tx, acme, resumeChat, 'conversation-1'))).toEqual({
+    id: 'conversation-1:7',
+    seq: 7,
+    timestamp: '2026-01-01T00:00:01Z',
+  })
+  expect(await inTransaction((tx) => lastConversationEvent(tx, acme, resumeChat, 'conversation-2'))).toBeUndefined()
 })

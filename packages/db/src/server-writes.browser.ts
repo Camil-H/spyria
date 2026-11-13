@@ -56,6 +56,7 @@ export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
+export const lastConversationEvent = skippedOnClient
 export const lastSessionId = skippedOnClient
 export const chatEventsOf = async () => []
 export const finishedToolCallEventOf = skippedOnClient
