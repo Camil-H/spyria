@@ -18,6 +18,11 @@ const dockerWith = (containerHostnames: Record<string, string>) =>
     return { Config: { Hostname: containerHostname } }
   }) as Docker
 const machineDocker = dockerWith({})
+const rejectionOf = (promise: Promise<unknown>) =>
+  promise.then(
+    () => undefined,
+    (error: unknown) => error,
+  )
 
 const machineRoot = (name: string, cgroupFiles: Record<string, Record<string, string>> = {}) => {
   const root = join(directory, name)
@@ -81,4 +86,30 @@ test.each([
   ],
 ])('reports the machine memory when %s', async (_, root) => {
   expect(await memoryOf(root)).toEqual({ totalBytes: 16 * gibibyte, freeBytes: 12 * gibibyte })
+})
+
+test('fails the reading instead of applying the limit when Docker cannot say whether the host is its container, and asks again next time', async () => {
+  let isDockerBusy = true
+  const busyDocker = (async (method: string, path: string) => {
+    if (isDockerBusy && path.startsWith('/containers/')) throw new DockerError(500, 'Docker is busy')
+    return dockerWith({ 'spyria-host': hostname() })(method, path)
+  }) as Docker
+  const source = { docker: busyDocker, ownContainer: 'spyria-host', root: limitedMachine }
+  expect(await rejectionOf(systemOf(source))).toBeInstanceOf(DockerError)
+  expect(await rejectionOf(freeMemoryBytes(source))).toBeInstanceOf(DockerError)
+  isDockerBusy = false
+  expect((await systemOf(source)).memoryBytes).toBe(16 * gibibyte)
+})
+
+test('asks Docker once whether the host is its container', async () => {
+  const containerPaths: string[] = []
+  const countingDocker = (async (method: string, path: string) => {
+    if (path.startsWith('/containers/')) containerPaths.push(path)
+    return machineDocker(method, path)
+  }) as Docker
+  const source = { docker: countingDocker, ownContainer: 'spyria-host', root: limitedMachine }
+  await systemOf(source)
+  await freeMemoryBytes(source)
+  await freeMemoryBytes(source)
+  expect(containerPaths).toHaveLength(2)
 })
