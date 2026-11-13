@@ -41,11 +41,12 @@ test('the merged PRs CSV has a header and one row per PR, in dollars, with quote
     mergedPullsCsvOf([
       pull,
       { ...pull, chatName: 'Say "hi", again', title: '=HYPERLINK("x")', number: 8, costMicros: 1_234_567 },
-    ]).split('\r\n'),
+    ]).split('\n'),
   ).toEqual([
     'Merged at,Chat,Repository,Pull request,Title,URL,Chat cost (USD)',
     '2026-10-02T13:00:00Z,Invoice bug,acme/app,7,Fix the invoice total,https://github.com/acme/app/pull/7,0.060000',
     `2026-10-02T13:00:00Z,"Say ""hi"", again",acme/app,8,"'=HYPERLINK(""x"")",https://github.com/acme/app/pull/7,1.234567`,
+    '',
   ])
-  expect(mergedPullsCsvOf([])).toBe('Merged at,Chat,Repository,Pull request,Title,URL,Chat cost (USD)')
+  expect(mergedPullsCsvOf([])).toBe('Merged at,Chat,Repository,Pull request,Title,URL,Chat cost (USD)\n')
 })
