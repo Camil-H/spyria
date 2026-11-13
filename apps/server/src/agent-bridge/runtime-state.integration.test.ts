@@ -135,23 +135,33 @@ test('Restart session ends a running turn and reloads the same session; Stop run
   expect((await runtimeOf(chat)).state).toBe('running')
 })
 
-test('a prompt whose turn was stopped while it was being sent is interrupted at once', async () => {
-  let firstPromptId = ''
-  const { relay } = await agentHost('Agent host', (relay) => ({
-    ...relay.containerAgent,
-    respond: async (request, container) => {
-      if (request.method === 'POST' && request.path.endsWith('/events'))
-        await database.$client`update chats set agent_turn_message_id = null where agent_turn_message_id = ${firstPromptId}`
-      return relay.containerAgent.respond(request, container)
-    },
-  }))
-  const chat = await newRuntimeChat()
-  firstPromptId = await prompt(chat, 'stub:long Stopped before sent')
-  await delivered(relay, 1)
+test.each([
+  ['no turn', false],
+  ['the next prompt’s turn', true],
+])(
+  'a prompt whose turn was stopped while it was being sent is interrupted at once, with %s begun since',
+  async (_, isNextPromptBegun) => {
+    let firstPromptId = ''
+    let nextPromptId: string | null = null
+    const { relay } = await agentHost('Agent host', (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        if (request.method === 'POST' && request.path.endsWith('/events')) {
+          await waitFor(() => !isNextPromptBegun || nextPromptId !== null)
+          await database.$client`update chats set agent_turn_message_id = ${nextPromptId} where agent_turn_message_id = ${firstPromptId}`
+        }
+        return relay.containerAgent.respond(request, container)
+      },
+    }))
+    const chat = await newRuntimeChat()
+    firstPromptId = await prompt(chat, 'stub:long Stopped before sent')
+    if (isNextPromptBegun) nextPromptId = await prompt(chat, 'Next one')
+    await delivered(relay, 1)
 
-  await waitFor(() => relay.interrupts.length === 1)
-  expect(relay.interrupts).toEqual([await conversationIdOf(chat)])
-})
+    await waitFor(() => relay.interrupts.length === 1)
+    expect(relay.interrupts).toEqual([await conversationIdOf(chat)])
+  },
+)
 
 test('a Stop whose interrupt arrives after the turn already finished ends the turn once', async () => {
   let first = ''
