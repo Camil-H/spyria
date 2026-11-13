@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ConversationCommands } from './commands.ts'
-import Markdown from './Markdown.tsx'
+import Markdown, { StreamedMarkdown } from './Markdown.tsx'
 import { ChatMediaContext, ConversationProvider, LoadedRemoteImagesContext } from './providers.tsx'
 
 const render = (text: string) => renderToStaticMarkup(<Markdown text={text} />)
@@ -113,4 +113,13 @@ test('a remote image the viewer loaded in this chat shows at once, so a stored r
   expect(html).toContain('<img src="https://images.example.com/chart.png" alt="Chart"')
   expect(html).not.toContain('logo.png')
   expect(html).toContain('Load image from images.example.com')
+})
+
+test('a streamed answer renders as Markdown while it grows, an open code block already shown as code', () => {
+  const html = renderToStaticMarkup(<StreamedMarkdown text={'# Plan\n\n- **Read** the file\n\n```ts\nconst a = 1'} />)
+  expect(html).toContain('<h1>Plan</h1>')
+  expect(html).toContain('<strong>Read</strong>')
+  expect(html).toContain('const a = 1')
+  expect(html).toContain('Copy code')
+  expect(renderToStaticMarkup(<StreamedMarkdown text="<b>raw</b>" />)).toContain('&lt;b&gt;raw&lt;/b&gt;')
 })

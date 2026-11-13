@@ -1,9 +1,10 @@
 import { CopyButton, focusRing } from '@spyria/ui'
-import { Children, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
+import { Children, memo, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
 import { mentionSegmentsOf } from '../domain/mentions.ts'
+import { streamedBlocksOf } from '../domain/streamed-markdown.ts'
 import { RuntimeMedia } from './Media.tsx'
 import { LoadedRemoteImagesContext } from './providers.tsx'
 
@@ -177,29 +178,42 @@ const components: Components = {
   },
 }
 
-const Markdown = ({
-  text,
-  keepsLineBreaks = false,
-  mentionNames = [],
-}: {
-  text: string
-  keepsLineBreaks?: boolean
-  mentionNames?: readonly string[]
-}) => (
-  <div className="flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs">
-    <ReactMarkdown
-      remarkPlugins={[
-        remarkGfm,
-        rawHtmlAsText,
-        underlineFromUnderscores,
-        laterImagesOnDemand,
-        ...(keepsLineBreaks ? [lineBreaksKept] : []),
-        boldMentions(mentionNames),
-      ]}
-      components={components}
-    >
-      {text}
-    </ReactMarkdown>
+type MarkdownProps = { text: string; keepsLineBreaks?: boolean; mentionNames?: readonly string[] }
+
+const markdownClassName =
+  'flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs'
+
+const MarkdownBlocks = memo(({ text, keepsLineBreaks = false, mentionNames = [] }: MarkdownProps) => (
+  <ReactMarkdown
+    remarkPlugins={[
+      remarkGfm,
+      rawHtmlAsText,
+      underlineFromUnderscores,
+      laterImagesOnDemand,
+      ...(keepsLineBreaks ? [lineBreaksKept] : []),
+      boldMentions(mentionNames),
+    ]}
+    components={components}
+  >
+    {text}
+  </ReactMarkdown>
+))
+
+export const StreamedMarkdown = ({ text, ...options }: MarkdownProps) => {
+  const { completed, tail } = streamedBlocksOf(text)
+  return (
+    <div className={markdownClassName}>
+      {completed.map((block) => (
+        <MarkdownBlocks key={block.offset} text={block.text} {...options} />
+      ))}
+      <MarkdownBlocks key={tail.offset} text={tail.text} {...options} />
+    </div>
+  )
+}
+
+const Markdown = (props: MarkdownProps) => (
+  <div className={markdownClassName}>
+    <MarkdownBlocks {...props} />
   </div>
 )
 
