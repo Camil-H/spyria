@@ -48,6 +48,10 @@ const gatewayKeysOf = async (provider: string) =>
   (await gateway.call<{ keys: { id: string; name: string }[] }>(`/api/providers/${provider}/keys`)).keys
 const virtualKeyIdOf = async (userId: string) =>
   (await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`)[0]?.virtual_key_id
+const gatewayVirtualKeyIds = async () =>
+  ((await gateway.call<{ virtual_keys: { id: string }[] | null }>('/api/governance/virtual-keys')).virtual_keys ?? [])
+    .map(({ id }) => id)
+    .toSorted()
 const boundKeyIdsOf = async (virtualKeyId: string) =>
   (
     (
@@ -321,4 +325,18 @@ test('a credential added while its member is being removed is refused once the r
   expect((await credentialRows()).filter((row) => row.user_id === dana.userId)).toEqual([])
   expect(await virtualKeyIdOf(dana.userId)).toBeUndefined()
   expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
+})
+
+test('a credential refused because its member was removed leaves no virtual key behind, even after the removal already deleted theirs', async () => {
+  const dana = await newAcmeMember()
+  expect(await postCredentialAs(dana, { provider: 'OpenAI', secret: secretValue })).toEqual({ status: 201, text: '' })
+  const virtualKeyId = await virtualKeyIdOf(dana.userId)
+  const virtualKeysBefore = await gatewayVirtualKeyIds()
+
+  expect(
+    await postCredentialDuringRemoval(dana, { provider: 'Mistral', secret: secretValue }, async () => {
+      await gateway.call(`/api/governance/virtual-keys/${virtualKeyId}`, { method: 'DELETE' })
+    }),
+  ).toEqual(memberRemoved(dana.userId))
+  expect(await gatewayVirtualKeyIds()).toEqual(virtualKeysBefore.filter((id) => id !== virtualKeyId))
 })
