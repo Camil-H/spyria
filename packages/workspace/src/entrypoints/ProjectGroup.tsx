@@ -26,7 +26,8 @@ export const ProjectGroup = ({
   chatAdornment?: ChatAdornment
 }) => {
   const [isExpanded, setIsExpanded] = useState(true)
-  const chatDrop = useChatDrop({ workspaceId, projectId: project.id, chats: project.chats, chatAction })
+  const group = { projectId: project.id, chatIds: project.chats.map((chat) => chat.id) }
+  const chatDrop = useChatDrop({ workspaceId, group, chatAction })
   const commands = useWorkspaceCommands()
   const [openDialog, setOpenDialog] = useState<'chat' | 'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
@@ -101,6 +102,7 @@ export const ProjectGroup = ({
               key={chat.id}
               workspaceId={workspaceId}
               chat={chat}
+              group={group}
               projects={projects}
               chatAction={chatAction}
               chatAdornment={chatAdornment}

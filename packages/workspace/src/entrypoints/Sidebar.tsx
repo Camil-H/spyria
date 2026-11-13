@@ -71,7 +71,8 @@ export const Sidebar = ({
   const navigate = useNavigate()
   const hasWorkspaceSettings = useWorkspacePermissions(workspaceId).length > 0
   const chatAction = useGuardedAction()
-  const looseChatDrop = useChatDrop({ workspaceId, projectId: null, chats: sidebar.looseChats, chatAction })
+  const looseGroup = { projectId: null, chatIds: sidebar.looseChats.map((chat) => chat.id) }
+  const looseChatDrop = useChatDrop({ workspaceId, group: looseGroup, chatAction })
   const [openDialog, setOpenDialog] = useState<'project' | 'chat' | 'chats' | 'search' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { isCollapsed, toggleCollapsed } = useCollapsed()
@@ -173,6 +174,7 @@ export const Sidebar = ({
                   key={chat.id}
                   workspaceId={workspaceId}
                   chat={chat}
+                  group={looseGroup}
                   projects={sidebar.projects}
                   chatAction={chatAction}
                   chatAdornment={chatAdornment}

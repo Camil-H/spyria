@@ -65,6 +65,7 @@ const participant = (chat: string, memberId: MemberId, roleId: string) => ({
   chatId: chatId(chat),
   memberId,
   roleId,
+  sidebarPosition: null,
 })
 
 export const seededChatCreatedSeq = 1
@@ -292,6 +293,7 @@ export const createMockSnapshot = (): Snapshot => {
         chatId: chat.id,
         memberId: chat.ownerId,
         roleId: 'owner',
+        sidebarPosition: null,
       })),
       participant('chat-invoice-bug', bob, 'prompter'),
       participant('chat-welcome', bob, 'prompter'),
