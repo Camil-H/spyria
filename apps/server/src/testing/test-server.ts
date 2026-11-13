@@ -116,6 +116,8 @@ const databaseByName = (databaseName: string) => {
       agentBridge,
       llmGateway,
       retryDelayMilliseconds: 100,
+      cleanupRetryDelayMilliseconds: 100,
+      maximumCleanupRetryDelayMilliseconds: 400,
     }),
     syncUsage,
     usageTimer: setInterval(() => syncUsage().catch(() => {}), usageSyncIntervalMilliseconds),

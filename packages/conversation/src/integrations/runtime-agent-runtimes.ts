@@ -6,10 +6,12 @@ import {
   expireSignIn,
   findLlmTokenChat,
   forgetAgentConversation,
+  isAwaitingHost,
   isRuntimeWaitingOnHost,
   issueAgentLlmToken,
   keepWorkspaceSnapshot,
   listHostChats,
+  RuntimeChatArchived,
   type RuntimePlacement,
   readAgentAccess,
   readWorkspaceSnapshot,
@@ -45,10 +47,14 @@ export const createRuntimeAgentRuntimes = (
     ensureRunning: async (chat) => {
       const runtime = await inTransaction((dependencies) =>
         ensureRuntimeRunning({ ...dependencies, ...placement }, { ...chat, id: crypto.randomUUID(), now: Date.now() }),
-      )
+      ).catch((error: unknown) => {
+        if (error instanceof RuntimeChatArchived) return undefined
+        throw error
+      })
+      if (!runtime) return { state: 'archived' }
+      if (isAwaitingHost(runtime)) return { state: 'host_offline' }
       if (['creating', 'starting', 'installing', 'stopping', 'removing'].includes(runtime.state))
         return { state: 'starting' }
-      if (!runtime.hostOnline && ['running', 'stopped'].includes(runtime.state)) return { state: 'host_offline' }
       const access = runtime.state === 'running' ? await accessOf(chat) : undefined
       return access
         ? { state: 'ready', endpoint: endpointFrom(access), signedIn: access.signedIn }

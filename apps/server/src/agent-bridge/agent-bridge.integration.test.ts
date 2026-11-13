@@ -229,6 +229,65 @@ test('a prompt whose send answer is lost after the agent took it is sent again o
   expect(await repliesTo(next)).toEqual([replyOf(2)])
 })
 
+const agentHostLosingFirstPrompt = async ({ ignoresStop = false } = {}) => {
+  const firstSend = Promise.withResolvers<void>()
+  const loseFirstPrompt = Promise.withResolvers<void>()
+  let isFirstSend = true
+  const host = await stack.agentHost('Agent host', {
+    holdUrl,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        if (ignoresStop && request.path.endsWith('/interrupt')) return { status: 200, body: '{}' }
+        if (!request.path.endsWith('/events') || !isFirstSend) return relay.containerAgent.respond(request, container)
+        isFirstSend = false
+        firstSend.resolve()
+        await loseFirstPrompt.promise
+        return { status: 500, body: '{"error":"Failed on purpose"}' }
+      },
+    }),
+  })
+  return { ...host, firstSend: firstSend.promise, loseFirstPrompt: loseFirstPrompt.resolve }
+}
+const chatWithPromptStoppedBeforeDelivery = async (host: Awaited<ReturnType<typeof agentHostLosingFirstPrompt>>) => {
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  await prompt(chat, 'Never delivered')
+  await host.firstSend
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
+  await turnEnded(chat)
+  host.loseFirstPrompt()
+  return { chat, viewer }
+}
+
+test('stopping a prompt that never reached the agent: the next prompt streams, is answered under itself, and its turn ends', async () => {
+  const host = await agentHostLosingFirstPrompt()
+  const { chat, viewer } = await chatWithPromptStoppedBeforeDelivery(host)
+
+  const next = await prompt(chat, 'Hello')
+  await answered(next)
+  await turnEnded(chat)
+  expect(await repliesTo(next)).toEqual([replyOf(1)])
+  const streamed = viewer.frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.text !== undefined)
+  expect(streamed.map((frame) => frame.text).join('')).toBe(replyOf(1).body)
+  expect(streamed.every((frame) => frame.promptId === next)).toBe(true)
+  expect(host.relay.prompts).toEqual(['Hello'])
+})
+
+test('a stop the agent ignores for a prompt it never received still lets the next prompt’s turn close, and the prompt after it is answered under itself', async () => {
+  const host = await agentHostLosingFirstPrompt({ ignoresStop: true })
+  const { chat } = await chatWithPromptStoppedBeforeDelivery(host)
+
+  await prompt(chat, 'Hello')
+  await waitFor(() => host.relay.prompts.length === 1)
+  await turnEnded(chat)
+  const after = await prompt(chat, 'Again')
+  await answered(after)
+  await turnEnded(chat)
+  expect(await repliesTo(after)).toEqual([replyOf(2)])
+})
+
 test('starting a runtime from a runtime chat message is refused and that chat’s queued prompt still runs', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
@@ -799,6 +858,45 @@ test('removing the owner of a runtime chat closes their stream, stops the turn a
   ).toEqual(succeeded)
   await answered(await prompt(chat, 'Back after the transfer'))
   expect((await runtimeOf(chat)).state).toBe('running')
+})
+
+test('an archived chat takes no new message nor retry, and a prompt or session start still queued for it places no runtime', async () => {
+  const { launches } = await agentHost()
+  const chat = await newRuntimeChat()
+  const onMachine = await newRuntimeChat({ harness: 'claude-code' })
+  for (const archived of [chat, onMachine])
+    expect(await mutate(aliceInAcme, 'workspace.archiveChat', { workspaceId: acme, chatId: archived })).toEqual(
+      succeeded,
+    )
+  const chatArchived = failedWith('This chat is archived: it takes no new messages')
+  expect(
+    await mutate(aliceInAcme, 'conversation.sendMessage', {
+      workspaceId: acme,
+      id: 'archived',
+      chatId: chat,
+      text: 'Hi',
+    }),
+  ).toEqual(chatArchived)
+  expect(await mutate(aliceInAcme, 'conversation.retryAgent', { workspaceId: acme, chatId: chat })).toEqual(
+    chatArchived,
+  )
+
+  const queuedPrompt = `message-${crypto.randomUUID()}`
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+    values (${acme}, ${chat}, ${queuedPrompt}, 1, 'member', ${alice}, 'Queued before the archive', now())`
+  const jobs = agentBridge.forDatabase(database).jobs
+  expect(
+    await jobs['agent.prompt']({ workspaceId: acme, payload: { messageId: queuedPrompt }, isLastAttempt: false }),
+  ).toBeUndefined()
+  expect(
+    await jobs['agent.start-session']({ workspaceId: acme, payload: { chatId: onMachine }, isLastAttempt: false }),
+  ).toBeUndefined()
+  expect(await turnOf(chat)).toBeNull()
+  expect(
+    (await database.$client`select id from runtimes where chat_id in (${chat}, ${onMachine})`).map(({ id }) => id),
+  ).toEqual([])
+  expect(launches()).toEqual([])
 })
 
 test('a runtime started under a previous secrets key is still reached with its key after the rotation', async () => {

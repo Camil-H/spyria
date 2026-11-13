@@ -101,6 +101,16 @@ export const lockMembership = (tx: Transaction, workspaceId: string, userId: str
     userId,
   ])
 
+export const lockInvitation = (tx: Transaction, workspaceId: string, id: string) =>
+  onServer(tx, 'select 1 from invitations where workspace_id = $1 and id = $2 for update', [workspaceId, id])
+
+export const lockOpenInvitation = (tx: Transaction, workspaceId: string, email: string) =>
+  onServer(
+    tx,
+    'select 1 from invitations where workspace_id = $1 and email = $2 and revoked_at is null and accepted_at is null for update',
+    [workspaceId, email],
+  )
+
 export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =>
   (
     await onServer<{ userId: string }>(
@@ -552,6 +562,15 @@ export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: str
        payload->>'replyToId' as "replyToId", payload->'event'->'update'->>'sessionUpdate' as "sessionUpdate" from events
      where workspace_id = $1 and chat_id = $2 and type = 'agent.event' order by events.seq desc limit 1`,
     [workspaceId, chatId],
+  )
+
+export const lastConversationEvent = (tx: Transaction, workspaceId: string, chatId: string, conversationId: string) =>
+  firstOnServer<{ id: string; seq: number | null; timestamp: string }>(
+    tx,
+    `select id, (payload->'event'->>'seq')::int as seq, payload->'event'->>'timestamp' as timestamp from events
+     where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and starts_with(id, $3 || ':')
+     order by events.seq desc limit 1`,
+    [workspaceId, chatId, conversationId],
   )
 
 export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
@@ -1044,6 +1063,16 @@ export const workspaceCleanupOf = async (tx: Transaction, workspaceId: string) =
     isPending: jobs.some(({ state }) => state !== 'failed'),
     failed: jobs.filter(({ state }) => state === 'failed').map(({ type, count }) => ({ type, count })),
   }
+}
+
+export const requeueFailedCleanup = async (tx: Transaction, workspaceId: string, delayMilliseconds: number) => {
+  await onServer(
+    tx,
+    `update jobs set state = 'queued', attempts = 0, finished_at = null,
+       run_at = now() + make_interval(secs => $3::double precision / 1000)
+     where workspace_id = $1 and type = any($2::text[]) and state = 'failed'`,
+    [workspaceId, workspaceCleanupJobTypes, delayMilliseconds],
+  )
 }
 
 const purgingWorkspace = (tx: Transaction, workspaceId: string) =>

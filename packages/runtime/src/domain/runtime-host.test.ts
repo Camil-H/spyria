@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { capacityOf, signInsOf, withExpiredSignIn } from './runtime-host.ts'
+import { capacityOf, isHostStale, signInsOf, withExpiredSignIn } from './runtime-host.ts'
 
 const gibibyte = 1024 ** 3
 const system = {
@@ -40,4 +40,26 @@ test('an expired sign-in drops the tool until its credentials file changes or go
   ).toMatchObject({
     expiredSignIns: {},
   })
+})
+
+test('an online host is stale once unseen for three of its declared heartbeats, thirty seconds each by default', () => {
+  const minute = 60_000
+  const now = 100 * minute
+  const host = (
+    lastSeenAt: number | null,
+    heartbeatMilliseconds?: number,
+    status: 'online' | 'offline' = 'online',
+  ) => ({
+    status,
+    lastSeenAt,
+    capacity: { ...capacityOf(system), ...(heartbeatMilliseconds !== undefined && { heartbeatMilliseconds }) },
+  })
+  expect(isHostStale(host(now - 89_000), now)).toBe(false)
+  expect(isHostStale(host(now - 91_000), now)).toBe(true)
+  expect(isHostStale({ ...host(now - 91_000), capacity: null }, now)).toBe(true)
+  expect(isHostStale(host(now - 10 * minute, 5 * minute), now)).toBe(false)
+  expect(isHostStale(host(now - 16 * minute, 5 * minute), now)).toBe(true)
+  expect(isHostStale(host(now - 2 * minute, 1000), now)).toBe(true)
+  expect(isHostStale(host(now - 10 * minute, undefined, 'offline'), now)).toBe(false)
+  expect(isHostStale(host(null), now)).toBe(true)
 })

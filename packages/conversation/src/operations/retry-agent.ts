@@ -1,7 +1,7 @@
 import { type ChatId, type MemberId, requireChatPermission, type WorkspaceId } from '@spyria/kernel'
 import type { AgentHost, RuntimeRetrier } from '../contracts/agent.ts'
 import type { ConversationTransactor } from '../contracts/transactor.ts'
-import { requireNotFrozen } from '../domain/message.ts'
+import { requireOpenChat } from '../domain/message.ts'
 import { type AgentDependencies, requestNextPrompt } from './agent-turn.ts'
 
 export const retryAgent = async (
@@ -10,7 +10,7 @@ export const retryAgent = async (
 ) => {
   await transactor.run(async ({ chats }) => {
     await requireChatPermission(chats, chatId, memberId, 'chat.post')
-    requireNotFrozen(await chats.get(chatId))
+    requireOpenChat(await chats.get(chatId))
   })
   await runtimeRetrier.retry({ workspaceId, chatId })
   await transactor.run((unitOfWork) => requestNextPrompt(unitOfWork, chatId))

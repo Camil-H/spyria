@@ -20,6 +20,7 @@ type Input = Partial<HostDeclaration> & {
   system: HostSystem
   hostVersion?: string
   protocolVersion?: number
+  heartbeatMilliseconds?: number
   now: number
   beforeOnline?: (host: ConnectedHost) => void
   updateCommandOf?: (host: RuntimeHost) => string
@@ -35,6 +36,7 @@ export const recordHostHello = async (
     credentialsChangedAt,
     hostVersion,
     protocolVersion = 0,
+    heartbeatMilliseconds,
     now,
     beforeOnline,
     updateCommandOf = () => 'the command in Workspace settings',
@@ -60,6 +62,7 @@ export const recordHostHello = async (
       protocolVersion,
       capacity: {
         ...capacityOf(system),
+        ...(heartbeatMilliseconds !== undefined && { heartbeatMilliseconds }),
         ...(personal && { personal, ...signInsOf({ signedIn, credentialsChangedAt }, host.capacity?.expiredSignIns) }),
       },
       lastSeenAt: now,

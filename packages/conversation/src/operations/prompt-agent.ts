@@ -420,8 +420,8 @@ export const startAgentSession = async (
   { workspaceId, chatId }: { workspaceId: WorkspaceId; chatId: ChatId },
 ) => {
   const { transactor, runtimes, eventSockets } = dependencies
-  const { type, localSession, harness } = await transactor.run(({ chats }) => chats.get(chatId))
-  if (type !== 'runtime' || !localSession) return undefined
+  const { type, localSession, harness, archived } = await transactor.run(({ chats }) => chats.get(chatId))
+  if (type !== 'runtime' || !localSession || archived) return undefined
   const chat = { workspaceId, chatId }
   const readiness = await runtimes.ensureRunning(chat)
   if (readiness.state === 'starting') return { retryInMilliseconds: runtimeStartPollMilliseconds }
@@ -441,11 +441,11 @@ export const promptAgent = async (
   { workspaceId, messageId, isLastAttempt, isRetry }: Input,
 ) => {
   const { transactor, runtimes, agentClient, eventSockets } = dependencies
-  const { chatId, type, localSession, harness } = await transactor.run(async ({ messages, chats }) => {
+  const { chatId, type, localSession, harness, archived } = await transactor.run(async ({ messages, chats }) => {
     const message = await messages.get(messageId)
     return { chatId: message.chatId, ...(await chats.get(message.chatId)) }
   })
-  if (type !== 'runtime') return undefined
+  if (type !== 'runtime' || archived) return undefined
   const chat = { workspaceId, chatId }
   const waitForRuntime = (readiness: NotReady, releasedPromptId?: MessageId) =>
     transactor.run(async (unitOfWork) => {
@@ -461,6 +461,7 @@ export const promptAgent = async (
   }
   if (readiness.state !== 'ready') {
     takeEarlyRoute(chat)
+    if (readiness.state === 'archived') return undefined
     return waitForRuntime(readiness, isRetry ? messageId : undefined)
   }
   const prompt = await transactor.run((unitOfWork) =>

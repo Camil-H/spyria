@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { memberId } from '@spyria/kernel'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
@@ -19,12 +20,20 @@ import {
   sessionTokenOf,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
 
 const { database, app, gateway, llmGateway, resultOf } = await openSharedTestApp()
-const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
+const worker = startJobWorker(database, {
+  pollIntervalMilliseconds: 5,
+  retryDelayMilliseconds: 100,
+  cleanupRetryDelayMilliseconds: 100,
+  maximumCleanupRetryDelayMilliseconds: 400,
+  llmGateway,
+})
 afterAll(() => worker.stop())
 const tokenOf = (workspaceId: string, userId: string) => sessionTokenOf(database, workspaceId, userId)
 const secretValue = 'sk-integration-secret-4321'
@@ -45,6 +54,10 @@ const gatewayKeysOf = async (provider: string) =>
   (await gateway.call<{ keys: { id: string; name: string }[] }>(`/api/providers/${provider}/keys`)).keys
 const virtualKeyIdOf = async (userId: string) =>
   (await database.$client`select virtual_key_id from member_gateway_keys where user_id = ${userId}`)[0]?.virtual_key_id
+const gatewayVirtualKeyIds = async () =>
+  ((await gateway.call<{ virtual_keys: { id: string }[] | null }>('/api/governance/virtual-keys')).virtual_keys ?? [])
+    .map(({ id }) => id)
+    .toSorted()
 const boundKeyIdsOf = async (virtualKeyId: string) =>
   (
     (
@@ -279,3 +292,57 @@ test.each([
     expect(await boundKeyIdsOf(await virtualKeyIdOf(bob))).toContain(key.id)
   },
 )
+
+const newAcmeMember = async () => {
+  const userId = memberId(`member-${crypto.randomUUID()}`)
+  await database.$client`insert into users (id, email) values (${userId}, ${`${userId}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${userId}, 'member', 'Dana')`
+  return { workspaceId: acme, userId }
+}
+const postCredentialDuringRemoval = async (
+  member: typeof aliceInAcme,
+  body: object,
+  beforeRemovalCommits = async () => {},
+) => {
+  const authorization = `Bearer ${await tokenOf(member.workspaceId, member.userId)}`
+  let posted: ReturnType<typeof postCredential> | undefined
+  await database.$client.begin(async (removal) => {
+    await removal`
+      update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${member.userId}`
+    posted = postCredential(authorization, JSON.stringify(body))
+    await waitFor(() => waitingOnLock(database))
+    await beforeRemovalCommits()
+  })
+  return posted
+}
+const memberRemoved = (removedMemberId: string) => ({
+  status: 400,
+  text: JSON.stringify({ error: 'member_not_found', message: `${removedMemberId} is not a member of this workspace` }),
+})
+
+test('a credential added while its member is being removed is refused once the removal commits, and leaves no row, member key nor gateway key behind', async () => {
+  const dana = await newAcmeMember()
+  const keysBefore = await gatewayKeysOf('mistral')
+
+  expect(await postCredentialDuringRemoval(dana, { provider: 'Mistral', secret: secretValue })).toEqual(
+    memberRemoved(dana.userId),
+  )
+  expect((await credentialRows()).filter((row) => row.user_id === dana.userId)).toEqual([])
+  expect(await virtualKeyIdOf(dana.userId)).toBeUndefined()
+  expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
+})
+
+test('a credential refused because its member was removed leaves no virtual key behind, even after the removal already deleted theirs', async () => {
+  const dana = await newAcmeMember()
+  expect(await postCredentialAs(dana, { provider: 'OpenAI', secret: secretValue })).toEqual({ status: 201, text: '' })
+  const virtualKeyId = await virtualKeyIdOf(dana.userId)
+  const virtualKeysBefore = await gatewayVirtualKeyIds()
+
+  expect(
+    await postCredentialDuringRemoval(dana, { provider: 'Mistral', secret: secretValue }, async () => {
+      await gateway.call(`/api/governance/virtual-keys/${virtualKeyId}`, { method: 'DELETE' })
+    }),
+  ).toEqual(memberRemoved(dana.userId))
+  expect(await gatewayVirtualKeyIds()).toEqual(virtualKeysBefore.filter((id) => id !== virtualKeyId))
+})

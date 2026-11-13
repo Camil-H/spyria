@@ -61,7 +61,7 @@ type RuntimeOperation = Exclude<
 >
 type ContainerInfo = {
   Config?: { Labels?: Record<string, string>; Image?: string }
-  State?: { Running?: boolean }
+  State?: { Running?: boolean; Paused?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
 type CreateRequest = {
@@ -372,9 +372,11 @@ export const createCommandRunner = ({
         await docker('DELETE', `/volumes/${volume.name}`).catch(ignoring(404, 409))
     }
   }
+  const pausedForSnapshot = new Set<string>()
   const copiedWhilePaused = async (runtime: string, copier: string) => {
-    await docker('POST', `/containers/${runtime}/pause`)
+    pausedForSnapshot.add(runtime)
     try {
+      await docker('POST', `/containers/${runtime}/pause`)
       await docker('POST', `/containers/${copier}/start`)
       return (
         await docker<{ StatusCode: number }>(
@@ -385,8 +387,18 @@ export const createCommandRunner = ({
         )
       ).StatusCode
     } finally {
-      await docker('POST', `/containers/${runtime}/unpause`).catch(ignoring(409))
+      await docker('POST', `/containers/${runtime}/unpause`)
+        .catch(ignoring(409))
+        .finally(() => pausedForSnapshot.delete(runtime))
     }
+  }
+  const statusOf = async (runtimeId: string) => {
+    const container = await managedContainer(runtimeId)
+    if (!container.State?.Running) return 'stopped'
+    const name = containerNameOf(prefix, runtimeId)
+    if (container.State.Paused && !pausedForSnapshot.has(name))
+      await docker('POST', `/containers/${name}/unpause`).catch(ignoring(409))
+    return 'running'
   }
   const snapshot = async (runtimeId: string, snapshotKey: string) => {
     if (personal) throw new Refused('snapshots are taken only on a workspace host')
@@ -443,13 +455,10 @@ export const createCommandRunner = ({
       return installHarness(docker, prefix, image, command.harness)
     }
     if (command.op === 'status')
-      return managedContainer(command.runtimeId).then(
-        (container) => (container.State?.Running ? 'running' : 'stopped'),
-        (error) => {
-          ignoringMissing(error)
-          return 'missing'
-        },
-      )
+      return statusOf(command.runtimeId).catch((error) => {
+        ignoringMissing(error)
+        return 'missing'
+      })
     const network = networkNameOf(prefix, command.runtimeId)
     if (command.op === 'start') {
       await managedContainer(command.runtimeId)

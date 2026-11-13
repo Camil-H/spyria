@@ -1,4 +1,6 @@
 export type { SandboxLocation, SandboxProvider, SandboxTransport } from './contracts/sandbox-provider.ts'
+export { RuntimeChatArchived } from './domain/errors.ts'
+export { isAwaitingHost } from './domain/runtime.ts'
 export {
   haltChatRuntimeOnServer,
   refillWarmPoolsOnServer,

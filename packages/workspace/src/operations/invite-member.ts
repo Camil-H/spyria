@@ -23,7 +23,7 @@ export const inviteMember = ({ transactor }: Dependencies, { email: text, role, 
     const email = Email(text)
     if (isActive(await memberships.findByEmail(email))) throw new AlreadyMember(email)
     requireInvitable(input.workspaceId, email, await domainClaims.of(domainOfEmail(email)))
-    const open = await invitations.findOpen(email)
+    const open = await invitations.lockOpen(email)
     if (open && isPending(open, now)) throw new InviteAlreadyPending(email)
     if (open) await invitations.save({ ...open, revokedAt: now })
     await invitations.add(newInvitation({ ...input, email, role, invitedBy: actorId }, now))

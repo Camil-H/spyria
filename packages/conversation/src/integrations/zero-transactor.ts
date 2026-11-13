@@ -16,6 +16,7 @@ import {
   isSessionStartPending,
   keepDeletedMessageText,
   lastAgentEvent,
+  lastConversationEvent,
   lastSessionId,
   linkAttachments,
   listedModelsOf,
@@ -440,6 +441,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const last = await lastAgentEvent(tx, contextWorkspaceId, id)
         return last && { ...last, replyToId: last.replyToId === null ? null : messageId(last.replyToId) }
       },
+      lastOfConversation: (id, conversationId) => lastConversationEvent(tx, contextWorkspaceId, id, conversationId),
       lastSessionId: (id) => lastSessionId(tx, contextWorkspaceId, id),
     },
     browserPages: {
@@ -575,6 +577,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           baseBranch: row.baseBranch ?? null,
           toolServersOff: row.toolServersOff ?? [],
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
+          archived: row.archived,
         }
       },
       ...chatPermissionsOf(tx, contextWorkspaceId),

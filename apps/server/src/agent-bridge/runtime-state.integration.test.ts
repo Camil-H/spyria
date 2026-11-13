@@ -59,6 +59,14 @@ const interruptJobsOf = (chat: ChatId) => jobStatesOf('agent.interrupt', { chatI
 const offlineReopenMilliseconds = 200
 const sweepAgentTurns = () =>
   agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {}, isLastAttempt: false })
+const restartSessionJob = (chat: ChatId, promptId: string | null) =>
+  agentBridge.forDatabase(database).jobs['agent.restart-session']({
+    workspaceId: acme,
+    payload: { chatId: chat, memberId: alice, promptId },
+    isLastAttempt: false,
+  })
+const restartRequestsOf = (relay: Relay) =>
+  relay.requests.filter(({ path }) => path.endsWith('/restart')).map(({ path }) => path)
 const agentReply = (turn: number) => ({
   kind: 'agent' as const,
   body: `[t${turn}] Hello from the stub (model spyria/fake, mode default).`,
@@ -133,6 +141,48 @@ test('Restart session ends a running turn and reloads the same session; Stop run
   const woken = await prompt(chat, 'Wake up')
   await answered(woken)
   expect((await runtimeOf(chat)).state).toBe('running')
+})
+
+test('a re-run of a restart does not interrupt a later turn: it waits for that turn to end', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat()
+  const first = await prompt(chat, 'Hello')
+  await answered(first)
+  await turnIs(chat, null)
+  const later = await prompt(chat, 'stub:linger Later work')
+  await holds.reached('linger')
+
+  expect(await restartSessionJob(chat, first)).toEqual({ retryInMilliseconds: 1000 })
+  expect(relay.interrupts).toEqual([])
+  expect(restartRequestsOf(relay)).toEqual([])
+  expect(await turnOf(chat)).toBe(later)
+
+  await holds.release('linger')
+  await answered(later)
+  expect(await repliesTo(later)).toEqual([agentReply(2)])
+})
+
+test('a restart asked while the chat was idle waits for a prompt that started since, then restarts the session once it ends', async () => {
+  const { relay } = await agentHost()
+  const chat = await newRuntimeChat()
+  const first = await prompt(chat, 'Hello')
+  await answered(first)
+  await turnIs(chat, null)
+  const conversationId = await conversationIdOf(chat)
+  const later = await prompt(chat, 'stub:linger Later work')
+  await holds.reached('linger')
+
+  expect(await restartSessionJob(chat, null)).toEqual({ retryInMilliseconds: 1000 })
+  expect(relay.interrupts).toEqual([])
+  expect(restartRequestsOf(relay)).toEqual([])
+
+  await holds.release('linger')
+  await answered(later)
+  await turnIs(chat, null)
+  expect(await restartSessionJob(chat, null)).toBeUndefined()
+  expect(restartRequestsOf(relay)).toEqual([`/api/conversations/${conversationId}/restart`])
+  expect(relay.interrupts).toEqual([])
+  expect(await repliesTo(later)).toEqual([agentReply(2)])
 })
 
 test.each([
@@ -454,4 +504,24 @@ test('a prompt while the host is offline gets one notice and is answered after t
   await answered(waiting, 2)
   expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(2)])
   expect(relay.prompts).toEqual(['Warm up', 'Are you there?'])
+})
+
+test('a prompt to a runtime stopping on an offline host gets one notice instead of waiting for it, and is answered once the host is back', async () => {
+  const { relay, host } = await agentHost()
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Warm up'))
+  await turnIs(chat, null)
+  await host.disconnect()
+  await database.$client`update runtimes set state = 'stopping', state_changed_at = now() where chat_id = ${chat}`
+
+  const waiting = await prompt(chat, 'Still there?')
+  await answered(waiting)
+  await jobDone('agent.prompt', { messageId: waiting })
+  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
+  expect(await turnOf(chat)).toBeNull()
+
+  await host.connect()
+  await answered(waiting, 2)
+  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(1)])
+  expect(relay.prompts).toEqual(['Warm up', 'Still there?'])
 })

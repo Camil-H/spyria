@@ -40,6 +40,11 @@ export const CodeAlreadyUsed = errorKind('code_already_used', () => 'This code w
 export const CodeExpired = errorKind('code_expired', () => 'This code has expired', HostRefused)
 export const HostRemoved = errorKind('host_removed', () => 'This host was removed', HostRefused)
 export const HostNotRegistered = errorKind('host_not_registered', () => 'This host is not registered', HostRefused)
+export const HostMarkedOffline = errorKind(
+  'host_marked_offline',
+  () => 'This host was marked offline after missing its heartbeats: say hello again',
+  RuntimeError,
+)
 export const HostOutOfDate = errorKind(
   'host_out_of_date',
   (updateCommand: string) => `This host is out of date: update it with ${updateCommand}`,
@@ -79,6 +84,11 @@ export const RuntimeNotReady = errorKind(
 export const RetryRefused = errorKind(
   'retry_refused',
   () => 'Only a runtime that could not start can be retried',
+  RuntimeError,
+)
+export const RuntimeChatArchived = errorKind(
+  'runtime_chat_archived',
+  () => 'This chat is archived: it starts no runtime',
   RuntimeError,
 )
 export const SpyriaAgentRefused = errorKind(

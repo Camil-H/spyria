@@ -11,6 +11,8 @@ export const setModelDirectory = skippedOnClient
 export const listedModelsOf = () => []
 export const setVirtualKeyId = skippedOnClient
 export const lockMembership = skippedOnClient
+export const lockInvitation = skippedOnClient
+export const lockOpenInvitation = skippedOnClient
 export const lockActiveAdminIds = async () => []
 export const verifiedDomainClaimsOn = async () => []
 export const deleteMemberSessions = skippedOnClient
@@ -55,6 +57,7 @@ export const activeAgentTurns = async () => []
 export const setRuntimesHostOnline = skippedOnClient
 export const isChatEventStored = async () => false
 export const lastAgentEvent = skippedOnClient
+export const lastConversationEvent = skippedOnClient
 export const lastSessionId = skippedOnClient
 export const chatEventsOf = async () => []
 export const finishedToolCallEventOf = skippedOnClient
@@ -75,6 +78,7 @@ export const scheduleWorkspaceDeletion = skippedOnClient
 export const lockDuePurge = async () => false
 export const isWorkspaceDeleted = async () => false
 export const workspaceCleanupOf = async () => ({ isPending: false, failed: [] })
+export const requeueFailedCleanup = skippedOnClient
 export const purgeWorkspaceChunk = async () => 0
 export const workspacePurgeTargetsOf = async () => ({ memberIds: [], runtimeChatIds: [] })
 export const purgeWorkspaceRows = skippedOnClient

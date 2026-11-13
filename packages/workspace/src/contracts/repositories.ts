@@ -71,6 +71,7 @@ export type DeletedWorkspace = {
   deleteLater(delayMilliseconds: number): Promise<void>
   cleanup(): Promise<WorkspaceCleanup>
   reportFailedCleanup(cleanup: WorkspaceCleanup): Promise<void>
+  retryFailedCleanupLater(delayMilliseconds: number): Promise<void>
   deleteChunk(): Promise<number>
   deleteAll(): Promise<void>
 }
@@ -86,8 +87,8 @@ export type MembershipRepository = {
 }
 
 export type InvitationRepository = {
-  get(invitationId: string): Promise<Invitation | undefined>
-  findOpen(email: string): Promise<Invitation | undefined>
+  lock(invitationId: string): Promise<Invitation | undefined>
+  lockOpen(email: string): Promise<Invitation | undefined>
   add(invitation: Invitation): Promise<void>
   save(invitation: Invitation): Promise<void>
 }

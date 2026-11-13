@@ -16,6 +16,7 @@ export type RuntimeHostRepository = {
   lockLoads(workspaceId: WorkspaceId, chatId: ChatId): Promise<HostLoad[]>
   lockWorkspaceLoads(workspaceId: WorkspaceId): Promise<HostLoad[]>
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
+  listOnline(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
   expireClaims(workspaceId: WorkspaceId, now: number): Promise<void>
 }
 
@@ -38,6 +39,7 @@ export type RuntimeRepository = {
     runtime: Runtime,
   ): Promise<{ harness?: HarnessId; packageCache?: PackageCacheScope; setupSnapshot?: SetupSnapshotScope }>
   claimScopeOf(workspaceId: WorkspaceId, chatId: ChatId): Promise<ClaimScope | undefined>
+  isChatArchived(workspaceId: WorkspaceId, chatId: ChatId): Promise<boolean>
   add(runtime: Runtime): Promise<void>
   save(runtime: Runtime): Promise<void>
   delete(runtime: Runtime): Promise<void>

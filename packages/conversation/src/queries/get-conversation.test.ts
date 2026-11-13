@@ -447,21 +447,23 @@ test.each([
   ['a prompter', bob, { canPost: true, canConfigure: false }, true],
   ['a reader', lee, { canPost: false, canConfigure: false }, false],
 ])(
-  '%s of Invoice bug posts and configures by their role, and edits only their own messages when they post',
+  '%s of Invoice bug posts and configures by their role, and edits only their own messages when they post, never a step card stored with them as author',
   (_, viewer, access, canEditOwn) => {
     const invoiceBug = chatId('chat-invoice-bug')
     const snapshot = createMockSnapshot()
     const othersMessage = { ...replyRow(2, 'agent'), chatId: invoiceBug, id: messageId('others'), authorId: null }
     const ownMessage = { ...othersMessage, kind: 'member' as const, id: messageId('own'), authorId: viewer }
+    const ownStepCard = { ...othersMessage, kind: 'step' as const, id: messageId('own-step-card'), authorId: viewer }
     const conversation = getConversation(
       acme,
       invoiceBug,
       viewer,
-    )({ ...snapshot, messages: [...snapshot.messages, othersMessage, ownMessage] })
+    )({ ...snapshot, messages: [...snapshot.messages, othersMessage, ownMessage, ownStepCard] })
     const canEditOf = (id: string) => conversation?.messages.find((message) => message.id === id)?.canEdit
     expect(conversation).toMatchObject(access)
     expect(canEditOf('own')).toBe(canEditOwn)
     expect(canEditOf('others')).toBe(false)
+    expect(canEditOf('own-step-card')).toBe(false)
   },
 )
 

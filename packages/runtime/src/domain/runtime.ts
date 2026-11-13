@@ -172,7 +172,7 @@ const statusByState: Record<RuntimeState, RuntimeStatus> = {
 }
 
 export const isAwaitingHost = (runtime: Pick<Runtime, 'state' | 'hostOnline'>) =>
-  !runtime.hostOnline && (runtime.state === 'running' || runtime.state === 'stopped')
+  !runtime.hostOnline && ['running', 'stopped', 'stopping', 'removing'].includes(runtime.state)
 
 export const runtimeStatusOf = (
   runtime: Pick<Runtime, 'state' | 'hostOnline'> | undefined,

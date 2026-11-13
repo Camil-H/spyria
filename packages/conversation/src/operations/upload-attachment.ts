@@ -1,7 +1,7 @@
 import { type ChatId, type MemberId, requireChatPermission } from '@spyria/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import { allowedMediaFormatOf, attachmentNameOf, requireRoomFor } from '../domain/attachments.ts'
-import { requireNotFrozen } from '../domain/message.ts'
+import { requireOpenChat } from '../domain/message.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 type Input = {
@@ -18,7 +18,7 @@ export const uploadAttachment = async (
 ) => {
   const requireMayUpload = async ({ chats }: Pick<UnitOfWork, 'chats'>) => {
     await requireChatPermission(chats, chatId, uploaderId, 'chat.post')
-    requireNotFrozen(await chats.get(chatId))
+    requireOpenChat(await chats.get(chatId))
   }
   await transactor.run(requireMayUpload)
   const content = await readContent()
