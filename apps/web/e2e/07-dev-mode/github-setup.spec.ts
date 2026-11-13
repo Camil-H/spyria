@@ -27,7 +27,7 @@ test.describe('GitHub setup', () => {
       'acme/docsmain',
     ])
     await page.reload()
-    await section.getByRole('button', { name: 'Change the App credentials' }).click()
+    await section.getByRole('button', { name: 'Edit credentials' }).click()
     for (const label of ['Private key', 'Client secret', 'Webhook secret']) {
       await expect(section.getByLabel(label)).toHaveValue('')
       await expect(section.getByLabel(label)).toHaveAttribute('placeholder', 'Set: enter a new value to replace it')
@@ -36,7 +36,7 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
   })
 
-  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (its status, no creation form, the status on the settings card)", {
+  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (its status, no creation form until I ask to create a new App, the status on the settings card)", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
     await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
@@ -91,6 +91,9 @@ test.describe('GitHub setup', () => {
       'acme/docsmain',
     ])
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
+    await section.getByRole('button', { name: 'Create a new App' }).click()
+    await expect(creation.getByRole('button', { name: 'Create the GitHub App on GitHub' })).toBeVisible()
+    await expect(section).toContainText('The new App replaces the connected one')
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
     await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with GitHub App connected')
   })
@@ -119,7 +122,7 @@ test.describe('GitHub setup', () => {
     )
     await configureGitHubApp(page)
     await page.reload()
-    await section.getByRole('button', { name: 'Change the App credentials' }).click()
+    await section.getByRole('button', { name: 'Edit credentials' }).click()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
     await section.getByText('How to create the GitHub App').click()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()

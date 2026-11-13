@@ -98,6 +98,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const [secrets, setSecrets] = useState(noSecrets)
   const [isSaved, setIsSaved] = useState(false)
   const [isManual, setIsManual] = useState(false)
+  const [isCreatingAgain, setIsCreatingAgain] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
   const show = (shown: GitHubSettingsView | null) => {
     setSettings(shown)
@@ -137,7 +138,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
       className={settings ? ghostButtonClass : `self-start ${ghostButtonClass}`}
       onClick={() => setIsManual(!isManual)}
     >
-      {settings ? 'Change the App credentials' : 'Create it manually'}
+      {settings ? 'Edit credentials' : 'Create it manually'}
     </button>
   )
   return (
@@ -149,6 +150,14 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
             description="Dev chats clone, fetch and push through this App"
           >
             <StatusBadge tone="ok">Connected</StatusBadge>
+            <button
+              type="button"
+              aria-expanded={isCreatingAgain}
+              className={ghostButtonClass}
+              onClick={() => setIsCreatingAgain(!isCreatingAgain)}
+            >
+              Create a new App
+            </button>
             {manualToggle}
           </SettingRow>
         </div>
@@ -160,6 +169,15 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
           </p>
           <GitHubAppCreationForm workspaceId={workspaceId} />
           {manualToggle}
+        </div>
+      )}
+      {settings && isCreatingAgain && (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted">
+            The new App replaces the connected one: you pick its repositories, and members may need to connect their
+            GitHub account again.
+          </p>
+          <GitHubAppCreationForm workspaceId={workspaceId} />
         </div>
       )}
       {isManual && (
