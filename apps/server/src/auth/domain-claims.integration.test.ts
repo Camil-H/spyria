@@ -1,18 +1,16 @@
 import { afterAll, expect, test } from 'bun:test'
-import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { workspacePermissions } from '@spyria/kernel'
 import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
 import { type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
-import { requestMutationWith, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { openSharedTestApp, requestMutationWith, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 import { confirmSsoSettings } from './sso.ts'
 
-const testDatabase = await createTestDatabase()
-const { database } = testDatabase
+const { database } = await openSharedTestApp()
 const secretsKeyring = secretsKeyringOf('domain-claims-integration-secrets-key-0123')
 const txtRecordsByDomain = new Map<string, string[][]>()
 const accountIdp = await startFakeIdp()
@@ -31,8 +29,7 @@ const app = createApp({
 })
 afterAll(async () => {
   for (const idp of [accountIdp, umbrellaIdp, tyrellIdp]) await idp.server.stop(true)
-  await testDatabase.drop()
-}, databaseDropTimeoutMilliseconds)
+})
 
 const ana = 'member-ana'
 const ben = 'member-ben'
@@ -306,7 +303,8 @@ test('invites refuse an address at a domain another workspace claimed, and in a 
   expect(await inviteAs('umbrella', ana, 'new@umbrella.com')).toEqual({})
   expect(await inviteAs('side', ben, 'pat@gmail.com')).toEqual({})
   expect([
-    ...(await database.$client`select workspace_id, email from invitations order by workspace_id, email`),
+    ...(await database.$client`select workspace_id, email from invitations where workspace_id in ('side', 'umbrella')
+      order by workspace_id, email`),
   ]).toEqual([
     { workspace_id: 'side', email: 'pat@gmail.com' },
     { workspace_id: 'umbrella', email: 'new@umbrella.com' },
