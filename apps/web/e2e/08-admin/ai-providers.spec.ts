@@ -22,7 +22,7 @@ test.describe('AI providers', () => {
       '9 allowed providers',
     )
 
-    await openProfile(page)
+    await openProfile(page, 'LLM keys')
     await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-refused-1234' })
     await expect(llmSectionOf(page)).toContainText('OpenAI is not allowed in this workspace')
 

@@ -19,7 +19,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 
 ## Setup checklist
 
-Until the workspace is set up, the top of the sidebar shows **Get started** with how many tasks are done and the next one; it opens that task's page. **Workspace settings** lists the workspace tasks at the top (**Get your workspace ready**) and **Profile** the personal ones (**Set up your profile**). Each list can be collapsed, which the browser remembers.
+Until the workspace is set up, the top of the sidebar shows **Get started** with how many tasks are done and the next one; it opens that task's page. **Workspace settings** lists the workspace tasks at the top (**Get your workspace ready**) and **Profile** the personal ones (**Set up your profile**). Like **Workspace settings**, **Profile** shows a card per part (**Account**, **LLM keys**, **My machine**, **Connections**, **Usage**), each with where it stands, and each opens its own page. Each list can be collapsed, which the browser remembers.
 
 | Task | Who sees it | Done once |
 |---|---|---|
@@ -99,7 +99,7 @@ Inviting a removed member's address again creates a normal invite that restores 
 
 ### Signing a member out
 
-**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again through their provider to come back; a session they still have in another workspace cannot reopen this one. After a lost device, also end their session at the provider, since a provider that still remembers them signs them in again. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
+**Sign out** on a member's row, for example after a lost laptop, ends every session of that member in the workspace and closes their open agent streams; they stay a member and sign in again through their provider to come back; a session they still have in another workspace cannot reopen this one. After a lost device, also end their session at the provider, since a provider that still remembers them signs them in again. It needs `members.manage` and a member whose role you could grant, and the audit log records it under **Members**. Members sign themselves out everywhere from **Profile** > **Account** > **Sessions**, which lists where they are signed in to the workspace (browser, system and when).
 
 ## Sign-in and SSO
 
@@ -135,7 +135,7 @@ Under **Servers**, **GitHub** comes first, a row like any other: its commands wi
 
 The rest is the workspace's catalogue of approved tool servers (MCP). Each server has a name, unique in the workspace, its address, and how members sign in, chosen when it is added:
 
-- **Each member signs in** (the default): each member connects their own account in **Profile** > **Tool connections**, and Spyria uses it on their chats. Adding the server opens a window where you sign in once with your own account: the gateway uses that sign-in only to list the server's tools, and the server is ready once you have. If the sign-in fails, Spyria removes the server and says why; while it waits, the server reads "Waiting for the sign-in that lists its tools", and one whose window was closed before the end stays so until it is removed. Its address cannot change once added, since members' sign-ins belong to it: remove it and add it again. The server must let the gateway register itself (OAuth dynamic client registration); one that needs a pre-registered OAuth app, such as GitHub's MCP server, cannot be added yet.
+- **Each member signs in** (the default): each member connects their own account in **Profile** > **Connections**, and Spyria uses it on their chats. Adding the server opens a window where you sign in once with your own account: the gateway uses that sign-in only to list the server's tools, and the server is ready once you have. If the sign-in fails, Spyria removes the server and says why; while it waits, the server reads "Waiting for the sign-in that lists its tools", and one whose window was closed before the end stays so until it is removed. Its address cannot change once added, since members' sign-ins belong to it: remove it and add it again. The server must let the gateway register itself (OAuth dynamic client registration); one that needs a pre-registered OAuth app, such as GitHub's MCP server, cannot be added yet.
 - **One shared login**: every member's calls use a secret header (name and value) you enter, only for servers without their own sign-in, such as API-key or internal servers. The secret is stored in the model gateway only, never in Spyria's database, and is never shown again. Changing the address or the header recreates the server in the gateway.
 
 Members cannot add servers of their own. Once a server is added, its card shows how many tools it has and how many read or write ("12 tools · 8 read · 4 write"):
@@ -170,7 +170,7 @@ The page lists the providers in two groups: labs (Anthropic, OpenAI, Google Gemi
 - **For** narrows the breakdown and its charts to one member, project, chat or model (the tables and the spend chart stay whole);
 - the cost per merged pull request, with the list of those pull requests.
 
-Calls delegated to sub-agents count in the turn that delegated them. Every member sees their own figures in **Profile** > **My usage**, and never anyone else's. Sessions on a member's own Claude or ChatGPT subscription are not metered by Spyria and do not appear.
+Calls delegated to sub-agents count in the turn that delegated them. Every member sees their own figures in **Profile** > **Usage**, and never anyone else's. Sessions on a member's own Claude or ChatGPT subscription are not metered by Spyria and do not appear.
 
 ## Budgets
 

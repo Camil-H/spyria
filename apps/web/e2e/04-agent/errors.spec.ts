@@ -16,7 +16,7 @@ import {
 } from './fixtures'
 
 const removeKey = async (page: Page, provider: string) => {
-  await openProfile(page)
+  await openProfile(page, 'LLM keys')
   await llmSectionOf(page)
     .getByRole('button', { name: `Remove ${provider}` })
     .click()

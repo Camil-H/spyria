@@ -19,7 +19,6 @@ import {
   sendButtonOf,
   sendMessage,
   sessionOf,
-  sidebarOf,
   signedInMachine,
   hostTest as test,
   urlOf,
@@ -53,7 +52,7 @@ test.describe('Where a chat runs', () => {
       where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
     )[0]?.count
   const addMachine = async (page: Page) => {
-    await openProfile(page)
+    await openProfile(page, 'My machine')
     await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add my machine' })
     const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
@@ -178,8 +177,8 @@ test.describe('Where a chat runs', () => {
       })
     await page.keyboard.press('Escape')
     await test.step('a removed machine offers no machine option', async () => {
-      await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-      const machineSection = mainOf(page).getByRole('region', { name: 'My machine' })
+      await openProfile(page, 'My machine')
+      const machineSection = machineSectionOf(page)
       await machineSection.getByRole('button', { name: 'Remove' }).click()
       await page.getByRole('dialog', { name: 'Remove my machine' }).getByRole('button', { name: 'Remove' }).click()
       await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
