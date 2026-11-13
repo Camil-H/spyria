@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ConversationCommands } from './commands.ts'
-import Markdown from './Markdown.tsx'
+import Markdown, { StreamedMarkdown } from './Markdown.tsx'
 import { ChatMediaContext, ConversationProvider, LoadedRemoteImagesContext } from './providers.tsx'
 
 const render = (text: string) => renderToStaticMarkup(<Markdown text={text} />)
@@ -113,4 +113,31 @@ test('a remote image the viewer loaded in this chat shows at once, so a stored r
   expect(html).toContain('<img src="https://images.example.com/chart.png" alt="Chart"')
   expect(html).not.toContain('logo.png')
   expect(html).toContain('Load image from images.example.com')
+})
+
+test('a streamed answer renders as Markdown while it grows, an open code block already shown as code', () => {
+  const html = renderToStaticMarkup(<StreamedMarkdown text={'# Plan\n\n- **Read** the file\n\n```ts\nconst a = 1'} />)
+  expect(html).toContain('<h1>Plan</h1>')
+  expect(html).toContain('<strong>Read</strong>')
+  expect(html).toContain('const a = 1')
+  expect(html).toContain('Copy code')
+  expect(renderToStaticMarkup(<StreamedMarkdown text="<b>raw</b>" />)).toContain('&lt;b&gt;raw&lt;/b&gt;')
+})
+
+test('a streamed answer loads its first four runtime images on their own across its blocks, as the stored answer does', () => {
+  const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
+  const text = Array.from(
+    { length: 6 },
+    (_, index) => `Shot ${index + 1}:\n\n![Shot ${index + 1}](out/${index + 1}.png)`,
+  )
+  const html = renderToStaticMarkup(
+    <ConversationProvider commands={commands} agentStream={{ subscribe: () => () => undefined }}>
+      <ChatMediaContext value={{ chatId: 'chat-1', isRuntime: true }}>
+        <StreamedMarkdown text={text.join('\n\n')} />
+      </ChatMediaContext>
+    </ConversationProvider>,
+  )
+  expect([...html.matchAll(/aria-label="Loading Shot \d"/g)].map(([label]) => label)).toEqual(
+    [1, 2, 3, 4].map((shot) => `aria-label="Loading Shot ${shot}"`),
+  )
 })

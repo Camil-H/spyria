@@ -25,17 +25,14 @@ export const getChatUsage =
         .map((member) => member.memberId),
       ...entries.map((entry) => entry.memberId),
     ])
+    const entriesByMember = Map.groupBy(entries, (entry) => entry.memberId)
     const rows = [...memberIds].map((memberId) => ({
       memberId,
       name: nameOf(memberId),
-      ...sumUsage(entries.filter((entry) => entry.memberId === memberId)),
+      ...sumUsage(entriesByMember.get(memberId) ?? []),
     }))
-    const models = [...new Set(entries.map((entry) => entry.model))]
-      .map((model) => ({
-        model,
-        name: modelNameOf(model),
-        ...sumUsage(entries.filter((entry) => entry.model === model)),
-      }))
+    const models = [...Map.groupBy(entries, (entry) => entry.model)]
+      .map(([model, modelEntries]) => ({ model, name: modelNameOf(model), ...sumUsage(modelEntries) }))
       .toSorted((first, second) => second.costMicros - first.costMicros || first.name.localeCompare(second.name))
     return { rows, models, total: sumUsage(rows) }
   }

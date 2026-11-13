@@ -17,7 +17,8 @@ import { resetDatabase } from './seed.ts'
 const templateDatabaseName = 'spyria_test_template'
 export const databaseDropTimeoutMilliseconds = 30_000
 const testPostgresContainer = 'spyria-test-postgres'
-const testPostgresUrl = 'postgres://spyria:spyria-test@localhost:5435/postgres'
+const testPostgresUrl = 'postgres://spyria:spyria-test@127.0.0.1:5435/postgres'
+const testNetwork = 'spyria-test-network'
 const docker = (...args: string[]) => spawnSync('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
 export const databaseUrlOf = (databaseName: string) =>
@@ -411,17 +412,24 @@ const isTestPostgresReady = async () => {
   }
 }
 
-export const startTestPostgres = () =>
-  startTestContainer(
+const ensureTestNetwork = () => {
+  if (docker('network', 'inspect', testNetwork).status !== 0) docker('network', 'create', testNetwork)
+}
+
+export const startTestPostgres = () => {
+  ensureTestNetwork()
+  return startTestContainer(
     testPostgresContainer,
     [
-      ...['-p', `${new URL(testPostgresUrl).port}:5432`, '--tmpfs', '/var/lib/postgresql:size=4g', '--shm-size', '1g'],
+      ...['--network', testNetwork, '-p', `127.0.0.1:${new URL(testPostgresUrl).port}:5432`],
+      ...['--tmpfs', '/var/lib/postgresql:size=4g', '--shm-size', '1g'],
       ...['-e', 'POSTGRES_USER=spyria', '-e', `POSTGRES_PASSWORD=${new URL(testPostgresUrl).password}`, 'postgres:18'],
       ...['postgres', '-c', 'wal_level=logical', '-c', 'max_slot_wal_keep_size=1GB', '-c', 'max_wal_size=1GB'],
       ...['-c', 'max_connections=300', '-c', 'max_replication_slots=40', '-c', 'max_wal_senders=40'],
     ],
     isTestPostgresReady,
   )
+}
 
 export const startTestGateway = async ({
   name,
@@ -448,6 +456,7 @@ export const startTestGateway = async ({
   const setup = {
     testPostgresStartedAt: docker('inspect', '-f', '{{.State.StartedAt}}', testPostgresContainer).stdout.toString(),
     gatewayImage,
+    testNetwork,
     port,
     networkConfig,
     oauthBase,
@@ -485,8 +494,8 @@ export const startTestGateway = async ({
     enabled: true,
     type: 'postgres',
     config: {
-      host: 'host.docker.internal',
-      port: postgresUrl.port,
+      host: testPostgresContainer,
+      port: '5432',
       user: postgresUrl.username,
       password: postgresUrl.password,
       db_name: databaseName,
@@ -512,6 +521,8 @@ export const startTestGateway = async ({
     containerName,
     '--label',
     `spyria.setup=${setupHash}`,
+    '--network',
+    testNetwork,
     '--add-host',
     'host.docker.internal:host-gateway',
     '-p',
