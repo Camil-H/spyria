@@ -6,7 +6,7 @@ A dev chat is a runtime chat attached to a GitHub repository: the agent works in
 
 | Piece | Who sets it up | What it is used for |
 |---|---|---|
-| The workspace's GitHub App | An admin (**Workspace settings** > **Connect GitHub**) | Lists the repositories the workspace may use, clones them and fetches base branches with short-lived read-only installation tokens, receives webhooks |
+| The workspace's GitHub App | An admin (**Workspace settings** > **GitHub**) | Lists the repositories the workspace may use, clones them and fetches base branches with short-lived read-only installation tokens, receives webhooks |
 | A member's GitHub account | Each member (**Profile** > **Connections** > **Connect** on GitHub) | Pushes and pull requests, so GitHub shows the member as the author |
 | The runtime | Started by the chat's first prompt | Holds the clone; the agent edits, builds and commits there |
 | The Spyria server | Always | Pushes the branch and talks to GitHub's API; GitHub tokens never enter a runtime |
@@ -15,7 +15,7 @@ The App's credentials (client secret, private key, webhook secret) are sealed wi
 
 ## Repositories
 
-The repositories a workspace can use are exactly those granted to its GitHub App's installations on GitHub. **Connect GitHub** lists them; to add one, change the installation on GitHub. The one-click setup creates the App with these permissions and events:
+The repositories a workspace can use are exactly those granted to its GitHub App's installations on GitHub. **Workspace settings** > **GitHub** lists them; to add one, change the installation on GitHub. The one-click setup creates the App with these permissions and events:
 
 | Permission | Access | Why |
 |---|---|---|
@@ -45,7 +45,7 @@ When the chat's runtime starts, spyria-agent clones the repository into the runt
 
 - The clone uses an installation token scoped to that one repository with read access only. The token lives only in the environment of the `git clone` process: it is not in the agent's environment and the remote in `.git/config` carries no credential.
 - Clone and checkout are part of the runtime's start, which the host relay limits to 2 minutes. A failed clone fails the start with "The repository could not be cloned" and git's reason.
-- The setup command runs right after the clone and before the agent starts, as a command step in the chat with live output: the one set for its repository in **Workspace settings > Connect runtime > Setup commands**, else the default one there. Nothing runs without one, even if the repository has a `.spyria/setup.sh`: set `sh .spyria/setup.sh` to run it. Members who manage runtime hosts set them; every member can read them, so they hold no secret. It runs without any token. The agent starts once it ends, so it never works on a half-installed checkout and finds what setup installed; meanwhile the chat says **Setting up the repository…**, a prompt sent waits, and **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the agent starts anyway.
+- The setup command runs right after the clone and before the agent starts, as a command step in the chat with live output: the one set for its repository in **Workspace settings > Runtimes > Setup commands**, else the default one there. Nothing runs without one, even if the repository has a `.spyria/setup.sh`: set `sh .spyria/setup.sh` to run it. Members who manage runtime hosts set them; every member can read them, so they hold no secret. It runs without any token. The agent starts once it ends, so it never works on a half-installed checkout and finds what setup installed; meanwhile the chat says **Setting up the repository…**, a prompt sent waits, and **Stop** ends a waiting prompt. The step ends when the script exits: a service it starts in the background keeps running without holding the step open. When it fails, the chat shows a notice with its exit code and its last lines; the agent starts anyway.
 - What setup installs reaches the agent, the quality gate commands and the git hooks of **Commit** and **Update from base** without changing `PATH` in each command:
   - `~/.local/bin`, `~/.bun/bin`, `~/.cargo/bin`, `~/.deno/bin`, `~/go/bin` and `~/.local/share/mise/shims` come first on `PATH`, so a tool installed by its usual installer is found as is, by the setup command itself too.
   - For anything else, the setup command writes one directory per line to the file named by `$SPYRIA_PATH` (each goes first on `PATH`, the last line first) and `NAME=value` lines to the file named by `$SPYRIA_ENV`, as GitHub Actions' `$GITHUB_PATH` and `$GITHUB_ENV`: `echo "$PWD/node_modules/.bin" >> "$SPYRIA_PATH"`. Both files start empty at each run. A variable there only adds to the environment: it never replaces `PATH` (use `$SPYRIA_PATH`), `HOME`, the runtime's own variables or the agent's credentials.
@@ -58,7 +58,7 @@ Rules files come with the clone, so every agent can read them. Pi loads `AGENTS.
 
 ### Runtimes kept ready
 
-A repository's own setup command, in **Workspace settings > Connect runtime > Setup commands**, can keep up to 5 runtimes ready (**Runtimes kept ready**, 0 by default). Spyria then keeps that many runtimes started on the workspace's runtime hosts, with the repository's default branch cloned and the setup command already run, so a new dev chat starts at once:
+A repository's own setup command, in **Workspace settings > Runtimes > Setup commands**, can keep up to 5 runtimes ready (**Runtimes kept ready**, 0 by default). Spyria then keeps that many runtimes started on the workspace's runtime hosts, with the repository's default branch cloned and the setup command already run, so a new dev chat starts at once:
 
 - A new dev chat on the repository's default branch takes a ready runtime instead of starting one: the chat reads **Ready** right away. The agent fetches the latest base, creates the chat's working branch and starts. Setup does not run again unless the default branch moved since the runtime was set up, or setup failed there: then it runs as usual, as a step in the chat. Spyria then starts another runtime to keep the count.
 - A runtime kept ready belongs to no chat and no member: it has no package cache, its clone uses a read-only installation token, and no agent runs in it until a chat takes it. Chats on another base branch, and chats on members' machines, start their runtime as before.

@@ -217,7 +217,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     }
   }
   const methods: Record<string, (params: Json) => Promise<Json>> = {
-    initialize: async () => ({}),
+    initialize: async () => ({ agentCapabilities: { promptCapabilities: { image: true } } }),
     'session/new': sessionOf,
     'session/resume': async ({ sessionId }) => {
       if (!existsSync(String(sessionId))) throw new AcpError('Resource not found')
@@ -228,8 +228,15 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       const ended = turnsEnded.then(async () => {
         isAborting = false
         turn = Promise.withResolvers()
+        const blocks = prompt as Json[]
         const { disposition } = await send('prompt', {
-          message: (prompt as Json[]).map((block) => block.text).join('\n'),
+          message: blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('\n'),
+          images: blocks
+            .filter((block) => block.type === 'image')
+            .map(({ mimeType, data }) => ({ type: 'image', mimeType, data })),
         })
         return disposition === 'handled' ? { stopReason: 'end_turn' } : turn.promise
       })

@@ -255,14 +255,27 @@ export const inPopup = async (page: Page, open: () => Promise<void>) => {
   await (await popup).waitForEvent('close')
 }
 
-export const openChatRoles = async (page: Page) => {
-  await openSettings(page, 'Roles and Permissions')
-  await mainOf(page).getByRole('tab', { name: 'Chat roles' }).click()
+export const openRoles = async (page: Page, roleKind: 'Workspace roles' | 'Chat roles') => {
+  await openSettings(page, 'Members and roles')
+  await mainOf(page).getByRole('tab', { name: 'Roles' }).click()
+  await mainOf(page).getByRole('radiogroup', { name: 'Role lists' }).getByRole('radio', { name: roleKind }).check()
 }
+export const openChatRoles = (page: Page) => openRoles(page, 'Chat roles')
 export const rolesSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Chat roles' })
-export const roleItemOf = (page: Page, name: string) =>
-  rolesSectionOf(page).getByRole('list', { name: 'Chat roles' }).getByRole('listitem', { name, exact: true })
-export const roleFormOf = (page: Page, label: string) => rolesSectionOf(page).getByRole('form', { name: label })
+export const roleColumnIn = (section: Locator, name: string) =>
+  section.getByRole('table').getByRole('columnheader', { name, exact: true })
+export const roleItemOf = (page: Page, name: string) => roleColumnIn(rolesSectionOf(page), name)
+export const permissionsOfRoleIn = (section: Locator, name: string) =>
+  section.getByRole('table').evaluate((table, roleName) => {
+    const headers = [...table.querySelectorAll('thead th')]
+    const column = headers.findIndex((header) => header.getAttribute('aria-label') === roleName)
+    if (column < 0) return null
+    return [...table.querySelectorAll('tbody tr')]
+      .filter((row) => row.children[column]?.querySelector('[aria-label="Allowed"]'))
+      .map((row) => row.children[0]?.textContent ?? '')
+  }, name)
+export const permissionsOfRole = (page: Page, name: string) => permissionsOfRoleIn(rolesSectionOf(page), name)
+export const roleFormOf = (page: Page, label: string) => page.getByRole('form', { name: label })
 export const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete role' })
 export const inviteRoleOptionsOf = async (page: Page) => {
   await tabPanelOf(page).getByRole('button', { name: 'Invite' }).click()
@@ -291,16 +304,18 @@ export const createRole = async (page: Page, name: string, permissionLabels: str
   await fillRoleForm(page, 'New role', name, permissionLabels)
   await expect(roleItemOf(page, name)).toBeVisible()
 }
-export const editRole = async (page: Page, name: string, permissionLabels: string[]) => {
-  await roleItemOf(page, name)
-    .getByRole('button', { name: `Edit ${name}` })
+export const chooseRoleAction = async (section: Locator, name: string, action: 'Edit' | 'Delete') => {
+  await roleColumnIn(section, name)
+    .getByRole('button', { name: `Actions for ${name}` })
     .click()
+  await section.page().getByRole('menuitem', { name: action }).click()
+}
+export const editRole = async (page: Page, name: string, permissionLabels: string[]) => {
+  await chooseRoleAction(rolesSectionOf(page), name, 'Edit')
   await fillRoleForm(page, `Edit ${name}`, name, permissionLabels)
 }
 export const deleteRole = async (page: Page, name: string) => {
-  await roleItemOf(page, name)
-    .getByRole('button', { name: `Delete ${name}` })
-    .click()
+  await chooseRoleAction(rolesSectionOf(page), name, 'Delete')
   await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
 }
 
@@ -352,7 +367,7 @@ export const openWelcome = async (page: Page) => {
 export const githubSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'GitHub' })
 export const configureGitHubApp = async (page: Page) => {
   const app = (await (await fetch(`${serverUrl}/test/github-app`)).json()) as Record<string, string>
-  await openSettings(page, 'Connect GitHub')
+  await openSettings(page, 'GitHub')
   const section = githubSectionOf(page)
   await section.getByRole('button', { name: /^(Create it manually|Change the App credentials)$/ }).click()
   await section.getByLabel('App id').fill(app.appId ?? '')

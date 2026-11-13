@@ -7,7 +7,9 @@ const allowedRequests = [
   /^GET \/ready$/,
   /^POST \/api\/conversations$/,
   new RegExp(`^(GET|DELETE) ${conversationPath}$`),
-  new RegExp(`^POST ${conversationPath}/(events|interrupt|restart|switch_acp_model|questions/${conversationId})$`),
+  new RegExp(
+    `^POST ${conversationPath}/(events|attachments|interrupt|restart|switch_acp_model|questions/${conversationId})$`,
+  ),
   new RegExp(`^WS /sockets/events/${conversationId}(\\?after=\\d+)?$`),
   /^GET \/api\/workspace\/(tree|file|media|changes|commits|status|checks)(\?[\w%=&.~+-]*)?$/,
   /^POST \/api\/workspace\/(bundle|commit|fetch|merge|pushed|screenshot|checks)$/,

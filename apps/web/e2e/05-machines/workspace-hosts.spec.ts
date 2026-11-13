@@ -18,6 +18,12 @@ test.describe('Workspace hosts', () => {
   const hostRowOf = (page: Page, hostName: string) =>
     hostsSectionOf(page).getByRole('listitem').filter({ hasText: hostName })
   const addDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add runtime host' })
+  const expectRuntimesCard = async (page: Page, status: string | RegExp) => {
+    await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+    const card = mainOf(page).getByRole('link', { name: 'Runtimes', exact: true })
+    await expect(card).toContainText(status)
+    await card.click()
+  }
   const commandOf = (page: Page, dialogName = 'Add runtime host') =>
     page.getByRole('dialog', { name: dialogName }).getByRole('textbox', { name: 'Command' })
 
@@ -53,7 +59,7 @@ test.describe('Workspace hosts', () => {
     test('As a member who can manage runtime hosts, I open Workspace settings from the sidebar and see an empty Runtime hosts section', {
       tag: ['@spec-07'],
     }, async ({ page }) => {
-      await openSettings(page, 'Connect runtime')
+      await openSettings(page, 'Runtimes')
       await expect(hostsSectionOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
       await expect(hostsSectionOf(page).getByText('No runtime host yet')).toBeVisible()
     })
@@ -76,7 +82,7 @@ test.describe('Workspace hosts', () => {
   test('As a member who can manage runtime hosts, I add a host and get one command that replaces spyria-host and picks rootless or rooted Docker itself', {
     tag: ['@spec-07', '@spec-25', '@stage-g'],
   }, async ({ page }) => {
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
     await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
     await addDialogOf(page).getByRole('button', { name: 'Add' }).click()
@@ -101,12 +107,13 @@ test.describe('Workspace hosts', () => {
     await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
     await expect(addDialogOf(page)).toHaveCount(0)
     await expect(hostRowOf(page, 'Home server')).toContainText('Waiting for the host')
+    await expectRuntimesCard(page, '1 runtime host · 1 not connected')
   })
 
   test('As a member who can manage runtime hosts, I follow a host’s lifecycle: online with its capacity, its code working once, offline and back with its stored token, then removed after confirmation and refused', {
     tag: ['@spec-07', '@smoke'],
   }, async ({ page, hosts }) => {
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     const url = await addHost(page, 'Home server')
     const stateDirectory = hosts.newStateDirectory()
     const firstRun = hosts.start(url, stateDirectory)
@@ -130,12 +137,15 @@ test.describe('Workspace hosts', () => {
       await test.step('a stopped host goes Offline and comes back Online with its stored token', async () => {
         await firstRun.stop()
         await expect(hostRowOf(page, 'Home server')).toContainText('Offline', { timeout: 60_000 })
+        await expectRuntimesCard(page, '1 runtime host · 1 not connected')
         const run = hosts.start(url, stateDirectory)
         await expectOnline(page, 'Home server')
+        await expectRuntimesCard(page, /^\D*1 runtime host$/)
         return run
       })
     await test.step('removing an online host asks for confirmation, disconnects it and refuses it afterwards', async () => {
-      await hostRowOf(page, 'Home server').getByRole('button', { name: 'Remove' }).click()
+      await hostRowOf(page, 'Home server').getByRole('button', { name: 'Actions for Home server' }).click()
+      await page.getByRole('menuitem', { name: 'Remove' }).click()
       const confirmation = page.getByRole('dialog', { name: 'Remove runtime host' })
       await expect(confirmation).toContainText('Home server')
       await confirmation.getByRole('button', { name: 'Remove' }).click()
@@ -149,7 +159,7 @@ test.describe('Workspace hosts', () => {
   test('As a member who can manage runtime hosts, I see an expired code refused and marked Code expired, and New command pairs the same row and closes once it is online', {
     tag: ['@spec-07'],
   }, async ({ page, hosts, workerStack }) => {
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     const expiredUrl = await addHost(page, 'Home server')
     await workerStack.database.$client`update runtime_hosts set claim_expires_at = now() - interval '1 second'`
     await expect(hostRowOf(page, 'Home server')).toContainText('Code expired')
@@ -176,7 +186,7 @@ test.describe('Workspace hosts', () => {
     return command
   }
   const addWorkspaceHost = async (page: Page) => {
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add runtime host' })
     await dialog.getByRole('textbox', { name: 'Host name' }).fill('Workspace box')

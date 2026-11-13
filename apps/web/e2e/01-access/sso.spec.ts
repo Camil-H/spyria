@@ -63,7 +63,7 @@ const signInThroughChosenProvider = async (page: Page, email: string, providerLa
 }
 
 const enforceAcmeSso = async (page: Page) => {
-  await openSettings(page, 'Setup SSO')
+  await openSettings(page, 'Single sign-on')
   await fillProvider(providerFormOf(page), ssoProviderIssuer)
   await signInThroughPopup(
     page,
@@ -209,14 +209,14 @@ test.describe('SSO', () => {
         'alice@example.com',
       )
       await expect(switcherOf(page)).toContainText('Umbrella')
-      await openSettings(page, 'Setup SSO')
+      await openSettings(page, 'Single sign-on')
       await expect(signInSectionOf(page)).toContainText(notEnforcedText)
       await expect(providerFormOf(page).getByRole('button', { name: 'Enforce SSO' })).toBeVisible()
       expect(await workerStack.database.$client`select 1 from workspace_sso`).toHaveLength(0)
     })
 
     await test.step('a person I invite signs in with their own account and lands in the workspace', async () => {
-      await openSettings(page, 'Manage Team')
+      await openSettings(page, 'Members and roles')
       await invite(page, 'bob@example.com')
       await expect(pendingInvitesOf(page)).toContainText('bob@example.com')
       const bobPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
@@ -252,7 +252,7 @@ test.describe('SSO', () => {
         'alice@example.com',
       )
       await expect(switcherOf(page)).toContainText('Umbrella')
-      await openSettings(page, 'Setup SSO')
+      await openSettings(page, 'Single sign-on')
       await expect(signInSectionOf(page)).toContainText(enforcedText)
       await expect(providerFormOf(page).getByLabel('Issuer')).toHaveValue(ssoProviderIssuer)
       await expect(providerFormOf(page).getByLabel('Client secret')).toHaveValue('')
@@ -266,17 +266,17 @@ test.describe('SSO', () => {
   test.describe(() => {
     test.use({ signedInAs: 'member-alice' })
 
-    test('As an Admin, I enforce SSO in Setup SSO by signing in through the provider with my own address; another address, or a provider whose discovery fails, changes nothing', {
+    test('As an Admin, I enforce SSO in Single sign-on by signing in through the provider with my own address; another address, or a provider whose discovery fails, changes nothing', {
       tag: ['@spec-37'],
     }, async ({ page, workerStack }) => {
       await page.goto('/')
-      await openSettings(page, 'Setup SSO')
+      await openSettings(page, 'Single sign-on')
       const form = providerFormOf(page)
 
       await test.step('the workspace does not enforce SSO: members sign in with their own account', async () => {
         await expect(signInSectionOf(page)).toContainText(notEnforcedText)
         await expect(form.getByRole('button', { name: 'Enforce SSO' })).toBeVisible()
-        await expect(form.getByRole('button', { name: 'Stop enforcing SSO' })).toHaveCount(0)
+        await expect(signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' })).toHaveCount(0)
       })
 
       await test.step('signing in to the provider as someone else is refused and changes nothing', async () => {
@@ -309,7 +309,7 @@ test.describe('SSO', () => {
         )
         await expect(signInSectionOf(page)).toContainText(enforcedText)
         await expect(form.getByRole('button', { name: 'Save and sign in again' })).toBeVisible()
-        await expect(form.getByRole('button', { name: 'Stop enforcing SSO' })).toBeVisible()
+        await expect(signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' })).toBeVisible()
         await expect(form.getByLabel('Provider')).toHaveValue('oidc')
         await expect(form.getByLabel('Client id')).toHaveValue(providerClientId)
         await expect(form.getByText('Secret: set')).toBeVisible()
@@ -334,8 +334,8 @@ test.describe('SSO', () => {
       })
 
       await test.step('stopping SSO asks to confirm, and Cancel keeps it enforced', async () => {
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
-        const confirmation = providerFormOf(page).getByRole('group', { name: 'Stop enforcing SSO' })
+        await signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
+        const confirmation = page.getByRole('dialog', { name: 'Stop enforcing SSO' })
         await expect(confirmation).toContainText(
           'Everyone is signed out of this workspace, you included, and signs in again with their own account. Its claimed domains are released.',
         )
@@ -345,8 +345,11 @@ test.describe('SSO', () => {
       })
 
       await test.step('stopping SSO signs everyone out of the workspace, me included', async () => {
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
-        await providerFormOf(page).getByRole('button', { name: 'Stop enforcing', exact: true }).click()
+        await signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
+        await page
+          .getByRole('dialog', { name: 'Stop enforcing SSO' })
+          .getByRole('button', { name: 'Stop enforcing', exact: true })
+          .click()
         await expect(switcherOf(page)).toContainText('Globex')
         await openMenu(page)
         await expect(page.getByRole('menuitem', { name: /^Acme/ })).toContainText('Signed out')

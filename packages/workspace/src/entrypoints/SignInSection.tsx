@@ -1,6 +1,9 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
+  calloutClass,
+  cardClass,
+  Dialog,
   dangerButtonClass,
   ErrorMessage,
   fieldClass,
@@ -8,6 +11,9 @@ import {
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  rowListClass,
+  SettingRow,
+  StatusBadge,
   useGuardedAction,
 } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
@@ -130,9 +136,11 @@ export const SignInSection = ({
   instanceApps?: readonly SsoPreset[]
 }) =>
   isDexSignIn ? (
-    <LabelledSection title="Sign-in">
-      <p className="text-sm text-muted">Sign-in uses this deployment's Dex: SSO settings apply in SSO mode only.</p>
-    </LabelledSection>
+    <section aria-label="Sign-in" className={`${rowListClass} max-w-2xl`}>
+      <SettingRow title="Sign-in uses this deployment's Dex" description="SSO settings apply in SSO mode only.">
+        <StatusBadge tone="ok">Dex</StatusBadge>
+      </SettingRow>
+    </section>
   ) : (
     <SsoSettingsForm workspaceId={workspaceId} instanceApps={instanceApps} />
   )
@@ -164,9 +172,9 @@ const SsoSettingsForm = ({
   }, [commands, workspaceId])
   if (stored === undefined)
     return (
-      <LabelledSection title="Sign-in">
+      <section aria-label="Sign-in">
         <p className="text-sm text-muted">Loading…</p>
-      </LabelledSection>
+      </section>
     )
   const edit = (field: ProviderField) => (event: { target: { value: string } }) =>
     setForm({ ...form, [field]: event.target.value })
@@ -181,62 +189,69 @@ const SsoSettingsForm = ({
     setStored(await commands.readSsoSettings({ workspaceId }))
   }
   const stop = () => run(() => commands.stopSso({ workspaceId }))
+  const isOwnApp = !isInstanceAppIn(instanceApps, form.preset, usesInstanceApp)
   return (
-    <LabelledSection title="Sign-in">
-      <p className="text-sm text-muted">
-        {stored
-          ? "This workspace enforces SSO: only your organization's provider opens it, for everyone, Admins included."
-          : "Members sign in with their own account, through the sign-in of this Spyria. Enforce SSO to make your organization's provider the only way into this workspace."}
-      </p>
-      <form aria-label="SSO provider" onSubmit={confirm} className="flex flex-col gap-3">
-        <input type="hidden" name="workspaceId" value={workspaceId} />
-        <ProviderFields
-          provider={form}
-          edit={edit}
-          clientSecret={clientSecret}
-          onClientSecretChange={setClientSecret}
-          hasSecret={stored?.hasSecret}
-          instanceApps={instanceApps}
-          usesInstanceApp={usesInstanceApp}
-          onUsesInstanceAppChange={setUsesInstanceApp}
-        />
-        {stored && !isInstanceAppIn(instanceApps, form.preset, usesInstanceApp) && (
-          <p className="text-sm text-muted">{stored.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
-        )}
-        <p className="text-sm text-muted">
-          You confirm by signing in through the provider with your own address. A new provider signs everyone out of
-          this workspace: members sign in again through it, matched by the address they were invited at.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className={buttonClass} disabled={isConfirming}>
+    <section aria-label="Sign-in" className="flex max-w-2xl flex-col gap-6">
+      <div className={rowListClass}>
+        <SettingRow
+          title={stored ? 'SSO enforced' : 'SSO not enforced'}
+          description={
+            stored
+              ? "This workspace enforces SSO: only your organization's provider opens it, for everyone, Admins included."
+              : "Members sign in with their own account, through the sign-in of this Spyria. Enforce SSO to make your organization's provider the only way into this workspace."
+          }
+        >
+          <StatusBadge tone={stored ? 'ok' : 'off'}>{stored ? presetLabels[stored.preset] : 'Off'}</StatusBadge>
+        </SettingRow>
+      </div>
+      <LabelledSection title={stored ? 'Provider' : 'Enforce SSO'} titleClass="text-sm font-medium">
+        <form aria-label="SSO provider" onSubmit={confirm} className={`${cardClass} flex flex-col gap-3 p-4`}>
+          <input type="hidden" name="workspaceId" value={workspaceId} />
+          <ProviderFields
+            provider={form}
+            edit={edit}
+            clientSecret={clientSecret}
+            onClientSecretChange={setClientSecret}
+            hasSecret={stored?.hasSecret}
+            instanceApps={instanceApps}
+            usesInstanceApp={usesInstanceApp}
+            onUsesInstanceAppChange={setUsesInstanceApp}
+          />
+          {stored && isOwnApp && (
+            <p className="-mt-1 text-xs text-muted">{stored.hasSecret ? 'Secret: set' : 'Secret: not set'}</p>
+          )}
+          <p className={calloutClass}>
+            You confirm by signing in through the provider with your own address. A new provider signs everyone out of
+            this workspace: members sign in again through it, matched by the address they were invited at.
+          </p>
+          <button type="submit" className={`self-start ${buttonClass}`} disabled={isConfirming}>
             {stored ? 'Save and sign in again' : 'Enforce SSO'}
           </button>
-          {stored && !isStopAsked && (
+          {refusal && <p className="text-sm text-muted">{refusal}</p>}
+        </form>
+      </LabelledSection>
+      {stored && <DomainClaimsSection workspaceId={workspaceId} />}
+      {stored && (
+        <div className={rowListClass}>
+          <SettingRow title="Stop enforcing SSO" description="Members go back to signing in with their own account">
             <button type="button" className={ghostButtonClass} onClick={() => setIsStopAsked(true)}>
               Stop enforcing SSO
             </button>
-          )}
+          </SettingRow>
         </div>
-        {isStopAsked && (
-          <fieldset aria-label="Stop enforcing SSO" className="flex flex-col gap-2">
-            <p className="text-sm">
-              Everyone is signed out of this workspace, you included, and signs in again with their own account. Its
-              claimed domains are released.
-            </p>
-            <div className="flex gap-3">
-              <button type="button" className={dangerButtonClass} disabled={isPending} onClick={stop}>
-                Stop enforcing
-              </button>
-              <button type="button" className={ghostButtonClass} onClick={() => setIsStopAsked(false)}>
-                Cancel
-              </button>
-            </div>
-          </fieldset>
-        )}
-        {refusal && <p className="text-sm text-muted">{refusal}</p>}
-        <ErrorMessage message={errorMessage} />
-      </form>
-      {stored && <DomainClaimsSection workspaceId={workspaceId} />}
-    </LabelledSection>
+      )}
+      {isStopAsked && (
+        <Dialog label="Stop enforcing SSO" onClose={() => setIsStopAsked(false)}>
+          <p className="text-sm text-muted">
+            Everyone is signed out of this workspace, you included, and signs in again with their own account. Its
+            claimed domains are released.
+          </p>
+          <ErrorMessage message={errorMessage} />
+          <button type="button" className={dangerButtonClass} disabled={isPending} onClick={stop}>
+            Stop enforcing
+          </button>
+        </Dialog>
+      )}
+    </section>
   )
 }

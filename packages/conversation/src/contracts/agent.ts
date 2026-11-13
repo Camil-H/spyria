@@ -72,7 +72,9 @@ export type AgentEventListener = { onEvent(event: AgentEvent): void; onClose(): 
 export type AgentLlmChoice = Readonly<
   { effort?: string; resumeSessionId?: string; adapterModel?: string } & ({ harness: HarnessId } | { pi: PiLaunch })
 >
-export type PiModel = Readonly<Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean }>
+export type PiModel = Readonly<
+  Pick<Model, 'id' | 'name' | 'contextWindow'> & { reasoning: boolean; readsImages: boolean }
+>
 export type PiLaunch = Readonly<{
   models: readonly PiModel[]
   compactionModel: string
@@ -115,6 +117,8 @@ export type RepositoryCheckouts = {
   issuesOf(chat: AgentChat, filter: IssueFilter): Promise<IssueSummary[]>
   issueOf(chat: AgentChat, number: number): Promise<Issue>
 }
+export type AgentAttachment = Readonly<{ id: string; name: string; content: Uint8Array }>
+export type SavedAttachment = Readonly<{ path: string; mediaType: string }>
 export type AgentClient = {
   createConversation(
     conversation: AgentConversation,
@@ -124,7 +128,13 @@ export type AgentClient = {
     checkout?: RepositoryCheckout,
   ): Promise<void>
   switchModel(conversation: AgentConversation, model: string | undefined, thoughtLevel?: string): Promise<void>
-  sendMessage(conversation: AgentConversation, text: string, promptId?: MessageId): Promise<void>
+  sendMessage(
+    conversation: AgentConversation,
+    text: string,
+    promptId?: MessageId,
+    attachments?: readonly SavedAttachment[],
+  ): Promise<void>
+  saveAttachment(conversation: AgentConversation, attachment: AgentAttachment): Promise<string>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>
   interrupt(conversation: AgentConversation, promptId?: MessageId): Promise<void>
@@ -159,6 +169,7 @@ type ClassifierCall = Readonly<{
 }>
 export type SessionClassifier = {
   listedModels(): readonly ListedModel[]
+  readsImages(modelId: string): Promise<boolean>
   classify(
     call: ClassifierCall,
   ): Promise<{ body: unknown; inputTokens: number; outputTokens: number } | { failure: string }>
