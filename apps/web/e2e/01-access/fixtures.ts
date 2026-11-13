@@ -23,7 +23,7 @@ export const signInThroughProvider = async (page: Page, email: string) => {
 }
 export const openMenu = async (page: Page) => {
   await switcherOf(page).click()
-  await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeVisible()
+  await expect(page.getByRole('menu')).toHaveAttribute('aria-busy', 'false')
 }
 export const menuItemNamesOf = async (page: Page) => {
   await openMenu(page)
