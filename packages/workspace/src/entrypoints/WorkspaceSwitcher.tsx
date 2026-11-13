@@ -18,7 +18,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
   const { memberId, signedInWorkspaceIds, signOut } = useSession()
   const workspaces = useQuery(listWorkspaces, memberId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
-  const [isCreationOpen, setIsCreationOpen] = useState(false)
+  const [isCreationOpen, setIsCreationOpen] = useState<boolean>()
   useEffect(() => {
     commands.isWorkspaceCreationOpen({ workspaceId }).then(setIsCreationOpen, () => setIsCreationOpen(false))
   }, [commands, workspaceId])
@@ -32,7 +32,7 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
         >
           <span className="truncate">{workspaces.find((workspace) => workspace.id === workspaceId)?.name}</span>
         </Trigger>
-        <Content align="start" sideOffset={4} className={menuContentClass}>
+        <Content align="start" sideOffset={4} className={menuContentClass} aria-busy={isCreationOpen === undefined}>
           {isCreationOpen && (
             <Item className={`${menuItemClass} justify-start gap-2`} onSelect={() => setOpenDialog({ kind: 'new' })}>
               <Plus aria-hidden className="size-4" />
