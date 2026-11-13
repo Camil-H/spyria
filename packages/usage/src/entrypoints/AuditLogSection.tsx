@@ -262,11 +262,7 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
           Load more
         </button>
       )}
-      <LabelledSection
-        title="Retention"
-        titleClass="text-sm font-medium"
-        className="mt-6 flex flex-col gap-3"
-      >
+      <LabelledSection title="Retention" titleClass="text-sm font-medium" className="mt-6 flex flex-col gap-3">
         <div className={`${cardClass} p-4`}>
           <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
         </div>
