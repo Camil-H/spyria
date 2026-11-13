@@ -54,7 +54,7 @@ export const syncMemberGatewayKey = (
         if (savedId !== virtualKeyId) await memberGatewayKeys.setVirtualKey(savedId)
       })
     } catch (error) {
-      if (savedId !== virtualKeyId) await gateway.removeVirtualKey(savedId)
+      if (savedId !== virtualKeyId || error instanceof MemberNotFound) await gateway.removeVirtualKey(savedId)
       else await gateway.saveVirtualKey({ id: virtualKeyId, keys })
       throw error
     }
