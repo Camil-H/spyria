@@ -909,6 +909,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 
 export const fakeHostVersion = 'test'
 export const fakeHostProtocolVersion = 4
+const fakeHostHeartbeatMilliseconds = 60 * 60_000
 export const fakeAgentProtocolVersion = 2
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
@@ -1140,6 +1141,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
           gatewayUrl: fakeHostGatewayUrl,
           hostVersion: fakeHostVersion,
           protocolVersion: fakeHostProtocolVersion,
+          heartbeatMilliseconds: fakeHostHeartbeatMilliseconds,
           ...(ownerId && { personal: true, signedIn: currentSignIns, credentialsChangedAt }),
           system: {
             cpus: 4,
