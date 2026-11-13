@@ -32,11 +32,11 @@ type SettingsCard = PageCard & {
 }
 
 const RuntimeSettings = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
-  <>
+  <div className="flex flex-col gap-10">
     <RuntimeHostsSection workspaceId={workspaceId} />
     <MemberLocalRuntimesSection workspaceId={workspaceId} />
     <SetupCommandsSection workspaceId={workspaceId} />
-  </>
+  </div>
 )
 
 const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[] = [
