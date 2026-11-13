@@ -24,10 +24,8 @@ const snapshot = {
   connectionAccess: ['crm', 'ledger'].flatMap((connectionId) =>
     ['admin', 'member'].map((roleId) => ({
       workspaceId: acme,
-      id: `${connectionId}-${roleId}`,
       connectionId,
       roleId,
-      memberId: null,
       level: 'write' as const,
       toolChanges: {},
     })),

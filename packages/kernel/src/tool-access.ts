@@ -8,8 +8,7 @@ export type ToolApproval = (typeof toolApprovals)[keyof typeof toolApprovals]
 export type ConnectionTool = Readonly<{ name: string; readOnly: boolean; destructive: boolean }>
 export type ToolServerAccess = Readonly<{
   connectionId: string
-  roleId: string | null
-  memberId: MemberId | null
+  roleId: string
   level: AccessLevel
   toolChanges: Readonly<Record<string, boolean>>
 }>
@@ -33,14 +32,8 @@ export const ownValueOf = <Value>(record: Readonly<Record<string, Value>> | unde
 export const isAllowedAtLevel = (level: AccessLevel, tool: ConnectionTool) =>
   level === accessLevels.write || (level === accessLevels.read && tool.readOnly)
 
-export const holderAccessOf = (
-  connectionId: string,
-  accessRows: readonly ToolServerAccess[],
-  { memberId, roleId }: ToolHolder,
-) => {
-  const ofServer = accessRows.filter((access) => access.connectionId === connectionId)
-  return ofServer.find((access) => access.memberId === memberId) ?? ofServer.find((access) => access.roleId === roleId)
-}
+export const holderAccessOf = (connectionId: string, accessRows: readonly ToolServerAccess[], { roleId }: ToolHolder) =>
+  accessRows.find((access) => access.connectionId === connectionId && access.roleId === roleId)
 
 export const toolsAllowedBy = (tools: readonly ConnectionTool[], access: ToolServerAccess | undefined) =>
   access

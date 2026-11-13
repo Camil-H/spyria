@@ -92,8 +92,8 @@ const sessionsOf = async (userId: string, gatewayName: string) => {
   const server = (await llmGateway.toolServers()).find(({ name }) => name === gatewayName)
   return server ? llmGateway.toolSessions((await virtualKeyOf(userId)).id, server) : []
 }
-const setCrmAccess = (memberId: string, level: string | null, toolChanges = {}) =>
-  setAccess('connection-crm', { memberId }, level, toolChanges)
+const setCrmAccess = (roleId: string, level: string | null, toolChanges = {}) =>
+  setAccess('connection-crm', { roleId }, level, toolChanges)
 const removeKeysOf = async (userId: string) => {
   for (const { id } of await database.$client<{ id: string }[]>`
     select id from llm_credentials where workspace_id = ${acme} and user_id = ${userId}`)
@@ -216,7 +216,7 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe('Bob needs to reconnect Docs')
   expect((await asMember(bob, 'POST', '/api/tool-connections/check')).status).toBe(204)
   expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Needs reconnection' }])
-  expect(await setAccess(connectionId, { memberId: bob }, 'none')).toBe(200)
+  expect(await setAccess(connectionId, { roleId: 'member' }, 'none')).toBe(200)
   expect(await signInsOf(connectionId)).toEqual([])
   expect(await sessionsOf(bob, gatewayName)).toEqual([])
   await removeKeysOf(bob)
@@ -264,8 +264,8 @@ test('a server each member signs in to is refused with a shared secret, keeps it
   expect(await gatewayClientNames()).not.toContain(gatewayName)
 })
 
-test('a member given Read is refused update on their own prompts, their key holds exactly lookup, and the key kept after the last LLM key is removed keeps that access', async () => {
-  expect(await setCrmAccess(bob, 'read')).toBe(200)
+test('a member whose role is given Read is refused update on their own prompts, their key holds exactly lookup, and the key kept after the last LLM key is removed keeps that access', async () => {
+  expect(await setCrmAccess('member', 'read')).toBe(200)
   await addLlmKey(bob, 'Mistral')
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
 
@@ -287,24 +287,32 @@ test('a member given Read is refused update on their own prompts, their key hold
     `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
   )
 
-  expect(await setCrmAccess(bob, 'none')).toBe(200)
+  expect(await setCrmAccess('member', 'none')).toBe(200)
   expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
-  expect(await setCrmAccess(bob, null)).toBe(200)
+  expect(await setCrmAccess('member', null)).toBe(200)
+  expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
+  expect(await setCrmAccess('member', 'write')).toBe(200)
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
-  expect(await setCrmAccess(bob, 'read', { delete: true })).toBe(400)
-  expect(await setCrmAccess(bob, 'everything')).toBe(400)
+  expect(await setCrmAccess('member', 'read', { delete: true })).toBe(400)
+  expect(await setCrmAccess('member', 'everything')).toBe(400)
   expect(
-    (await asMember(bob, 'POST', accessPath('connection-crm'), { memberId: bob, level: 'write', toolChanges: {} }))
-      .status,
+    (
+      await asMember(bob, 'POST', accessPath('connection-crm'), {
+        roleId: 'member',
+        level: 'write',
+        toolChanges: {},
+      })
+    ).status,
   ).toBe(403)
   expect(
     (await workspaceEventsOf(database))
       .filter(({ type, payload }) => type === 'connection.access_changed' && payload.connectionId === 'connection-crm')
       .map(({ payload }) => payload),
   ).toEqual([
-    { connectionId: 'connection-crm', memberId: bob, level: 'read', toolChanges: {} },
-    { connectionId: 'connection-crm', memberId: bob, level: 'none', toolChanges: {} },
-    { connectionId: 'connection-crm', memberId: bob, level: null, toolChanges: {} },
+    { connectionId: 'connection-crm', roleId: 'member', level: 'read', toolChanges: {} },
+    { connectionId: 'connection-crm', roleId: 'member', level: 'none', toolChanges: {} },
+    { connectionId: 'connection-crm', roleId: 'member', level: null, toolChanges: {} },
+    { connectionId: 'connection-crm', roleId: 'member', level: 'write', toolChanges: {} },
   ])
 })
 
@@ -370,33 +378,40 @@ test('a member moved to a role without access to a server they signed in to lose
   }
 })
 
-test("a member's own access syncs to them and to admins, never to other members, while every member reads the roles' access", async () => {
-  await setCrmAccess(lee, 'read')
-  const accessOf = async (userId: string, isLeeSynced: boolean) => {
-    const store = await openZeroStore(createZeroStore, userId as never, [acme])
-    const accessRows = () =>
-      store
-        .read()
-        .connectionAccess.map(
-          ({ roleId, memberId, level }): Record<string, string | null> => ({ roleId, memberId, level }),
-        )
-    await waitFor(
-      () =>
-        store.read().workspaceConnections.length > 0 &&
-        accessRows().some(({ roleId }) => roleId === 'member') &&
-        (!isLeeSynced || accessRows().some(({ memberId }) => memberId === lee)),
-    )
-    return accessRows()
+test("every member reads the access of every role of their workspace, and a role's change syncs to each of them", async () => {
+  expect(await setCrmAccess('admin', 'read', { update: true })).toBe(200)
+  try {
+    const adminAccess = {
+      connectionId: 'connection-crm',
+      roleId: 'admin',
+      level: 'read',
+      toolChanges: { update: true },
+    }
+    const crmAccessOf = async (userId: string) => {
+      const store = await openZeroStore(createZeroStore, userId as never, [acme])
+      const accessRows = () =>
+        store
+          .read()
+          .connectionAccess.filter(({ connectionId }) => connectionId === 'connection-crm')
+          .map(({ connectionId, roleId, level, toolChanges }) => ({ connectionId, roleId, level, toolChanges }))
+      await waitFor(() => accessRows().some((row) => row.roleId === 'admin' && row.level === 'read'))
+      return accessRows()
+    }
+    for (const userId of [alice, bob, lee])
+      expect(await crmAccessOf(userId)).toEqual(
+        expect.arrayContaining([
+          adminAccess,
+          { connectionId: 'connection-crm', roleId: 'member', level: 'write', toolChanges: {} },
+        ]),
+      )
+  } finally {
+    await setCrmAccess('admin', 'write')
   }
-  const leeAccess = { roleId: null, memberId: lee, level: 'read' }
-  expect(await accessOf(lee, true)).toContainEqual(leeAccess)
-  expect(await accessOf(alice, true)).toContainEqual(leeAccess)
-  expect(await accessOf(bob, false)).not.toContainEqual(leeAccess)
 })
 
 test('the admin’s review of what each tool does decides what Read grants, and only an admin reviews', async () => {
   const review = (userId: string, markings: object[]) => asMember(userId, 'POST', crmPath('review'), { markings })
-  expect(await setCrmAccess(alice, 'read')).toBe(200)
+  expect(await setCrmAccess('admin', 'read')).toBe(200)
   try {
     expect((await grantsOf(alice))[sharedToolServer]).toEqual(['lookup'])
     expect((await review(alice, [{ name: 'update', readOnly: true }])).status).toBe(200)
@@ -413,7 +428,7 @@ test('the admin’s review of what each tool does decides what Read grants, and 
     })
   } finally {
     await review(alice, [{ name: 'update', readOnly: false }])
-    await setCrmAccess(alice, null)
+    await setCrmAccess('admin', 'write')
   }
 })
 
@@ -507,7 +522,7 @@ test('editing replaces the secret in place, a new URL registers the server again
   expect((await grantsOf(alice))[secondName]).toEqual(['lookup', 'update'])
   expect(await lookupUser(secondName)).toEqual(['third-secret'])
 
-  expect(await setAccess(connectionId, { memberId: bob }, 'read')).toBe(200)
+  expect(await setAccess(connectionId, { roleId: 'member' }, 'read')).toBe(200)
   expect((await asMember(alice, 'POST', path('remove'))).status).toBe(200)
   expect(await connectionRow(connectionId)).toBeUndefined()
   expect((await database.$client`select 1 from connection_access where connection_id = ${connectionId}`).length).toBe(0)
@@ -563,7 +578,7 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
 
   const ordersPath = (action: string) => `${connectionsPath}/${connectionId}/${action}`
   const beforeNarrowing = changeCount()
-  expect(await setAccess(connectionId, { memberId: alice }, 'read')).toBe(200)
+  expect(await setAccess(connectionId, { roleId: 'admin' }, 'read')).toBe(200)
   await waitFor(() => changeCount() > beforeNarrowing)
   expect(await listedNames()).toContain(`${gatewayName}-lookup`)
   expect(await listedNames()).not.toContain(`${gatewayName}-update`)
@@ -648,7 +663,7 @@ test('the agent lists the tools of the member who prompted, so a guest’s turn 
       .map(({ name }) => name)
       .filter((name) => name.startsWith(`${gatewayName}-`))
   try {
-    expect(await setAccess(connectionId, { memberId: bob }, 'none')).toBe(200)
+    expect(await setAccess(connectionId, { roleId: 'member' }, 'none')).toBe(200)
     await waitFor(async () => (await ticketTools()).length > 0)
     await promptedBy(chatId, bob)
     await waitFor(async () => (await ticketTools()).length === 0)
