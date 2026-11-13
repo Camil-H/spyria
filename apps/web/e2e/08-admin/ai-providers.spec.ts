@@ -29,7 +29,7 @@ test.describe('AI providers', () => {
     await expect(addKeyDialogOf(page)).toHaveCount(0)
 
     await openSettings(page, 'AI providers')
-    await providersOf(page).getByRole('button', { name: 'Allow every provider' }).click()
+    await providersOf(page).getByRole('radio', { name: 'Every provider' }).check()
     await expect(providerSwitchOf(page, 'OpenAI')).toHaveAttribute('aria-checked', 'true')
   })
 })
