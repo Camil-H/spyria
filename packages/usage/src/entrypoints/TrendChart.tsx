@@ -1,18 +1,17 @@
 import { type PointerEvent, useState } from 'react'
 import type { SpendGranularity } from '../domain/spend.ts'
 import { formatBucket } from './format.ts'
+import { useChartWidth } from './useChartWidth.ts'
 
 type TrendPoint = { bucket: string; value: number | null }
 
 const lineColor = 'light-dark(#2a78d6, #3987e5)'
-const width = 640
 const height = 160
 const axisWidth = 64
 const rightPadding = 12
 const topPadding = 16
 const labelHeight = 20
 const gridSteps = [0, 0.5, 1]
-const plotWidth = width - axisWidth - rightPadding
 const plotHeight = height - labelHeight - topPadding
 
 const segmentsOf = (points: readonly { x: number; y: number | null }[]) => {
@@ -39,6 +38,8 @@ export const TrendChart = ({
   label: string
 }) => {
   const [hovered, setHovered] = useState<number | null>(null)
+  const { ref, width } = useChartWidth<HTMLElement>()
+  const plotWidth = width - axisWidth - rightPadding
   const largest = Math.max(...points.map((point) => point.value ?? 0), 0) || 1
   const xOf = (index: number) =>
     axisWidth + (points.length <= 1 ? plotWidth / 2 : (index * plotWidth) / (points.length - 1))
@@ -58,7 +59,7 @@ export const TrendChart = ({
     setHovered(Math.min(points.length - 1, Math.max(0, Math.round((x - axisWidth) / step))))
   }
   return (
-    <figure className="relative">
+    <figure ref={ref} className="relative">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={label}>
         {gridSteps.map((step) => (
           <g key={step}>
