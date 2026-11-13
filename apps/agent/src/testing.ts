@@ -44,7 +44,21 @@ export const clientOf = (port: number) => {
       content: [{ type: 'text', text }],
       run: true,
     })
-  return { call, open, create, prompt }
+  const attach = async (conversationId: string, id: string, name: string, content: string) => {
+    const { body } = await call('POST', `/api/conversations/${conversationId}/attachments`, {
+      id,
+      name,
+      content: Buffer.from(content).toString('base64'),
+    })
+    return String(body.path)
+  }
+  const promptWith = (conversationId: string, text: string, attachments: { path: string; mimeType: string }[]) =>
+    call('POST', `/api/conversations/${conversationId}/events`, {
+      role: 'user',
+      content: [{ type: 'text', text }, ...attachments.map((attachment) => ({ type: 'attachment', ...attachment }))],
+      run: true,
+    })
+  return { call, open, create, prompt, attach, promptWith }
 }
 
 export const kindOf = (kind: string) => (event: AgentEvent) => event.update.sessionUpdate === kind
@@ -73,7 +87,13 @@ export const createAgentTestbed = () => {
   })
   afterAll(() => rmSync(stateDirectory, { recursive: true, force: true }))
   const started = (options: Partial<Parameters<typeof startAgent>[0]> = {}) => {
-    const agent = startAgent({ apiKey, port: 0, homeDirectory: join(stateDirectory, 'home'), ...options })
+    const agent = startAgent({
+      apiKey,
+      port: 0,
+      homeDirectory: join(stateDirectory, 'home'),
+      attachmentsDirectory: join(stateDirectory, 'attachments'),
+      ...options,
+    })
     running.push(agent)
     return { agent, ...clientOf(agent.port) }
   }

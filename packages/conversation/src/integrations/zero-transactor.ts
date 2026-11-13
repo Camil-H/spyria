@@ -28,6 +28,7 @@ import {
   pendingPrompts,
   redactDeletedMessageEvents,
   runningDelegationOfTokenHash,
+  sentAttachmentOf,
   setChatAgentModel,
   setChatTurnFailure,
   setChatTurnPrompter,
@@ -336,6 +337,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         await deleteMessageAttachments(tx, contextWorkspaceId, id)
       },
       storedBytes: (uploaderId) => storedAttachmentBytesOf(tx, contextWorkspaceId, uploaderId),
+      contentOf: async (id, attachmentId) =>
+        (await sentAttachmentOf(tx, contextWorkspaceId, id, attachmentId))?.content,
     },
     agentJobs: {
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),

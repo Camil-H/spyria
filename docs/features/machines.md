@@ -4,7 +4,7 @@ This page explains where agent chats run: on the workspace's runtime hosts, or o
 
 ## Runtime hosts and runtimes
 
-A **runtime** is one container per runtime chat, made from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git and ripgrep. A **runtime host** is any machine with Docker that runs the host program, `spyria-host`. The host dials out to Spyria over a WebSocket and carries out a fixed set of commands (create, start, stop, remove a runtime, report status). Spyria never connects into the host, so a host needs no open port and Spyria never holds a key to it. See [Decisions](../decisions/).
+A **runtime** is one container per runtime chat, made from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git, ripgrep and poppler-utils. A **runtime host** is any machine with Docker that runs the host program, `spyria-host`. The host dials out to Spyria over a WebSocket and carries out a fixed set of commands (create, start, stop, remove a runtime, report status). Spyria never connects into the host, so a host needs no open port and Spyria never holds a key to it. See [Decisions](../decisions/).
 
 There are two kinds of host:
 

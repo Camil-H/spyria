@@ -11,6 +11,14 @@ import {
   unspawnedConnection,
 } from './acp.ts'
 import {
+  noPromptCapabilities,
+  type PromptBlock,
+  type PromptCapabilities,
+  promptBlocksOf,
+  promptCapabilitiesOf,
+  saveAttachment,
+} from './attachments.ts'
+import {
   checkOut,
   headOf,
   lastLinesOf,
@@ -79,6 +87,7 @@ type Conversation = {
   workspace?: AgentEvent
   questions: Map<string, PendingQuestion>
   configOptions: Json[]
+  promptCapabilities: PromptCapabilities
   events: BufferedEvent[]
   bufferedBytes: number
   lastSeq: number
@@ -131,7 +140,7 @@ const subAnswerText = 'No member is available; decide yourself and state your as
 const terminalToolStatuses = ['completed', 'failed']
 const keptCommandOutputCharacters = 1_000_000
 const conversationRoute =
-  /^\/api\/conversations\/([\w-]+)(?:\/(events|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
+  /^\/api\/conversations\/([\w-]+)(?:\/(events|attachments|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
@@ -303,6 +312,7 @@ export const startAgent = ({
   homeDirectory = process.env.HOME ?? '/home/spyria',
   packageCacheDirectory = '/var/cache/spyria',
   snapshotDirectory = '/var/lib/spyria/snapshot',
+  attachmentsDirectory = '/workspace/attachments',
 }: {
   apiKey: string
   port: number
@@ -316,6 +326,7 @@ export const startAgent = ({
   homeDirectory?: string
   packageCacheDirectory?: string
   snapshotDirectory?: string
+  attachmentsDirectory?: string
 }) => {
   const packageCacheEnvironment = packageCacheEnvironmentOf(packageCacheDirectory)
   const checkoutDirectories = { snapshot: snapshotDirectory, home: homeDirectory }
@@ -537,7 +548,11 @@ export const startAgent = ({
       mcpServers: mcpServersOf(agent?.mcp_config),
       _meta: { systemPrompt: { excludeDynamicSections: true } },
     }
-    await request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
+    const initialized = await request('initialize', {
+      protocolVersion: 1,
+      clientCapabilities: { elicitation: { form: {} } },
+    })
+    conversation.promptCapabilities = promptCapabilitiesOf(initialized)
     const resumeSessionId = agent?.acp_resume_session_id
     const resumed = resumeSessionId && (await reopened(conversation, resumeSessionId, sessionParams, isReload))
     const session = resumed || (await request('session/new', sessionParams))
@@ -841,6 +856,7 @@ export const startAgent = ({
       cwd,
       questions: new Map(),
       configOptions: [],
+      promptCapabilities: noPromptCapabilities,
       events: [],
       bufferedBytes: 0,
       lastSeq: 0,
@@ -869,7 +885,7 @@ export const startAgent = ({
 
   const prompt = (
     conversation: Conversation,
-    body: { content?: { type?: string; text?: string }[]; prompt_id?: unknown },
+    body: { content?: PromptBlock[]; prompt_id?: unknown },
     traceHeaders: Record<string, unknown>,
   ) => {
     const promptId = typeof body.prompt_id === 'string' ? body.prompt_id : undefined
@@ -888,9 +904,9 @@ export const startAgent = ({
       return conversation.promptsInFlight === 0
     }
     const startedAt = performance.now()
-    const promptParams = () => ({
+    const promptParams = async () => ({
       sessionId: conversation.sessionId,
-      prompt: (body.content ?? []).filter((block) => block.type === 'text').map(({ text }) => ({ type: 'text', text })),
+      prompt: await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities),
     })
     const turnEnded = (stopReason: unknown) =>
       log.info({
@@ -943,7 +959,7 @@ export const startAgent = ({
       const { connection } = conversation
       const promptSeq = conversation.lastSeq
       try {
-        ended(await connection.request('session/prompt', promptParams()))
+        ended(await connection.request('session/prompt', await promptParams()))
       } catch (rejection) {
         const error = (await timedOutConnections.get(connection)) ?? rejection
         if (conversation.connection !== connection) return endedByRestart()
@@ -1043,6 +1059,7 @@ export const startAgent = ({
     if (method === 'GET' && !action) return Response.json({ id: conversation.id, ...summaryOf(conversation) })
     if (method === 'DELETE' && !action) return remove(conversation)
     if (method !== 'POST') return Response.json({ error: 'Not found' }, { status: 404 })
+    if (action === 'attachments') return saveAttachment(attachmentsDirectory, await request.json())
     if (action === 'events')
       return prompt(conversation, await request.json(), {
         traceparent: request.headers.get('traceparent'),

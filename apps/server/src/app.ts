@@ -187,6 +187,7 @@ export const sessionClassifierOf =
       virtualKeyOf: createMemberKeyReader(transact, llmGateway),
       isBudgetUsedUp: async (workspaceId, memberId) => (await usedUpBudgetOf(workspaceId, memberId)) !== null,
       listedModels: llmGateway.listedModels,
+      readsImages: llmGateway.readsImages,
       headersOf: headersOf && ((chat) => headersOf(database, chat)),
       timeoutMilliseconds,
     })
