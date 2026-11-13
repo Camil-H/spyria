@@ -97,14 +97,40 @@ test('a forked runtime chat quotes its member and agent messages under the runti
   )
 })
 
-test('attachments are named to the agent, which cannot read them, also on a prompt without text', () => {
+test('the attachments of a prompt are given to the agent by the paths they were saved at, also without text, and one not saved is named as not readable', () => {
   const photo = { id: 'a1', name: 'photo.png', mediaType: 'image/png', size: 150 * 1024 }
-  expect(agentPromptTextOf({ body: MessageBody('What is this?'), attachments: [photo] }, undefined)).toBe(
-    'What is this?\n\nAttached, not readable by you: photo.png (image/png, 150 KB)',
+  const report = { id: 'a2', name: 'report.pdf', mediaType: 'application/pdf', size: 2048 }
+  const song = { id: 'a3', name: 'song.mp3', mediaType: 'audio/mpeg', size: 3 * 1024 * 1024 }
+  const savedPaths = new Map([
+    ['a1', '/workspace/attachments/a1/photo.png'],
+    ['a2', '/workspace/attachments/a2/report.pdf'],
+  ])
+  expect(
+    agentPromptTextOf(
+      { body: MessageBody('What is this?'), attachments: [photo, report, song] },
+      undefined,
+      undefined,
+      savedPaths,
+    ),
+  ).toBe(
+    [
+      'What is this?',
+      'Attached files, saved in your workspace: /workspace/attachments/a1/photo.png (image/png, 150 KB), /workspace/attachments/a2/report.pdf (application/pdf, 2 KB)',
+      'Attached, not readable by you: song.mp3 (audio/mpeg, 3.0 MB)',
+    ].join('\n\n'),
   )
-  expect(agentPromptTextOf({ body: MessageBody('', { allowsBlank: true }), attachments: [photo] }, undefined)).toBe(
-    'Attached, not readable by you: photo.png (image/png, 150 KB)',
-  )
+  expect(
+    agentPromptTextOf(
+      { body: MessageBody('', { allowsBlank: true }), attachments: [report] },
+      undefined,
+      undefined,
+      savedPaths,
+    ),
+  ).toBe('Attached files, saved in your workspace: /workspace/attachments/a2/report.pdf (application/pdf, 2 KB)')
+})
+
+test('attachments of earlier messages are named to the agent as not readable, images included', () => {
+  const photo = { id: 'a1', name: 'photo.png', mediaType: 'image/png', size: 150 * 1024 }
   expect(
     String(
       seedMessageBodyOf(channelThreadHeaderOf('Welcome'), [quoted('Alice', 'Look', '09:05', { attachments: [photo] })]),
