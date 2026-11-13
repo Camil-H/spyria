@@ -36,7 +36,7 @@ Each record states one decision: the context that called for it, what was decide
 | [0030](0030-workspace-tools-catalogue.md) | Tools come from a per-workspace catalogue, signed in to by each member or through one shared login (access revised by 0031) |
 | [0031](0031-tool-access-levels-and-approvals.md) | Tools are granted per role at a level, after an admin confirms what each tool does, and members choose their approvals (approvals amended by 0033, access by 0036) |
 | [0032](0032-runtimes-kept-ready-and-setup-snapshots.md) | Runtimes kept ready and setup snapshots per repository |
-| [0033](0033-tools-on-the-prompters-account.md) | The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's |
+| [0033](0033-tools-on-the-prompters-account.md) | The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's (access amended by 0036) |
 | [0034](0034-catalogue-tools-found-not-declared.md) | Catalogue tools are found when needed instead of declared on every call: code mode for Pi, per-chat switches and the spyria command |
 | [0035](0035-domain-claims.md) | A workspace may claim its organization's email domains, proven by DNS |
 | [0036](0036-tool-access-per-role-only.md) | Tool access is set per role only |
