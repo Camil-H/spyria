@@ -316,7 +316,7 @@ test.describe('Tools catalogue', () => {
     ).toContainText('ran lookup')
   })
 
-  test('As a member who can manage the tools catalogue, I remove CRM: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {
+  test('As a member who can manage the tools catalogue, I remove CRM from its folded row: it leaves members’ tool connections and the Connected tools tab, and its calls are refused', {
     tag: ['@spec-38'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -324,6 +324,8 @@ test.describe('Tools catalogue', () => {
     const bobCrm = await profileCrmOf(bobPage)
     await expect(bobCrm).toContainText('Shared login · 2 tools · 1 read · 1 write')
 
+    await page.reload()
+    await expect(crmCardOf(page).getByRole('region', { name: 'Access to CRM' })).toHaveCount(0)
     await crmCardOf(page).getByRole('button', { name: 'Actions for CRM' }).click()
     await page.getByRole('menuitem', { name: 'Remove' }).click()
     await page.getByRole('dialog', { name: 'Remove server' }).getByRole('button', { name: 'Remove' }).click()
@@ -395,7 +397,8 @@ test.describe('Tools catalogue', () => {
       await expect(builtIn).toContainText(
         "open_pageOpens a web page or a file of the project in the chat's Browser tab",
       )
-      await expect(builtIn.getByRole('button', { name: 'Actions for Spyria' })).toHaveCount(0)
+      await expect(builtIn.getByRole('button')).toHaveCount(1)
+      await expect(builtIn.getByRole('button', { name: /^Spyria/ })).toHaveAttribute('aria-expanded', 'true')
       await expect(builtIn.getByRole('combobox')).toHaveCount(0)
       await builtIn.getByRole('link', { name: 'Set in Quality gates' }).first().click()
       await expect(page).toHaveURL(/\/settings\/quality-gates$/)
