@@ -110,9 +110,18 @@ The page opens with whether SSO is enforced and through which provider, then the
 
 - **Enforce SSO** opens the provider's sign-in: you confirm by signing in through it with your own address, and nothing changes if that does not complete. From then on only that provider opens the workspace, for everyone, Admins included.
 - **Save and sign in again** changes the provider the same way. A new provider (another issuer or tenant) signs everyone out of the workspace; members sign in again through it, matched once by the address they were invited at. A new client or secret for the same provider keeps everyone signed in.
-- **Stop enforcing SSO**, below the form, asks in a dialog, then signs everyone out of the workspace, you included; they then sign in with their own accounts. It is refused when the deployment offers no account provider.
+- **Stop enforcing SSO**, below the form, asks in a dialog, then signs everyone out of the workspace, you included, and releases its claimed domains; they then sign in with their own accounts. It is refused when the deployment offers no account provider.
 
-A session opened through a workspace's own provider opens only that workspace: it cannot list or open the person's other workspaces, or create one.
+Until the workspace claims a domain, a session opened through its own provider opens only that workspace: it cannot list or open the person's other workspaces, or create one.
+
+**Domains** appears once the workspace enforces SSO. It lists the workspace's domains, each **Claimed** or **Waiting for the DNS record**:
+
+- **Claim** a domain such as `example.com`: Spyria shows the TXT record to add at it (`spyria-verify=…`, with a copy button). After adding it at your DNS provider, **Check the record**; DNS changes can take minutes, sometimes hours, and the check says when the record is not found yet. **Cancel the claim** drops a domain still waiting.
+- A claimed domain's addresses then sign in only through your provider, which also opens their other workspaces on this Spyria; they cannot create a workspace, and other workspaces cannot invite them. Members and invites at any other domain can no longer sign in to this workspace, and inviting such an address is refused. The rules are in [claimed domains](../guides/who-can-join.md#claimed-domains).
+- A domain claimed by another workspace of this Spyria is refused, as is a claim or **Release** that would leave your own address outside the workspace's claimed domains.
+- **Release** frees the domain at once: its addresses sign in with their own accounts again.
+
+Claims and releases are recorded in the audit log.
 
 ## GitHub
 
@@ -201,7 +210,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 |---|---|
 | Members | invites, revoked invites, joins, role changes, removals |
 | Workspace | workspace deleted, restored by the operator, AI providers allow-list changed, quality gates changed, setup commands changed |
-| Sign-in | SSO configured, client secret replaced |
+| Sign-in | SSO configured, client secret replaced, SSO stopped, domains claimed and released |
 | GitHub | App configured, App secrets replaced |
 | Tools | tool servers added, changed, removed, reviewed, and changes to who may use them |
 

@@ -14,6 +14,7 @@ import {
   type Page,
   pendingInvitesOf,
   ssoProviderIssuer,
+  ssoServerUrl,
   ssoViteUrl,
   switcherOf,
   test,
@@ -27,8 +28,6 @@ const accountSignInLabel = 'Continue with single sign-on'
 const organizationSignInLabel = "Continue with your organization's sign-in"
 const notEnforcedText = 'Members sign in with their own account, through the sign-in of this Spyria.'
 const enforcedText = "This workspace enforces SSO: only your organization's provider opens it"
-const accountSignInRequired =
-  "Your organization's sign-in opens only its workspace: sign in with your own account to do this"
 
 const signInSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Sign-in' })
 const providerFormOf = (page: Page) => signInSectionOf(page).getByRole('form', { name: 'SSO provider' })
@@ -91,6 +90,26 @@ const ssoEventsOf = async (workerStack: WorkerStack, workspaceId: string) =>
       select type from workspace_events where workspace_id = ${workspaceId} and type like 'sso.%' order by created_at`
   ).map(({ type }) => type)
 
+const domainsSectionOf = (page: Page) => signInSectionOf(page).getByRole('region', { name: 'Domains' })
+
+const claimTokenOf = async (workerStack: WorkerStack) =>
+  (await workerStack.database.$client<{ token: string }[]>`select token from domain_claims`)[0]?.token ?? ''
+
+const addTxtRecord = async (domain: string, record: string) => {
+  const response = await fetch(`${ssoServerUrl}/test/txt-records`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ domain, record }),
+  })
+  expect(response.status).toBe(204)
+}
+
+const domainEventsOf = async (workerStack: WorkerStack) =>
+  (
+    await workerStack.database.$client`
+      select type from workspace_events where workspace_id = 'workspace-acme' and type like 'domain.%' order by created_at`
+  ).map(({ type }) => type)
+
 const acmeSsoRowsOf = (workerStack: WorkerStack) =>
   workerStack.database.$client`select issuer, client_id from workspace_sso where workspace_id = 'workspace-acme'`
 
@@ -131,7 +150,7 @@ test.describe('SSO', () => {
     await test.step("signing in through my organization's sign-in opens the workspace that invited me", async () => {
       await signInThroughChosenProvider(page, 'nina@example.com', organizationSignInLabel)
       await expect(switcherOf(page)).toContainText('Acme')
-      expect(await menuItemNamesOf(page)).toEqual(['New workspace', 'Acme', 'Log out of Acme'])
+      expect(await menuItemNamesOf(page)).toEqual(['Acme', 'Log out of Acme'])
     })
 
     await test.step('a stranger is offered no choice: the popup goes straight to the sign-in of this Spyria', async () => {
@@ -308,27 +327,17 @@ test.describe('SSO', () => {
       await enforceAcmeSso(page)
       const throughOrganization = await openPageAs(browser, workerStack, null, ssoViteUrl)
 
-      await test.step("signing in through my organization's sign-in lists only its workspace", async () => {
+      await test.step("signing in through my organization's sign-in lists only its workspace and offers no New workspace", async () => {
         await signInThroughChosenProvider(throughOrganization, 'alice@example.com', organizationSignInLabel)
         await expect(switcherOf(throughOrganization)).toContainText('Acme')
-        expect(await menuItemNamesOf(throughOrganization)).toEqual(['New workspace', 'Acme', 'Log out of Acme'])
-      })
-
-      await test.step('creating a workspace from that session is refused and creates nothing', async () => {
-        await openMenu(throughOrganization)
-        await throughOrganization.getByRole('menuitem', { name: 'New workspace' }).click()
-        const dialog = throughOrganization.getByRole('dialog', { name: 'New workspace' })
-        await dialog.getByRole('textbox', { name: 'Workspace name' }).fill('Side project')
-        await dialog.getByRole('button', { name: 'Confirm' }).click()
-        await expect(dialog).toContainText(accountSignInRequired)
-        expect(await workerStack.database.$client`select 1 from workspaces where name = 'Side project'`).toHaveLength(0)
+        expect(await menuItemNamesOf(throughOrganization)).toEqual(['Acme', 'Log out of Acme'])
       })
 
       await test.step('stopping SSO asks to confirm, and Cancel keeps it enforced', async () => {
         await signInSectionOf(page).getByRole('button', { name: 'Stop enforcing SSO' }).click()
         const confirmation = page.getByRole('dialog', { name: 'Stop enforcing SSO' })
         await expect(confirmation).toContainText(
-          'Everyone is signed out of this workspace, you included, and signs in again with their own account.',
+          'Everyone is signed out of this workspace, you included, and signs in again with their own account. Its claimed domains are released.',
         )
         await confirmation.getByRole('button', { name: 'Cancel' }).click()
         await expect(confirmation).toHaveCount(0)
@@ -359,6 +368,51 @@ test.describe('SSO', () => {
         await bobPage.context().close()
       })
       await throughOrganization.context().close()
+    })
+
+    test("As an Admin, I claim my organization's domain with a DNS record: its addresses then sign in only through our provider, which opens each of their workspaces, and cannot create another", {
+      tag: ['@spec-37'],
+    }, async ({ page, browser, workerStack }) => {
+      await page.goto('/')
+      await enforceAcmeSso(page)
+      await workerStack.database.$client`
+        insert into memberships (workspace_id, user_id, role, display_name)
+        values ('workspace-globex', 'member-bob', 'member', 'Bob')`
+      const domains = domainsSectionOf(page)
+      const claim = domains.getByRole('listitem', { name: 'example.com' })
+
+      await test.step('claiming the domain shows the TXT record to add, and checking it before it exists claims nothing', async () => {
+        await domains.getByRole('textbox', { name: 'Domain' }).fill('Example.com')
+        await domains.getByRole('button', { name: 'Claim', exact: true }).click()
+        await expect(claim).toContainText('Waiting for the DNS record')
+        await expect(claim).toContainText(`spyria-verify=${await claimTokenOf(workerStack)}`)
+        await claim.getByRole('button', { name: 'Check the record' }).click()
+        await expect(domains).toContainText('The TXT record was not found at example.com yet')
+        await expect(claim).toContainText('Waiting for the DNS record')
+      })
+
+      await test.step('once the record is published, checking it claims the domain', async () => {
+        await addTxtRecord('example.com', `spyria-verify=${await claimTokenOf(workerStack)}`)
+        await claim.getByRole('button', { name: 'Check the record' }).click()
+        await expect(claim).toContainText('Claimed')
+        await expect(claim.getByRole('button', { name: 'Release' })).toBeVisible()
+        expect(await domainEventsOf(workerStack)).toEqual(['domain.claimed'])
+      })
+
+      await test.step('a member at the domain goes straight to our provider, which opens each of their workspaces, without New workspace', async () => {
+        const bobPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
+        await signInStraightThroughProvider(bobPage, 'bob@example.com')
+        await expect(switcherOf(bobPage)).toContainText('Acme')
+        expect(await menuItemNamesOf(bobPage)).toEqual(['Acme', 'Log out of Acme', 'Globex', 'Log out of Globex'])
+        await bobPage.context().close()
+      })
+
+      await test.step('releasing the domain frees it', async () => {
+        await claim.getByRole('button', { name: 'Release' }).click()
+        await expect(claim).toHaveCount(0)
+        expect(await workerStack.database.$client`select 1 from domain_claims`).toHaveLength(0)
+        expect(await domainEventsOf(workerStack)).toEqual(['domain.claimed', 'domain.released'])
+      })
     })
   })
 })

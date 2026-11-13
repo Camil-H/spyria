@@ -3,9 +3,10 @@ import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/
 import { workspacePermissions } from '@spyria/kernel'
 import { microsoftPersonalAccountsTenantId } from '@spyria/workspace/server'
 import { serializeSigned } from 'hono/utils/cookie'
-import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
+import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
+import { commonPath, type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
 import { runOperator } from '../testing/operator.ts'
 import {
   acme,
@@ -29,61 +30,6 @@ const { database } = testDatabase
 const emptyInstance = await createTestDatabase()
 await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKeyring = secretsKeyringOf('sso-integration-secrets-key-0123456789')
-const nowInSeconds = () => Math.floor(Date.now() / 1000)
-const commonPath = '/common/v2.0'
-
-const startFakeIdp = async (issuerPath = '', { confirmsEmail = true } = {}) => {
-  const keys = await generateKeyPair('RS256')
-  const publicKey = { ...(await exportJWK(keys.publicKey)), kid: 'fake-idp', alg: 'RS256', use: 'sig' }
-  const idp = {
-    claimsByCode: new Map<string, JWTPayload>(),
-    clientSecrets: {} as Record<string, string>,
-    requests: [] as string[],
-    tokenRequests: [] as URLSearchParams[],
-  }
-  const server = Bun.serve({
-    port: 0,
-    fetch: async (request) => {
-      const { pathname, origin } = new URL(request.url)
-      idp.requests.push(pathname)
-      const basePath = [commonPath, issuerPath].find((path) => pathname.startsWith(`${path}/`))
-      if (basePath === undefined) return new Response(null, { status: 404 })
-      const endpoint = `${origin}${basePath}`
-      const isCommon = basePath === commonPath
-      const route = pathname.slice(basePath.length)
-      if (route === '/.well-known/openid-configuration')
-        return Response.json({
-          issuer: isCommon ? `${origin}/{tenantid}/v2.0` : endpoint,
-          authorization_endpoint: `${endpoint}/auth`,
-          token_endpoint: `${endpoint}/token`,
-          jwks_uri: `${endpoint}/keys`,
-          response_types_supported: ['code'],
-          subject_types_supported: ['public'],
-          id_token_signing_alg_values_supported: ['RS256'],
-        })
-      if (route === '/keys') return Response.json({ keys: [publicKey] })
-      if (route !== '/token') return new Response(null, { status: 404 })
-      const form = new URLSearchParams(await request.text())
-      idp.tokenRequests.push(form)
-      if (form.get('client_secret') !== idp.clientSecrets[form.get('client_id') ?? ''])
-        return Response.json({ error: 'invalid_client' }, { status: 401 })
-      const claims = idp.claimsByCode.get(form.get('code') ?? '') ?? {}
-      const idToken = await new SignJWT({
-        iss: isCommon ? `${origin}/${claims.tid}/v2.0` : endpoint,
-        aud: form.get('client_id') ?? '',
-        iat: nowInSeconds(),
-        exp: nowInSeconds() + 60,
-        ...(confirmsEmail && { email_verified: true }),
-        ...claims,
-      })
-        .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
-        .sign(keys.privateKey)
-      return Response.json({ access_token: 'access', token_type: 'Bearer', id_token: idToken })
-    },
-  })
-  return Object.assign(idp, { origin: server.url.origin, issuer: `${server.url.origin}${issuerPath}`, server })
-}
-type FakeIdp = Awaited<ReturnType<typeof startFakeIdp>>
 
 const accountIdp = await startFakeIdp()
 const microsoftIdp = await startFakeIdp('/tenant-1/v2.0', { confirmsEmail: false })
@@ -229,8 +175,8 @@ const queryWith = (token: string) =>
     headers: { authorization: `Bearer ${token}` },
     body: JSON.stringify(['transform', []]),
   })
-const sessionCookieOf = async (workspaceId: string, userId: string, through?: 'workspace sso') => {
-  const [session] = await openSessions(database, userId, workspaceId, through)
+const sessionCookieOf = async (workspaceId: string, userId: string, providerWorkspaceId: string | null = null) => {
+  const [session] = await openSessions(database, userId, workspaceId, providerWorkspaceId)
   if (!session) throw new Error(`${userId} has no session in ${workspaceId}`)
   return `spyria_s_${workspaceId}=${session.sessionId}`
 }
@@ -610,7 +556,7 @@ test('a session keeps how it was opened: once its workspace starts or stops enfo
   await enforceSso('vandelay', hooliIdp)
   expect(await renewStatus('vandelay', throughAccount)).toBe(401)
   expect((await queryWith(accountToken)).status).toBe(401)
-  const throughSso = await sessionCookieOf('vandelay', alice, 'workspace sso')
+  const throughSso = await sessionCookieOf('vandelay', alice, 'vandelay')
   const ssoToken = await sessionTokenOf(database, 'vandelay', alice)
   expect((await queryWith(ssoToken)).status).toBe(200)
   await database.$client`delete from workspace_sso where workspace_id = 'vandelay'`
@@ -824,7 +770,7 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
 })
 
 test('rotating only the client secret keeps the sessions of the workspace and is recorded; a save without a secret keeps the stored one only for the same issuer and client id', async () => {
-  const aliceCookie = await sessionCookieOf('stark', alice, 'workspace sso')
+  const aliceCookie = await sessionCookieOf('stark', alice, 'stark')
   starkIdp.clientSecrets['spyria-stark'] = 'stark-secret-2'
   const rotated = await callbackAfter(
     starkIdp,
@@ -859,7 +805,7 @@ test('stopping SSO takes the workspace back to account sign-in and ends every se
       method: 'POST',
       headers: { authorization: await bearerOf('stark', userId) },
     })
-  const aliceCookie = await sessionCookieOf('stark', alice, 'workspace sso')
+  const aliceCookie = await sessionCookieOf('stark', alice, 'stark')
   expect((await stop(app, bob)).status).toBe(403)
   const refused = await stop(createApp({ database, ...ssoSettings, instanceSignInApps: {} }), alice)
   expect(refused.status).toBe(400)
@@ -881,7 +827,7 @@ test('stopping SSO takes the workspace back to account sign-in and ends every se
 test('an operator stops the SSO of a workspace whose provider no longer signs anyone in, ending its sessions', async () => {
   await addWorkspace('dunder')
   await enforceSso('dunder', hooliIdp)
-  const aliceCookie = await sessionCookieOf('dunder', alice, 'workspace sso')
+  const aliceCookie = await sessionCookieOf('dunder', alice, 'dunder')
   const stopped = await runOperator(testDatabase.name, ['workspace:stop-sso', 'dunder'])
   expect(stopped).toMatchObject({
     exitCode: 0,

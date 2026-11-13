@@ -15,6 +15,8 @@ const databaseNamed = (databaseName: string) => {
   return database
 }
 
+const txtRecordsByDomain = new Map<string, string[][]>()
+
 const app = createApp({
   database: createDatabase(databaseUrlOf('postgres')),
   ...testAuthSettings,
@@ -26,6 +28,11 @@ const app = createApp({
   instanceSignInApps: {
     oidc: { issuer: testAuthSettings.oidc.issuer, clientId: 'spyria-sso', clientSecret: 'spyria-sso-e2e-secret' },
   },
+  resolveTxt: async (domain) => txtRecordsByDomain.get(domain) ?? [],
+}).post('/test/txt-records', async (context) => {
+  const { domain, record } = await context.req.json<{ domain: string; record: string }>()
+  txtRecordsByDomain.set(domain, [...(txtRecordsByDomain.get(domain) ?? []), [record]])
+  return context.body(null, 204)
 })
 
 serveWithLifecycleLogs('sso_test_server', port, () =>

@@ -26,6 +26,7 @@ export const rateBudgets = {
   signInCallback: { count: 30, perMilliseconds: minute, per: 'address' },
   workspaceCreation: { count: 5, perMilliseconds: hour, per: 'address' },
   ssoChanges: { count: 10, perMilliseconds: hour, per: 'address' },
+  domainClaims: { count: 30, perMilliseconds: hour, per: 'address' },
   setupToken: { count: 10, perMilliseconds: hour, per: 'address' },
   hostConnection: { count: 10, perMilliseconds: minute, per: 'address' },
   zeroConnections: { count: 120, perMilliseconds: minute, per: 'address' },

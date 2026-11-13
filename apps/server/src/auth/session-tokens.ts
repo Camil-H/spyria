@@ -1,12 +1,12 @@
 import type { ZeroContext } from '@spyria/db/zero-queries'
-import { memberId, workspaceId } from '@spyria/kernel'
+import { memberId, type SignedInThrough, workspaceId } from '@spyria/kernel'
 import { jwtVerify, SignJWT } from 'jose'
 
 export type SessionClaims = { workspaceId: string; userId: string; sessionId: string }
 export type FindMember = (
   claims: SessionClaims,
   databaseName: string | undefined,
-) => Promise<{ hasLiveSession: boolean; signedInThroughWorkspaceSso: boolean } | undefined>
+) => Promise<{ hasLiveSession: boolean; signedInThrough: SignedInThrough } | undefined>
 export type Authentication =
   | { status: 200; context: ZeroContext; databaseName?: string; sessionId: string; expiresAt: number }
   | { status: 401 | 403 }
@@ -59,7 +59,7 @@ export const createSessionAuthenticator =
     if (!member.hasLiveSession) return { status: 401 }
     return {
       status: 200,
-      context: { ...context, signedInThroughWorkspaceSso: member.signedInThroughWorkspaceSso },
+      context: { ...context, signedInThrough: member.signedInThrough },
       databaseName,
       sessionId: claims.sid,
       expiresAt: claims.exp * 1000,

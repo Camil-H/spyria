@@ -233,7 +233,7 @@ const app = createApp({
         databaseByName(db),
         user,
         undefined,
-        'account',
+        null,
         context.req.header('user-agent'),
       ))
         setSessionCookie(context, appOrigin, session)
