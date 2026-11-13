@@ -191,6 +191,8 @@ test.each<[RuntimeState | undefined, boolean, RuntimeStatus]>([
   ['removed', true, 'Could not start'],
   ['running', false, 'Host offline'],
   ['stopped', false, 'Host offline'],
+  ['stopping', false, 'Host offline'],
+  ['removing', false, 'Host offline'],
   ['starting', false, 'Starting…'],
   ['failed', false, 'Could not start'],
 ])('a %s runtime with its host online %p reads %s', (state, hostOnline, status) => {

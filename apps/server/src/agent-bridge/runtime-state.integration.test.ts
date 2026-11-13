@@ -455,3 +455,23 @@ test('a prompt while the host is offline gets one notice and is answered after t
   expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(2)])
   expect(relay.prompts).toEqual(['Warm up', 'Are you there?'])
 })
+
+test('a prompt to a runtime stopping on an offline host gets one notice instead of waiting for it, and is answered once the host is back', async () => {
+  const { relay, host } = await agentHost()
+  const chat = await newRuntimeChat()
+  await answered(await prompt(chat, 'Warm up'))
+  await turnIs(chat, null)
+  await host.disconnect()
+  await database.$client`update runtimes set state = 'stopping', state_changed_at = now() where chat_id = ${chat}`
+
+  const waiting = await prompt(chat, 'Still there?')
+  await answered(waiting)
+  await jobDone('agent.prompt', { messageId: waiting })
+  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
+  expect(await turnOf(chat)).toBeNull()
+
+  await host.connect()
+  await answered(waiting, 2)
+  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(2)])
+  expect(relay.prompts).toEqual(['Warm up', 'Still there?'])
+})
