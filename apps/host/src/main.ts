@@ -198,7 +198,16 @@ const connect = () => {
     const system = await systemOf(docker)
     const declared = await declaration()
     if (socket.readyState !== WebSocket.OPEN) return
-    send({ type: 'hello', token, gatewayUrl, system, hostVersion, protocolVersion, ...declared })
+    send({
+      type: 'hello',
+      token,
+      gatewayUrl,
+      system,
+      hostVersion,
+      protocolVersion,
+      heartbeatMilliseconds,
+      ...declared,
+    })
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
     reconnectDelayMilliseconds = 1000
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)

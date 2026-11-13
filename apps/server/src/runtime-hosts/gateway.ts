@@ -6,6 +6,7 @@ import { log, type RuntimeHostId, type WorkspaceId } from '@spyria/kernel'
 import {
   type ConnectedHost,
   createHostSessionHandlers,
+  HostMarkedOffline,
   HostNotRegistered,
   HostRefused,
   type HostSessionFrame,
@@ -380,6 +381,14 @@ export const createRuntimeHostGateway = ({
           if (error instanceof HostRefused) {
             sendTo(connection, { type: 'refused', reason: error.message })
             return socket.close(refusedCloseCode, error.message.slice(0, maximumCloseReasonBytes))
+          }
+          if (error instanceof HostMarkedOffline) {
+            log.warn({
+              event: 'runtime_host.marked_offline',
+              body: 'A runtime host marked offline sent a heartbeat, so it was asked to reconnect',
+              attributes: connection.identified && hostAttributesOf(connection.identified.host),
+            })
+            return socket.close(tryAgainLaterCloseCode, 'Marked offline: say hello again')
           }
           log.error({ event: 'runtime_host.connection_failed', body: 'A runtime host connection failed', error })
           socket.close(1011, 'Internal error')
