@@ -26,7 +26,8 @@ export const interruptAgent = async (
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) !== promptId) return
   const subConversationIds = await transactor.run(({ delegations }) => delegations.stopRunning(chatId, promptId))
   const endpoint = await runtimes.endpointOf(chat)
-  if (endpoint?.conversationId) await agentClient.interrupt({ ...endpoint, conversationId: endpoint.conversationId })
+  if (endpoint?.conversationId)
+    await agentClient.interrupt({ ...endpoint, conversationId: endpoint.conversationId }, promptId)
   for (const conversationId of subConversationIds)
     if (endpoint) await agentClient.interrupt({ ...endpoint, conversationId }).catch(() => undefined)
   eventSockets.stopStreaming(chat, promptId)
