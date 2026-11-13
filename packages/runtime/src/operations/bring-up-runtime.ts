@@ -65,7 +65,9 @@ export const bringUpRuntime = async (
           ? 'create_failed'
           : 'start_failed'
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
-      runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
+      runtimes.save(
+        current.hostOnline ? transitioned(current, 'failed', now, failure) : transitioned(current, 'stopped', now),
+      ),
     )
     await provider.stop(sandbox).catch(() => {})
     log.error({
