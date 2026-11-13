@@ -1,5 +1,5 @@
 import type { GatewayKey } from '@spyria/kernel'
-import { type ListedModel, withRetries } from '@spyria/kernel'
+import { createBoundedCache, type ListedModel, withRetries } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import { UnsupportedProvider } from '../domain/errors.ts'
 import type { ConnectionTool } from '../domain/workspace-connection.ts'
@@ -27,6 +27,7 @@ type BifrostGateway = LlmGateway &
 
 const notFound = 404
 const mcpClientPageSize = 100
+const maximumCachedVirtualKeys = 1000
 const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
 const openAiCompatibleProviderAt = (baseUrl: string) => ({
   network_config: { base_url: baseUrl },
@@ -73,7 +74,7 @@ export const createLlmGateway = ({
   virtualKeyMilliseconds = 60_000,
 }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
-  const virtualKeyValues = new Map<string, { value: string; readAt: number }>()
+  const virtualKeyValues = createBoundedCache<string, { value: string; readAt: number }>(maximumCachedVirtualKeys)
   let listing: { models: readonly ListedModel[]; loadedAt: number; loading?: Promise<void> } = {
     models: [],
     loadedAt: 0,
@@ -371,7 +372,10 @@ export const createLlmGateway = ({
       const cached = virtualKeyValues.get(id)
       if (cached && Date.now() - cached.readAt < virtualKeyMilliseconds) return cached.value
       const read = await request('GET', `/api/governance/virtual-keys/${id}`)
-      if (!read.found) return undefined
+      if (!read.found) {
+        virtualKeyValues.delete(id)
+        return undefined
+      }
       const { value } = virtualKeyOf(read.body)
       virtualKeyValues.set(id, { value, readAt: Date.now() })
       return value
