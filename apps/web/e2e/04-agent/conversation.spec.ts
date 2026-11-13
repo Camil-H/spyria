@@ -147,7 +147,7 @@ test.describe('Conversation', () => {
         return
       }
       const chatName = `${harness.name} watched`
-      const chatId = await newHarnessChat(page, harness, chatName, { machine, workerStack })
+      const chatId = await newHarnessChat(page, harness, chatName, { machine })
       await addParticipant(workerStack, chatId, 'member-bob', 'reader')
       const bobPage = await openPageAs(browser, workerStack, 'member-bob')
       await openChat(bobPage, chatName)
@@ -167,7 +167,7 @@ test.describe('Conversation', () => {
 
     test(`As a prompter, after leaving and reopening the chat, I see a turn stream each word once and the stored answer match it [${harness.name}]`, {
       tag: ['@spec-25', '@stage-f'],
-    }, async ({ page, agentScript, reached, release, machine, workerStack }) => {
+    }, async ({ page, agentScript, reached, release, machine }) => {
       if (harness.name === 'Pi') {
         await openChat(page, 'Research')
         for (const _ of [1, 2]) {
@@ -187,7 +187,7 @@ test.describe('Conversation', () => {
         return
       }
       const chatName = `${harness.name} reopened`
-      await newHarnessChat(page, harness, chatName, { machine, workerStack })
+      await newHarnessChat(page, harness, chatName, { machine })
       for (const _ of [1, 2]) {
         await openChat(page, 'Welcome')
         await openChat(page, chatName)
@@ -204,7 +204,7 @@ test.describe('Conversation', () => {
 
     test(`As a prompter, I stop a turn during a command and the prompt I queued behind it is answered next in the same session [${harness.name}]`, {
       tag: ['@spec-25'],
-    }, async ({ page, agentScript, machine, workerStack }) => {
+    }, async ({ page, agentScript, machine }) => {
       if (harness.name === 'Pi') {
         await openChat(page, 'Research')
         await agentScript(research, { steps: [{ command: 'sleep 30' }], text: 'Never shown.' })
@@ -226,7 +226,7 @@ test.describe('Conversation', () => {
         await expect(mainOf(page)).not.toContainText(newSessionNotice)
         return
       }
-      await newHarnessChat(page, harness, `${harness.name} stopped`, { machine, workerStack })
+      await newHarnessChat(page, harness, `${harness.name} stopped`, { machine })
       await sendMessage(page, 'stub:long Sleep for a while')
       await expect(messageContaining(page, 'sleep 600').getByRole('img', { name: 'Running' })).toBeVisible()
       await sendMessage(page, 'Carry on')
