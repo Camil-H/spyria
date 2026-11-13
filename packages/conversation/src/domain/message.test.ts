@@ -13,6 +13,7 @@ import {
   deletedMessage,
   editedMessage,
   isAgentActivity,
+  isChangeableBy,
   type Message,
   quotedMessageOf,
   requireNotFrozen,
@@ -53,6 +54,21 @@ test('editedMessage and deletedMessage reject the owner on a prompt the quality 
   }
   expect(() => editedMessage(loopPrompt, alice, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
   expect(() => deletedMessage(loopPrompt, alice, editedAt)).toThrow(NotMessageAuthor)
+})
+
+test('a member changes only their own messages: not a step card stored with them as author, nor a quality-gates prompt', () => {
+  const qualityGatesPrompt: Message = {
+    ...messageByAlice,
+    step: { type: 'dev_loop_prompt', loopId: messageId('loop'), phase: 'command' },
+  }
+  const stepCard: Message = { ...messageByAlice, kind: 'step' }
+  expect(isChangeableBy(messageByAlice, alice)).toBe(true)
+  expect(isChangeableBy(messageByAlice, bob)).toBe(false)
+  expect(isChangeableBy(stepCard, alice)).toBe(false)
+  expect(isChangeableBy(qualityGatesPrompt, alice)).toBe(false)
+  expect(isChangeableBy({ ...messageByAlice, kind: 'agent', authorId: null }, alice)).toBe(false)
+  expect(() => editedMessage(stepCard, alice, MessageBody('Hi'), editedAt)).toThrow(NotMessageAuthor)
+  expect(() => deletedMessage(stepCard, alice, editedAt)).toThrow(NotMessageAuthor)
 })
 
 test('deletedMessage turns a live message into a tombstone that keeps its body and drops its attachments', () => {
