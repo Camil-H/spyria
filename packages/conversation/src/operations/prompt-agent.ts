@@ -3,6 +3,7 @@ import {
   can,
   chatModelsOf,
   cheapestModelOf,
+  createBoundedCache,
   defaultDeployment,
   disclosableMessageOf,
   type HarnessId,
@@ -51,6 +52,7 @@ type Prepared = { conversation: AgentConversation } | { refusal: string }
 type NotReady = Exclude<RuntimeReadiness, { state: 'ready' | 'starting' }>
 
 const runtimeStartPollMilliseconds = 500
+const maximumEarlyRoutes = 1000
 
 const quotedByPrompt = async ({ messages, members }: UnitOfWork, prompt: Message) => {
   const quoted = prompt.quotedMessageId ? await messages.find(prompt.quotedMessageId) : undefined
@@ -132,7 +134,7 @@ const routeSession = async (
 }
 
 type EarlyRoute = { promptId: MessageId; routed: Awaited<ReturnType<typeof routeSession>> }
-const earlyRoutes = new Map<string, Promise<EarlyRoute | undefined>>()
+const earlyRoutes = createBoundedCache<string, Promise<EarlyRoute | undefined>>(maximumEarlyRoutes)
 const earlyRouteKeyOf = ({ workspaceId, chatId }: AgentChat) => `${workspaceId}:${chatId}`
 
 const firstPromptRouteOf = async (dependencies: AgentDependencies, chat: AgentChat) => {
@@ -149,7 +151,7 @@ const firstPromptRouteOf = async (dependencies: AgentDependencies, chat: AgentCh
 }
 
 const routeWhileStarting = (dependencies: AgentDependencies, chat: AgentChat) => {
-  if (dependencies.fixedLlm || earlyRoutes.has(earlyRouteKeyOf(chat))) return
+  if (dependencies.fixedLlm || earlyRoutes.get(earlyRouteKeyOf(chat))) return
   earlyRoutes.set(
     earlyRouteKeyOf(chat),
     firstPromptRouteOf(dependencies, chat).catch(() => undefined),
