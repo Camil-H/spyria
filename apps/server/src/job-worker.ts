@@ -34,6 +34,29 @@ const jobLogs = {
 } as const
 
 export const maximumJobAttempts = 5
+const cleanupRetryGrowth = 5
+const cleanupJobTypes = new Set<string>(jobTypesOfDeletedWorkspaces)
+
+export const retryDelayOf = (
+  jobType: string,
+  attempt: number,
+  {
+    retryDelayMilliseconds,
+    cleanupRetryDelayMilliseconds,
+    maximumCleanupRetryDelayMilliseconds,
+  }: {
+    retryDelayMilliseconds: number
+    cleanupRetryDelayMilliseconds: number
+    maximumCleanupRetryDelayMilliseconds: number
+  },
+) =>
+  cleanupJobTypes.has(jobType)
+    ? Math.min(
+        cleanupRetryDelayMilliseconds * cleanupRetryGrowth ** (attempt - 1),
+        maximumCleanupRetryDelayMilliseconds,
+      )
+    : attempt * retryDelayMilliseconds
+
 const queuedJobsChannel = 'jobs_queued'
 const claimedJob = `workspace_id = $1 and id = $2 and state = 'running' and claimed_at = $3::timestamptz`
 
@@ -42,6 +65,8 @@ export const startJobWorker = (
   {
     pollIntervalMilliseconds = 1000,
     retryDelayMilliseconds = 1000,
+    cleanupRetryDelayMilliseconds = 5000,
+    maximumCleanupRetryDelayMilliseconds = 5 * 60_000,
     leaseMilliseconds = 5 * 60_000,
     maximumRunMilliseconds = 30 * 60_000,
     concurrency = 4,
@@ -57,6 +82,8 @@ export const startJobWorker = (
   }: {
     pollIntervalMilliseconds?: number
     retryDelayMilliseconds?: number
+    cleanupRetryDelayMilliseconds?: number
+    maximumCleanupRetryDelayMilliseconds?: number
     leaseMilliseconds?: number
     maximumRunMilliseconds?: number
     concurrency?: number
@@ -71,6 +98,7 @@ export const startJobWorker = (
     usageLogs?: Parameters<typeof createUsageJobs>[0]
   } = {},
 ) => {
+  const retryDelays = { retryDelayMilliseconds, cleanupRetryDelayMilliseconds, maximumCleanupRetryDelayMilliseconds }
   const transactionalHandlers: Record<string, TransactionalJobHandler | undefined> = sessionJobs
   const jobHandlers: Record<string, JobHandler | undefined> = {
     ...(sandboxProvider &&
@@ -250,7 +278,7 @@ export const startJobWorker = (
            run_at = now() + make_interval(secs => $6::double precision / 1000),
            finished_at = case when $4 = 'failed' then now() end
          where ${claimedJob}`,
-        [...jobKey, state, errorSummaryOf(error), isLastAttempt ? 0 : job.attempt * retryDelayMilliseconds],
+        [...jobKey, state, errorSummaryOf(error), isLastAttempt ? 0 : retryDelayOf(job.type, job.attempt, retryDelays)],
       )
       return { outcome: isLastAttempt ? 'failed' : 'retried', error }
     }

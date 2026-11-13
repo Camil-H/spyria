@@ -36,7 +36,13 @@ import {
 setDefaultTimeout(30_000)
 const { database, port, gateway, llmGateway, fakeMcp, resultOf } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
-const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, retryDelayMilliseconds: 100, llmGateway })
+const worker = startJobWorker(database, {
+  pollIntervalMilliseconds: 5,
+  retryDelayMilliseconds: 100,
+  cleanupRetryDelayMilliseconds: 100,
+  maximumCleanupRetryDelayMilliseconds: 400,
+  llmGateway,
+})
 afterEach(() => disconnectFakeHosts())
 afterAll(async () => {
   await disconnectFakeHosts()

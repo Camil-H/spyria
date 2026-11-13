@@ -46,6 +46,8 @@ const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
 const worker = startJobWorker(database, {
   pollIntervalMilliseconds: 5,
   retryDelayMilliseconds: 300,
+  cleanupRetryDelayMilliseconds: 300,
+  maximumCleanupRetryDelayMilliseconds: 1200,
   sandboxProvider: gateway.sandboxProvider,
   spyriaAgentImage: testSpyriaAgentImage,
 })
