@@ -135,7 +135,8 @@ test.describe('Workspace hosts', () => {
         return run
       })
     await test.step('removing an online host asks for confirmation, disconnects it and refuses it afterwards', async () => {
-      await hostRowOf(page, 'Home server').getByRole('button', { name: 'Remove' }).click()
+      await hostRowOf(page, 'Home server').getByRole('button', { name: 'Actions for Home server' }).click()
+      await page.getByRole('menuitem', { name: 'Remove' }).click()
       const confirmation = page.getByRole('dialog', { name: 'Remove runtime host' })
       await expect(confirmation).toContainText('Home server')
       await confirmation.getByRole('button', { name: 'Remove' }).click()

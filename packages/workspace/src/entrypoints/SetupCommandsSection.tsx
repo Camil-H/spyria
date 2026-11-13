@@ -2,6 +2,8 @@ import { useQuery } from '@spyria/db/react'
 import { maximumWarmRuntimes, type SetupCommand, type WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
+  calloutClass,
+  cardClass,
   ErrorMessage,
   fieldClass,
   ghostButtonClass,
@@ -74,12 +76,17 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
   const row = rows.find(({ repository }) => repository === selected)
   return (
     <LabelledSection title="Setup commands">
-      <p className="text-sm text-muted">
-        When a dev chat's runtime starts, and again after each restart, it runs the setup command of its repository
-        before the agent gets a message: the repository's own, else the default one. Nothing runs without one. Keep the
-        logic in a script of the repository, such as sh .spyria/setup.sh, and make it safe to run twice. Every member
-        can read these commands: never put a secret in one.
+      <p className="-mt-2 text-sm text-muted">
+        Each dev chat's runtime runs its repository's command, else the default one, when it starts and after each
+        restart, before the agent gets a message. Nothing runs without one.
       </p>
+      <details className="text-sm text-muted">
+        <summary className="cursor-pointer text-ink">Writing a good setup command</summary>
+        <p className="mt-1">
+          Keep the logic in a script of the repository, such as sh .spyria/setup.sh, and make it safe to run twice.
+        </p>
+      </details>
+      <p className={calloutClass}>Every member can read these commands: never put a secret in one.</p>
       <RepositoryTabs
         label="Setup commands"
         defaultLabel={defaultLabel}
@@ -89,7 +96,7 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
         onSelect={setSelected}
       />
       <form
-        className="flex flex-col gap-5"
+        className={`${cardClass} flex flex-col gap-5 p-4`}
         onSubmit={(event) => {
           event.preventDefault()
           save()
@@ -141,11 +148,9 @@ export const SetupCommandsSection = ({ workspaceId }: { workspaceId: WorkspaceId
                     }
                   />
                 </label>
-                <p id={warmRuntimesHintId} className="text-sm text-muted">
-                  Spyria keeps this many runtimes of {row.repository} started on the runtime hosts, with the setup
-                  command already run on its default branch, so a new dev chat on that branch starts at once. Each one
-                  counts as a runtime on its host. A copy of the repository as setup left it stays on each host, and new
-                  runtimes of {row.repository} start from it.
+                <p id={warmRuntimesHintId} className="text-xs text-muted">
+                  Started ahead on the runtime hosts with setup already run on the default branch, so a new dev chat on
+                  it starts at once. Each one counts as a runtime on its host.
                 </p>
               </div>
             )}
