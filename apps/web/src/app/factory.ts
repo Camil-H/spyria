@@ -28,6 +28,7 @@ import {
   type UsageCommands,
 } from '@spyria/usage/server'
 import {
+  createHttpDomainClaimCommands,
   createHttpGitHubCommands,
   createHttpSsoSettingsCommands,
   type WorkspaceCommands,
@@ -262,6 +263,7 @@ export const createApp = async (
         return input.workspaceId
       },
       ...ssoSettingsCommands,
+      ...createHttpDomainClaimCommands(postAsMember, fetchAsMember),
       confirmSsoSettings: async ({ workspaceId, form }) => {
         const outcome = await submitInPopup(form, '/auth/workspace-sso')
         if (outcome.status === 'signed_in') await store.renewSession(workspaceId)
