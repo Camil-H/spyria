@@ -76,6 +76,7 @@ const mergedPullsStatement = `
   select merged.chat_id as "chatId", chat.name as "chatName", merged.step->>'repository' as repository,
     (merged.step->>'number')::int as number, coalesce(merged.step->>'title', '') as title,
     coalesce(merged.step->>'url', '') as url,
+    to_char(merged.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "mergedAt",
     coalesce((select sum(call.cost_micros) from model_calls call
       where call.workspace_id = $1 and call.chat_id = merged.chat_id and call.called_at < $3), 0)::float8 as "costMicros"
   from changes merged

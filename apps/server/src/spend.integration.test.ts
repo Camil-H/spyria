@@ -15,9 +15,10 @@ type Report = {
     biggestMover: string | null
   }
   mergedPulls: {
-    pulls: { chatName: string; repository: string; number: number; costMicros: number }[]
+    pulls: { chatName: string; repository: string; number: number; mergedAt: string; costMicros: number }[]
     costMicros: number
     perPullMicros: number | null
+    trend: { bucket: string; perPullMicros: number | null }[]
   } | null
 }
 
@@ -110,16 +111,19 @@ test('the decomposition counts delegated calls in their parent turn and finds to
 
 test('cost per merged PR lists the PR merged this month with all its chat’s spend up to the period end', async () => {
   const { mergedPulls } = await reportOf('/api/spend')
+  const mergedAt = mergedPulls?.pulls[0]?.mergedAt ?? ''
+  expect(mergedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
   expect(mergedPulls).toMatchObject({
     costMicros: 60_000,
     perPullMicros: 60_000,
     pulls: [{ chatName: 'Invoice bug', repository: 'acme/app', number: 7, costMicros: 60_000 }],
   })
-  expect((await reportOf('/api/spend?period=last_month')).mergedPulls).toEqual({
-    pulls: [],
-    costMicros: 0,
-    perPullMicros: null,
-  })
+  expect(mergedPulls?.trend.filter((point) => point.perPullMicros !== null)).toEqual([
+    { bucket: mergedAt.slice(0, 10), perPullMicros: 60_000 },
+  ])
+  const lastMonth = (await reportOf('/api/spend?period=last_month')).mergedPulls
+  expect(lastMonth).toMatchObject({ pulls: [], costMicros: 0, perPullMicros: null })
+  expect(lastMonth?.trend.every((point) => point.perPullMicros === null)).toBe(true)
 })
 
 test('own usage holds only the requester’s calls, whatever member the request names', async () => {
