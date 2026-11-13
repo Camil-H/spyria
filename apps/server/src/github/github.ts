@@ -354,21 +354,41 @@ export const finishGitHubAppCreation = async (
   return dependencies.api.installationUrlOf(created.slug)
 }
 
+const sealedTokensOf = async (secretBox: SecretBox, { accessToken, refreshToken, accessExpiresAt }: UserTokens) => ({
+  accessToken: await secretBox.seal(accessToken),
+  refreshToken: refreshToken ? await secretBox.seal(refreshToken) : null,
+  accessExpiresAt: accessExpiresAt?.toISOString() ?? null,
+})
+
+const storeRefreshedTokens = async (
+  database: Database,
+  secretBox: SecretBox,
+  { workspaceId, userId }: Member,
+  tokens: UserTokens,
+) => {
+  const sealed = await sealedTokensOf(secretBox, tokens)
+  const updated = await database.$client`
+    update github_connections set encrypted_access_token = ${sealed.accessToken},
+      encrypted_refresh_token = ${sealed.refreshToken}, access_expires_at = ${sealed.accessExpiresAt}::timestamptz,
+      needs_reconnection = false, updated_at = now()
+    where workspace_id = ${workspaceId} and user_id = ${userId}
+    returning user_id`
+  return updated.length > 0
+}
+
 const storeUserTokens = async (
   database: Database,
   secretBox: SecretBox,
   { workspaceId, userId }: Member,
   login: string,
-  { accessToken, refreshToken, accessExpiresAt }: UserTokens,
+  tokens: UserTokens,
 ) => {
-  const sealedAccessToken = await secretBox.seal(accessToken)
-  const sealedRefreshToken = refreshToken ? await secretBox.seal(refreshToken) : null
+  const sealed = await sealedTokensOf(secretBox, tokens)
   await database.$client`
     insert into github_connections (workspace_id, user_id, login, encrypted_access_token, encrypted_refresh_token,
       access_expires_at, needs_reconnection, updated_at)
-    values (${workspaceId}, ${userId}, ${login}, ${sealedAccessToken}, ${sealedRefreshToken},
-      ${accessExpiresAt?.toISOString() ?? null}::timestamptz,
-      false, now())
+    values (${workspaceId}, ${userId}, ${login}, ${sealed.accessToken}, ${sealed.refreshToken},
+      ${sealed.accessExpiresAt}::timestamptz, false, now())
     on conflict (workspace_id, user_id) do update set login = excluded.login,
       encrypted_access_token = excluded.encrypted_access_token,
       encrypted_refresh_token = excluded.encrypted_refresh_token, access_expires_at = excluded.access_expires_at,
@@ -405,10 +425,10 @@ const connectionWithTokenOf = async (
           )
           .catch(loggedFailure(member.workspaceId))
       : undefined
-  if (refreshed && secretBox) {
-    await storeUserTokens(database, secretBox, member, row.login, refreshed)
-    return { login: row.login, state: 'connected', accessToken: async () => refreshed.accessToken }
-  }
+  if (refreshed && secretBox)
+    return (await storeRefreshedTokens(database, secretBox, member, refreshed))
+      ? { login: row.login, state: 'connected', accessToken: async () => refreshed.accessToken }
+      : null
   await database.$client`
     update github_connections set needs_reconnection = true, updated_at = now()
     where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
