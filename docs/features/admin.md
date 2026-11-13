@@ -2,7 +2,7 @@
 
 This page covers what workspace admins manage: members and invites, workspace and chat roles, sign-in, GitHub, shared tools, spend, budgets and the audit log, and deleting the workspace. It describes the features as admins and members see them; deployment steps (the sign-in providers, the GitHub App) are in [Manual install](../guides/self-hosting.md).
 
-Everything here is in **Workspace settings** (the workspace menu), as cards in three sections, each card with where it stands (a green, amber or grey dot when it is a state, such as a runtime host offline); Escape goes back from a card's page to the cards. Each page opens with its current state and its main action, lists its items as rows with a menu (**⋯**) for the actions on one item, and keeps rare or risky actions at the bottom. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
+Everything here is in **Workspace settings** (the workspace menu), as cards in three sections, each card with where it stands (a green, amber or grey dot when it is a state, such as a runtime host that is not connected); Escape goes back from a card's page to the cards. Each page opens with its current state and its main action, lists its items as rows with a menu (**⋯**) for the actions on one item, and keeps rare or risky actions at the bottom. A member sees only the cards their workspace role allows, and the server checks the same permission on every request, so hiding a card is a convenience, not the protection.
 
 | Section | Card | Permission needed |
 |---|---|---|

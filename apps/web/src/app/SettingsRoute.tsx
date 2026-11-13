@@ -3,7 +3,7 @@ import { useQuery, useScoped } from '@spyria/db/react'
 import { isAnyRuleOn, type WorkspaceId, type WorkspacePermission } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import { AiProvidersSection, WorkspaceConnectionsSection } from '@spyria/profile'
-import { MemberLocalRuntimesSection, RuntimeHostsSection } from '@spyria/runtime'
+import { hostStatusOf, MemberLocalRuntimesSection, RuntimeHostsSection } from '@spyria/runtime'
 import { formatCost, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
@@ -130,10 +130,12 @@ const aiProvidersStatusOf = (workspace: Snapshot['workspaces'][number] | undefin
 }
 
 const runtimeStatusOf = (hosts: readonly Snapshot['runtimeHosts'][number][]): CardStatus => {
-  const offlineCount = hosts.filter((host) => host.status === 'offline').length
+  const notConnectedCount = hosts.filter((host) => hostStatusOf(host) !== 'online').length
   const label = countLabelOf(hosts.length, 'runtime host')
   if (hosts.length === 0) return { label, tone: 'off' }
-  return offlineCount > 0 ? { label: `${label} · ${offlineCount} offline`, tone: 'attention' } : { label, tone: 'ok' }
+  return notConnectedCount > 0
+    ? { label: `${label} · ${notConnectedCount} not connected`, tone: 'attention' }
+    : { label, tone: 'ok' }
 }
 
 const cardStatusesOf =
