@@ -224,4 +224,25 @@ test.describe('Roles', () => {
     for (const builtInName of ['Owner', 'Editor', 'Prompter', 'Reader'])
       await expect(roleItemOf(page, builtInName).getByRole('button')).toHaveCount(0)
   })
+
+  test('As a member whose role only manages roles, I open Members and roles straight onto the permission grid, without a Members tab', {
+    tag: ['@spec-50'],
+  }, async ({ browser, workerStack }) => {
+    await insertWorkspaceRole(workerStack, 'role-keeper', 'Role keeper', ['roles.manage'])
+    await giveWorkspaceRole(workerStack, 'member-bob', 'role-keeper')
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await settingsLinkOf(bobPage).click()
+    const bobsCards = mainOf(bobPage).getByRole('region').getByRole('link')
+    await expect(bobsCards).toHaveCount(1)
+    await expect(bobsCards).toHaveAccessibleName('Members and roles')
+    await bobsCards.click()
+
+    await expect(mainOf(bobPage).getByRole('tablist', { name: 'Members and roles' })).toHaveCount(0)
+    await expect(mainOf(bobPage).getByRole('region', { name: 'Members' })).toHaveCount(0)
+    const workspaceRoles = mainOf(bobPage).getByRole('region', { name: 'Workspace roles' })
+    await expect(roleColumnIn(workspaceRoles, 'Role keeper')).toBeVisible()
+    await expect.poll(() => permissionsOfRoleIn(workspaceRoles, 'Role keeper')).toEqual(['Manage roles'])
+    await expect(workspaceRoles.getByRole('button', { name: 'New role' })).toBeVisible()
+    await bobPage.context().close()
+  })
 })

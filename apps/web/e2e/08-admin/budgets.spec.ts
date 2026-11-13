@@ -115,6 +115,10 @@ test.describe('Budgets', () => {
     await expect(budgetsOf(page).getByRole('region', { name: 'Over 80% of their budget' })).toContainText(
       /Bob · \$0\.80 of \$1\.00 \(80%\)/,
     )
+    await expect(mainOf(page).getByText('1 budget alert this month.')).toBeVisible()
+    await mainOf(page).getByRole('link', { name: 'See the budgets' }).click()
+    await expect(page).toHaveURL(/#budgets$/)
+    await expect(budgetsOf(page)).toBeInViewport()
   })
 
   test('As a member at 100% of my budget, my next prompt is refused with the budget notice and no model call reaches the gateway', {
