@@ -242,6 +242,8 @@ test.describe('Sidebar', () => {
     page,
   }) => {
     await test.step('reaches the log-out icons with the keyboard', async () => {
+      await openMenu(page)
+      await page.keyboard.press('Escape')
       await switcherOf(page).focus()
       await page.keyboard.press('Enter')
       await expect(page.getByRole('menuitem', { name: 'New workspace' })).toBeFocused()
