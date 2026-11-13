@@ -104,6 +104,31 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
   ])
 })
 
+test('an interrupt naming a prompt that already ended cancels nothing, one naming the running prompt cancels it', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
+  await promptWithId('hello', 'prompt-ended')
+  await socket.until(kindOf('turn_end'))
+  await promptWithId('stub:long', 'prompt-running')
+  await socket.until((event) => event.update.status === 'in_progress')
+
+  expect((await interrupt('prompt-ended')).status).toBe(200)
+  await Bun.sleep(100)
+  expect(socket.events.filter(kindOf('turn_end'))).toHaveLength(1)
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
+
+  expect((await interrupt('prompt-running')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({
+    stopReason: 'cancelled',
+    promptId: 'prompt-running',
+  })
+})
+
 test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())

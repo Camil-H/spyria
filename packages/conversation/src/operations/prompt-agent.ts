@@ -450,7 +450,7 @@ export const promptAgent = async (
     return transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chatId, prompt.id, () => notice))
   }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) !== prompt.id)
-    await agentClient.interrupt(conversation)
+    await agentClient.interrupt(conversation, prompt.id)
   await runtimes.touch(chat)
   return undefined
 }
