@@ -164,7 +164,7 @@ test.describe('Spend', () => {
       test('As a member, I see only my own usage in my Profile, per chat and per model, with my decomposition without the Users factor', {
         tag: ['@spec-45'],
       }, async ({ page }) => {
-        await openProfile(page)
+        await openProfile(page, 'Usage')
         const section = usageSectionOf(page, 'My usage')
         await expect(section).toContainText('$0.02 · 2 requests')
         await expect(legendOf(section)).toHaveText(['openai/gpt-5$0.02'])

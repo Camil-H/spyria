@@ -197,7 +197,7 @@ test.describe('Questions', () => {
       const releaseAliceAnswer = await holdAnswers(page)
       await questionOf(page).getByRole('button', { name: 'Submit' }).click()
 
-      await openProfile(bobPage)
+      await openProfile(bobPage, 'LLM keys')
       await addCredential(bobPage, { provider: 'OpenAI', secret: `fake-key-${crypto.randomUUID()}` })
       await expect(llmSectionOf(bobPage).getByRole('listitem').filter({ hasText: 'OpenAI' })).toBeVisible()
       await openChat(bobPage, 'Research')

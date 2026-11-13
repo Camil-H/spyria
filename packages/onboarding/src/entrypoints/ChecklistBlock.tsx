@@ -43,7 +43,7 @@ const TaskRow = ({
   onSkip: () => void
   isPending: boolean
 }) => {
-  const { title, explanation, page, section } = taskTextOf(view.task)
+  const { title, explanation, page } = taskTextOf(view.task)
   const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
   return (
     <li className="flex items-start gap-3 py-2">
@@ -51,15 +51,9 @@ const TaskRow = ({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span>
           <span className="sr-only">To do: </span>
-          {view.scope === 'member' && section ? (
-            <a href={`#${section}`} className={linkClass}>
-              {title}
-            </a>
-          ) : (
-            <Link to={`/w/${workspaceId}/${page}`} className={linkClass}>
-              {title}
-            </Link>
-          )}
+          <Link to={`/w/${workspaceId}/${page}`} className={linkClass}>
+            {title}
+          </Link>
         </span>
         <span className="text-sm text-muted">{explanation}</span>
       </div>

@@ -274,7 +274,7 @@ test.describe('Steps', () => {
     tag: ['@spec-25'],
   }, async ({ browser, workerStack, agentScript, release, heldCommand }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'LLM keys')
     await addCredential(bobPage, { provider: 'Anthropic', secret: `fake-key-${crypto.randomUUID()}` })
     await expect(llmSectionOf(bobPage).getByRole('listitem').filter({ hasText: 'Anthropic' })).toBeVisible()
     const chatId = await newRuntimeChat(bobPage, 'Bob on Anthropic')

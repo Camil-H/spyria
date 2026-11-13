@@ -33,7 +33,7 @@ export const SidebarChecklistLink = ({
   if (doneCount === tasks.length) return null
   const nextTask = nextTaskOf(tasks)
   const nextText = nextTask && taskTextOf(nextTask)
-  const target = `/w/${workspaceId}/${nextText ? `${nextText.page}${nextText.section ? `#${nextText.section}` : ''}` : 'settings'}`
+  const target = `/w/${workspaceId}/${nextText ? nextText.page : 'settings'}`
   const label = `Get started: ${doneCount} of ${tasks.length} done`
   if (isCollapsed)
     return (

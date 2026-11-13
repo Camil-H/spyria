@@ -4,7 +4,7 @@ test.describe('Host versions', () => {
   test.use({ runtimeHost: false, signedInAs: 'member-bob' })
 
   const addMachine = async (page: Page) => {
-    await openProfile(page)
+    await openProfile(page, 'My machine')
     await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add my machine' })
     const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()

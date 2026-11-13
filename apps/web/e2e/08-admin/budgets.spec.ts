@@ -82,7 +82,7 @@ test.describe('Budgets', () => {
     await expect(budgetRowOf(page, 'Bob').getByRole('cell').nth(1)).toHaveText('70%')
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'Usage')
     const bar = myUsageOf(bobPage).getByRole('progressbar', { name: 'Monthly AI budget used' })
     await expect(bar).toHaveAttribute('aria-valuenow', '70')
     await expect(myUsageOf(bobPage)).toContainText('$0.70 of $1.00 (70%)')
@@ -103,7 +103,7 @@ test.describe('Budgets', () => {
     await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
     await syncUntilAlert(workerStack, bobPage, 'You have used 80% of your monthly AI budget')
 
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'Usage')
     await expect(myUsageOf(bobPage).getByRole('status', { name: 'Budget alert' })).toHaveText(
       'You have used 80% of your monthly AI budget',
     )
@@ -196,7 +196,7 @@ test.describe('Budgets', () => {
     await expect(budgetRowOf(page, 'Lee').getByRole('cell').nth(1)).toHaveText('0%')
 
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
-    await openProfile(leePage)
+    await openProfile(leePage, 'Usage')
     await expect(myUsageOf(leePage)).toContainText('$0.00 of $3.00 (0%)')
     await expect(mainOf(leePage)).not.toContainText('Bob')
     await expect(mainOf(leePage)).not.toContainText('$0.90')
