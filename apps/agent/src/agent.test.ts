@@ -56,6 +56,25 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
   expect((await call('GET', `/api/conversations/${id}`)).status).toBe(404)
 })
 
+test('a conversation stays running while a later prompt runs after an earlier one was stopped, and finishes with the last', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const statusOf = async () => (await call('GET', `/api/conversations/${id}`)).body.execution_status
+  const isRunningCall = (event: AgentEvent) => event.update.status === 'in_progress'
+  await prompt(id, 'stub:long')
+  await socket.until(isRunningCall)
+  await prompt(id, 'stub:long')
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  const stoppedTurnEnd = (await socket.until(kindOf('turn_end'))).findIndex(kindOf('turn_end'))
+  await socket.until((event) => socket.events.indexOf(event) > stoppedTurnEnd && isRunningCall(event))
+  expect(await statusOf()).toBe('running')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(await statusOf()).toBe('finished')
+})
+
 test('a prompt sent again with its id runs once: while it runs the repeat is ignored, once ended the repeat resends its turn end', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())

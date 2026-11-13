@@ -84,6 +84,7 @@ type Conversation = {
   lastSeq: number
   toolCalls: Map<string, ToolCallState>
   turnEnds: Map<string, Json | undefined>
+  promptsInFlight: number
   sockets: Set<ServerWebSocket<SocketData>>
   started: Promise<void>
   isSettingUp: boolean
@@ -838,6 +839,7 @@ export const startAgent = ({
       lastSeq: 0,
       toolCalls: new Map(),
       turnEnds: new Map(),
+      promptsInFlight: 0,
       sockets: new Set(),
       started: Promise.resolve(),
       isSettingUp: false,
@@ -872,6 +874,11 @@ export const startAgent = ({
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
     if (promptId) rememberPrompt(conversation, promptId)
     conversation.status = 'running'
+    conversation.promptsInFlight += 1
+    const isLastInFlight = () => {
+      conversation.promptsInFlight -= 1
+      return conversation.promptsInFlight === 0
+    }
     const startedAt = performance.now()
     const promptParams = () => ({
       sessionId: conversation.sessionId,
@@ -895,7 +902,7 @@ export const startAgent = ({
     }
     const ended = (result: Json) => {
       turnEnded(result.stopReason)
-      conversation.status = 'finished'
+      if (isLastInFlight()) conversation.status = 'finished'
       closeQuestions(conversation, 'turn_end')
       endTurn(result.stopReason)
       void reportWorkspace(conversation)
@@ -910,8 +917,9 @@ export const startAgent = ({
         },
         error,
       })
+      const isLast = isLastInFlight()
       if (conversation.status !== 'error') {
-        conversation.status = 'finished'
+        if (isLast) conversation.status = 'finished'
         emit(conversation, errorUpdateOf(error))
       }
       closeQuestions(conversation, 'turn_end')
@@ -919,6 +927,7 @@ export const startAgent = ({
       void reportWorkspace(conversation)
     }
     const endedByRestart = () => {
+      isLastInFlight()
       turnEnded('restarted')
       endTurn('cancelled')
     }
