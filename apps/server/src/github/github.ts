@@ -364,7 +364,7 @@ const storeRefreshedTokens = async (
   database: Database,
   secretBox: SecretBox,
   { workspaceId, userId }: Member,
-  tokens: UserTokens,
+  { tokens, encryptedRefreshTokenUsed }: { tokens: UserTokens; encryptedRefreshTokenUsed: string },
 ) => {
   const sealed = await sealedTokensOf(secretBox, tokens)
   const updated = await database.$client`
@@ -372,6 +372,7 @@ const storeRefreshedTokens = async (
       encrypted_refresh_token = ${sealed.refreshToken}, access_expires_at = ${sealed.accessExpiresAt}::timestamptz,
       needs_reconnection = false, updated_at = now()
     where workspace_id = ${workspaceId} and user_id = ${userId}
+      and encrypted_refresh_token = ${encryptedRefreshTokenUsed}
     returning user_id`
   return updated.length > 0
 }
@@ -432,14 +433,21 @@ const connectionWithTokenOf = async (
           )
           .catch(loggedFailure(member.workspaceId))
       : undefined
-  if (refreshed && secretBox)
-    return (await storeRefreshedTokens(database, secretBox, member, refreshed))
+  if (refreshed && secretBox && row.encryptedRefreshToken)
+    return (await storeRefreshedTokens(database, secretBox, member, {
+      tokens: refreshed,
+      encryptedRefreshTokenUsed: row.encryptedRefreshToken,
+    }))
       ? { login: row.login, state: 'connected', accessToken: async () => refreshed.accessToken }
-      : null
-  await database.$client`
+      : connectionWithTokenOf(database, dependencies, member)
+  const marked = await database.$client`
     update github_connections set needs_reconnection = true, updated_at = now()
-    where workspace_id = ${member.workspaceId} and user_id = ${member.userId}`
-  return { login: row.login, state: 'needs_reconnection' }
+    where workspace_id = ${member.workspaceId} and user_id = ${member.userId}
+      and encrypted_refresh_token is not distinct from ${row.encryptedRefreshToken}
+    returning user_id`
+  return marked.length > 0
+    ? { login: row.login, state: 'needs_reconnection' }
+    : connectionWithTokenOf(database, dependencies, member)
 }
 
 export const githubConnectionOf = async (
