@@ -86,8 +86,8 @@ export const RetryRefused = errorKind(
   () => 'Only a runtime that could not start can be retried',
   RuntimeError,
 )
-export const ChatArchived = errorKind(
-  'chat_archived',
+export const RuntimeChatArchived = errorKind(
+  'runtime_chat_archived',
   () => 'This chat is archived: it starts no runtime',
   RuntimeError,
 )

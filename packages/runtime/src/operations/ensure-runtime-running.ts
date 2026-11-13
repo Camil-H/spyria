@@ -1,6 +1,6 @@
 import { type ChatId, runtimeId, type WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { ChatArchived, RetryRefused } from '../domain/errors.ts'
+import { RetryRefused, RuntimeChatArchived } from '../domain/errors.ts'
 import {
   ensureStepOf,
   isAwaitingHost,
@@ -73,7 +73,7 @@ const placeRuntime = async (
 
 const lockedRuntimeOfOpenChat = async ({ runtimes }: UnitOfWork, { workspaceId, chatId }: Input) => {
   const existing = await runtimes.lockByChat(workspaceId, chatId)
-  if (await runtimes.isChatArchived(workspaceId, chatId)) throw new ChatArchived()
+  if (await runtimes.isChatArchived(workspaceId, chatId)) throw new RuntimeChatArchived()
   return existing
 }
 
