@@ -12,6 +12,7 @@ import {
 } from '@spyria/ui'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import type { SsoPreset, SsoSettingsView } from '../domain/sso.ts'
+import { DomainClaimsSection } from './DomainClaimsSection.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 
 const presetLabels: Record<SsoPreset, string> = {
@@ -219,7 +220,8 @@ const SsoSettingsForm = ({
         {isStopAsked && (
           <fieldset aria-label="Stop enforcing SSO" className="flex flex-col gap-2">
             <p className="text-sm">
-              Everyone is signed out of this workspace, you included, and signs in again with their own account.
+              Everyone is signed out of this workspace, you included, and signs in again with their own account. Its
+              claimed domains are released.
             </p>
             <div className="flex gap-3">
               <button type="button" className={dangerButtonClass} disabled={isPending} onClick={stop}>
@@ -234,6 +236,7 @@ const SsoSettingsForm = ({
         {refusal && <p className="text-sm text-muted">{refusal}</p>}
         <ErrorMessage message={errorMessage} />
       </form>
+      {stored && <DomainClaimsSection workspaceId={workspaceId} />}
     </LabelledSection>
   )
 }
