@@ -3,8 +3,9 @@ import {
   accountOf,
   addLlmKey,
   addParticipant,
+  approvalsOf,
+  chooseConnectionAction,
   connectFake,
-  connectionsOf,
   expect,
   lastToolResultOf,
   messageItemsOf,
@@ -144,15 +145,13 @@ test.describe('Guest rights', () => {
   test('As a chat owner, I set CRM’s update to Always in my approvals, and my own prompt waits for my approval before it runs', {
     tag: ['@spec-58'],
   }, async ({ page, agentScript }) => {
-    await openProfile(page)
-    const crmRow = connectionsOf(page).getByRole('listitem', { name: 'CRM' })
-    await crmRow.getByRole('button', { name: 'Approvals for CRM' }).click()
-    const updateApproval = crmRow
-      .getByRole('region', { name: 'Approvals for CRM' })
-      .getByRole('combobox', { name: 'Approval for update' })
+    await openProfile(page, 'Connections')
+    await chooseConnectionAction(page, 'CRM', 'Approvals')
+    const updateApproval = approvalsOf(page, 'CRM').getByRole('combobox', { name: 'Approval for update' })
     await expect(updateApproval.locator('option:checked')).toHaveText("Default (On a guest's prompt)")
     await updateApproval.selectOption('always')
     await expect(updateApproval).toHaveValue('always')
+    await approvalsOf(page, 'CRM').getByRole('button', { name: 'Done' }).click()
 
     await openChat(page, 'Research')
     await agentScript(research, updateScript('Updated the record.'))

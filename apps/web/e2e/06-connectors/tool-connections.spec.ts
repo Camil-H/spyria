@@ -3,6 +3,7 @@ import { fakeMcpUrl, gatewayUrl } from '../stack-ports'
 import {
   accountOf,
   addLlmKey,
+  chooseConnectionAction,
   connectFake,
   connectionsOf,
   expect,
@@ -47,7 +48,7 @@ const whoamiThroughGateway = async (workerStack: WorkerStack, workspace: string)
 }
 
 const toolRowOf = (page: Page, name: string) =>
-  connectionsOf(page).getByRole('list', { name: 'Tools' }).getByRole('listitem', { name, exact: true })
+  connectionsOf(page).getByRole('list', { name: 'Connections' }).getByRole('listitem', { name, exact: true })
 
 test.describe('Tool connections', () => {
   test.beforeEach(async ({ page }) => {
@@ -57,16 +58,19 @@ test.describe('Tool connections', () => {
   test('As a member, I see the workspace’s tools in one list: a shared login with the tools I may use, and each server I sign in to with its status and Connect', async ({
     page,
   }) => {
-    await openProfile(page)
+    await openProfile(page, 'Connections')
 
     await test.step('lists my GitHub account and every tool of the catalogue, without tabs', async () => {
-      await expect(connectionsOf(page)).toContainText('GitHub account')
+      await expect(connectionsOf(page).getByRole('listitem', { name: 'GitHub account' })).toBeVisible()
       await expect(connectionsOf(page).getByRole('tab')).toHaveCount(0)
     })
 
     await test.step('shows the shared-login server with the count of my tools, nothing to connect and my approvals', async () => {
-      await expect(toolRowOf(page, 'CRM')).toHaveText('CRMShared login: 2 tools · 1 read · 1 writeApprovals for CRM')
-      await expect(toolRowOf(page, 'CRM').getByRole('button')).toHaveText(['Approvals for CRM'])
+      await expect(toolRowOf(page, 'CRM')).toHaveText('CRMShared login · 2 tools · 1 read · 1 write')
+      await expect(toolRowOf(page, 'CRM').getByRole('button')).toHaveCount(1)
+      await toolRowOf(page, 'CRM').getByRole('button', { name: 'Actions for CRM' }).click()
+      await expect(page.getByRole('menuitem')).toHaveText(['Approvals'])
+      await page.keyboard.press('Escape')
     })
 
     await test.step('shows each server I sign in to as not connected, with Connect', async () => {
@@ -81,7 +85,7 @@ test.describe('Tool connections', () => {
   test('As a member, I connect and disconnect a tool, and the chat’s Connected tools panel follows', async ({
     page,
   }) => {
-    await openProfile(page)
+    await openProfile(page, 'Connections')
 
     await test.step('connects a server of the catalogue', async () => {
       await inPopup(page, () =>
@@ -99,8 +103,8 @@ test.describe('Tool connections', () => {
     })
 
     await test.step('disconnects it and offers to connect it again', async () => {
-      await openProfile(page)
-      await toolRowOf(page, 'Linear').getByRole('button', { name: 'Disconnect Linear' }).click()
+      await openProfile(page, 'Connections')
+      await chooseConnectionAction(page, 'Linear', 'Disconnect')
       await expect(toolRowOf(page, 'Linear')).toContainText('Not connected')
       await expect(toolRowOf(page, 'Linear').getByRole('button', { name: 'Connect Linear', exact: true })).toBeVisible()
     })
@@ -162,7 +166,7 @@ test.describe('Tool connections', () => {
   }, async ({ page, agentScript }) => {
     const account = accountOf('alice-acme')
     await connectFake(page, account)
-    await connectionsOf(page).getByRole('button', { name: 'Disconnect fake' }).click()
+    await chooseConnectionAction(page, 'fake', 'Disconnect')
     await expect(fakeRowOf(page)).toContainText('Not connected')
     await expect(
       connectionsOf(page)
