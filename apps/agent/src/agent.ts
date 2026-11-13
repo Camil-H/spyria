@@ -534,6 +534,7 @@ export const startAgent = ({
     const sessionParams = {
       cwd: conversation.cwd,
       mcpServers: mcpServersOf(agent?.mcp_config),
+      _meta: { systemPrompt: { excludeDynamicSections: true } },
     }
     await request('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } })
     const resumeSessionId = agent?.acp_resume_session_id

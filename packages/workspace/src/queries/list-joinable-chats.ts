@@ -13,6 +13,7 @@ export const listJoinableChats =
   (workspaceId: WorkspaceId, viewerId: MemberId) =>
   (snapshot: Snapshot): readonly JoinableChat[] => {
     const isParticipant = participantIn(snapshot, workspaceId, viewerId)
+    const projectNameById = new Map(snapshot.projects.map((project) => [project.id, project.name]))
     return snapshot.chats
       .filter(
         (chat) =>
@@ -22,7 +23,7 @@ export const listJoinableChats =
         id: chat.id,
         type: chat.type,
         name: chat.name,
-        projectName: snapshot.projects.find((project) => project.id === chat.projectId)?.name ?? null,
+        projectName: chat.projectId ? (projectNameById.get(chat.projectId) ?? null) : null,
         memberCount: chatParticipantsIn(snapshot, workspaceId, chat.id).length,
       }))
   }

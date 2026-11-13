@@ -18,6 +18,15 @@ import {
 
 const { stateDirectory, stubCommand, launchOf, piLaunchOf, running, started } = createAgentTestbed()
 
+test('a session asks the harness to keep per-session details out of its system prompt, so the prompt prefix stays cacheable across chats', async () => {
+  const { open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:system-prompt')
+  await socket.until(kindOf('turn_end'))
+  expect(textOf(socket.events)).toContain('system-prompt:{"excludeDynamicSections":true}')
+})
+
 test('a prompt streams chunks and ends its turn; Stop cancels the next turn and the session continues', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(launchOf({ acp_model: 'stub-large' }))

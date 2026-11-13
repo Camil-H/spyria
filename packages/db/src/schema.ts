@@ -269,8 +269,16 @@ export type Snapshot = {
 
 type ChatScoped = { workspaceId: WorkspaceId; chatId: ChatId }
 
-export const chatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) =>
-  snapshot.chats.find((chat) => chat.id === chatId && chat.workspaceId === workspaceId)
+const chatByKeyOfRows = new WeakMap<readonly ChatRow[], Map<string, ChatRow>>()
+
+export const chatIn = (snapshot: Snapshot, workspaceId: WorkspaceId, chatId: ChatId) => {
+  let chatByKey = chatByKeyOfRows.get(snapshot.chats)
+  if (!chatByKey) {
+    chatByKey = new Map(snapshot.chats.map((chat) => [`${chat.workspaceId}/${chat.id}`, chat]))
+    chatByKeyOfRows.set(snapshot.chats, chatByKey)
+  }
+  return chatByKey.get(`${workspaceId}/${chatId}`)
+}
 
 export const inChat = (workspaceId: WorkspaceId, chatId: ChatId) => (row: ChatScoped) =>
   row.workspaceId === workspaceId && row.chatId === chatId
@@ -290,23 +298,31 @@ export const usableConnectionsIn = (snapshot: Snapshot, workspaceId: WorkspaceId
     (row) => row.workspaceId === workspaceId && row.memberId === memberId && row.removedAt === null,
   )
   if (!membership) return []
-  const accessRows = connectionAccessIn(snapshot, workspaceId)
+  const accessRowsByConnection = Map.groupBy(connectionAccessIn(snapshot, workspaceId), (access) => access.connectionId)
+  const isOwned = ownedBy(workspaceId, memberId)
+  const signedInByConnection = new Map(
+    snapshot.toolConnections.filter(isOwned).map((row) => [row.connectionId, row] as const),
+  )
+  const approvalsByConnection = new Map(
+    snapshot.toolApprovals.filter(isOwned).map((row) => [row.connectionId, row] as const),
+  )
   return workspaceConnectionsIn(snapshot, workspaceId).flatMap((connection) => {
-    const granted = grantedToolsOf(connection, accessRows, { memberId, roleId: membership.role })
-    if (granted.length === 0) return []
-    const signedIn = snapshot.toolConnections.find(
-      (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === connection.id,
+    const granted = new Set(
+      grantedToolsOf(connection, accessRowsByConnection.get(connection.id) ?? [], {
+        memberId,
+        roleId: membership.role,
+      }),
     )
-    const approvals = snapshot.toolApprovals.find(
-      (row) => ownedBy(workspaceId, memberId)(row) && row.connectionId === connection.id,
-    )
+    if (granted.size === 0) return []
+    const signedIn = signedInByConnection.get(connection.id)
+    const approvals = approvalsByConnection.get(connection.id)
     return [
       {
         id: connection.id,
         name: connection.name,
         gatewayName: connection.gatewayName,
         signIn: connection.signIn,
-        tools: connection.tools.filter((tool) => granted.includes(tool.name)),
+        tools: connection.tools.filter((tool) => granted.has(tool.name)),
         approvals,
         status: signedIn?.status,
       },

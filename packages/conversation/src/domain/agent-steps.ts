@@ -1,8 +1,8 @@
 import type { DevLoopPromptStep, DevLoopStep } from './dev-loop.ts'
+import { type DiffLine, lineDiffOf } from './line-diff.ts'
 import type { PullRequestStep } from './pull-requests.ts'
 import { toolConnectionOf } from './tool-calls.ts'
 
-export type DiffLine = { kind: 'added' | 'removed' | 'context'; text: string }
 export type ThoughtStep = { type: 'thought'; text: string; durationMilliseconds: number | null }
 export type AgentStep =
   | ThoughtStep
@@ -84,27 +84,6 @@ export const keptOutputOf = (output: string) => {
 
 const linesOf = (content: unknown) =>
   typeof content === 'string' && content !== '' ? content.replace(/\n$/, '').split('\n') : []
-
-const contextLines = 3
-const linesOfKind = (kind: DiffLine['kind'], lines: readonly string[]) => lines.map((text) => ({ kind, text }))
-
-const lineDiffOf = (before: readonly string[], after: readonly string[]): DiffLine[] => {
-  let prefix = 0
-  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++
-  let suffix = 0
-  while (
-    suffix < before.length - prefix &&
-    suffix < after.length - prefix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  )
-    suffix++
-  return [
-    ...linesOfKind('context', before.slice(Math.max(0, prefix - contextLines), prefix)),
-    ...linesOfKind('removed', before.slice(prefix, before.length - suffix)),
-    ...linesOfKind('added', after.slice(prefix, after.length - suffix)),
-    ...linesOfKind('context', after.slice(after.length - suffix).slice(0, contextLines)),
-  ]
-}
 
 export const pathOf = (path: unknown) => String(path ?? '').replace(workingDirectory, '')
 

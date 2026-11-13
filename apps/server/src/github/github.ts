@@ -10,7 +10,7 @@ import {
   type RepositoryCheckouts,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
-import { DomainError, log, memberActor, memberId } from '@spyria/kernel'
+import { createBoundedCache, DomainError, log, memberActor, memberId } from '@spyria/kernel'
 import type { RepositoryAccess } from '@spyria/runtime/server'
 import {
   enteredSecretsOf,
@@ -68,6 +68,7 @@ type StatePurpose = 'github-connection' | 'github-app'
 
 const connectionStateLifetimeMilliseconds = 10 * 60 * 1000
 const appCreationStateLifetimeMilliseconds = 60 * 60 * 1000
+const maximumCachedAuthors = 1000
 const secretLabels: Record<keyof GitHubSecrets, string> = {
   clientSecret: 'A client secret',
   privateKey: 'A private key',
@@ -536,7 +537,7 @@ export const createRepositoryAccess = (database: Database, dependencies: GitHubD
 
 export const createGitHubCheckouts = (database: Database, dependencies: GitHubDependencies): RepositoryCheckouts => {
   const { api } = dependencies
-  const authorsByMember = new Map<string, { login: string; author: GitAuthor }>()
+  const authorsByMember = createBoundedCache<string, { login: string; author: GitAuthor }>(maximumCachedAuthors)
   const publishingOf = async (chat: AgentChat, publisherId: string) => {
     const { repository, baseBranch, workingBranch } = (await chatRepositoryOf(database, chat)) ?? {}
     const token = await userTokenOf(database, dependencies, { workspaceId: chat.workspaceId, userId: publisherId })

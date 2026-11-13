@@ -139,8 +139,8 @@ const runDelegation = async (
 ): Promise<DelegationResult> => {
   const { transactor, agentClient } = dependencies
   let status: 'finished' | 'failed' = 'failed'
+  const conversation = { ...endpoint, conversationId: crypto.randomUUID() }
   try {
-    const conversation = { ...endpoint, conversationId: crypto.randomUUID() }
     await agentClient.createConversation(
       conversation,
       token,
@@ -171,6 +171,7 @@ const runDelegation = async (
     return cannotStart
   } finally {
     await transactor.run(({ delegations }) => delegations.update(delegation.id, { status }))
+    await agentClient.deleteConversation(conversation).catch(() => undefined)
   }
 }
 
