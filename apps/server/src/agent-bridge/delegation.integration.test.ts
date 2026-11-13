@@ -72,7 +72,7 @@ const toolListWith = (host: FakeHost, token: string) =>
     },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
   })
-test('a delegated task runs in a Pi sub-conversation on the classified model, its events are stored once and in order, and the tool answers with the sub’s final message', async () => {
+test('a delegated task runs in a Pi sub-conversation on the classified model, its events are stored once and in order, the tool answers with the sub’s final message and the sub-conversation is then deleted', async () => {
   const { relay, host, main, subs } = await fakeAgent()
   const chat = await newRuntimeChat()
   const subagent = { steps: [{ command: 'echo sub', say: 'Let me look.' }], text: 'Sub done.' }
@@ -98,6 +98,9 @@ test('a delegated task runs in a Pi sub-conversation on the classified model, it
   expect(delegation?.token_hash).not.toContain(tokenOf(sub))
   expect(delegation?.finished_at).not.toBeNull()
   expect(delegation?.classifier_output).not.toBeNull()
+  expect(relay.requests).toContainEqual(
+    expect.objectContaining({ method: 'DELETE', path: `/api/conversations/${delegation?.conversation_id}` }),
+  )
 
   const stored = await database.$client`
     select id, payload from events where workspace_id = ${acme} and chat_id = ${chat}
