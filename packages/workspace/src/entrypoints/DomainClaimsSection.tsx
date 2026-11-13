@@ -68,7 +68,7 @@ export const DomainClaimsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
     if (await change(() => commands.claimDomain({ workspaceId, domain }))) setDomain('')
   }
   return (
-    <LabelledSection title="Domains" Heading="h3" titleClass="font-semibold">
+    <LabelledSection title="Domains" titleClass="text-sm font-medium">
       <p className="text-sm text-muted">
         Claim your organization's email domains to prove they are yours. Addresses at a claimed domain then sign in only
         through your provider, which opens every workspace they belong to on this Spyria; they cannot create or join
