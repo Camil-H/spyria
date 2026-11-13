@@ -268,7 +268,7 @@ test('the trend fills every bucket of the period with its counts, zero where not
   ])
 })
 
-test('the report total sums the whole period from the tables, whatever scope narrows the counts', () => {
+test('the report total sums the period from the tables the ledger read for the scope, not from the scoped counts', () => {
   const report = spendReportOf({
     filter: { ...spendFilterFrom({ scope: 'model', scopeKey: 'openai/gpt-5' }, now) },
     rows: [
