@@ -1,4 +1,3 @@
-import { Content, List, Root, Trigger } from '@radix-ui/react-tabs'
 import type { Snapshot } from '@spyria/db'
 import { useQuery } from '@spyria/db/react'
 import {
@@ -11,16 +10,18 @@ import {
 } from '@spyria/kernel'
 import {
   buttonClass,
+  cardClass,
   Dialog,
+  dangerButtonClass,
   ErrorMessage,
   fieldClass,
-  ghostButtonClass,
-  LabelledSection,
   labelClass,
-  tabTriggerClass,
+  RowMenu,
+  SegmentedChoice,
   useGuardedAction,
 } from '@spyria/ui'
-import { type SubmitEvent, useState } from 'react'
+import { Check } from 'lucide-react'
+import { type ReactNode, type SubmitEvent, useState } from 'react'
 import { listChatRoles, listWorkspaceRoles } from '../queries/list-roles.ts'
 import type { WorkspaceCommands } from './commands.ts'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -87,7 +88,7 @@ const chatRoleKind: RoleKind<ChatPermission> = {
   }),
 }
 
-const RoleForm = <Permission extends string>({
+const RoleFormDialog = <Permission extends string>({
   kind,
   label,
   role,
@@ -114,166 +115,201 @@ const RoleForm = <Permission extends string>({
     if (await run(() => save({ name, permissions }))) onClose()
   }
   return (
-    <form aria-label={label} onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-line p-3">
-      <label className={labelClass}>
-        Name
-        <input className={fieldClass} value={name} maxLength={40} onChange={(event) => setName(event.target.value)} />
-      </label>
-      <fieldset className="flex flex-col gap-1.5 text-sm">
-        <legend className="mb-1 text-xs font-semibold uppercase text-muted">Permissions</legend>
-        {kind.permissions.map((permission) => {
-          const isLocked = kind.lockedPermissions.includes(permission)
-          return (
-            <label key={permission} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isLocked || permissions.includes(permission)}
-                disabled={isLocked || isPending}
-                onChange={() => toggle(permission)}
-              />
-              {kind.labels[permission]}
-            </label>
-          )
-        })}
-      </fieldset>
-      <ErrorMessage message={errorMessage} />
-      <div className="flex gap-2">
+    <Dialog label={label} isWide onClose={onClose}>
+      <form aria-label={label} onSubmit={submit} className="flex flex-col gap-4">
+        <label className={labelClass}>
+          Name
+          <input
+            data-initial-focus
+            className={fieldClass}
+            value={name}
+            maxLength={40}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <fieldset className="flex flex-col gap-1.5 text-sm">
+          <legend className="mb-1 text-sm text-muted">Permissions</legend>
+          {kind.permissions.map((permission) => {
+            const isLocked = kind.lockedPermissions.includes(permission)
+            return (
+              <label key={permission} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={isLocked || permissions.includes(permission)}
+                  disabled={isLocked || isPending}
+                  onChange={() => toggle(permission)}
+                />
+                {kind.labels[permission]}
+              </label>
+            )
+          })}
+        </fieldset>
+        <ErrorMessage message={errorMessage} />
         <button type="submit" className={buttonClass} disabled={isPending || name.trim() === ''}>
           Save
         </button>
-        <button type="button" className={ghostButtonClass} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </form>
+      </form>
+    </Dialog>
   )
 }
 
-const CustomRoleActions = <Permission extends string>({
+const DeleteRoleDialog = <Permission extends string>({
   kind,
-  workspaceId,
   role,
+  remove,
+  onClose,
 }: {
   kind: RoleKind<Permission>
-  workspaceId: WorkspaceId
   role: StoredRole<Permission>
+  remove: () => Promise<unknown>
+  onClose: () => void
 }) => {
-  const commands = kind.commandsOf(useWorkspaceCommands())
-  const [isEditing, setIsEditing] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const { errorMessage, isPending, run } = useGuardedAction()
-  const target = { workspaceId, roleId: role.id }
   return (
-    <>
-      <span className="mt-2 flex gap-2">
-        <button
-          type="button"
-          aria-label={`Edit ${role.name}`}
-          className={ghostButtonClass}
-          onClick={() => setIsEditing(true)}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          aria-label={`Delete ${role.name}`}
-          className={ghostButtonClass}
-          onClick={() => setIsDeleting(true)}
-        >
-          Delete
-        </button>
-      </span>
-      {isEditing && (
-        <div className="mt-3">
-          <RoleForm
-            kind={kind}
-            label={`Edit ${role.name}`}
-            role={role}
-            save={(input) => commands.update({ ...target, ...input })}
-            onClose={() => setIsEditing(false)}
-          />
-        </div>
-      )}
-      {isDeleting && (
-        <Dialog label="Delete role" subject={role.name} onClose={() => setIsDeleting(false)}>
-          <p className="text-sm text-muted">{kind.deletionHint}</p>
-          <ErrorMessage message={errorMessage} />
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={isPending}
-            onClick={() => run(() => commands.remove(target))}
-          >
-            Delete
-          </button>
-        </Dialog>
-      )}
-    </>
+    <Dialog label="Delete role" subject={role.name} onClose={onClose}>
+      <p className="text-sm text-muted">{kind.deletionHint}</p>
+      <ErrorMessage message={errorMessage} />
+      <button type="button" className={dangerButtonClass} disabled={isPending} onClick={() => run(remove)}>
+        Delete
+      </button>
+    </Dialog>
   )
 }
 
-const RoleList = <Permission extends string>({
+type OpenRoleDialog<Permission extends string> =
+  | { kind: 'create' }
+  | { kind: 'edit'; role: StoredRole<Permission> }
+  | { kind: 'delete'; role: StoredRole<Permission> }
+  | null
+
+const PermissionCell = ({ isAllowed }: { isAllowed: boolean }) =>
+  isAllowed ? (
+    <Check role="img" aria-label="Allowed" className="mx-auto size-4 text-agent-done" />
+  ) : (
+    <span role="img" aria-label="Not allowed" className="block text-center text-muted">
+      –
+    </span>
+  )
+
+const RoleGrid = <Permission extends string>({
   kind,
   workspaceId,
+  kindChoice,
 }: {
   kind: RoleKind<Permission>
   workspaceId: WorkspaceId
+  kindChoice: ReactNode
 }) => {
   const commands = kind.commandsOf(useWorkspaceCommands())
   const roles = useQuery(kind.listRoles, workspaceId)
-  const [isCreating, setIsCreating] = useState(false)
+  const [openDialog, setOpenDialog] = useState<OpenRoleDialog<Permission>>(null)
+  const closeDialog = () => setOpenDialog(null)
   return (
-    <LabelledSection title={kind.title}>
+    <section aria-label={kind.title} className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {kindChoice}
+        <button type="button" className={buttonClass} onClick={() => setOpenDialog({ kind: 'create' })}>
+          New role
+        </button>
+      </div>
       <p className="text-sm text-muted">{kind.description}</p>
-      <ul aria-label={kind.title} className="flex flex-col gap-3">
-        {roles.map((role) => (
-          <li key={role.id} aria-label={role.name} className="rounded-lg border border-line p-3">
-            <h3 className="font-medium">{role.name}</h3>
-            {role.permissions.length === 0 ? (
-              <p className="mt-1 text-sm text-muted">No permissions</p>
-            ) : (
-              <ul className="mt-1 list-disc pl-5 text-sm text-muted">
-                {role.permissions.map((permission) => (
-                  <li key={permission}>{kind.labels[permission]}</li>
+      <div className={`${cardClass} overflow-x-auto`}>
+        <table aria-label={kind.title} className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line">
+              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-muted">
+                Permission
+              </th>
+              {roles.map((role) => (
+                <th
+                  key={role.id}
+                  scope="col"
+                  aria-label={role.name}
+                  className="min-w-28 px-3 py-2 text-center font-medium"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {role.name}
+                    {!role.builtIn && (
+                      <RowMenu
+                        label={`Actions for ${role.name}`}
+                        items={[
+                          { label: 'Edit', onSelect: () => setOpenDialog({ kind: 'edit', role }) },
+                          { label: 'Delete', onSelect: () => setOpenDialog({ kind: 'delete', role }) },
+                        ]}
+                      />
+                    )}
+                  </span>
+                  <span className="block text-xs font-normal text-muted">{role.builtIn ? 'Built-in' : 'Custom'}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {kind.permissions.map((permission) => (
+              <tr key={permission} className="hover:bg-hover">
+                <th scope="row" className="px-4 py-2 text-left font-normal">
+                  {kind.labels[permission]}
+                </th>
+                {roles.map((role) => (
+                  <td key={role.id} className="px-3 py-2">
+                    <PermissionCell isAllowed={role.permissions.includes(permission)} />
+                  </td>
                 ))}
-              </ul>
-            )}
-            {!role.builtIn && <CustomRoleActions kind={kind} workspaceId={workspaceId} role={role} />}
-          </li>
-        ))}
-      </ul>
-      {isCreating ? (
-        <RoleForm
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {openDialog?.kind === 'create' && (
+        <RoleFormDialog
           kind={kind}
           label="New role"
           save={(input) => commands.create({ workspaceId, ...input })}
-          onClose={() => setIsCreating(false)}
+          onClose={closeDialog}
         />
-      ) : (
-        <button type="button" className={`self-start ${buttonClass}`} onClick={() => setIsCreating(true)}>
-          New role
-        </button>
       )}
-    </LabelledSection>
+      {openDialog?.kind === 'edit' && (
+        <RoleFormDialog
+          kind={kind}
+          label={`Edit ${openDialog.role.name}`}
+          role={openDialog.role}
+          save={(input) => commands.update({ workspaceId, roleId: openDialog.role.id, ...input })}
+          onClose={closeDialog}
+        />
+      )}
+      {openDialog?.kind === 'delete' && (
+        <DeleteRoleDialog
+          kind={kind}
+          role={openDialog.role}
+          remove={async () => {
+            await commands.remove({ workspaceId, roleId: openDialog.role.id })
+            closeDialog()
+          }}
+          onClose={closeDialog}
+        />
+      )}
+    </section>
   )
 }
 
-const tabClass = `${tabTriggerClass} px-3`
+const roleKindTitles = [workspaceRoleKind.title, chatRoleKind.title] as const
+type RoleKindTitle = (typeof roleKindTitles)[number]
 
-export const RolesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => (
-  <Root defaultValue={workspaceRoleKind.title} className="flex flex-col gap-4">
-    <List aria-label="Role lists" className="flex gap-2 border-b border-line">
-      {[workspaceRoleKind.title, chatRoleKind.title].map((title) => (
-        <Trigger key={title} value={title} className={tabClass}>
-          {title}
-        </Trigger>
-      ))}
-    </List>
-    <Content value={workspaceRoleKind.title}>
-      <RoleList kind={workspaceRoleKind} workspaceId={workspaceId} />
-    </Content>
-    <Content value={chatRoleKind.title}>
-      <RoleList kind={chatRoleKind} workspaceId={workspaceId} />
-    </Content>
-  </Root>
-)
+export const RolesSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const [shown, setShown] = useState<RoleKindTitle>(workspaceRoleKind.title)
+  const kindChoice = (
+    <SegmentedChoice
+      label="Role lists"
+      name="role-kind"
+      options={roleKindTitles}
+      labels={{ [workspaceRoleKind.title]: workspaceRoleKind.title, [chatRoleKind.title]: chatRoleKind.title }}
+      value={shown}
+      onChange={setShown}
+    />
+  )
+  return shown === workspaceRoleKind.title ? (
+    <RoleGrid kind={workspaceRoleKind} workspaceId={workspaceId} kindChoice={kindChoice} />
+  ) : (
+    <RoleGrid kind={chatRoleKind} workspaceId={workspaceId} kindChoice={kindChoice} />
+  )
+}

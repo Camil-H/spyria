@@ -1,5 +1,14 @@
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
-import { ErrorMessage, fieldClass, formatCost, ghostButtonClass, LabelledSection, useGuardedAction } from '@spyria/ui'
+import {
+  calloutClass,
+  cardClass,
+  ErrorMessage,
+  fieldClass,
+  formatCost,
+  ghostButtonClass,
+  LabelledSection,
+  useGuardedAction,
+} from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import { type BudgetOverview, type BudgetProgress, isOverAlertLine } from '../domain/budgets.ts'
 import { useUsageCommands } from './providers.tsx'
@@ -57,7 +66,7 @@ const BudgetRow = ({
   )
 }
 
-export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+export const BudgetsSection = ({ id, workspaceId }: { id?: string; workspaceId: WorkspaceId }) => {
   const commands = useUsageCommands()
   const [overview, setOverview] = useState<BudgetOverview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -68,8 +77,8 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     setOverview(await commands.saveBudget({ workspaceId, memberId, dollars }))
   const overAlertLine = overview?.members.filter(isOverAlertLine) ?? []
   return (
-    <LabelledSection title="Budgets">
-      <p className="text-sm text-muted">
+    <LabelledSection id={id} title="Budgets">
+      <p className="-mt-2 text-sm text-muted">
         Monthly AI budgets in dollars, per calendar month in UTC. At 100% the member's prompts are refused until next
         month or a higher budget; leave a budget empty to remove it.
       </p>
@@ -82,8 +91,13 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
       ) : (
         <>
           {overAlertLine.length > 0 && (
-            <LabelledSection title="Over 80% of their budget" Heading="h3" titleClass="font-medium">
-              <ul className="flex flex-col gap-1 text-sm">
+            <LabelledSection
+              title="Over 80% of their budget"
+              Heading="h3"
+              titleClass="font-medium"
+              className={`${calloutClass} flex flex-col gap-1`}
+            >
+              <ul className="flex flex-col gap-1">
                 {overAlertLine.map((member) => (
                   <li key={member.memberId}>
                     {member.name} · {formatCost(member.spentMicros)} of {formatCost(member.limitMicros ?? 0)} (
@@ -93,35 +107,37 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               </ul>
             </LabelledSection>
           )}
-          <table aria-label="Budgets" className="w-full text-sm">
-            <thead className="text-xs text-muted">
-              <tr>
-                <th scope="col" className={`${cellClass} text-left font-medium`}>
-                  Budget
-                </th>
-                <th scope="col" className={`${cellClass} text-right font-medium`}>
-                  Spent this month
-                </th>
-                <th scope="col" className={`${cellClass} text-right font-medium`}>
-                  Used
-                </th>
-                <th scope="col" className={`${cellClass} text-right font-medium`}>
-                  Monthly budget ($)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <BudgetRow name="Workspace total" progress={overview.workspace} onSave={saveOf(null)} />
-              {overview.members.map((member) => (
-                <BudgetRow
-                  key={member.memberId}
-                  name={member.name}
-                  progress={member}
-                  onSave={saveOf(member.memberId)}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className={`${cardClass} overflow-x-auto px-2 py-1`}>
+            <table aria-label="Budgets" className="w-full text-sm">
+              <thead className="text-xs text-muted">
+                <tr>
+                  <th scope="col" className={`${cellClass} text-left font-medium`}>
+                    Budget
+                  </th>
+                  <th scope="col" className={`${cellClass} text-right font-medium`}>
+                    Spent this month
+                  </th>
+                  <th scope="col" className={`${cellClass} text-right font-medium`}>
+                    Used
+                  </th>
+                  <th scope="col" className={`${cellClass} text-right font-medium`}>
+                    Monthly budget ($)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <BudgetRow name="Workspace total" progress={overview.workspace} onSave={saveOf(null)} />
+                {overview.members.map((member) => (
+                  <BudgetRow
+                    key={member.memberId}
+                    name={member.name}
+                    progress={member}
+                    onSave={saveOf(member.memberId)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </LabelledSection>

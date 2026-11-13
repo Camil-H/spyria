@@ -4,7 +4,7 @@ import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@spyria/ui'
 import { LogOut, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { listWorkspaces } from '../queries/list-workspaces.ts'
 import { NameDialog } from './NameDialog.tsx'
@@ -18,6 +18,10 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
   const { memberId, signedInWorkspaceIds, signOut } = useSession()
   const workspaces = useQuery(listWorkspaces, memberId)
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null)
+  const [isCreationOpen, setIsCreationOpen] = useState<boolean>()
+  useEffect(() => {
+    commands.isWorkspaceCreationOpen({ workspaceId }).then(setIsCreationOpen, () => setIsCreationOpen(false))
+  }, [commands, workspaceId])
   const closeDialog = () => setOpenDialog(null)
   return (
     <>
@@ -28,11 +32,13 @@ export const WorkspaceSwitcher = ({ workspaceId }: { workspaceId: WorkspaceId })
         >
           <span className="truncate">{workspaces.find((workspace) => workspace.id === workspaceId)?.name}</span>
         </Trigger>
-        <Content align="start" sideOffset={4} className={menuContentClass}>
-          <Item className={`${menuItemClass} justify-start gap-2`} onSelect={() => setOpenDialog({ kind: 'new' })}>
-            <Plus aria-hidden className="size-4" />
-            New workspace
-          </Item>
+        <Content align="start" sideOffset={4} className={menuContentClass} aria-busy={isCreationOpen === undefined}>
+          {isCreationOpen && (
+            <Item className={`${menuItemClass} justify-start gap-2`} onSelect={() => setOpenDialog({ kind: 'new' })}>
+              <Plus aria-hidden className="size-4" />
+              New workspace
+            </Item>
+          )}
           {workspaces.map((workspace) => (
             <div key={workspace.id} className="flex items-center gap-1">
               <Item className={`${menuItemClass} flex-1 gap-4`} onSelect={() => navigate(`/w/${workspace.id}`)}>

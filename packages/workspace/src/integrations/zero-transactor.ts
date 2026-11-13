@@ -10,6 +10,7 @@ import {
   lockOpenInvitation,
   scheduleWorkspaceDeletion,
   signOutMemberEverywhere,
+  verifiedDomainClaimsOn,
 } from '@spyria/db/server-writes'
 import type {
   Chat as ChatRow,
@@ -268,6 +269,18 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
     workspaceEvents: {
       record: async ({ actorId, ...event }) => {
         await appendWorkspaceEvent(tx, { ...event, actor: memberActor(actorId), workspaceId: context.workspaceId })
+      },
+    },
+    domainClaims: {
+      of: async (domain) => {
+        const claims = await verifiedDomainClaimsOn(tx, context.workspaceId, domain)
+        const claiming = claims.find((claim) => claim.domain === domain)
+        return {
+          claimingWorkspaceId: claiming && workspaceId(claiming.workspaceId),
+          workspaceDomains: claims
+            .filter((claim) => claim.workspaceId === context.workspaceId)
+            .map((claim) => claim.domain),
+        }
       },
     },
     projects: {

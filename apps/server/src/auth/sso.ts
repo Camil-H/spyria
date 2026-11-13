@@ -16,7 +16,9 @@ import {
 import { addInstallHostIn } from '@spyria/runtime/server'
 import {
   type AccountProvider,
+  ClaimedDomainCannotCreate,
   displayNameFrom,
+  domainOfEmail,
   EmailNotConfirmed,
   type InstanceApps,
   InstanceBeingSetUp,
@@ -37,7 +39,13 @@ import {
 } from '@spyria/workspace/server'
 import { discoverIssuer } from './oidc.ts'
 import type { SecretBox } from './secret-box.ts'
-import { bindAccountByEmail, type Sql, type VerifiedIdentity } from './sessions.ts'
+import {
+  bindAccountByEmail,
+  claimedDomainsOf,
+  endSessionsOpenedThrough,
+  type Sql,
+  type VerifiedIdentity,
+} from './sessions.ts'
 
 export type SsoProvider = {
   workspaceId: string
@@ -67,16 +75,21 @@ export const workspaceProviderOf = async (database: Database, workspaceId: strin
   )[0]
 
 export const workspaceProvidersForEmail = (database: Database, email: string) =>
-  database.$client<{ workspaceId: string; preset: SsoPreset }[]>`
-    select workspace_id as "workspaceId", preset from workspace_sso join workspaces using (workspace_id)
+  database.$client<{ workspaceId: string; preset: SsoPreset; isClaiming: boolean }[]>`
+    select workspace_id as "workspaceId", preset, claimed.is_claiming as "isClaiming"
+    from workspace_sso join workspaces using (workspace_id)
+      cross join lateral (select exists(select 1 from domain_claims
+        where domain_claims.workspace_id = workspace_sso.workspace_id and domain_claims.domain = ${domainOfEmail(email)}
+          and domain_claims.verified_at is not null) as is_claiming) as claimed
     where workspaces.deleted_at is null and (
-      exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
+      claimed.is_claiming
+      or exists(select 1 from invitations where invitations.workspace_id = workspace_sso.workspace_id
         and invitations.email = ${normalizedEmail(email)} and revoked_at is null and accepted_at is null
         and expires_at > now())
       or exists(select 1 from memberships join users on users.id = memberships.user_id
         where memberships.workspace_id = workspace_sso.workspace_id and memberships.removed_at is null
           and users.email = ${normalizedEmail(email)}))
-    order by workspaces.created_at, workspace_id`
+    order by claimed.is_claiming desc, workspaces.created_at, workspace_id`
 
 export const requireMemberPermission = async (
   sql: Sql,
@@ -165,7 +178,7 @@ const storeSsoSettings = async (sql: Sql, workspaceId: string, actor: Actor, pro
     on conflict (workspace_id) do update set preset = excluded.preset, issuer = excluded.issuer,
       client_id = excluded.client_id, uses_instance_app = excluded.uses_instance_app, updated_at = excluded.updated_at,
       encrypted_client_secret = excluded.encrypted_client_secret`
-  if (previous?.issuer !== provider.issuer) await sql`delete from sessions where workspace_id = ${workspaceId}`
+  if (previous?.issuer !== provider.issuer) await endSessionsOpenedThrough(sql, workspaceId)
   const { preset, issuer, clientId, usesInstanceApp } = provider
   const isChanged =
     !previous ||
@@ -234,9 +247,12 @@ export const confirmSsoSettings = (database: Database, pending: PendingSso, iden
   })
 
 const removeWorkspaceSso = async (sql: Sql, workspaceId: string, actor: Actor) => {
+  const claimed = await sql<{ domain: string }[]>`
+    select domain from domain_claims where workspace_id = ${workspaceId} and verified_at is not null order by domain`
   const removed = await sql`delete from workspace_sso where workspace_id = ${workspaceId} returning 1`
   if (removed.length === 0) return false
-  await sql`delete from sessions where workspace_id = ${workspaceId}`
+  await endSessionsOpenedThrough(sql, workspaceId)
+  for (const { domain } of claimed) await recordWorkspaceEvent(sql, workspaceId, 'domain.released', actor, { domain })
   await recordWorkspaceEvent(sql, workspaceId, 'sso.removed', actor, {})
   return true
 }
@@ -293,6 +309,7 @@ export const createWorkspaceOfAccount = async (database: Database, userId: strin
   return database.$client.begin(async (sql) => {
     const [user] = await sql<{ email: string }[]>`select email from users where id = ${userId}`
     if (!user || (await hasNoWorkspace(sql))) throw new InstanceBeingSetUp()
+    if ((await claimedDomainsOf(sql, domainOfEmail(user.email))).length > 0) throw new ClaimedDomainCannotCreate()
     return insertWorkspace(sql, { userId, workspaceName, identity: user })
   })
 }

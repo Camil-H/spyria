@@ -52,7 +52,7 @@ const workspaceExistsInRunningStack = (folder: string) => {
 }
 
 const addRuntimeHostGuide =
-  "this machine's runtime host pairs with the command an admin gets from Workspace settings > Connect runtime > Add runtime host"
+  "this machine's runtime host pairs with the command an admin gets from Workspace settings > Runtimes > Add runtime host"
 
 const pairingCodeFor = (
   asker: Asker,
@@ -276,9 +276,9 @@ export const setup = async (
         : answers.runsHost && setupLink.exitCode === 0
           ? 'This machine runs a runtime host: it joins the first workspace when you create it.'
           : '',
-      'Then, in Workspace settings, Connect GitHub to work on repositories.',
+      'Then, in Workspace settings, open GitHub to connect it and work on repositories.',
       google || microsoft || oidc
-        ? 'Anyone who signs in with an app of this Spyria can then create a workspace; a workspace can require its own sign-in provider in Setup SSO.'
+        ? 'Anyone who signs in with an app of this Spyria can then create a workspace; a workspace can require its own sign-in provider in Single sign-on.'
         : 'People join the first workspace by invite, signing in with its own provider.',
     ]
       .filter(Boolean)

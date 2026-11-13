@@ -1,5 +1,7 @@
 # 0029. Sign in with an account; a workspace may enforce its own SSO
 
+Amended by [decision 0035](0035-domain-claims.md): a workspace may claim email domains proven by DNS; its provider is then trusted for those addresses in every workspace they belong to, and addresses at a claimed domain can neither create nor join other workspaces.
+
 ## Context
 
 [Decision 0012](0012-per-workspace-sso.md) tied every workspace to an email domain proven by an emailed link, and [decision 0027](0027-join-by-invited-address.md) added a second, instance-wide way to join, by invited address through one shared sign-in app. Neither fits a deployment that serves both: a person with a Gmail account who wants a workspace of their own, and an organization that wants only its own provider to open its workspace. Domains also brought mail, a verification step before any invite, a refusal of public domains and a race for who claims a domain first.

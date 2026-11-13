@@ -145,7 +145,7 @@ const runDelegation = async (
       conversation,
       token,
       dependencies.fixedLlm
-        ? fixedPiLlmOf(delegation.model)
+        ? await fixedPiLlmOf(dependencies, delegation.model)
         : await piLlmOf(dependencies, input.turn.prompterId, delegation.model, choice.effort),
       { parentConversationId: endpoint.conversationId },
     )

@@ -25,12 +25,12 @@ import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import {
   deleteSession,
+  emailOfUser,
   findLiveSessions,
   findMemberSessions,
   isSignedOutSince,
   openSessions,
-  type SignedInThrough,
-  signedInAtOf,
+  signInOf,
   signInThroughWorkspace,
   signInWithAccount,
   signOutMemberEverywhere,
@@ -216,14 +216,16 @@ export const createAuthRoutes = ({
       userId,
       email,
       workspaceId,
-      through,
-    }: { userId?: string; email: string; workspaceId?: string; through: SignedInThrough },
+      providerWorkspaceId,
+    }: { userId?: string; email: string; workspaceId?: string; providerWorkspaceId: string | null },
   ) => {
     const opened =
-      userId === undefined ? [] : await openSessions(scope.database, userId, workspaceId, through, userAgentOf(context))
+      userId === undefined
+        ? []
+        : await openSessions(scope.database, userId, workspaceId, providerWorkspaceId, userAgentOf(context))
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     if (opened.length > 0) return popup(context, { status: 'signed_in' })
-    if (userId === undefined || through !== 'account' || workspaceId !== undefined)
+    if (userId === undefined || providerWorkspaceId !== null || workspaceId !== undefined)
       return popup(context, { status: 'not_invited', email }, 403)
     await setSignedCookie(
       context,
@@ -238,14 +240,32 @@ export const createAuthRoutes = ({
     )
     return popup(context, { status: 'no_workspace' })
   }
-  const signInProvidersFor = async (scopedDatabase: Database, email: string): Promise<SignInProvider[]> => [
-    ...accountProviders.map((provider) => ({ id: provider, kind: provider, isWorkspaceSso: false })),
-    ...(await workspaceProvidersForEmail(scopedDatabase, email)).map(({ preset }, index) => ({
-      id: `${workspaceProviderPrefix}${index}`,
-      kind: preset,
-      isWorkspaceSso: true,
-    })),
-  ]
+  const signInProvidersFor = async (scopedDatabase: Database, email: string): Promise<SignInProvider[]> => {
+    const workspaceProviders = await workspaceProvidersForEmail(scopedDatabase, email)
+    const isClaimed = workspaceProviders.some(({ isClaiming }) => isClaiming)
+    return [
+      ...(isClaimed ? [] : accountProviders).map((provider) => ({
+        id: provider,
+        kind: provider,
+        isWorkspaceSso: false,
+      })),
+      ...workspaceProviders.map(({ preset }, index) => ({
+        id: `${workspaceProviderPrefix}${index}`,
+        kind: preset,
+        isWorkspaceSso: true,
+      })),
+    ]
+  }
+  const sessionIdByWorkspaceOf = (context: Context) =>
+    Object.entries(getCookie(context)).flatMap(([name, sessionId]) =>
+      name.startsWith(sessionCookiePrefix)
+        ? [[name.slice(sessionCookiePrefix.length), sessionId] as [string, string]]
+        : [],
+    )
+  const signedInEmailOf = async (context: Context, scopedDatabase: Database) => {
+    const [session] = await findLiveSessions(scopedDatabase, sessionIdByWorkspaceOf(context))
+    return session ? await emailOfUser(scopedDatabase, session.userId) : ''
+  }
   const lastAccountProviderOf = (context: Context) =>
     accountProviders.find((provider) => provider === getCookie(context, accountProviderCookie)) ?? accountProviders[0]
   const redirectToAccountProvider = (
@@ -271,16 +291,26 @@ export const createAuthRoutes = ({
     scopedDatabase: Database,
     { workspaceId, email, providerId }: { workspaceId?: string; email: string; providerId: string },
   ) => {
-    const workspaceProvider = async (providerWorkspaceId: string | undefined) => {
+    const workspaceProvider = async (providerWorkspaceId: string | undefined, loginHint = email) => {
       const provider = providerWorkspaceId && (await workspaceProviderOf(scopedDatabase, providerWorkspaceId))
       return provider
-        ? redirectToProvider(context, await workspaceClientOf(provider), { workspaceId, providerWorkspaceId }, email)
+        ? redirectToProvider(
+            context,
+            await workspaceClientOf(provider),
+            { workspaceId, providerWorkspaceId },
+            loginHint,
+          )
         : undefined
     }
     if (workspaceId) {
       const accountProvider = lastAccountProviderOf(context)
+      const knownEmail = email || (await signedInEmailOf(context, scopedDatabase))
+      const claimingProvider = knownEmail
+        ? (await workspaceProvidersForEmail(scopedDatabase, knownEmail)).find(({ isClaiming }) => isClaiming)
+        : undefined
       return (
         (await workspaceProvider(workspaceId)) ??
+        (await workspaceProvider(claimingProvider?.workspaceId, knownEmail)) ??
         (accountProvider && redirectToAccountProvider(context, accountProvider, { workspaceId }))
       )
     }
@@ -373,7 +403,7 @@ export const createAuthRoutes = ({
       const body = await context.req.json().catch(() => null)
       const created = await createWorkspaceOfAccount(scope.database, userId, body?.name).catch(domainErrorOnly)
       if (created instanceof DomainError) return context.json({ error: created.code, message: created.message }, 400)
-      const [session] = await openSessions(scope.database, userId, created, 'account', userAgentOf(context))
+      const [session] = await openSessions(scope.database, userId, created, null, userAgentOf(context))
       if (!session) return context.json({ error: 'forbidden' }, 403)
       setSessionCookie(context, appOrigin, session)
       deleteCookie(context, accountCookie, { path: '/auth/workspaces' })
@@ -395,7 +425,12 @@ export const createAuthRoutes = ({
       const scope = scopeOf(context)
       const workspaceId = context.req.query('workspace')
       if (scope.testUserId)
-        return completeSignIn(context, scope, { userId: scope.testUserId, email: '', workspaceId, through: 'account' })
+        return completeSignIn(context, scope, {
+          userId: scope.testUserId,
+          email: '',
+          workspaceId,
+          providerWorkspaceId: null,
+        })
       if (authMode === 'dex') return redirectToProvider(context, oidc, { workspaceId })
       if (await hasNoWorkspace(scope.database.$client))
         return popup(context, { status: 'refused', message: setupLinkNeededNotice }, 403)
@@ -425,18 +460,17 @@ export const createAuthRoutes = ({
         return refusedPopup(context, new EmailNotConfirmed())
       if (identity === undefined || identity instanceof Error) return popup(context, { status: 'failed' }, 400)
       const signedIn = await (firstWorkspace
-        ? createFirstWorkspace(scope.database, firstWorkspace, identity, sso).then(
-            (created) =>
-              ({
-                ...created,
-                email: identity.email,
-                through: firstWorkspace.provider ? 'workspace sso' : 'account',
-              }) as const,
-          )
+        ? createFirstWorkspace(scope.database, firstWorkspace, identity, sso).then((created) => ({
+            ...created,
+            email: identity.email,
+            providerWorkspaceId: firstWorkspace.provider ? created.workspaceId : null,
+          }))
         : pendingSso
-          ? confirmSsoSettings(scope.database, pendingSso, identity).then(
-              (confirmed) => ({ ...confirmed, email: identity.email, through: 'workspace sso' }) as const,
-            )
+          ? confirmSsoSettings(scope.database, pendingSso, identity).then((confirmed) => ({
+              ...confirmed,
+              email: identity.email,
+              providerWorkspaceId: confirmed.workspaceId,
+            }))
           : provider
             ? signInThroughWorkspace(
                 scope.database,
@@ -446,22 +480,19 @@ export const createAuthRoutes = ({
                   currentSubjectPattern: provider.preset === 'microsoft' ? entraObjectIdPattern : undefined,
                 },
                 identity,
-              ).then((user) => ({ ...user, workspaceId: provider.workspaceId, through: 'workspace sso' }) as const)
-            : signInWithAccount(scope.database, identity).then(
-                (user) => ({ ...user, workspaceId, through: 'account' }) as const,
-              )
+              ).then((user) => ({ ...user, workspaceId, providerWorkspaceId: provider.workspaceId }))
+            : signInWithAccount(scope.database, identity).then((user) => ({
+                ...user,
+                workspaceId,
+                providerWorkspaceId: null,
+              }))
       ).catch(domainErrorOnly)
       if (signedIn instanceof Error) return refusedPopup(context, signedIn)
       return completeSignIn(context, scope, signedIn)
     })
     .get('/sessions', async (context) => {
       const scope = scopeOf(context)
-      const sessionIdByWorkspace = Object.entries(getCookie(context)).flatMap(([name, sessionId]) =>
-        name.startsWith(sessionCookiePrefix)
-          ? [[name.slice(sessionCookiePrefix.length), sessionId] as [string, string]]
-          : [],
-      )
-      const liveSessions = await findLiveSessions(scope.database, sessionIdByWorkspace)
+      const liveSessions = await findLiveSessions(scope.database, sessionIdByWorkspaceOf(context))
       const userId = liveSessions.toSorted((first, second) => +second.createdAt - +first.createdAt)[0]?.userId
       const sessions = await Promise.all(liveSessions.filter((session) => session.userId === userId).map(scope.issue))
       if (!userId) return context.json({ sessions: [] })
@@ -484,19 +515,19 @@ export const createAuthRoutes = ({
     })
     .post('/sessions', (context) =>
       asMember(context, async ({ context: member, sessionId, scope }) => {
-        if (member.signedInThroughWorkspaceSso) return context.json({ error: 'forbidden' }, 403)
+        if (member.signedInThrough === 'workspace sso') return context.json({ error: 'forbidden' }, 403)
         const workspaceId = await workspaceIdOfBody(context)
-        const signedInAt = await signedInAtOf(scope.database, { ...member, sessionId })
-        if (!signedInAt) return context.json({ error: 'unauthorized' }, 401)
-        if (await isSignedOutSince(scope.database, workspaceId, member.userId, signedInAt))
+        const signIn = await signInOf(scope.database, { ...member, sessionId })
+        if (!signIn) return context.json({ error: 'unauthorized' }, 401)
+        if (await isSignedOutSince(scope.database, workspaceId, member.userId, signIn.signedInAt))
           return context.json({ error: 'forbidden' }, 403)
         const [session] = await openSessions(
           scope.database,
           member.userId,
           workspaceId,
-          'account',
+          signIn.providerWorkspaceId,
           userAgentOf(context),
-          signedInAt,
+          signIn.signedInAt,
         )
         if (!session) return context.json({ error: 'forbidden' }, 403)
         setSessionCookie(context, appOrigin, session)

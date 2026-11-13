@@ -26,7 +26,7 @@ test.describe('Policy', () => {
   const switchOf = (page: Page) => localRuntimesSectionOf(page).getByRole('switch', { name: switchName })
 
   const setLocalSessions = async (page: Page, isOn: boolean) => {
-    await openSettings(page, 'Connect runtime')
+    await openSettings(page, 'Runtimes')
     await expect(switchOf(page)).toHaveAttribute('aria-checked', String(!isOn))
     await switchOf(page).click()
     await expect(switchOf(page)).toHaveAttribute('aria-checked', String(isOn))

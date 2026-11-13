@@ -68,7 +68,7 @@ test.describe('My machine', () => {
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
 
       const adminPage = await openPageAs(browser, workerStack, 'member-alice')
-      await openSettings(adminPage, 'Connect runtime')
+      await openSettings(adminPage, 'Runtimes')
       await expect(localRuntimesSectionOf(adminPage)).toContainText(
         '1 member uses their machine: 1 signed in to Claude Code, 0 to Codex',
       )

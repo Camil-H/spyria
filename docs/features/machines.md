@@ -4,13 +4,13 @@ This page explains where agent chats run: on the workspace's runtime hosts, or o
 
 ## Runtime hosts and runtimes
 
-A **runtime** is one container per runtime chat, made from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git and ripgrep. A **runtime host** is any machine with Docker that runs the host program, `spyria-host`. The host dials out to Spyria over a WebSocket and carries out a fixed set of commands (create, start, stop, remove a runtime, report status). Spyria never connects into the host, so a host needs no open port and Spyria never holds a key to it. See [Decisions](../decisions/).
+A **runtime** is one container per runtime chat, made from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git, ripgrep and poppler-utils. A **runtime host** is any machine with Docker that runs the host program, `spyria-host`. The host dials out to Spyria over a WebSocket and carries out a fixed set of commands (create, start, stop, remove a runtime, report status). Spyria never connects into the host, so a host needs no open port and Spyria never holds a key to it. See [Decisions](../decisions/).
 
 There are two kinds of host:
 
 | | Workspace runtime host | A member's machine |
 |---|---|---|
-| Added by | an admin, in **Workspace settings > Connect runtime** | the member, in **Profile > My machine** |
+| Added by | an admin, in **Workspace settings > Runtimes** | the member, in **Profile > My machine** |
 | Runs | Pi sessions of any member's runtime chats | only its owner's Claude Code and Codex sessions |
 | Model calls | the prompter's API key through Spyria's gateway | the owner's subscription, directly from the machine |
 | Started with | `spyria-host <claim URL>` | `spyria-host --personal <claim URL>` |
@@ -19,11 +19,11 @@ A host runs only the runtime image the server names: on a published deployment t
 
 ## Adding a workspace runtime host
 
-1. As an admin, open **Workspace settings**, **Connect runtime**, then **Add runtime host**, give it a name and copy the command.
+1. As an admin, open **Workspace settings**, **Runtimes**, then **Add runtime host**, give it a name and copy the command.
 2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. On a published deployment the command runs the host image of Spyria's own version (`ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker); when Spyria's origin is `localhost` (local development), it builds the host image itself and points the container at `host.docker.internal`.
 3. The row turns **Online** within seconds, and the command dialog closes by itself. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
 
-Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine. **Remove** disconnects a host and revokes its token.
+Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Docker: rootless** or **Docker: root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine; the last two are amber, as risks. **Remove**, in the host's menu, disconnects a host and revokes its token.
 
 ## Versions and updates
 
@@ -114,7 +114,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 
 ## Turning members' machines off
 
-Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Connect runtime > Member local runtimes** (on by default). The section also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
+Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Runtimes > Member local runtimes** (on by default). The section also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
 
 ## Several deployments on one machine
 

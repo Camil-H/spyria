@@ -1,3 +1,4 @@
+import { domainOfEmail } from './domain-claim.ts'
 import { InvalidSsoSettings } from './errors.ts'
 
 export const ssoPresets = ['google', 'microsoft', 'oidc'] as const
@@ -29,8 +30,6 @@ export const microsoftPersonalAccountsTenantId = '9188040d-6c67-4c5b-b112-36a304
 const multiTenantSegments = new Set(['common', 'organizations', 'consumers'])
 const tenantIdPattern = /^[\w.-]+$/
 const gmailDomains = new Set(['gmail.com', 'googlemail.com'])
-
-const domainOfEmail = (email: string) => email.trim().toLowerCase().split('@')[1] ?? ''
 
 export const tenantIdOf = (issuer: string) => new URL(issuer).pathname.split('/')[1] ?? ''
 

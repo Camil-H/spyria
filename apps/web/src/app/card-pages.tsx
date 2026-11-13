@@ -1,9 +1,11 @@
-import { focusRing, iconButtonClass, useShortcut } from '@spyria/ui'
+import { focusRing, iconButtonClass, StatusBadge, type StatusTone, useShortcut } from '@spyria/ui'
 import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 export type PageCard = { path: string; title: string; description: string; isWide?: true }
+
+export type CardStatus = string | { label: string; tone: StatusTone }
 
 export const pagePaddingClass = 'px-6 py-6 md:px-12 xl:px-16'
 
@@ -17,7 +19,7 @@ export const CardGrid = ({
 }: {
   basePath: string
   cards: readonly PageCard[]
-  statusOf: (path: string) => string | undefined
+  statusOf: (path: string) => CardStatus | undefined
   badgeOf?: (path: string) => ReactNode
 }) => (
   <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
@@ -37,7 +39,11 @@ export const CardGrid = ({
             </span>
             <span id={`card-${path}`} className="flex flex-1 flex-col gap-2 text-sm text-muted">
               {description}
-              {status && <span className="mt-auto text-xs text-ink">{status}</span>}
+              {status && (
+                <span className="mt-auto text-xs text-ink">
+                  {typeof status === 'string' ? status : <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+                </span>
+              )}
             </span>
           </Link>
         </li>

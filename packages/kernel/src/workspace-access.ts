@@ -16,6 +16,7 @@ export const workspacePermissions = [
 ] as const
 export type WorkspacePermission = (typeof workspacePermissions)[number]
 export type WorkspaceRole = Readonly<{ id: string; name: string; permissions: readonly WorkspacePermission[] }>
+export type SignedInThrough = 'account' | 'workspace sso' | 'claimed domain'
 
 export const workspacePermissionLabels: Record<WorkspacePermission, string> = {
   'members.invite': 'Invite members',

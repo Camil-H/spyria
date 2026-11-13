@@ -10,6 +10,7 @@ import type {
   WorkspaceRole,
 } from '@spyria/kernel'
 import type { Chat, ChatChange } from '../domain/chat.ts'
+import type { DomainClaimsOf } from '../domain/domain-claim.ts'
 import type { Invitation } from '../domain/invitation.ts'
 import type { Member } from '../domain/member.ts'
 import type { Project } from '../domain/project.ts'
@@ -90,6 +91,10 @@ export type InvitationRepository = {
   lockOpen(email: string): Promise<Invitation | undefined>
   add(invitation: Invitation): Promise<void>
   save(invitation: Invitation): Promise<void>
+}
+
+export type DomainClaimRepository = {
+  of(domain: string): Promise<DomainClaimsOf>
 }
 
 export type MemberAccess = {

@@ -129,3 +129,13 @@ test('CSV lines quote separators and neutralize spreadsheet formulas', () => {
     `2026-10-18T10:00:00.123456Z,Bob,Called a tool,"'=HYPERLINK(""x"")","Title: Fix, ""quoted"""\n`,
   )
 })
+
+test('claiming and releasing a domain are sign-in records naming the domain', () => {
+  expect(auditKindsOf('Sign-in')).toEqual(expect.arrayContaining(['domain.claimed', 'domain.released']))
+  expect(
+    auditEntryOf({ ...record, kind: 'domain.claimed', target: null, details: { domain: 'acme.com' } }),
+  ).toMatchObject({ action: 'Claimed a domain', details: [{ label: 'Domain', value: 'acme.com' }] })
+  expect(auditEntryOf({ ...record, kind: 'domain.released', target: null, details: {} }).action).toBe(
+    'Released a domain',
+  )
+})

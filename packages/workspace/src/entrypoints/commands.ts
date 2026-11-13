@@ -10,6 +10,7 @@ import type {
   WorkspacePermission,
 } from '@spyria/kernel'
 import type { Chat } from '../domain/chat.ts'
+import type { DomainClaimView } from '../domain/domain-claim.ts'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 import type { Name } from '../domain/name.ts'
 import type { ChatsPolicy } from '../domain/project.ts'
@@ -50,6 +51,11 @@ export type WorkspaceCommands = {
     form: HTMLFormElement
   }) => Promise<{ status: string; message?: string }>
   stopSso: (input: { workspaceId: WorkspaceId }) => Promise<void>
+  readDomainClaims: (input: { workspaceId: WorkspaceId }) => Promise<DomainClaimView[]>
+  claimDomain: (input: { workspaceId: WorkspaceId; domain: string }) => Promise<DomainClaimView[]>
+  verifyDomainClaim: (input: { workspaceId: WorkspaceId; domain: string }) => Promise<DomainClaimView[]>
+  releaseDomainClaim: (input: { workspaceId: WorkspaceId; domain: string }) => Promise<DomainClaimView[]>
+  isWorkspaceCreationOpen: (input: { workspaceId: WorkspaceId }) => Promise<boolean>
   readGitHubSettings: (input: { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
   isGitHubConfigured: (input: { workspaceId: WorkspaceId }) => Promise<boolean>
   saveGitHubSettings: (input: GitHubSettingsInput & { workspaceId: WorkspaceId }) => Promise<GitHubSettingsView | null>
