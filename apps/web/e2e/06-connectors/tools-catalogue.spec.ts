@@ -385,8 +385,7 @@ test.describe('Tools catalogue', () => {
       await expect(github.getByRole('combobox', { name: 'Access of Member' }).locator('option:checked')).toHaveText(
         'Read and write',
       )
-      await expect(github.getByRole('button', { name: 'Edit' })).toHaveCount(0)
-      await expect(github.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+      await expect(github.getByRole('button', { name: 'Actions for GitHub' })).toHaveCount(0)
     })
 
     await test.step('gives the Member role Read on GitHub, so a member chooses approvals for its read tools only', async () => {
