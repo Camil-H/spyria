@@ -125,8 +125,8 @@ test.describe('Questions', () => {
     test(
       `As a prompter, I answer the agent’s question with a choice, and the card stays answered after a reload [${harness.name}]`,
       tags,
-      async ({ page, machine, workerStack }) => {
-        await newHarnessChat(page, harness, `${harness.name} asks`, { machine, workerStack })
+      async ({ page, machine }) => {
+        await newHarnessChat(page, harness, `${harness.name} asks`, { machine })
         await sendMessage(page, askPromptOf[harness.name])
         const question = questionOf(page)
         const shownAnswer = await answerWithChoice[harness.name](page, question)
@@ -144,8 +144,8 @@ test.describe('Questions', () => {
 
     test(`As a prompter, I reload while the question waits, see the card again and answer in free text [${harness.name}]`, {
       tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      await newHarnessChat(page, harness, `${harness.name} free answer`, { machine, workerStack })
+    }, async ({ page, machine }) => {
+      await newHarnessChat(page, harness, `${harness.name} free answer`, { machine })
       await sendMessage(page, askPromptOf[harness.name])
       await expect(questionOf(page).getByRole('radio')).toHaveCount(radioCountOf[harness.name])
       await page.reload()
@@ -159,8 +159,8 @@ test.describe('Questions', () => {
 
     test(`As a prompter, I stop while a question waits: the turn ends Stopped, the card shows it, a late answer is refused and the next prompt works [${harness.name}]`, {
       tag: ['@spec-25'],
-    }, async ({ page, machine, workerStack }) => {
-      await newHarnessChat(page, harness, `${harness.name} stops a question`, { machine, workerStack })
+    }, async ({ page, machine }) => {
+      await newHarnessChat(page, harness, `${harness.name} stops a question`, { machine })
       await sendMessage(page, askPromptOf[harness.name])
       const question = questionOf(page)
       await pickAnyChoice[harness.name](question)
