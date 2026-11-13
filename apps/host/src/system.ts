@@ -1,21 +1,31 @@
 import { readFile } from 'node:fs/promises'
 import { freemem, hostname } from 'node:os'
 import { join } from 'node:path'
-import type { Docker } from './docker.ts'
+import { type Docker, DockerError } from './docker.ts'
 
 export type MemorySource = { docker: Docker; ownContainer: string; root?: string }
 
 const textOf = (path: string) => readFile(path, 'utf8').catch(() => '')
 
-const isContainerOfItsDocker = async ({ docker, ownContainer }: MemorySource) => {
-  const containers = await Promise.all(
-    [ownContainer, hostname()].map((name) =>
-      docker<{ Config?: { Hostname?: string } }>('GET', `/containers/${encodeURIComponent(name)}/json`).catch(
-        () => undefined,
-      ),
-    ),
+const hostnameOfContainer = (docker: Docker, name: string) =>
+  docker<{ Config?: { Hostname?: string } }>('GET', `/containers/${encodeURIComponent(name)}/json`).then(
+    (container) => container.Config?.Hostname,
+    (error) => {
+      if (error instanceof DockerError && error.status === 404) return undefined
+      throw error
+    },
   )
-  return containers.some((container) => container?.Config?.Hostname === hostname())
+
+const isContainerOfItsDockerBySource = new WeakMap<MemorySource, Promise<boolean>>()
+const isContainerOfItsDocker = (source: MemorySource) => {
+  const known = isContainerOfItsDockerBySource.get(source)
+  if (known) return known
+  const asked = Promise.all(
+    [source.ownContainer, hostname()].map((name) => hostnameOfContainer(source.docker, name)),
+  ).then((containerHostnames) => containerHostnames.includes(hostname()))
+  isContainerOfItsDockerBySource.set(source, asked)
+  asked.catch(() => isContainerOfItsDockerBySource.delete(source))
+  return asked
 }
 
 const machineCgroupMemoryOf = async (source: MemorySource) => {
