@@ -1,6 +1,7 @@
 import { openPageAs } from '../stack'
 import {
   addCredential,
+  addKeyDialogOf,
   addLlmKey,
   addParticipant,
   agentReplyText,
@@ -22,7 +23,7 @@ import {
 const credentialRowOf = (page: Page, provider: string) =>
   llmSectionOf(page).getByRole('listitem').filter({ hasText: provider })
 const removeKey = async (page: Page, provider: string) => {
-  await openProfile(page)
+  await openProfile(page, 'LLM keys')
   await llmSectionOf(page)
     .getByRole('button', { name: `Remove ${provider}` })
     .click()
@@ -36,16 +37,18 @@ test.describe('LLM keys', () => {
     await page.goto('/')
   })
 
-  test('As a member, I add an API key shown only by its last 4 characters, and the form is cleared', async ({
+  test('As a member, I add an API key shown only by its last 4 characters, and the add form opens empty again', async ({
     page,
   }) => {
-    await openProfile(page)
+    await openProfile(page, 'LLM keys')
 
-    await test.step('adds an API key, shows only its last 4 characters and clears the form', async () => {
+    await test.step('adds an API key, shows only its last 4 characters and opens the form empty again', async () => {
       await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-1234567890' })
       await expect(credentialRowOf(page, 'OpenAI')).toContainText('••••7890')
-      await expect(llmSectionOf(page).getByLabel('Provider')).toHaveValue('')
-      await expect(llmSectionOf(page).getByLabel('Secret')).toHaveValue('')
+      await expect(addKeyDialogOf(page)).toHaveCount(0)
+      await llmSectionOf(page).getByRole('button', { name: 'Add key' }).click()
+      await expect(addKeyDialogOf(page).getByLabel('Provider')).toHaveValue('')
+      await expect(addKeyDialogOf(page).getByLabel('Secret')).toHaveValue('')
       expect(await page.content()).not.toContain('sk-test-1234567890')
       const inputValues = await page
         .locator('input, textarea')
@@ -55,32 +58,35 @@ test.describe('LLM keys', () => {
   })
 
   test('As a member, I see my key masked, and the form takes only a provider and a secret', async ({ page }) => {
-    await openProfile(page)
+    await openProfile(page, 'LLM keys')
 
     await test.step('shows the credential masked, without the full secret anywhere', async () => {
       await expect(credentialRowOf(page, 'Anthropic')).toContainText('••••a1b2')
     })
 
     await test.step('has only the Provider and Secret fields: no Label, Kind or Credential kind switch', async () => {
+      await llmSectionOf(page).getByRole('button', { name: 'Add key' }).click()
       for (const removedField of ['Label', 'Kind', 'Credential']) {
-        await expect(llmSectionOf(page).getByLabel(removedField)).toHaveCount(0)
+        await expect(addKeyDialogOf(page).getByLabel(removedField)).toHaveCount(0)
       }
       await expect(llmSectionOf(page).getByText(/Plan/)).toHaveCount(0)
     })
 
     await test.step('disables Add while the provider or the secret is blank', async () => {
-      const addButton = llmSectionOf(page).getByRole('button', { name: 'Add' })
+      const addButton = addKeyDialogOf(page).getByRole('button', { name: 'Add', exact: true })
       await expect(addButton).toBeDisabled()
-      await llmSectionOf(page).getByLabel('Provider').fill('OpenAI')
+      await addKeyDialogOf(page).getByLabel('Provider').fill('OpenAI')
       await expect(addButton).toBeDisabled()
-      await llmSectionOf(page).getByLabel('Secret').fill('sk-test-1234567890')
+      await addKeyDialogOf(page).getByLabel('Secret').fill('sk-test-1234567890')
       await expect(addButton).toBeEnabled()
-      await llmSectionOf(page).getByLabel('Provider').fill('   ')
+      await addKeyDialogOf(page).getByLabel('Provider').fill('   ')
       await expect(addButton).toBeDisabled()
     })
 
     await test.step('keeps the secret field a password input', async () => {
-      await expect(llmSectionOf(page).getByLabel('Secret')).toHaveAttribute('type', 'password')
+      await expect(addKeyDialogOf(page).getByLabel('Secret')).toHaveAttribute('type', 'password')
+      await addKeyDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+      await expect(addKeyDialogOf(page)).toHaveCount(0)
     })
 
     await test.step('keeps the credential when the removal is cancelled', async () => {
@@ -101,7 +107,7 @@ test.describe('LLM keys', () => {
   test('As a member, I remove my only key and cannot prompt in runtime chats until I add one, while channels still work', async ({
     page,
   }) => {
-    await openProfile(page)
+    await openProfile(page, 'LLM keys')
 
     await test.step('removes the credential after confirmation and shows the empty state', async () => {
       await llmSectionOf(page).getByRole('button', { name: 'Remove Anthropic' }).click()
@@ -136,7 +142,7 @@ test.describe('LLM keys', () => {
       await composerOf(page).fill('Waiting for a key')
       await expect(sendButtonOf(page)).toBeDisabled()
       await mainOf(page).getByRole('link', { name: 'Open profile' }).click()
-      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'LLM keys' })).toBeVisible()
       await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-1234567890' })
       await openChat(page, 'Research')
       await expect(mainOf(page)).not.toContainText(blockedNotice)
