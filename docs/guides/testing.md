@@ -113,7 +113,7 @@ Tests start and own their containers; they never touch the dev stack.
 
 | Piece | Container or port | Notes |
 |---|---|---|
-| Test Postgres | `spyria-test-postgres` on 5435 | In memory (tmpfs, 4 GB at most), WAL capped at 1 GB; recreated when its settings change. Integration tests create their own databases (`spyria_test_<id>`), cloned from a migrated template. |
+| Test Postgres | `spyria-test-postgres` on 127.0.0.1:5435 | On the `spyria-test-network` Docker network, where the test gateways reach it by name; the port is published on loopback only. In memory (tmpfs, 4 GB at most), WAL capped at 1 GB; recreated when its settings change. Integration tests create their own databases (`spyria_test_<id>`), cloned from a migrated template. |
 | Test Dex | `spyria-test-dex` on 5557 | Config `apps/web/e2e/dex-test.yaml`, shared by integration and e2e, never the dev Dex. |
 | Integration gateway | `spyria-test-gateway-integration` on 4880 | A Bifrost of its own, on its own database. |
 | e2e gateway | `spyria-test-gateway-e2e` on 4881 | One for the whole e2e run. |
