@@ -165,7 +165,7 @@ When an agent acts, it uses the access and accounts of the member who prompted: 
 - the models of a provider that is off are not offered in the model picker, nor chosen by routing or for sub-agents;
 - the model relay refuses a call to such a model before it reaches the gateway, and the chat shows "*Model* is not allowed in this workspace".
 
-The choice at the top, **Every provider** or **Only the ones turned on**, removes or starts the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
+**Turn every provider on**, shown while a provider is off, removes the allow-list. Keys already added for a provider turned off stay in the member's profile but reach no model. Sessions on a member's own machine (Claude Code, Codex) use the member's own subscription and are not covered. Each change is recorded in the audit log.
 
 The page lists the providers in two groups side by side: labs (Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, Meta and TypeSafe, whose decision models route turns) and routers (OpenRouter), listed once in `packages/kernel/src/models.ts`. Meta is reached through the OpenAI-compatible Meta Model API (`api.meta.ai`), with Muse Wonder as its large model and Muse Spark as its medium one.
 
