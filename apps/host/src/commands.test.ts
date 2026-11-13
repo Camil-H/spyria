@@ -627,3 +627,35 @@ test('pruning keeps the newest snapshot of each kept repository and removes the 
     `DELETE /volumes/spyria-snapshot-${snapshotKey}-00mabc001`,
   ])
 })
+
+test('the status of a runtime left paused by an interrupted snapshot resumes it and reports it running, but leaves a runtime paused for a snapshot under way', async () => {
+  const requests: string[] = []
+  const copy = Promise.withResolvers<{ StatusCode: number }>()
+  const docker = (async (method: string, path: string) => {
+    requests.push(`${method} ${path.split('?')[0]}`)
+    if (path.startsWith('/volumes?')) return { Volumes: [] }
+    if (path.endsWith('/wait')) return copy.promise
+    if (path === '/containers/spyria-rt-runtime-1/json')
+      return {
+        Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
+        State: { Running: true, Paused: true },
+      }
+    return {}
+  }) as Docker
+  const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  const unpauses = () => requests.filter((request) => request === 'POST /containers/spyria-rt-runtime-1/unpause')
+
+  expect(await runner.run({ op: 'status', runtimeId: 'runtime-1' })).toBe('running')
+  expect(unpauses()).toHaveLength(1)
+
+  const snapshotTaken = runner.run({ op: 'snapshot', runtimeId: 'runtime-1', snapshotKey })
+  while (!requests.includes('POST /containers/spyria-rt-runtime-1-snapshot/wait')) await Bun.sleep(1)
+  expect(await runner.run({ op: 'status', runtimeId: 'runtime-1' })).toBe('running')
+  expect(unpauses()).toHaveLength(1)
+
+  copy.resolve({ StatusCode: 0 })
+  await snapshotTaken
+  expect(unpauses()).toHaveLength(2)
+  expect(await runner.run({ op: 'status', runtimeId: 'runtime-1' })).toBe('running')
+  expect(unpauses()).toHaveLength(3)
+})
