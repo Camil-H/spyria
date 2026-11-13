@@ -25,7 +25,7 @@ export const ActiveSessionsSection = ({ workspaceId }: { workspaceId: WorkspaceI
     commands.readActiveSessions({ workspaceId }).then(setSessions, () => setSessions([]))
   }, [commands, workspaceId])
   return (
-    <LabelledSection id="sessions" title="Sessions">
+    <LabelledSection title="Sessions">
       <p className="-mt-2 text-sm text-muted">Where you are signed in to this workspace</p>
       <ul aria-label="Sessions" className={rowListClass}>
         {sessions.map((session) => (
@@ -43,7 +43,7 @@ export const ActiveSessionsSection = ({ workspaceId }: { workspaceId: WorkspaceI
       <div className={`${rowListClass} mt-4`}>
         <div className={rowClass}>
           <span className="flex flex-col">
-            <span className="font-medium">Sign out everywhere</span>
+            <span className="font-medium">End every session</span>
             <span className="text-muted">Ends every session, this one included</span>
           </span>
           <button type="button" className={`ml-auto ${ghostButtonClass}`} onClick={() => setIsConfirming(true)}>

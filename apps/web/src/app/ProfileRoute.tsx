@@ -14,7 +14,7 @@ import { useSession } from '@spyria/session'
 import { MyUsageSection } from '@spyria/usage'
 import type { ComponentType } from 'react'
 import { useOutletContext, useParams } from 'react-router'
-import { CardGrid, CardPage, type PageCard, pagePaddingClass } from './card-pages.tsx'
+import { CardGrid, CardPage, countLabelOf, type PageCard, pagePaddingClass } from './card-pages.tsx'
 
 type ProfileCard = PageCard & { Page: ComponentType<{ workspaceId: WorkspaceId; memberId: MemberId }> }
 
@@ -51,8 +51,6 @@ const profileCards: readonly ProfileCard[] = [
     Page: MyUsageSection,
   },
 ]
-
-const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
 const cardStatusesOf =
   (workspaceId: WorkspaceId, memberId: MemberId) =>

@@ -19,7 +19,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 
 ## Setup checklist
 
-Until the workspace is set up, the top of the sidebar shows **Get started** with how many tasks are done and the next one; it opens that task's page. **Workspace settings** lists the workspace tasks at the top (**Get your workspace ready**) and **Profile** the personal ones (**Set up your profile**). Like **Workspace settings**, **Profile** shows a card per part (**Account**, **LLM keys**, **My machine**, **Connections**, **Usage**), each with where it stands, and each opens its own page. Each list can be collapsed, which the browser remembers.
+Until the workspace is set up, the top of the sidebar shows **Get started** with how many tasks are done and the next one; it opens that task's page. **Workspace settings** lists the workspace tasks at the top (**Get your workspace ready**) and **Profile** the personal ones (**Set up your profile**). Each list can be collapsed, which the browser remembers. Like **Workspace settings**, **Profile** shows a card per part (**Account**, **LLM keys**, **My machine**, **Connections**, **Usage**), each with where it stands, and each opens its own page.
 
 | Task | Who sees it | Done once |
 |---|---|---|
