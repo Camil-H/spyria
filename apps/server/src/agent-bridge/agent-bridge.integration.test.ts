@@ -770,6 +770,45 @@ test('removing the owner of a runtime chat closes their stream, stops the turn a
   expect((await runtimeOf(chat)).state).toBe('running')
 })
 
+test('an archived chat takes no new message nor retry, and a prompt or session start still queued for it places no runtime', async () => {
+  const { launches } = await agentHost()
+  const chat = await newRuntimeChat()
+  const onMachine = await newRuntimeChat({ harness: 'claude-code' })
+  for (const archived of [chat, onMachine])
+    expect(await mutate(aliceInAcme, 'workspace.archiveChat', { workspaceId: acme, chatId: archived })).toEqual(
+      succeeded,
+    )
+  const chatArchived = failedWith('This chat is archived: it takes no new messages')
+  expect(
+    await mutate(aliceInAcme, 'conversation.sendMessage', {
+      workspaceId: acme,
+      id: 'archived',
+      chatId: chat,
+      text: 'Hi',
+    }),
+  ).toEqual(chatArchived)
+  expect(await mutate(aliceInAcme, 'conversation.retryAgent', { workspaceId: acme, chatId: chat })).toEqual(
+    chatArchived,
+  )
+
+  const queuedPrompt = `message-${crypto.randomUUID()}`
+  await database.$client`
+    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+    values (${acme}, ${chat}, ${queuedPrompt}, 1, 'member', ${alice}, 'Queued before the archive', now())`
+  const jobs = agentBridge.forDatabase(database).jobs
+  expect(
+    await jobs['agent.prompt']({ workspaceId: acme, payload: { messageId: queuedPrompt }, isLastAttempt: false }),
+  ).toBeUndefined()
+  expect(
+    await jobs['agent.start-session']({ workspaceId: acme, payload: { chatId: onMachine }, isLastAttempt: false }),
+  ).toBeUndefined()
+  expect(await turnOf(chat)).toBeNull()
+  expect(
+    (await database.$client`select id from runtimes where chat_id in (${chat}, ${onMachine})`).map(({ id }) => id),
+  ).toEqual([])
+  expect(launches()).toEqual([])
+})
+
 test('a runtime started under a previous secrets key is still reached with its key after the rotation', async () => {
   const { host, relay } = await agentHost()
   const chat = await newRuntimeChat()

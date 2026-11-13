@@ -574,6 +574,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           baseBranch: row.baseBranch ?? null,
           toolServersOff: row.toolServersOff ?? [],
           isOwnerRemoved: await isOwnerRemoved(tx, contextWorkspaceId, row.ownerUserId),
+          archived: row.archived,
         }
       },
       ...chatPermissionsOf(tx, contextWorkspaceId),
