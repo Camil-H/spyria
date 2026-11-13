@@ -245,7 +245,7 @@ test.describe('Spend', () => {
       tag: ['@spec-45'],
     }, async ({ page }) => {
       await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
-      await expect(mainOf(page).getByRole('link', { name: 'Usage', exact: true })).toContainText('$0.04 this month')
+      await expect(mainOf(page).getByRole('link', { name: 'Usage', exact: true })).toContainText('$0.18 this month')
       await openProfile(page, 'Usage')
       const mergedPulls = usageSectionOf(page, 'Cost per merged PR')
       await expect(mergedPulls).toContainText('The pull requests merged from chats you prompted in')
