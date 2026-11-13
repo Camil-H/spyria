@@ -252,9 +252,6 @@ test('removing a member ends their sessions, participations, keys and connection
   await database.$client`
     insert into tool_connections (workspace_id, user_id, connection_id, status) values (${acme}, ${bob}, 'connection-fake', 'Connected')`
   await database.$client`
-    insert into connection_access (workspace_id, connection_id, id, user_id, level, tool_changes)
-    values (${acme}, 'connection-crm', ${`member:${bob}`}, ${bob}, 'read', '{}')`
-  await database.$client`
     insert into tool_approvals (workspace_id, user_id, connection_id, server_approval, tool_approvals)
     values (${acme}, ${bob}, 'connection-crm', 'always', '{}')`
   await database.$client`
@@ -296,13 +293,7 @@ test('removing a member ends their sessions, participations, keys and connection
     actor: alice,
     payload: { memberId: bob },
   })
-  for (const table of [
-    'llm_credentials',
-    'tool_connections',
-    'connection_access',
-    'tool_approvals',
-    'github_connections',
-  ])
+  for (const table of ['llm_credentials', 'tool_connections', 'tool_approvals', 'github_connections'])
     expect(await database.$client`select 1 from ${database.$client(table)} where user_id = ${bob}`).toHaveLength(0)
   await jobDone('profile.gateway-sync', { memberId: bob })
   expect(await database.$client`select 1 from member_gateway_keys where user_id = ${bob}`).toHaveLength(0)

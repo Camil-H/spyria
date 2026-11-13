@@ -8,28 +8,18 @@ import {
   type WorkspaceId,
 } from '@spyria/kernel'
 
+export const listToolRoles = (workspaceId: WorkspaceId) => (snapshot: Snapshot) =>
+  snapshot.workspaceRoles.filter((role) => role.workspaceId === workspaceId).map(({ id, name }) => ({ id, name }))
+
 const accessListOf = (snapshot: Snapshot, workspaceId: WorkspaceId) => {
-  const members = snapshot.memberships
-    .filter((membership) => membership.workspaceId === workspaceId && membership.removedAt === null)
-    .toSorted((first, second) => first.displayName.localeCompare(second.displayName))
-  const roles = snapshot.workspaceRoles.filter((role) => role.workspaceId === workspaceId)
+  const roles = listToolRoles(workspaceId)(snapshot)
   const accessRowsByConnection = Map.groupBy(connectionAccessIn(snapshot, workspaceId), (access) => access.connectionId)
   return (
     connectionId: string,
     roleAccessOf: (roleId: string, ofServer: ToolServerAccess[]) => ToolServerAccess | undefined,
   ) => {
     const ofServer = accessRowsByConnection.get(connectionId) ?? []
-    const accessByMember = new Map(ofServer.flatMap((access) => (access.memberId ? [[access.memberId, access]] : [])))
-    return {
-      roles: roles.map(({ id, name }) => ({ id, name, access: roleAccessOf(id, ofServer) })),
-      namedMembers: members.flatMap(({ memberId, displayName }) => {
-        const access = accessByMember.get(memberId)
-        return access ? [{ id: memberId, name: displayName, access }] : []
-      }),
-      otherMembers: members
-        .filter(({ memberId }) => !accessByMember.has(memberId))
-        .map(({ memberId, displayName }) => ({ id: memberId, name: displayName })),
-    }
+    return { roles: roles.map(({ id, name }) => ({ id, name, access: roleAccessOf(id, ofServer) })) }
   }
 }
 
@@ -49,7 +39,4 @@ export const listGitHubToolAccess = (workspaceId: WorkspaceId) => (snapshot: Sna
 })
 
 export type ListedWorkspaceConnection = ReturnType<ReturnType<typeof listWorkspaceConnections>>[number]
-export type ServerAccessList = Pick<
-  ListedWorkspaceConnection,
-  'id' | 'name' | 'tools' | 'roles' | 'namedMembers' | 'otherMembers'
->
+export type ServerAccessList = Pick<ListedWorkspaceConnection, 'id' | 'name' | 'tools' | 'roles'>

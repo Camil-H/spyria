@@ -7,7 +7,6 @@ import {
   githubTools,
   grantedToolsOf,
   isAllowedAtLevel,
-  type MemberId,
   ownValueOf,
   type ToolHolder,
   type ToolServerAccess,
@@ -32,8 +31,7 @@ export type WorkspaceConnection = {
   tools: ConnectionTool[]
   isReviewed: boolean
 }
-export type AccessSubject = { roleId: string; memberId?: undefined } | { memberId: MemberId; roleId?: undefined }
-export type AccessInput = AccessSubject & { level: AccessLevel | null; toolChanges: Record<string, boolean> }
+export type AccessInput = { roleId: string; level: AccessLevel | null; toolChanges: Record<string, boolean> }
 export type ToolMarking = { name: string; readOnly: boolean }
 export type ConnectionInput = {
   name: string
@@ -112,8 +110,7 @@ export const accessOf = (
   )
   return {
     connectionId: connection.id,
-    roleId: input.roleId ?? null,
-    memberId: input.memberId ?? null,
+    roleId: input.roleId,
     level,
     toolChanges,
   }

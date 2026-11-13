@@ -180,10 +180,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           zql.toolConnections.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
           await tx.mutate.toolConnections.delete({ workspaceId, userId, connectionId })
-        for (const { id } of await tx.run(
+        for (const { roleId } of await tx.run(
           zql.connectionAccess.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
-          await tx.mutate.connectionAccess.delete({ workspaceId, connectionId, id })
+          await tx.mutate.connectionAccess.delete({ workspaceId, connectionId, roleId })
         for (const { userId } of await tx.run(
           zql.toolApprovals.where('workspaceId', workspaceId).where('connectionId', connectionId),
         ))
@@ -192,31 +192,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
       accessOf: async (workspaceId) =>
         (await tx.run(zql.connectionAccess.where('workspaceId', inContextWorkspace(workspaceId)))).map(
-          ({ connectionId, roleId, userId, level, toolChanges }) => ({
-            connectionId,
-            roleId,
-            memberId: userId === null ? null : toMemberId(userId),
-            level,
-            toolChanges,
-          }),
+          ({ connectionId, roleId, level, toolChanges }) => ({ connectionId, roleId, level, toolChanges }),
         ),
-      setAccess: async (workspaceId, connectionId, subject, access) => {
-        const id = subject.roleId === undefined ? `member:${subject.memberId}` : `role:${subject.roleId}`
-        const key = { workspaceId: inContextWorkspace(workspaceId), connectionId, id }
+      setAccess: async (workspaceId, connectionId, roleId, access) => {
+        const key = { workspaceId: inContextWorkspace(workspaceId), connectionId, roleId }
         if (!access) return tx.mutate.connectionAccess.delete(key)
-        await tx.mutate.connectionAccess.upsert({
-          ...key,
-          roleId: access.roleId,
-          userId: access.memberId,
-          level: access.level,
-          toolChanges: access.toolChanges,
-        })
-      },
-      removeAccessOf: async (workspaceId, memberId) => {
-        for (const { connectionId, id } of await tx.run(
-          zql.connectionAccess.where('workspaceId', inContextWorkspace(workspaceId)).where('userId', memberId),
-        ))
-          await tx.mutate.connectionAccess.delete({ workspaceId, connectionId, id })
+        await tx.mutate.connectionAccess.upsert({ ...key, level: access.level, toolChanges: access.toolChanges })
       },
       removeSignIn: (workspaceId, connectionId, memberId) =>
         tx.mutate.toolConnections.delete({

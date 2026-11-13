@@ -598,8 +598,8 @@ type SeedWriter = { execute: (query: SQL) => Promise<unknown> }
 export const testCrmConnection = { id: 'connection-crm', name: 'CRM', gatewayName: 'crm' }
 const openToEveryRole = (writer: SeedWriter, workspaceId: string, connectionId: string) =>
   writer.execute(
-    sql`insert into connection_access (workspace_id, connection_id, id, role_id, level, tool_changes)
-      select workspace_id, ${connectionId}, 'role:' || id, id, 'write', '{}' from workspace_roles
+    sql`insert into connection_access (workspace_id, connection_id, role_id, level, tool_changes)
+      select workspace_id, ${connectionId}, id, 'write', '{}' from workspace_roles
       where workspace_id = ${workspaceId}`,
   )
 
