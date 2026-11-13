@@ -1,5 +1,5 @@
 import { ownedBy, type Snapshot } from '@spyria/db'
-import { useQuery } from '@spyria/db/react'
+import { useQuery, useScoped } from '@spyria/db/react'
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import { ChecklistBlock } from '@spyria/onboarding'
 import {
@@ -11,6 +11,7 @@ import {
 } from '@spyria/profile'
 import { MyMachineSection, statusLabelOf } from '@spyria/runtime'
 import { useSession } from '@spyria/session'
+import { formatCost } from '@spyria/ui'
 import { MyUsageSection } from '@spyria/usage'
 import type { ComponentType } from 'react'
 import { useOutletContext, useParams } from 'react-router'
@@ -46,7 +47,7 @@ const profileCards: readonly ProfileCard[] = [
   {
     path: 'usage',
     title: 'Usage',
-    description: 'Your AI spend and monthly budget',
+    description: 'Your AI spend, monthly budget and cost per merged PR',
     isWide: true,
     Page: MyUsageSection,
   },
@@ -58,10 +59,15 @@ const cardStatusesOf =
     const keyCount = snapshot.llmCredentials.filter(ownedBy(workspaceId, memberId)).length
     const machine = snapshot.runtimeHosts.find((host) => host.workspaceId === workspaceId && host.ownerId === memberId)
     const { connected, toReconnect } = countConnectionStates(workspaceId, memberId)(snapshot)
+    const month = new Date().toISOString().slice(0, 7)
+    const monthCostMicros = snapshot.usageEntries
+      .filter((entry) => entry.workspaceId === workspaceId && entry.memberId === memberId && entry.month === month)
+      .reduce((sum, entry) => sum + entry.costMicros, 0)
     return {
       'llm-keys': keyCount === 0 ? 'No key yet' : countLabelOf(keyCount, 'key'),
       machine: machine ? statusLabelOf(machine) : 'Not added',
       connections: toReconnect > 0 ? `${toReconnect} to reconnect` : `${connected} connected`,
+      usage: `${formatCost(monthCostMicros)} this month`,
     }
   }
 
@@ -70,6 +76,8 @@ const ProfileRoute = () => {
   const { memberId } = useSession()
   const { card } = useParams()
   const statuses = useQuery(cardStatusesOf, workspaceId, memberId)
+  const isMonthUsageComplete =
+    useScoped(workspaceId, 'monthUsage', { month: new Date().toISOString().slice(0, 7) })?.isComplete === true
   const profilePath = `/w/${workspaceId}/profile`
   const openCard = profileCards.find(({ path }) => path === card)
   if (openCard)
@@ -83,7 +91,12 @@ const ProfileRoute = () => {
       <h1 className="text-2xl font-semibold">Profile</h1>
       <ProfileHeader workspaceId={workspaceId} memberId={memberId} />
       <ChecklistBlock workspaceId={workspaceId} scope="member" />
-      <CardGrid basePath={profilePath} cards={profileCards} statusOf={(path) => statuses[path]} />
+      <CardGrid
+        basePath={profilePath}
+        cards={profileCards}
+        columnsClass="sm:grid-cols-2 xl:grid-cols-3"
+        statusOf={(path) => (path !== 'usage' || isMonthUsageComplete ? statuses[path] : undefined)}
+      />
     </div>
   )
 }
