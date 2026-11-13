@@ -25,7 +25,7 @@ export class AgentStartFailure extends Error {}
 export type AgentChat = Readonly<{ workspaceId: WorkspaceId; chatId: ChatId }>
 export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHostId }>
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
-export type SessionRestart = Readonly<{ chatId: ChatId; memberId: MemberId }>
+export type SessionRestart = Readonly<{ chatId: ChatId; memberId: MemberId; promptId: MessageId | null }>
 type AgentSocket = { send(data: string): void; close(): void }
 export type AgentTransport = {
   gatewayUrl: string
