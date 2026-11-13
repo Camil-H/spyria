@@ -50,7 +50,7 @@ test.describe('Steps', () => {
   forEachHarness((harness) => {
     test(`As a prompter, I follow the agent’s steps live while it works, then see them folded before its answer [${harness.name}]`, {
       tag: ['@spec-10', '@spec-21', '@spec-25', ...(harness.name === 'Codex' ? [] : ['@smoke'])],
-    }, async ({ page, agentScript, release, heldCommand, machine, workerStack }) => {
+    }, async ({ page, agentScript, release, heldCommand, machine }) => {
       if (harness.name === 'Pi') {
         await openChat(page, 'Research')
         const steps = fixSteps(`${heldCommand('command')} && `, 'thinking')
@@ -71,7 +71,7 @@ test.describe('Steps', () => {
         await expect(messageContaining(page, fixedText)).toHaveCount(1)
         return
       }
-      await newHarnessChat(page, harness, `${harness.name} steps`, { machine, workerStack })
+      await newHarnessChat(page, harness, `${harness.name} steps`, { machine })
       if (harness.name === 'Claude Code') {
         await sendMessage(page, 'stub:tools stub:linger')
         await expect(messageContaining(page, '[t1]')).toBeVisible()
@@ -226,6 +226,7 @@ test.describe('Steps', () => {
       await sendMessage(page, 'Show the pricing')
 
       const reply = messageContaining(page, 'See the pricing')
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(reply.getByRole('table')).toBeVisible()
       await expect(reply.getByRole('cell', { name: 'Team' })).toBeVisible()
       await expect(reply.locator('code .hljs-keyword').first()).toHaveText('const')
@@ -245,7 +246,6 @@ test.describe('Steps', () => {
         await page.evaluate(() => (window as Window & { spyriaInjected?: boolean }).spyriaInjected),
       ).toBeUndefined()
       await expect(reply.locator('img')).toHaveCount(0)
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
       await reply.getByRole('button', { name: 'Load image from images.example.com' }).click()
       await expect(reply.locator('img')).toHaveAttribute('src', 'https://images.example.com/chart.png')
     })
