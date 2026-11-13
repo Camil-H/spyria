@@ -66,7 +66,7 @@ hostTest.describe('Machines', () => {
   )
 
   hostTest(
-    'As a member who can manage runtime hosts, I see Docker: root or Docker: rootless badges with a tooltip, and limits that are not enforced',
+    'As a member who can manage runtime hosts, I see Docker runs as root or Rootless Docker badges with a tooltip, and limits that are not enforced',
     {
       tag: ['@spec-07', '@spec-25', '@stage-f'],
     },
@@ -78,12 +78,12 @@ hostTest.describe('Machines', () => {
       await expectOnline(page, 'Rootless box')
       const rootedRow = hostRowOf(page, 'Rooted box')
       const rootlessRow = hostRowOf(page, 'Rootless box')
-      await expect(rootedRow.getByText('Docker: root', { exact: true })).toHaveAttribute(
+      await expect(rootedRow.getByText('Docker runs as root', { exact: true })).toHaveAttribute(
         'title',
         'Docker on this host runs as root: containers are isolated but the daemon has root on the host',
       )
       await expect(rootedRow.getByText('Limits not enforced')).toHaveCount(0)
-      await expect(rootlessRow.getByText('Docker: rootless', { exact: true })).toHaveAttribute(
+      await expect(rootlessRow.getByText('Rootless Docker', { exact: true })).toHaveAttribute(
         'title',
         'Docker runs without root on this host',
       )
