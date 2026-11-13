@@ -390,10 +390,10 @@ test.describe('Tools catalogue', () => {
       await expect(servers).toHaveCount(2)
       await expect(servers.first()).toHaveAttribute('aria-label', 'Spyria')
       const builtIn = serverCardOf(page, 'Spyria')
-      await expect(builtIn).toContainText('8 tools')
+      await expect(builtIn).toContainText('11 tools')
       await expect(builtIn.getByRole('list', { name: 'Built-in tools' })).toHaveCount(0)
       await openServer(page, 'Spyria')
-      await expect(builtIn.getByRole('list', { name: 'Built-in tools' }).getByRole('listitem')).toHaveCount(8)
+      await expect(builtIn.getByRole('list', { name: 'Built-in tools' }).getByRole('listitem')).toHaveCount(11)
       await expect(builtIn).toContainText(
         "open_pageOpens a web page or a file of the project in the chat's Browser tab",
       )
