@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'bun:test'
 import { seedSpend } from '@spyria/db/testing'
-import { alice, asMember, bob, openSharedTestApp } from './testing/testing.ts'
+import { alice, asMember, bob, lee, openSharedTestApp } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
 
@@ -19,7 +19,7 @@ type Report = {
     costMicros: number
     perPullMicros: number | null
     trend: { bucket: string; perPullMicros: number | null }[]
-  } | null
+  }
 }
 
 const reportOf = async (path: string, userId = alice) => {
@@ -46,7 +46,7 @@ test('members are refused the workspace spend; their own usage is open to them',
   expect((await asMember(bob, 'GET', '/api/spend/mine')).status).toBe(200)
   expect((await asMember(alice, 'GET', '/api/spend?period=yesterday')).status).toBe(400)
   expect((await asMember(alice, 'GET', '/api/spend?scope=chat')).status).toBe(400)
-  expect((await asMember(bob, 'GET', '/api/spend/mine?scope=member&scopeKey=member-alice')).status).toBe(400)
+  expect((await asMember(bob, 'GET', '/api/spend/mine?scope=member&scopeKeys=member-alice')).status).toBe(400)
 })
 
 test('this month totals each member, project, chat and model of the workspace only, with shares and a chart per day', async () => {
@@ -126,13 +126,34 @@ test('cost per merged PR lists the PR merged this month with all its chat’s sp
   expect(lastMonth?.trend.every((point) => point.perPullMicros === null)).toBe(true)
 })
 
+test('own cost per merged PR counts the PRs of the chats I prompted in, against only what I spent in them', async () => {
+  await database.$client`
+    insert into model_calls (workspace_id, id, chat_id, prompter_id, model, provider, input_tokens, output_tokens,
+      cost_micros, status, turn_id, session_id, called_at)
+    values ('workspace-acme', 'call-bob-invoice', 'chat-invoice-bug', 'member-bob', 'gpt-5', 'openai', 400, 100, 7000,
+      'success', 'turn-bob-invoice', 'session-bob-invoice', now())`
+  const pullsOf = async (userId: typeof alice) => (await reportOf('/api/spend/mine', userId)).mergedPulls
+  expect(await pullsOf(alice)).toMatchObject({
+    costMicros: 60_000,
+    perPullMicros: 60_000,
+    pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 60_000 }],
+  })
+  expect(await pullsOf(bob)).toMatchObject({
+    costMicros: 7000,
+    perPullMicros: 7000,
+    pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 7000 }],
+  })
+  expect(await pullsOf(lee)).toMatchObject({ pulls: [], perPullMicros: null })
+  expect((await reportOf('/api/spend')).mergedPulls).toMatchObject({ costMicros: 67_000 })
+})
+
 test('own usage holds only the requester’s calls, whatever member the request names', async () => {
   const report = await reportOf('/api/spend/mine?member=member-alice&period=this_month', bob)
   expect(report.total).toEqual({ costMicros: 20_000, tokens: 2000, requests: 2 })
   expect(Object.keys(report.tables)).toEqual(['chat', 'model'])
   expect(rowsOf(report.tables.chat)).toEqual([['Research', 20_000, 2]])
   expect(rowsOf(report.tables.model)).toEqual([['openai/gpt-5', 20_000, 2]])
-  expect(report.mergedPulls).toBeNull()
+  expect(report.mergedPulls).toMatchObject({ pulls: [], costMicros: 0, perPullMicros: null })
   expect(report.decomposition.factors.map(({ name, current, previous }) => [name, current, previous])).toEqual([
     ['users', 1, 1],
     ['sessionsPerUser', 1, 1],
@@ -148,7 +169,7 @@ const factorsOf = (point: Pick<Report['decomposition'], 'factors'> | undefined) 
   Object.fromEntries((point?.factors ?? []).map(({ name, current }) => [name, current]))
 
 test('a scope narrows the whole report to one model, the total, tables and charts included, while its choices stay every member, project, chat and model', async () => {
-  const report = await reportOf('/api/spend?scope=model&scopeKey=anthropic/claude-sonnet')
+  const report = await reportOf('/api/spend?scope=model&scopeKeys=anthropic/claude-sonnet')
   expect(report.decomposition.biggestMover).toBe('tokensPerRequest')
   expect(factorsOf(report.decomposition).users).toBe(1)
   expect(report.total).toEqual({ costMicros: 30_000, tokens: 3000, requests: 3 })
@@ -175,7 +196,7 @@ test('the spend over time gives each day of the period its counts over the scope
     return JSON.parse(response.body) as ({ bucket: string } & Record<string, number>)[]
   }
   const trend = await trendOf(
-    '/api/spend/trend?period=this_month&granularity=day&scope=model&scopeKey=anthropic/claude-sonnet',
+    '/api/spend/trend?period=this_month&granularity=day&scope=model&scopeKeys=anthropic/claude-sonnet',
   )
   const secondDay = trend.findIndex((point) => point.bucket.endsWith('-02'))
   const [, ...counts] = trend.slice(secondDay - 1, secondDay + 3).map(({ bucket: _, ...rest }) => rest)
@@ -188,16 +209,17 @@ test('the spend over time gives each day of the period its counts over the scope
   ])
   expect(trend.reduce((sum, point) => sum + (point.costMicros ?? 0), 0)).toBe(30_000)
   expect((await asMember(bob, 'GET', '/api/spend/trend')).status).toBe(403)
-  expect((await asMember(bob, 'GET', '/api/spend/mine/trend?scope=member&scopeKey=member-alice')).status).toBe(400)
-  const bobInInvoiceBug = await trendOf('/api/spend/mine/trend?scope=chat&scopeKey=chat-invoice-bug', bob)
+  expect((await asMember(bob, 'GET', '/api/spend/mine/trend?scope=member&scopeKeys=member-alice')).status).toBe(400)
+  const bobInInvoiceBug = await trendOf('/api/spend/mine/trend?scope=chat&scopeKeys=chat-invoice-bug', bob)
   expect(bobInInvoiceBug.every((point) => point.requests === 0)).toBe(true)
 })
 
-test('a scope narrows the decomposition to one member, the chats without project, a model, or one of my own chats', async () => {
+test('a scope narrows the decomposition to one member or several, the chats without project, a model, or one of my own chats', async () => {
   const usersOf = async (path: string, userId = alice) => factorsOf((await reportOf(path, userId)).decomposition).users
-  expect(await usersOf('/api/spend?scope=member&scopeKey=member-bob')).toBe(1)
-  expect(await usersOf('/api/spend?scope=project&scopeKey=none')).toBe(1)
-  expect(await usersOf('/api/spend?scope=model&scopeKey=openai/gpt-5')).toBe(2)
-  const bobInInvoiceBug = await reportOf('/api/spend/mine?scope=chat&scopeKey=chat-invoice-bug', bob)
+  expect(await usersOf('/api/spend?scope=member&scopeKeys=member-bob')).toBe(1)
+  expect(await usersOf('/api/spend?scope=member&scopeKeys=member-alice,member-bob')).toBe(2)
+  expect(await usersOf('/api/spend?scope=project&scopeKeys=none')).toBe(1)
+  expect(await usersOf('/api/spend?scope=model&scopeKeys=openai/gpt-5')).toBe(2)
+  const bobInInvoiceBug = await reportOf('/api/spend/mine?scope=chat&scopeKeys=chat-invoice-bug', bob)
   expect(bobInInvoiceBug.decomposition.factors.every((factor) => !factor.current)).toBe(true)
 })
