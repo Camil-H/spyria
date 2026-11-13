@@ -194,8 +194,14 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
     adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
       models: [
-        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false },
-        { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
+        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
+        {
+          id: 'anthropic/claude-haiku-5-5',
+          name: 'Haiku 5.5',
+          reasoning: false,
+          readsImages: false,
+          contextWindow: 200000,
+        },
       ],
       compactionModel: 'mistral/mistral-small-latest',
     },
@@ -236,8 +242,14 @@ test('a model switch keeps the conversation: the next request on a curated model
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
   const models = [
-    { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false },
-    { id: 'anthropic/claude-haiku-5-5', name: 'Haiku 5.5', reasoning: false, contextWindow: 200000 },
+    { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
+    {
+      id: 'anthropic/claude-haiku-5-5',
+      name: 'Haiku 5.5',
+      reasoning: false,
+      readsImages: false,
+      contextWindow: 200000,
+    },
   ]
   const llm = {
     adapterModel: 'spyria/mistral/mistral-medium-latest',
@@ -253,7 +265,7 @@ test('a model switch keeps the conversation: the next request on a curated model
   first.close()
   await agentClient.deleteConversation(first.conversation)
 
-  const picked = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false }
+  const picked = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false }
   const relaunched = await piConversationOf(transport, token, {
     adapterModel: 'spyria/mistral/mistral-small-latest',
     pi: { models: [...models, picked], compactionModel: 'mistral/mistral-medium-latest' },
@@ -282,8 +294,20 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
     adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
       models: [
-        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, contextWindow: 4000 },
-        { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, contextWindow: 4000 },
+        {
+          id: 'mistral/mistral-medium-latest',
+          name: 'Mistral Medium',
+          reasoning: false,
+          readsImages: false,
+          contextWindow: 4000,
+        },
+        {
+          id: 'mistral/mistral-small-latest',
+          name: 'Mistral Small',
+          reasoning: false,
+          readsImages: false,
+          contextWindow: 4000,
+        },
       ],
       compactionModel: 'mistral/mistral-small-latest',
       compaction: { reserveTokens: 3999, keepRecentTokens: 1 },
@@ -335,7 +359,7 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
   const pi = await piConversationOf(transport, token, {
     adapterModel: 'spyria/mistral/mistral-medium-latest',
     pi: {
-      models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false }],
+      models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false }],
       compactionModel: 'mistral/mistral-medium-latest',
     },
   })
@@ -414,7 +438,9 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       const pi = await piConversationOf(transport, token, {
         adapterModel: 'spyria/mistral/mistral-medium-latest',
         pi: {
-          models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false }],
+          models: [
+            { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
+          ],
           compactionModel: 'mistral/mistral-medium-latest',
         },
       })

@@ -203,6 +203,39 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
   }
 })
 
+test('a model reads images only when its gateway parameters say it supports vision; the answer is kept, and a model the gateway does not know or cannot look up reads none', async () => {
+  const lookedUp: string[] = []
+  const parametersByModel: Record<string, object> = {
+    'anthropic/claude-sonnet-5-5': { supports_vision: true, supports_pdf_input: true },
+    'deepseek/deepseek-chat': { supports_function_calling: true },
+  }
+  const parametersServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname, searchParams } = new URL(request.url)
+      const model = searchParams.get('model') ?? ''
+      lookedUp.push(model)
+      if (pathname !== '/api/models/parameters') return new Response('', { status: 404 })
+      if (model === 'broken/model') return new Response('', { status: 400 })
+      const parameters = parametersByModel[model]
+      return parameters ? Response.json(parameters) : new Response('', { status: 404 })
+    },
+  })
+  const parametersGateway = createLlmGateway({
+    url: `http://localhost:${parametersServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const models = ['anthropic/claude-sonnet-5-5', 'deepseek/deepseek-chat', 'unknown/model', 'broken/model']
+    expect(await Promise.all(models.map(parametersGateway.readsImages))).toEqual([true, false, false, false])
+    expect(await Promise.all(models.map(parametersGateway.readsImages))).toEqual([true, false, false, false])
+    expect(lookedUp.toSorted()).toEqual(models.toSorted())
+  } finally {
+    parametersServer.stop(true)
+  }
+})
+
 test('a consent starts on a read-only tool granted to the member, or on the first tool granted when none is read-only, never on a tool the key lacks', async () => {
   const calledTools: string[] = []
   const flowId = crypto.randomUUID()

@@ -170,9 +170,15 @@ test('a spyria-agent conversation that failed to start is deleted and reported w
 
 const piLaunch = {
   models: [
-    { id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 },
-    { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, contextWindow: 1050000 },
-    { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false },
+    {
+      id: 'anthropic/claude-sonnet-5-5',
+      name: 'Sonnet 5.5',
+      reasoning: true,
+      readsImages: true,
+      contextWindow: 200000,
+    },
+    { id: 'openai/gpt-6.1-sol', name: 'GPT-6.1-Sol', reasoning: true, readsImages: true, contextWindow: 1050000 },
+    { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false },
   ],
   compactionModel: 'mistral/mistral-small-latest',
 }
@@ -227,7 +233,7 @@ test("a Pi launch passes the tokens only as secrets, runs offline, keeps its Ant
   expect(script.split('\n').at(-1)).toBe('exec pi --mode rpc --no-themes')
 })
 
-test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning and context windows, the others without the long cache', async () => {
+test('Pi lists Anthropic models on the Anthropic route without /v1 and the others on the chat route, with names, reasoning, the inputs they read and context windows, the others without the long cache', async () => {
   const { models } = await createdPiOf()
   expect(models).toEqual({
     providers: {
@@ -240,6 +246,7 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
             id: 'openai/gpt-6.1-sol',
             name: 'GPT-6.1-Sol',
             reasoning: true,
+            input: ['text', 'image'],
             contextWindow: 1050000,
             compat: { supportsLongCacheRetention: false },
           },
@@ -247,6 +254,7 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
             id: 'mistral/mistral-small-latest',
             name: 'Mistral Small',
             reasoning: false,
+            input: ['text'],
             compat: { supportsLongCacheRetention: false, supportsDeveloperRole: false },
           },
         ],
@@ -255,7 +263,15 @@ test('Pi lists Anthropic models on the Anthropic route without /v1 and the other
         baseUrl: 'http://spyria-gateway-relay:4000',
         api: 'anthropic-messages',
         apiKey: `\${SPYRIA_LLM_TOKEN}`,
-        models: [{ id: 'anthropic/claude-sonnet-5-5', name: 'Sonnet 5.5', reasoning: true, contextWindow: 200000 }],
+        models: [
+          {
+            id: 'anthropic/claude-sonnet-5-5',
+            name: 'Sonnet 5.5',
+            reasoning: true,
+            input: ['text', 'image'],
+            contextWindow: 200000,
+          },
+        ],
       },
     },
   })
@@ -272,7 +288,7 @@ test.each([
   expect(piModelOf(id)).toBe(`spyria/${id}`)
   const command = piCommandOf(
     'http://spyria-gateway-relay:4000/v1',
-    { models: [{ id, name: id, reasoning: true }], compactionModel: id },
+    { models: [{ id, name: id, reasoning: true, readsImages: false }], compactionModel: id },
     { sub: false },
   )
   const models = JSON.parse(
@@ -282,7 +298,13 @@ test.each([
     spyria: expect.objectContaining({
       api: 'openai-completions',
       models: [
-        { id, name: id, reasoning: true, compat: { supportsLongCacheRetention: false, supportsDeveloperRole: false } },
+        {
+          id,
+          name: id,
+          reasoning: true,
+          input: ['text'],
+          compat: { supportsLongCacheRetention: false, supportsDeveloperRole: false },
+        },
       ],
     }),
   })

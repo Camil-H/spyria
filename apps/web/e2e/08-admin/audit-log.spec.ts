@@ -28,15 +28,17 @@ const insertApprovedGuestToolCall = (workerStack: WorkerStack) =>
       'approved', 'member-alice', 'succeeded', now())`
 
 const inviteNinaAndRemoveBob = async (page: Page, workerStack: WorkerStack) => {
-  await openSettings(page, 'Manage Team')
+  await openSettings(page, 'Members and roles')
   const members = mainOf(page).getByRole('region', { name: 'Members' })
+  await members.getByRole('button', { name: 'Invite member' }).click()
   const inviteForm = members.getByRole('form', { name: 'Invite member' })
   await inviteForm.getByRole('textbox', { name: 'Email' }).fill('nina@example.com')
   await inviteForm.getByRole('button', { name: 'Invite' }).click()
   await expect(members.getByRole('list', { name: 'Pending invites' })).toContainText('nina@example.com')
-  await members.getByRole('button', { name: 'Remove Bob' }).click()
+  await members.getByRole('button', { name: 'Actions for Bob' }).click()
+  await page.getByRole('menuitem', { name: 'Remove from workspace' }).click()
   await page.getByRole('dialog', { name: 'Remove member' }).getByRole('button', { name: 'Remove' }).click()
-  await expect(members.getByRole('button', { name: 'Remove Bob' })).toHaveCount(0)
+  await expect(members.getByRole('button', { name: 'Actions for Bob' })).toHaveCount(0)
   await expect
     .poll(
       async () =>
@@ -157,7 +159,7 @@ test.describe('Audit log', () => {
   test('As a member who can view the audit log, I see who created, changed and deleted a role under Roles, and who changed a monthly AI budget', {
     tag: ['@spec-44', '@spec-46', '@spec-47'],
   }, async ({ page }) => {
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     const leeBudget = mainOf(page)
       .getByRole('region', { name: 'Budgets' })
       .getByRole('table', { name: 'Budgets' })

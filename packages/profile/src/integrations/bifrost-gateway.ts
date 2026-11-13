@@ -23,11 +23,13 @@ type BifrostGateway = LlmGateway &
     url: string
     listedModels(): readonly ListedModel[]
     refreshListedModels(): Promise<void>
+    readsImages(modelId: string): Promise<boolean>
   }
 
 const notFound = 404
 const mcpClientPageSize = 100
 const maximumCachedVirtualKeys = 1000
+const maximumCachedModelInputs = 1000
 const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
 const openAiCompatibleProviderAt = (baseUrl: string) => ({
   network_config: { base_url: baseUrl },
@@ -53,6 +55,7 @@ const providersCreatedOnDemand: Record<string, object> = {
   meta: openAiCompatibleProviderAt('https://api.meta.ai/v1'),
 }
 const modelListMilliseconds = 60 * 60 * 1000
+const failedModelLookupMilliseconds = 60 * 1000
 const modelListSize = 5000
 type Prices = { input_cost_per_token?: number; output_cost_per_token?: number }
 type ModelDetails = Prices & {
@@ -75,6 +78,7 @@ export const createLlmGateway = ({
 }: LlmGatewaySettings): BifrostGateway => {
   const authorization = `Basic ${btoa(`${adminUser}:${adminPassword}`)}`
   const virtualKeyValues = createBoundedCache<string, { value: string; readAt: number }>(maximumCachedVirtualKeys)
+  const imageReading = createBoundedCache<string, { readsImages: boolean; expiresAt: number }>(maximumCachedModelInputs)
   let listing: { models: readonly ListedModel[]; loadedAt: number; loading?: Promise<void> } = {
     models: [],
     loadedAt: 0,
@@ -245,6 +249,19 @@ export const createLlmGateway = ({
       if (listing.models.length === 0 || Date.now() - listing.loadedAt > modelListMilliseconds)
         void gateway.refreshListedModels()
       return listing.models
+    },
+    readsImages: async (modelId) => {
+      const cached = imageReading.get(modelId)
+      if (cached && Date.now() < cached.expiresAt) return cached.readsImages
+      const looked = await request('GET', `/api/models/parameters?model=${encodeURIComponent(modelId)}`).then(
+        ({ found, body }) => ({
+          readsImages: found && body.supports_vision === true,
+          keptMilliseconds: modelListMilliseconds,
+        }),
+        () => ({ readsImages: false, keptMilliseconds: failedModelLookupMilliseconds }),
+      )
+      imageReading.set(modelId, { readsImages: looked.readsImages, expiresAt: Date.now() + looked.keptMilliseconds })
+      return looked.readsImages
     },
     toolServers,
     finishToolConsent,

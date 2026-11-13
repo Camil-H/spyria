@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import type { SignedInThrough } from '@spyria/kernel'
 import { SignJWT, UnsecuredJWT } from 'jose'
 import { createSessionAuthenticator, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 
@@ -9,9 +10,16 @@ const aliceInAcme: SessionClaims = {
   sessionId: 'session-1',
 }
 const revokedSessionIds = new Set(['session-revoked'])
+const signedInThroughBySessionId = new Map<string, SignedInThrough>([
+  ['session-sso', 'workspace sso'],
+  ['session-claimed', 'claimed domain'],
+])
 const authenticate = createSessionAuthenticator(secret, async ({ workspaceId, userId, sessionId }) =>
   workspaceId === aliceInAcme.workspaceId && userId === aliceInAcme.userId
-    ? { hasLiveSession: !revokedSessionIds.has(sessionId), signedInThroughWorkspaceSso: sessionId === 'session-sso' }
+    ? {
+        hasLiveSession: !revokedSessionIds.has(sessionId),
+        signedInThrough: signedInThroughBySessionId.get(sessionId) ?? 'account',
+      }
     : undefined,
 )
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
@@ -32,12 +40,15 @@ test('accepts an issued token and builds the context from the membership', async
   })
 })
 
-test('tells a session opened through the workspace sign-in of its organization apart from an account session', async () => {
+test('tells an account session from one opened through a workspace provider, trusted for a claimed domain or not', async () => {
   expect(await authenticate(bearer(await issued(aliceInAcme)))).toMatchObject({
-    context: { signedInThroughWorkspaceSso: false },
+    context: { signedInThrough: 'account' },
   })
   expect(await authenticate(bearer(await issued({ ...aliceInAcme, sessionId: 'session-sso' })))).toMatchObject({
-    context: { signedInThroughWorkspaceSso: true },
+    context: { signedInThrough: 'workspace sso' },
+  })
+  expect(await authenticate(bearer(await issued({ ...aliceInAcme, sessionId: 'session-claimed' })))).toMatchObject({
+    context: { signedInThrough: 'claimed domain' },
   })
 })
 

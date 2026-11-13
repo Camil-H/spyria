@@ -385,7 +385,7 @@ test("a member sees by device where they are signed in to a workspace, never a s
   const { sessions } = await sessionsOf(laptopCookie)
   const laptopInAcme = sessions.find((session) => session.workspaceId === acme)
   const laptopInGlobex = sessions.find((session) => session.workspaceId === globex)
-  const [phone] = await openSessions(database, alice, acme, 'account', 'phone')
+  const [phone] = await openSessions(database, alice, acme, null, 'phone')
   const [bobSession] = await openSessions(database, bob, acme)
   if (!laptopInAcme || !laptopInGlobex || !phone || !bobSession) throw new Error('missing session')
   const phoneToken = (await issueSessionToken(testAuthSettings.tokenSecret, phone)).token

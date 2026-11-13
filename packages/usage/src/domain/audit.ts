@@ -17,7 +17,7 @@ export const auditKindsByGroup = {
     'dev_loop.changed',
     'setup_commands.changed',
   ],
-  'Sign-in': ['sso.configured', 'sso.secret_rotated', 'sso.removed'],
+  'Sign-in': ['sso.configured', 'sso.secret_rotated', 'sso.removed', 'domain.claimed', 'domain.released'],
   GitHub: ['github.configured', 'github.secret_rotated'],
   Tools: [
     'connection.added',
@@ -69,6 +69,8 @@ const actionByKind: Record<string, string> = {
   'sso.configured': 'Configured SSO',
   'sso.secret_rotated': 'Replaced the SSO client secret',
   'sso.removed': 'Stopped enforcing SSO',
+  'domain.claimed': 'Claimed a domain',
+  'domain.released': 'Released a domain',
   'github.configured': 'Configured the GitHub App',
   'github.secret_rotated': "Replaced the GitHub App's secrets",
   'connection.added': 'Added a tool server',

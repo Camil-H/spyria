@@ -14,6 +14,7 @@ export const lockMembership = skippedOnClient
 export const lockInvitation = skippedOnClient
 export const lockOpenInvitation = skippedOnClient
 export const lockActiveAdminIds = async () => []
+export const verifiedDomainClaimsOn = async () => []
 export const deleteMemberSessions = skippedOnClient
 export const signOutMemberEverywhere = skippedOnClient
 export const deleteGitHubConnection = skippedOnClient

@@ -134,7 +134,7 @@ export const repositoryPromptOf = (listing: RepositoryListing, withoutOwn: numbe
   listing.state === 'loading'
     ? 'Listing repositories…'
     : listing.state === 'failed'
-      ? 'The repositories could not be listed: check Connect GitHub'
+      ? 'The repositories could not be listed: check GitHub in Workspace settings'
       : listing.repositories.length === 0
         ? 'No repository yet: connect GitHub and grant it repositories'
         : withoutOwn === 0

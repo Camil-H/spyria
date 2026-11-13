@@ -1,14 +1,21 @@
+import type { Snapshot } from '@spyria/db'
 import { useQuery } from '@spyria/db/react'
 import { canGrantWorkspaceRole, memberRoleId, type WorkspaceId, type WorkspaceRole } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
 import {
   buttonClass,
+  cardClass,
   Dialog,
+  dangerButtonClass,
   ErrorMessage,
   fieldClass,
-  ghostButtonClass,
   LabelledSection,
   labelClass,
+  RowMenu,
+  rowClass,
+  rowHeaderClass,
+  rowListClass,
+  smallGhostButtonClass,
   useGuardedAction,
 } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
@@ -40,7 +47,7 @@ const RoleSelect = ({
 }) => (
   <select
     aria-label={label}
-    className={fieldClass}
+    className={`${fieldClass} w-full`}
     value={role}
     disabled={isDisabled}
     onChange={(event) => onChange(event.target.value)}
@@ -53,29 +60,85 @@ const RoleSelect = ({
   </select>
 )
 
-const InviteForm = ({ workspaceId, roles }: { workspaceId: WorkspaceId; roles: readonly WorkspaceRole[] }) => {
+const InviteDialog = ({
+  workspaceId,
+  roles,
+  onClose,
+}: {
+  workspaceId: WorkspaceId
+  roles: readonly WorkspaceRole[]
+  onClose: () => void
+}) => {
   const commands = useWorkspaceCommands()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<string>(memberRoleId)
   const { errorMessage, isPending, run } = useGuardedAction()
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    if (await run(() => commands.inviteMember({ workspaceId, email, role }))) setEmail('')
+    if (await run(() => commands.inviteMember({ workspaceId, email, role }))) onClose()
   }
   return (
-    <form aria-label="Invite member" onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <label className={`${labelClass} min-w-56 flex-1`}>
-        Email
-        <input type="email" className={fieldClass} value={email} onChange={(event) => setEmail(event.target.value)} />
-      </label>
-      <RoleSelect label="Role" role={role} roles={roles} onChange={setRole} />
-      <button type="submit" className={buttonClass} disabled={isPending || email.trim() === ''}>
-        Invite
-      </button>
-      <div className="basis-full">
+    <Dialog label="Invite member" onClose={onClose}>
+      <form aria-label="Invite member" onSubmit={submit} className="flex flex-col gap-3">
+        <label className={labelClass}>
+          Email
+          <input
+            type="email"
+            data-initial-focus
+            className={fieldClass}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <div className={labelClass}>
+          <span aria-hidden>Role</span>
+          <RoleSelect label="Role" role={role} roles={roles} onChange={setRole} />
+        </div>
+        <p className="text-xs text-muted">
+          No email is sent: they get in the next time they sign in with this address.
+        </p>
         <ErrorMessage message={errorMessage} />
-      </div>
-    </form>
+        <button type="submit" className={buttonClass} disabled={isPending || email.trim() === ''}>
+          Invite
+        </button>
+      </form>
+    </Dialog>
+  )
+}
+
+const PendingInvites = ({
+  workspaceId,
+  invitations,
+  roleNameOf,
+}: {
+  workspaceId: WorkspaceId
+  invitations: Snapshot['invitations']
+  roleNameOf: (roleId: string) => string
+}) => {
+  const commands = useWorkspaceCommands()
+  const { errorMessage, isPending, run } = useGuardedAction()
+  return (
+    <LabelledSection title={`Pending invites · ${invitations.length}`} Heading="h3" titleClass="text-sm font-medium">
+      <ul aria-label="Pending invites" className={rowListClass}>
+        {invitations.map((invitation) => (
+          <li key={invitation.id} className={rowClass}>
+            <span className="min-w-0 flex-1 truncate font-medium">{invitation.email}</span>
+            <span className="w-32 text-muted">{roleNameOf(invitation.role)}</span>
+            <span className="w-32 text-muted">{expiryLabelOf(invitation.expiresAt)}</span>
+            <button
+              type="button"
+              aria-label={`Revoke the invite of ${invitation.email}`}
+              className={smallGhostButtonClass}
+              disabled={isPending}
+              onClick={() => run(() => commands.revokeInvite({ workspaceId, invitationId: invitation.id }))}
+            >
+              Revoke
+            </button>
+          </li>
+        ))}
+      </ul>
+      <ErrorMessage message={errorMessage} />
+    </LabelledSection>
   )
 }
 
@@ -92,6 +155,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     member.id !== viewerId &&
     permissions.includes('members.manage') &&
     grantableRoles.some((role) => role.id === member.role)
+  const [isInviting, setIsInviting] = useState(false)
   const [removing, setRemoving] = useState<WorkspaceMember | null>(null)
   const [signingOut, setSigningOut] = useState<WorkspaceMember | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
@@ -102,71 +166,68 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     if (await run(() => commands.endMemberSessions({ workspaceId, memberId: member.id }))) setSigningOut(null)
   }
   return (
-    <LabelledSection title="Members" className="flex max-w-2xl flex-col gap-3">
-      <ul aria-label="Members" className="flex flex-col gap-2 text-sm">
-        {members.map((member) => (
-          <li key={member.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-medium">{member.name}</span>
-            <span className="text-muted">{member.email}</span>
-            {!canManage(member) ? (
-              <span className="ml-auto text-muted">
-                {roleNameOf(member.role)}
-                {member.id === viewerId && ' (you)'}
+    <section aria-label="Members" className="flex max-w-3xl flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">Everyone in this workspace and the role each one holds</p>
+        {permissions.includes('members.invite') && (
+          <button type="button" className={buttonClass} onClick={() => setIsInviting(true)}>
+            Invite member
+          </button>
+        )}
+      </div>
+      <div className={`${cardClass} divide-y divide-line`}>
+        <div aria-hidden className={rowHeaderClass}>
+          <span className="flex-1">Name</span>
+          <span className="w-44">Role</span>
+          <span className="w-8" />
+        </div>
+        <ul aria-label="Members" className="flex flex-col divide-y divide-line">
+          {members.map((member) => (
+            <li key={member.id} className="flex items-center gap-x-3 px-4 py-3 text-sm">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-medium">
+                  {member.name}
+                  {member.id === viewerId && <span className="font-normal text-muted"> (you)</span>}
+                </span>
+                <span className="truncate text-muted">{member.email}</span>
               </span>
-            ) : (
-              <span className="ml-auto flex items-center gap-2">
-                <RoleSelect
-                  label={`Role of ${member.name}`}
-                  role={member.role}
-                  roles={grantableRoles}
-                  isDisabled={isPending}
-                  onChange={(role) => run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))}
-                />
-                <button
-                  type="button"
-                  aria-label={`Sign ${member.name} out everywhere`}
-                  className={ghostButtonClass}
-                  disabled={isPending}
-                  onClick={() => setSigningOut(member)}
-                >
-                  Sign out
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Remove ${member.name}`}
-                  className={ghostButtonClass}
-                  disabled={isPending}
-                  onClick={() => setRemoving(member)}
-                >
-                  Remove
-                </button>
+              <span className="w-44">
+                {canManage(member) ? (
+                  <RoleSelect
+                    label={`Role of ${member.name}`}
+                    role={member.role}
+                    roles={grantableRoles}
+                    isDisabled={isPending}
+                    onChange={(role) =>
+                      run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))
+                    }
+                  />
+                ) : (
+                  <span className="text-muted">{roleNameOf(member.role)}</span>
+                )}
               </span>
-            )}
-          </li>
-        ))}
-      </ul>
-      {!removing && !signingOut && <ErrorMessage message={errorMessage} />}
-      {invitations.length > 0 && (
-        <ul aria-label="Pending invites" className="flex flex-col gap-2 text-sm">
-          {invitations.map((invitation) => (
-            <li key={invitation.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-medium">{invitation.email}</span>
-              <span className="text-muted">{roleNameOf(invitation.role)}</span>
-              <span className="text-muted">{expiryLabelOf(invitation.expiresAt)}</span>
-              <button
-                type="button"
-                aria-label={`Revoke the invite of ${invitation.email}`}
-                className={`ml-auto ${ghostButtonClass}`}
-                disabled={isPending}
-                onClick={() => run(() => commands.revokeInvite({ workspaceId, invitationId: invitation.id }))}
-              >
-                Revoke
-              </button>
+              <span className="w-8">
+                {canManage(member) && (
+                  <RowMenu
+                    label={`Actions for ${member.name}`}
+                    items={[
+                      { label: 'Sign out everywhere', onSelect: () => setSigningOut(member) },
+                      { label: 'Remove from workspace', onSelect: () => setRemoving(member) },
+                    ]}
+                  />
+                )}
+              </span>
             </li>
           ))}
         </ul>
+      </div>
+      {!removing && !signingOut && <ErrorMessage message={errorMessage} />}
+      {invitations.length > 0 && (
+        <PendingInvites workspaceId={workspaceId} invitations={invitations} roleNameOf={roleNameOf} />
       )}
-      {permissions.includes('members.invite') && <InviteForm workspaceId={workspaceId} roles={grantableRoles} />}
+      {isInviting && (
+        <InviteDialog workspaceId={workspaceId} roles={grantableRoles} onClose={() => setIsInviting(false)} />
+      )}
       {removing && (
         <Dialog label="Remove member" subject={removing.name} onClose={() => setRemoving(null)}>
           <p className="text-sm text-muted">
@@ -174,7 +235,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
             them.
           </p>
           <ErrorMessage message={errorMessage} />
-          <button type="button" className={buttonClass} disabled={isPending} onClick={() => remove(removing)}>
+          <button type="button" className={dangerButtonClass} disabled={isPending} onClick={() => remove(removing)}>
             Remove
           </button>
         </Dialog>
@@ -196,6 +257,6 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           </button>
         </Dialog>
       )}
-    </LabelledSection>
+    </section>
   )
 }

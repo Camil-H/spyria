@@ -28,7 +28,7 @@ test.describe('Onboarding', () => {
 
     await test.step('opens the page of a task, and keeps the list collapsed once I collapse it', async () => {
       await checklist.getByRole('link', { name: 'Connect a runtime' }).click()
-      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Connect runtime' })).toBeVisible()
+      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Runtimes' })).toBeVisible()
       await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
       await checklist.getByRole('button', { name: /^Get your workspace ready/ }).click()
       await expect(checklist.getByRole('listitem')).toHaveCount(0)

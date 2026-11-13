@@ -46,6 +46,7 @@ export type AttachmentRepository = {
   link(messageId: MessageId, attachments: readonly Attachment[]): Promise<void>
   discard(messageId: MessageId): Promise<void>
   storedBytes(uploaderId: MemberId): Promise<StoredBytes>
+  contentOf(chatId: ChatId, attachmentId: string): Promise<Uint8Array | undefined>
 }
 
 export type AgentJobs = {

@@ -1,6 +1,6 @@
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
-import { iconButtonClass, menuContentClass, menuItemClass } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
+import { iconButtonClass, menuContentClass, menuItemClass } from './classes.ts'
 
 export type RowMenuItem = { label: string; onSelect: () => void }
 
