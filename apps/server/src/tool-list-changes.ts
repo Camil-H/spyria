@@ -1,39 +1,48 @@
+import type { Database } from '@spyria/db/postgres'
 import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
 
 type Listener = { chatId: ChatId; onChange: () => void }
 
-const listenersByWorkspace = new Map<WorkspaceId, Set<Listener>>()
-const listedForByChat = new Map<ChatId, MemberId>()
+export const createToolListChanges = () => {
+  const listenersByWorkspace = new Map<WorkspaceId, Set<Listener>>()
+  const listedForByChat = new Map<string, MemberId>()
+  const chatKeyOf = (workspaceId: WorkspaceId, chatId: ChatId) => `${workspaceId}/${chatId}`
+  const listenersOf = (workspaceId: WorkspaceId, chatId: ChatId) =>
+    [...(listenersByWorkspace.get(workspaceId) ?? [])].filter((listener) => listener.chatId === chatId)
 
-const listenersOf = (chatId: ChatId) =>
-  [...listenersByWorkspace.values()].flatMap((listeners) =>
-    [...listeners].filter((listener) => listener.chatId === chatId),
-  )
+  const announceChatToolListChange = (workspaceId: WorkspaceId, chatId: ChatId) => {
+    for (const { onChange } of listenersOf(workspaceId, chatId)) onChange()
+  }
 
-export const watchToolLists = (workspaceId: WorkspaceId, chatId: ChatId, onChange: () => void) => {
-  const listener = { chatId, onChange }
-  const listeners = listenersByWorkspace.get(workspaceId) ?? new Set()
-  listenersByWorkspace.set(workspaceId, listeners.add(listener))
-  return () => {
-    listeners.delete(listener)
-    if (listenersOf(chatId).length === 0) listedForByChat.delete(chatId)
-    if (listeners.size === 0) listenersByWorkspace.delete(workspaceId)
+  return {
+    watchToolLists: (workspaceId: WorkspaceId, chatId: ChatId, onChange: () => void) => {
+      const listener = { chatId, onChange }
+      const listeners = listenersByWorkspace.get(workspaceId) ?? new Set()
+      listenersByWorkspace.set(workspaceId, listeners.add(listener))
+      return () => {
+        listeners.delete(listener)
+        if (listenersOf(workspaceId, chatId).length === 0) listedForByChat.delete(chatKeyOf(workspaceId, chatId))
+        if (listeners.size === 0) listenersByWorkspace.delete(workspaceId)
+      }
+    },
+    announceToolListChange: (workspaceId: WorkspaceId) => {
+      for (const { onChange } of listenersByWorkspace.get(workspaceId) ?? []) onChange()
+    },
+    recordToolListing: (workspaceId: WorkspaceId, chatId: ChatId, memberId: MemberId) => {
+      if (listenersOf(workspaceId, chatId).length > 0) listedForByChat.set(chatKeyOf(workspaceId, chatId), memberId)
+    },
+    announceChatToolListChange,
+    announcePrompter: (workspaceId: WorkspaceId, chatId: ChatId, prompterId: MemberId) => {
+      if (listedForByChat.get(chatKeyOf(workspaceId, chatId)) !== prompterId)
+        announceChatToolListChange(workspaceId, chatId)
+    },
   }
 }
 
-export const announceToolListChange = (workspaceId: WorkspaceId) => {
-  for (const { onChange } of listenersByWorkspace.get(workspaceId) ?? []) onChange()
-}
+const toolListChangesByDatabase = new WeakMap<Database, ReturnType<typeof createToolListChanges>>()
 
-export const recordToolListing = (chatId: ChatId, memberId: MemberId) => {
-  if (listenersOf(chatId).length > 0) listedForByChat.set(chatId, memberId)
-}
-
-export const announceChatToolListChange = (workspaceId: WorkspaceId, chatId: ChatId) => {
-  for (const listener of listenersByWorkspace.get(workspaceId) ?? [])
-    if (listener.chatId === chatId) listener.onChange()
-}
-
-export const announcePrompter = (workspaceId: WorkspaceId, chatId: ChatId, prompterId: MemberId) => {
-  if (listedForByChat.get(chatId) !== prompterId) announceChatToolListChange(workspaceId, chatId)
+export const toolListChangesOf = (database: Database) => {
+  const changes = toolListChangesByDatabase.get(database) ?? createToolListChanges()
+  toolListChangesByDatabase.set(database, changes)
+  return changes
 }

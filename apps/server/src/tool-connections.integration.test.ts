@@ -43,10 +43,7 @@ afterAll(() => disconnectFakeHosts())
 const aliceAccount = `alice-${crypto.randomUUID().slice(0, 8)}`
 const aliceCookie = `fake_mcp_user=${aliceAccount}`
 beforeEach(() => asMember(alice, 'POST', connectionPath('disconnect')))
-const fakeClientId = async () =>
-  (await gateway.call<{ clients: { config: { client_id: string; name: string } }[] }>('/api/mcp/clients')).clients.find(
-    (client) => client.config.name === 'fake',
-  )?.config.client_id
+const fakeClientId = async () => (await llmGateway.toolServers()).find((server) => server.name === 'fake')?.id
 const sessionsOf = async (virtualKeyId: string) =>
   (
     await gateway.call<{ sessions: { status: string }[] }>(
