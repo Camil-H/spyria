@@ -9,7 +9,8 @@ const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString()
 test('only names of killed test runs older than 30 minutes are Docker leftovers', () => {
   const leftovers = ['spyria-test-1a2b3c4d-host', 'spyria-test-1a2b3c4d-rt-x-ws', 'spyria-test-e2e-host']
   const kept = [
-    ...['spyria-test-postgres', 'spyria-test-dex', 'spyria-test-gateway-e2e', 'spyria-test-harnesses'],
+    ...['spyria-test-postgres', 'spyria-test-network', 'spyria-test-dex', 'spyria-test-gateway-e2e'],
+    'spyria-test-harnesses',
     ...['spyria-postgres', 'spyria-postgres-data', 'spyria-host', 'spyria-rt-1a2b3c4d-ws', 'spyria-network'],
     ...['spyria-prod-postgres', 'spyria-smoke-1a2b3c4d-server', 'cnt-dev', 'blitz-1a2b3c4d-db-1'],
     ...['spyria-test-1A2B3C4D-host', 'spyria-test-1a2b3c4-host', 'spyria-tests-1a2b3c4d-host', 'xspyria-test-e2e-host'],
