@@ -11,6 +11,7 @@ import {
   DomainError,
   type MemberId,
   permissionsOf,
+  type SignedInThrough,
   type Transactor,
   type WorkspaceId,
   type WorkspacePermission,
@@ -21,7 +22,7 @@ import { type Schema, schema } from './zero.ts'
 export type ZeroContext = {
   userId: MemberId
   workspaceId: WorkspaceId
-  signedInThroughWorkspaceSso?: boolean
+  signedInThrough?: SignedInThrough
   spyriaAgentImage?: string
   limitMessage?: (isPrompt: boolean) => void
 }
@@ -143,7 +144,7 @@ export const queries = defineQueries({
       .where('deletedAt', 'IS', null)
       .whereExists('memberships', (membership) => membership.where('userId', ctx.userId).where('removedAt', 'IS', null))
       .orderBy('createdAt', 'asc')
-    return ctx.signedInThroughWorkspaceSso ? memberOf.where('workspaceId', ctx.workspaceId) : memberOf
+    return ctx.signedInThrough === 'workspace sso' ? memberOf.where('workspaceId', ctx.workspaceId) : memberOf
   }),
   memberships: defineQuery(({ ctx }) => zql.memberships.where('workspaceId', ctx.workspaceId)),
   workspaceRoles: defineQuery(({ ctx }) => zql.workspaceRoles.where('workspaceId', ctx.workspaceId)),

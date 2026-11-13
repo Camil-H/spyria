@@ -103,7 +103,7 @@ export const issueTestSession = async (
 ) => {
   const [session] = [
     ...(await openSessions(database, userId, workspaceId)),
-    ...(await openSessions(database, userId, workspaceId, 'workspace sso')),
+    ...(await openSessions(database, userId, workspaceId, workspaceId)),
   ]
   if (!session) throw new Error(`${userId} is not a member of ${workspaceId}`)
   const issued = await issueSessionToken(testAuthSettings.tokenSecret, session, { databaseName, lifetimeSeconds })
