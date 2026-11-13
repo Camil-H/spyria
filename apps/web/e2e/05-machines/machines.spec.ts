@@ -8,25 +8,17 @@ hostTest.describe('Machines', () => {
     hostTest.use({ signedInAs: 'member-bob' })
 
     hostTest(
-      'As a member, I see my connected tool in green and the Use buttons below my machine and its Remove',
+      'As a member, I see my machine and its Remove above Claude Code and Codex, each with its sign-in state',
       async ({ page, pair }) => {
         await page.goto('/')
-        await openProfile(page)
+        await openProfile(page, 'My machine')
         await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
         const dialog = page.getByRole('dialog', { name: 'Add my machine' })
         const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
         await dialog.getByRole('button', { name: 'Close' }).click()
         pair(urlOf(command), { personal: true, signedIn: ['codex'] })
-        const codexState = machineToolOf(page, 'Codex')
-        await expect(codexState).toHaveText('✓ Codex connected')
-        const connectedColour = await page.evaluate(() => {
-          const probe = document.body.appendChild(document.createElement('span'))
-          probe.style.color = 'light-dark(var(--color-green-900), var(--color-green-400))'
-          const colour = getComputedStyle(probe).color
-          probe.remove()
-          return colour
-        })
-        expect(await codexState.evaluate((state) => getComputedStyle(state).color)).toBe(connectedColour)
+        await expect(machineToolOf(page, 'Codex')).toHaveText('CodexSigned in')
+        await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeNot signed inSet up')
         const [removeBottom, toolsTop] = await Promise.all([
           machineSectionOf(page)
             .getByRole('button', { name: 'Remove' })
