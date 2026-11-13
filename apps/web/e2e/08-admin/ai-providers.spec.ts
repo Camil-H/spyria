@@ -1,4 +1,4 @@
-import { addCredential, expect, llmSectionOf, mainOf, openProfile, openSettings, type Page, test } from '../fixtures'
+import { addCredential, addKeyDialogOf, expect, mainOf, openProfile, openSettings, type Page, test } from '../fixtures'
 
 const providersOf = (page: Page) => mainOf(page).getByRole('region', { name: 'AI providers' })
 const providerSwitchOf = (page: Page, name: string) => providersOf(page).getByRole('switch', { name, exact: true })
@@ -24,7 +24,9 @@ test.describe('AI providers', () => {
 
     await openProfile(page, 'LLM keys')
     await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-refused-1234' })
-    await expect(llmSectionOf(page)).toContainText('OpenAI is not allowed in this workspace')
+    await expect(addKeyDialogOf(page)).toContainText('OpenAI is not allowed in this workspace')
+    await addKeyDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+    await expect(addKeyDialogOf(page)).toHaveCount(0)
 
     await openSettings(page, 'AI providers')
     await providersOf(page).getByRole('button', { name: 'Allow every provider' }).click()
