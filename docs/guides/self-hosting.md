@@ -166,7 +166,7 @@ By hand, before the first workspace exists, set those two settings yourself: `SP
 
 To run the workspace host on the Compose machine:
 
-1. Signed in as an Admin, open **Workspace settings > Connect runtime > Add runtime host**, give it a name and copy the command.
+1. Signed in as an Admin, open **Workspace settings > Runtimes > Add runtime host**, give it a name and copy the command.
 2. Take the claim URL at its end (`https://spyria.example.com/h/<code>`), replace its origin with `http://server:3000`, and put it in `SPYRIA_HOST_CLAIM_URL`: `http://server:3000/h/<code>`.
 3. Add `host` to `COMPOSE_PROFILES` (and set `SPYRIA_DOCKER_GROUP` on Linux), then run the same `pull` and `up -d`.
 
@@ -200,7 +200,7 @@ Spyria does not filter runtimes' outbound traffic. On a cloud machine, block the
 
 ## GitHub App (dev chats)
 
-Each deployment registers its own GitHub App. An Admin opens **Workspace settings > Connect GitHub**:
+Each deployment registers its own GitHub App. An Admin opens **Workspace settings > GitHub**:
 
 - **Create the GitHub App on GitHub** (on a private account or an organization) sends GitHub a manifest with Spyria's permissions (contents, pull requests and workflows write, issues, checks, actions and metadata read), its events (pull requests, reviews, review comments and threads, check suites and runs) and its URLs, all computed from the origin. GitHub creates the App, Spyria stores its credentials sealed with `SPYRIA_SECRETS_KEY`, and GitHub asks which repositories to install it on.
 - **Create it manually** opens the steps and a form as a fallback, for example on a GitHub Enterprise server without manifests: the App id, the client id, the private key, the client secret and the webhook secret. Secrets are shown only as set and replaced by entering a new value, under **Change the App credentials** once the App is connected.

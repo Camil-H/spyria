@@ -138,7 +138,7 @@ The build also:
 docker build -t spyria-host apps/host
 ```
 
-Signed in as a workspace admin (Alice), open the workspace menu > Workspace settings > Connect runtime > Add runtime host, give it a name and copy the command. Run it in the repository root: when the app's origin is `localhost`, the command builds the `spyria-host` image itself, replaces `localhost` with `host.docker.internal` (a container cannot reach the machine's `localhost`) and maps that name to the host gateway. It detects rootless Docker and mounts the right socket, and on macOS it adds group `0` for the Docker socket. The row turns Online within seconds.
+Signed in as a workspace admin (Alice), open the workspace menu > Workspace settings > Runtimes > Add runtime host, give it a name and copy the command. Run it in the repository root: when the app's origin is `localhost`, the command builds the `spyria-host` image itself, replaces `localhost` with `host.docker.internal` (a container cannot reach the machine's `localhost`) and maps that name to the host gateway. It detects rootless Docker and mounts the right socket, and on macOS it adds group `0` for the Docker socket. The row turns Online within seconds.
 
 With a host online, a prompt in a runtime chat starts that chat's runtime and Pi answers. Runtimes call the model through their host: `spyria-host` relays `/v1/*` (at `http://spyria-gateway-relay:4000/v1` on the runtime's network) to Spyria, which runs each call on the prompting member's key in the gateway.
 

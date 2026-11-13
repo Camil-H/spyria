@@ -73,6 +73,7 @@ test.describe('Tools catalogue', () => {
   }
   const addCrm = async (page: Page, workerStack: WorkerStack) => {
     await openSettings(page, 'Tools')
+    await settingsSectionOf(page).getByRole('button', { name: 'Add server' }).click()
     const form = settingsSectionOf(page).getByRole('form', { name: 'Add server' })
     await form.getByLabel('Name').fill('CRM')
     await form.getByLabel('Address').fill(crmUrl)
@@ -311,7 +312,8 @@ test.describe('Tools catalogue', () => {
     const bobCrm = await profileCrmOf(bobPage)
     await expect(bobCrm).toContainText('Shared login · 2 tools · 1 read · 1 write')
 
-    await crmCardOf(page).getByRole('button', { name: 'Remove' }).click()
+    await crmCardOf(page).getByRole('button', { name: 'Actions for CRM' }).click()
+    await page.getByRole('menuitem', { name: 'Remove' }).click()
     await page.getByRole('dialog', { name: 'Remove server' }).getByRole('button', { name: 'Remove' }).click()
     await expect(crmCardOf(page)).toHaveCount(0)
     await expect(bobCrm).toHaveCount(0)
@@ -334,6 +336,7 @@ test.describe('Tools catalogue', () => {
   }, async ({ page, browser, workerStack }) => {
     await logInAtFakeProvider(page.context(), accountOf('alice-admin'))
     await openSettings(page, 'Tools')
+    await settingsSectionOf(page).getByRole('button', { name: 'Add server' }).click()
     const form = settingsSectionOf(page).getByRole('form', { name: 'Add server' })
     await form.getByLabel('Name').fill('Docs')
     await form.getByLabel('Address').fill(`http://host.docker.internal:${new URL(fakeMcpUrl).port}/mcp`)
@@ -358,7 +361,7 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I find Spyria’s built-in tools with what they do and nothing to edit, and GitHub as a server with a level per role, linked both ways with Connect GitHub', {
+  test('As a member who can manage the tools catalogue, I find Spyria’s built-in tools with what they do and nothing to edit, and GitHub as a server with a level per role, linked both ways with GitHub settings', {
     tag: ['@spec-58'],
   }, async ({ page, browser, workerStack }) => {
     await openSettings(page, 'Tools')
@@ -382,8 +385,7 @@ test.describe('Tools catalogue', () => {
       await expect(github.getByRole('combobox', { name: 'Access of Member' }).locator('option:checked')).toHaveText(
         'Read and write',
       )
-      await expect(github.getByRole('button', { name: 'Edit' })).toHaveCount(0)
-      await expect(github.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+      await expect(github.getByRole('button', { name: 'Actions for GitHub' })).toHaveCount(0)
     })
 
     await test.step('gives the Member role Read on GitHub, so a member chooses approvals for its read tools only', async () => {
@@ -397,8 +399,8 @@ test.describe('Tools catalogue', () => {
       await bobPage.context().close()
     })
 
-    await test.step('links to Connect GitHub for its setup, which links back to Tools', async () => {
-      await github.getByRole('link', { name: 'Set up in Connect GitHub' }).click()
+    await test.step('links to GitHub settings for its setup, which links back to Tools', async () => {
+      await github.getByRole('link', { name: 'Set up in GitHub' }).click()
       await expect(page).toHaveURL(/\/settings\/github$/)
       await githubSectionOf(page).getByRole('link', { name: 'Tools', exact: true }).click()
       await expect(page).toHaveURL(/\/settings\/tools$/)

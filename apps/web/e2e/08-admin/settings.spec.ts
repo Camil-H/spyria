@@ -1,20 +1,19 @@
 import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
-  'Setup your organization': ['Setup SSO', 'Connect GitHub', 'Roles and Permissions', 'Manage Team'],
-  'Setup your agents': ['Connect runtime', 'AI providers', 'Tools', 'Quality gates'],
-  'Analyze usage': ['Analyze costs', 'Audit log'],
+  Organization: ['Single sign-on', 'GitHub', 'Members and roles'],
+  Agents: ['Runtimes', 'AI providers', 'Tools', 'Quality gates'],
+  Usage: ['Costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
-  'Setup SSO': 'Sign-in',
-  'Connect GitHub': 'GitHub',
-  'Roles and Permissions': 'Workspace roles',
-  'Manage Team': 'Members',
-  'Connect runtime': 'Runtime hosts',
+  'Single sign-on': 'Sign-in',
+  GitHub: 'GitHub',
+  'Members and roles': 'Members',
+  Runtimes: 'Runtime hosts',
   Tools: 'Servers',
   'AI providers': 'AI providers',
   'Quality gates': 'Quality gates',
-  'Analyze costs': 'Usage',
+  Costs: 'Usage',
   'Audit log': 'Audit log',
 }
 const cardOf = (page: Page, title: string) => mainOf(page).getByRole('link', { name: title, exact: true })
@@ -35,14 +34,13 @@ test.describe('Settings', () => {
       await expect(section.getByRole('link')).toHaveCount(cardTitles.length)
       for (const cardTitle of cardTitles) await expect(section.getByRole('link', { name: cardTitle })).toBeVisible()
     }
-    await expect(cardOf(page, 'Setup SSO')).toContainText("Signs in with this deployment's Dex")
-    await expect(cardOf(page, 'Roles and Permissions')).toContainText('6 built-in roles')
-    await expect(cardOf(page, 'Manage Team')).toContainText('3 members')
-    await expect(cardOf(page, 'Connect runtime')).toContainText('1 runtime host')
+    await expect(cardOf(page, 'Single sign-on')).toContainText("Signs in with this deployment's Dex")
+    await expect(cardOf(page, 'Members and roles')).toContainText('3 members')
+    await expect(cardOf(page, 'Runtimes')).toContainText('1 runtime host')
     await expect(cardOf(page, 'Tools')).toContainText('6 servers')
     await expect(cardOf(page, 'AI providers')).toContainText('Every provider allowed')
     await expect(cardOf(page, 'Quality gates')).toContainText('Off')
-    await expect(cardOf(page, 'Analyze costs')).toContainText(/\$\d+\.\d\d this month/)
+    await expect(cardOf(page, 'Costs')).toContainText(/\$\d+\.\d\d this month/)
 
     for (const [index, cardTitle] of Object.values(cardsBySection).flat().entries()) {
       await cardOf(page, cardTitle).click()
@@ -54,11 +52,11 @@ test.describe('Settings', () => {
     }
   })
 
-  test('As a member who can manage the workspace, I open a card page from its URL, see the default sign-in named on Setup SSO, and a new invite counted on the Manage Team card', {
+  test('As a member who can manage the workspace, I open a card page from its URL, see the default sign-in named on Single sign-on, and a new invite counted on the Members and roles card', {
     tag: ['@spec-42'],
   }, async ({ page }) => {
-    await page.goto('/w/workspace-acme/settings/roles')
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Roles and Permissions' })).toBeVisible()
+    await page.goto('/w/workspace-acme/settings/team')
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Members and roles' })).toBeVisible()
 
     await page.goto('/w/workspace-acme/settings/sso')
     await expect(mainOf(page).getByRole('region', { name: 'Sign-in' })).toContainText(
@@ -67,10 +65,11 @@ test.describe('Settings', () => {
     await expect(mainOf(page).getByLabel('Issuer')).toHaveCount(0)
 
     await page.goto('/w/workspace-acme/settings/team')
+    await mainOf(page).getByRole('button', { name: 'Invite member' }).click()
     const inviteForm = mainOf(page).getByRole('form', { name: 'Invite member' })
     await inviteForm.getByRole('textbox', { name: 'Email' }).fill('nina@example.com')
     await inviteForm.getByRole('button', { name: 'Invite' }).click()
     await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
-    await expect(cardOf(page, 'Manage Team')).toContainText('3 members · 1 pending invite')
+    await expect(cardOf(page, 'Members and roles')).toContainText('3 members · 1 pending invite')
   })
 })

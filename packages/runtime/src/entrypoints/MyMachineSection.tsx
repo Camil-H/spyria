@@ -28,7 +28,7 @@ import { getMachine, localSessionsOf } from '../queries/list-runtime-hosts.ts'
 import { CommandBox, HostCommand, HostCommandDialog, PersonalNotice, useCloseOnceDone } from './HostCommandDialog.tsx'
 import { HostVersion } from './HostVersion.tsx'
 import { useRuntimeCommands } from './providers.tsx'
-import { statusLabelOf, statusOf } from './RuntimeHostsSection.tsx'
+import { hostStatusOf, statusLabelOf } from './RuntimeHostsSection.tsx'
 
 const StartMachine = ({
   workspaceId,
@@ -130,7 +130,7 @@ const UseToolDialog = ({
 }
 
 const machineToneOf = (machine: RuntimeHostRow) => {
-  const status = statusOf(machine)
+  const status = hostStatusOf(machine)
   return status === 'online' ? 'ok' : status === 'offline' ? 'off' : 'attention'
 }
 
