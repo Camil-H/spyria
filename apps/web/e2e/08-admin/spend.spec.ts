@@ -36,7 +36,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I analyze this month by day: the chart and the member, project, chat and model tables match the seed, and by model restacks the chart', {
       tag: ['@spec-45', '@smoke'],
     }, async ({ page }) => {
-      await openSettings(page, 'Analyze costs')
+      await openSettings(page, 'Costs')
       const section = usageSectionOf(page, 'Usage')
       await expect(section.getByRole('combobox', { name: 'Period' })).toHaveValue('this_month')
       await expect(section.getByRole('radio', { name: 'Day' })).toBeChecked()
@@ -83,7 +83,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I see the spend decomposed into six factors against last month, tokens per request highlighted as the biggest mover', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Analyze costs')
+      await openSettings(page, 'Costs')
       const decomposition = tableOf(usageSectionOf(page, 'Usage'), 'Spend decomposition')
       const expectedFactors = [
         ['Users', ['3', '3', '0%']],
@@ -106,7 +106,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I narrow the decomposition to one model, open a factor’s daily line chart under it and close it again, and the same for the total', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Analyze costs')
+      await openSettings(page, 'Costs')
       const section = usageSectionOf(page, 'Usage')
       await section.getByRole('combobox', { name: 'For' }).selectOption({ label: 'Model' })
       await section.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
@@ -147,7 +147,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I see the cost per merged PR with each merged PR and its chat’s cost', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Analyze costs')
+      await openSettings(page, 'Costs')
       const mergedPulls = usageSectionOf(page, 'Cost per merged PR')
       await expect(mergedPulls).toContainText('$0.06 per merged PR · 1 merged · $0.06 spent in their chats')
       const table = tableOf(mergedPulls, 'Merged pull requests')
@@ -217,7 +217,7 @@ test.describe('Spend', () => {
     const openUsageTab = (page: Page, chatName: string) => openPanelTab(page, chatName, 'Usage')
 
     const openUsageSettings = async (page: Page) => {
-      await openSettings(page, 'Analyze costs')
+      await openSettings(page, 'Costs')
       await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
     }
 

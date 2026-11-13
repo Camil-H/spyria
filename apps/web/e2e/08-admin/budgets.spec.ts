@@ -76,7 +76,7 @@ test.describe('Budgets', () => {
     tag: ['@spec-46'],
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 700_000)
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     await expect(budgetRowOf(page, 'Bob')).toContainText('$0.70')
     await saveBudget(page, 'Bob', '1')
     await expect(budgetRowOf(page, 'Bob').getByRole('cell').nth(1)).toHaveText('70%')
@@ -110,8 +110,8 @@ test.describe('Budgets', () => {
     await bobPage.context().close()
 
     await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Workspace settings' }).click()
-    await expect(mainOf(page).getByRole('link', { name: 'Analyze costs', exact: true })).toContainText('1 budget alert')
-    await mainOf(page).getByRole('link', { name: 'Analyze costs', exact: true }).click()
+    await expect(mainOf(page).getByRole('link', { name: 'Costs', exact: true })).toContainText('1 budget alert')
+    await mainOf(page).getByRole('link', { name: 'Costs', exact: true }).click()
     await expect(budgetsOf(page).getByRole('region', { name: 'Over 80% of their budget' })).toContainText(
       /Bob · \$0\.80 of \$1\.00 \(80%\)/,
     )
@@ -150,7 +150,7 @@ test.describe('Budgets', () => {
     await prompt(bobPage, 'Over budget')
     await expect(messageItemsOf(bobPage).getByRole('alert')).toContainText(bobNotice)
 
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     await saveBudget(page, 'Bob', '2')
     await expect(budgetRowOf(page, 'Bob').getByRole('cell').nth(1)).toHaveText('50%')
     await prompt(bobPage, 'Back under budget')
@@ -164,7 +164,7 @@ test.describe('Budgets', () => {
     await spend(workerStack, 'member-alice', 1_000_000)
     await spend(workerStack, 'member-bob', 500_000)
     const bobPage = await openBobInResearch(browser, workerStack)
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     await saveBudget(page, 'Workspace total', '1.5')
     await expect(budgetRowOf(page, 'Workspace total').getByRole('cell').nth(1)).toHaveText('100%')
 
@@ -175,7 +175,7 @@ test.describe('Budgets', () => {
     await expect(messageItemsOf(page).getByRole('alert')).toHaveCount(2)
     await expect(messageItemsOf(page).getByRole('alert').last()).toContainText(workspaceNotice)
 
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     await saveBudget(page, 'Workspace total', '')
     await expect(budgetRowOf(page, 'Workspace total').getByRole('cell').nth(1)).toHaveText('—')
     await openChat(page, 'Research')
@@ -191,7 +191,7 @@ test.describe('Budgets', () => {
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 900_000)
     await seedBudget(workerStack, 'member-bob', 1_000_000)
-    await openSettings(page, 'Analyze costs')
+    await openSettings(page, 'Costs')
     await saveBudget(page, 'Lee', '3')
     await expect(budgetRowOf(page, 'Lee').getByRole('cell').nth(1)).toHaveText('0%')
 
