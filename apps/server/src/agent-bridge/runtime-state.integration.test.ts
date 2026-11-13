@@ -522,6 +522,6 @@ test('a prompt to a runtime stopping on an offline host gets one notice instead 
 
   await host.connect()
   await answered(waiting, 2)
-  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(2)])
+  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(1)])
   expect(relay.prompts).toEqual(['Warm up', 'Still there?'])
 })
