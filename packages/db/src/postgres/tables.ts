@@ -234,6 +234,24 @@ export const workspaceSso = table('workspace_sso', {
   updatedAt: instant().notNull(),
 })
 
+export const domainClaims = table(
+  'domain_claims',
+  {
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaceSso.workspaceId, { onDelete: 'cascade' }),
+    domain: text().notNull(),
+    token: text().notNull(),
+    createdAt: instant().notNull(),
+    verifiedAt: instant(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.domain] }),
+    uniqueIndex('domain_claims_one_verified_per_domain').on(table.domain).where(sql`${table.verifiedAt} is not null`),
+    check('domain_claims_lowercase_domain', sql`${table.domain} = lower(${table.domain})`),
+  ],
+)
+
 export const githubApps = table('github_apps', {
   workspaceId: text()
     .primaryKey()
@@ -264,7 +282,7 @@ export const sessions = table(
     ...tenant,
     id: text().notNull(),
     userId: text().notNull(),
-    openedThroughWorkspaceSso: boolean().notNull().default(false),
+    providerWorkspaceId: text(),
     userAgent: text().notNull().default(''),
     signedInAt: instant().notNull().defaultNow(),
     createdAt: instant().notNull(),
