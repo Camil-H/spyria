@@ -264,7 +264,6 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
       )}
       <LabelledSection
         title="Retention"
-        Heading="h3"
         titleClass="text-sm font-medium"
         className="mt-6 flex flex-col gap-3"
       >
