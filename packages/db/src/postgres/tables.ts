@@ -291,6 +291,7 @@ export const sessions = table(
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
     index('sessions_member_index').on(table.workspaceId, table.userId),
+    index('sessions_provider_workspace_index').on(table.providerWorkspaceId),
     memberReference(table, table.userId).onDelete('cascade'),
   ],
 )
