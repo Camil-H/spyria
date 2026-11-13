@@ -144,6 +144,7 @@ const isRefusal = (closeCode: number) => closeCode >= 4000 && closeCode < 4100
 const logHelloFailure = (error: unknown) =>
   log.error({ event: 'host.hello_failed', body: 'Saying hello to Spyria failed', error })
 const ownContainer = `${prefix}host`
+const memorySource = { docker, ownContainer }
 const stopRestarting = async () => {
   const container = await docker<{ Config?: { Hostname?: string } }>('GET', `/containers/${ownContainer}/json`).catch(
     () => undefined,
@@ -188,14 +189,14 @@ const connect = () => {
     const { signedIn, credentialsChangedAt } = await declaration()
     send({
       type: 'heartbeat',
-      memoryFreeBytes: await freeMemoryBytes(),
+      memoryFreeBytes: await freeMemoryBytes(memorySource),
       running: await runner.runningCount(),
       signedIn,
       credentialsChangedAt,
     })
   }
   const hello = async (token: string) => {
-    const system = await systemOf(docker)
+    const system = await systemOf(memorySource)
     const declared = await declaration()
     if (socket.readyState !== WebSocket.OPEN) return
     send({
