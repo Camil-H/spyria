@@ -36,7 +36,7 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
   })
 
-  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (a tick, no creation form, the status on the settings card)", {
+  test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (its status, no creation form, the status on the settings card)", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
     await sidebarOf(page).getByRole('link', { name: 'Workspace settings' }).click()
@@ -85,7 +85,6 @@ test.describe('GitHub setup', () => {
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'GitHub' })).toBeVisible()
     const connected = section.getByRole('status').filter({ hasText: 'GitHub App connected' })
     await expect(connected).toBeVisible()
-    await expect(connected).toHaveAttribute('title', 'GitHub App connected')
     await expect(creation).toHaveCount(0)
     await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
       'acme/appmain',
