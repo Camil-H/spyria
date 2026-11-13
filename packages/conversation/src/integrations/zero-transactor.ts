@@ -19,6 +19,7 @@ import {
   lastSessionId,
   linkAttachments,
   listedModelsOf,
+  lockChat,
   lockChatTurn,
   lockPendingAttachments,
   memberModelsOf,
@@ -226,6 +227,10 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   const unitOfWork: UnitOfWork = {
     messages: {
       get: getMessage,
+      lock: async (id) => {
+        await lockChat(tx, contextWorkspaceId, (await getMessage(id)).chatId)
+        return getMessage(id)
+      },
       record: async (change) => {
         const row = rowOf(change.message)
         const seq = await appendEvent(change)

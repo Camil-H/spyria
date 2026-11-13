@@ -412,6 +412,9 @@ export const rememberAgentConversation = async (
     )
   )?.id ?? conversationId
 
+export const lockChat = (tx: Transaction, workspaceId: string, chatId: string) =>
+  onServer(tx, 'select 1 from chats where workspace_id = $1 and id = $2 for update', [workspaceId, chatId])
+
 export const lockChatTurn = async (tx: Transaction, workspaceId: string, chatId: string) =>
   (
     await firstOnServer<{ turnMessageId: string | null }>(

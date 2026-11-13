@@ -7,7 +7,7 @@ type Input = { messageId: MessageId; deleterId: MemberId }
 
 export const deleteMessage = ({ transactor }: Dependencies, { messageId, deleterId }: Input) =>
   transactor.run(async (unitOfWork) => {
-    const message = await unitOfWork.messages.get(messageId)
+    const message = await unitOfWork.messages.lock(messageId)
     await requireChatPermission(unitOfWork.chats, message.chatId, deleterId, 'chat.post')
     await unitOfWork.messages.record({
       type: 'message.deleted',
