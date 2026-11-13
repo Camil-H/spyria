@@ -96,7 +96,9 @@ const hunksOf = (kinds: readonly EditKind[], before: readonly string[], after: r
     }
     const text = before[beforeIndex++] as string
     afterIndex++
-    if (index - previousChange > contextLines && (nextChangeAt[index] ?? 0) - index > contextLines) {
+    const nextChange = nextChangeAt[index] ?? 0
+    const hidesOneLineOnly = previousChange >= 0 && nextChange - previousChange - 1 <= 2 * contextLines + 1
+    if (index - previousChange > contextLines && nextChange - index > contextLines && !hidesOneLineOnly) {
       isSkipping = true
       continue
     }
