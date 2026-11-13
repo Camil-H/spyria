@@ -4,7 +4,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { commandOutputPathOf, rebuildMessages } from '@spyria/conversation/server'
 import { schema } from '@spyria/db/zero'
 import { secretsKeyringOf } from '../auth/secret-box.ts'
-import { startJobWorker } from '../job-worker.ts'
+import { maximumJobAttempts, startJobWorker } from '../job-worker.ts'
 import {
   acme,
   alice,
@@ -12,6 +12,7 @@ import {
   bob,
   bobInAcme,
   captureConsole,
+  captureLogs,
   chatAccessRows,
   chatAs,
   failedWith,
@@ -85,20 +86,38 @@ test('a prompt starts the runtime, creates one Pi conversation with the runtime 
   expect(await repliesTo(question)).toEqual([replyOf(1)])
 })
 
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82])
+const pdf = new TextEncoder().encode('%PDF-1.7 report')
+const uploadTo = async (chat: string, name: string, content: Uint8Array<ArrayBuffer>) =>
+  (await (
+    await app.request(`/api/chats/${chat}/attachments?${new URLSearchParams({ name })}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
+      body: content,
+    })
+  ).json()) as { id: string }
+const agentHostFailingUploads = async (failures: number) => {
+  let uploadAttempts = 0
+  const host = await stack.agentHost('Agent host', {
+    holdUrl,
+    containerAgentOf: (relay) => ({
+      ...relay.containerAgent,
+      respond: async (request, container) => {
+        if (!request.path.endsWith('/attachments')) return relay.containerAgent.respond(request, container)
+        uploadAttempts += 1
+        return uploadAttempts > failures
+          ? relay.containerAgent.respond(request, container)
+          : { status: 500, body: '{"error":"Failed on purpose"}' }
+      },
+    }),
+  })
+  return { ...host, uploadAttempts: () => uploadAttempts }
+}
+
 test('a prompt’s attachments are saved in the runtime and named to the agent by path, and Pi is shown the image but not the PDF', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat()
-  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82])
-  const pdf = new TextEncoder().encode('%PDF-1.7 report')
-  const upload = async (name: string, content: Uint8Array<ArrayBuffer>) =>
-    (await (
-      await app.request(`/api/chats/${chat}/attachments?${new URLSearchParams({ name })}`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
-        body: content,
-      })
-    ).json()) as { id: string }
-  const attachments = [await upload('chart.png', png), await upload('report.pdf', pdf)]
+  const attachments = [await uploadTo(chat, 'chart.png', png), await uploadTo(chat, 'report.pdf', pdf)]
   const question = await prompt(chat, 'What is this?', aliceInAcme, attachments)
   await answered(question)
   await turnEnded(chat)
@@ -116,6 +135,44 @@ test('a prompt’s attachments are saved in the runtime and named to the agent b
   expect(await repliesTo(question)).toEqual([
     { kind: 'agent', body: `[t1] Saw image image/png 16 B. ${replyOf(1).body.slice(5)}` },
   ])
+})
+
+test('an attachment the runtime fails to save once is saved on the retry, and the prompt reaches the agent once, with its path', async () => {
+  const { relay, uploadAttempts } = await agentHostFailingUploads(1)
+  const chat = await newRuntimeChat()
+  const question = await prompt(chat, 'What is this?', aliceInAcme, [await uploadTo(chat, 'chart.png', png)])
+  await answered(question)
+  await turnEnded(chat)
+
+  expect(uploadAttempts()).toBe(2)
+  expect(relay.prompts).toHaveLength(1)
+  expect(relay.prompts[0]).toMatch(
+    /^What is this\?\n\nAttached files, saved in your workspace: \/\S+\/chart\.png \(image\/png, 16 B\)$/,
+  )
+})
+
+test('an attachment the runtime never saves is named to the agent as not readable on the last attempt, and logged without its content', async () => {
+  const logs = captureLogs()
+  try {
+    const { relay, uploadAttempts } = await agentHostFailingUploads(Number.POSITIVE_INFINITY)
+    const chat = await newRuntimeChat()
+    const attachment = await uploadTo(chat, 'chart.png', png)
+    const question = await prompt(chat, 'What is this?', aliceInAcme, [attachment])
+    await answered(question)
+    await turnEnded(chat)
+
+    expect(relay.prompts).toEqual(['What is this?\n\nAttached, not readable by you: chart.png (image/png, 16 B)'])
+    expect(uploadAttempts()).toBe(maximumJobAttempts)
+    const unsaved = logs.events.filter(({ event }) => event === 'agent.attachment_unsaved')
+    expect(unsaved).toHaveLength(1)
+    expect(unsaved[0]).toMatchObject({
+      severity: 'WARN',
+      attributes: { 'workspace.id': acme, 'chat.id': chat, 'attachment.id': attachment.id },
+    })
+    expect(JSON.stringify(unsaved)).not.toContain(Buffer.from(png).toString('base64'))
+  } finally {
+    logs.restore()
+  }
 })
 
 test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {

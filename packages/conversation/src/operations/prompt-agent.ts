@@ -9,6 +9,7 @@ import {
   type HarnessId,
   harnessOf,
   isPickableModel,
+  log,
   type MemberId,
   type MessageId,
   signInNoticeOf,
@@ -65,16 +66,34 @@ const quotedByPrompt = async ({ messages, members }: UnitOfWork, prompt: Message
   return { ...quoted, authorName } satisfies QuotedMessage
 }
 
+const unsavedOnLastAttempt = (chat: AgentChat, attachmentId: string, isLastAttempt: boolean) => (error: unknown) => {
+  if (!isLastAttempt) throw error
+  log.warn({
+    event: 'agent.attachment_unsaved',
+    body: 'An attachment of the prompt could not be saved in the runtime',
+    attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId, 'attachment.id': attachmentId },
+    error,
+  })
+  return undefined
+}
+
 const savedAttachmentsOf = async (
   { transactor, agentClient }: Pick<AgentDependencies, 'transactor' | 'agentClient'>,
-  conversation: AgentConversation,
-  prompt: Message,
+  {
+    chat,
+    conversation,
+    prompt,
+    isLastAttempt,
+  }: { chat: AgentChat; conversation: AgentConversation; prompt: Message; isLastAttempt: boolean },
 ) => {
   const savedPaths = new Map<string, string>()
   for (const { id, name } of prompt.attachments) {
     const content = await transactor.run(({ attachments }) => attachments.contentOf(prompt.chatId, id))
     const path =
-      content && (await agentClient.saveAttachment(conversation, { id, name, content }).catch(() => undefined))
+      content &&
+      (await agentClient
+        .saveAttachment(conversation, { id, name, content })
+        .catch(unsavedOnLastAttempt(chat, id, isLastAttempt)))
     if (path) savedPaths.set(id, path)
   }
   return savedPaths
@@ -466,7 +485,7 @@ export const promptAgent = async (
       seed: await unitOfWork.messages.seedFor(prompt),
       quoted: await quotedByPrompt(unitOfWork, prompt),
     }))
-    const savedPaths = await savedAttachmentsOf(dependencies, conversation, prompt)
+    const savedPaths = await savedAttachmentsOf(dependencies, { chat, conversation, prompt, isLastAttempt })
     await agentClient.sendMessage(
       conversation,
       agentPromptTextOf(prompt, seed, quoted, savedPaths),
