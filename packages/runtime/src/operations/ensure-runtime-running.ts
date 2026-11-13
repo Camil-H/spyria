@@ -1,6 +1,6 @@
 import { type ChatId, runtimeId, type WorkspaceId } from '@spyria/kernel'
 import type { RuntimeTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { RetryRefused } from '../domain/errors.ts'
+import { ChatArchived, RetryRefused } from '../domain/errors.ts'
 import {
   ensureStepOf,
   isAwaitingHost,
@@ -71,11 +71,17 @@ const placeRuntime = async (
   return runtime
 }
 
+const lockedRuntimeOfOpenChat = async ({ runtimes }: UnitOfWork, { workspaceId, chatId }: Input) => {
+  const existing = await runtimes.lockByChat(workspaceId, chatId)
+  if (await runtimes.isChatArchived(workspaceId, chatId)) throw new ChatArchived()
+  return existing
+}
+
 export const ensureRuntimeRunning = ({ transactor, ...placement }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork): Promise<Runtime> => {
     const { runtimes, jobs } = unitOfWork
-    const { workspaceId, chatId, now } = input
-    const existing = await runtimes.lockByChat(workspaceId, chatId)
+    const { workspaceId, now } = input
+    const existing = await lockedRuntimeOfOpenChat(unitOfWork, input)
     const step = ensureStepOf(existing)
     if (existing && (step === 'none' || isAwaitingHost(existing))) return existing
     if (existing && step !== 'place') {
@@ -89,7 +95,7 @@ export const ensureRuntimeRunning = ({ transactor, ...placement }: Dependencies,
 
 export const retryRuntime = ({ transactor, ...placement }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork) => {
-    const existing = await unitOfWork.runtimes.lockByChat(input.workspaceId, input.chatId)
+    const existing = await lockedRuntimeOfOpenChat(unitOfWork, input)
     if (!isRetryable(existing)) throw new RetryRefused()
     return placeRuntime(unitOfWork, input, existing, placement)
   })

@@ -177,6 +177,7 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
         const setupCommand = setupCommandOf(await setupCommandsOf(workspaceId), chat.repository)
         return setupCommand ? { repository: chat.repository, baseBranch: chat.baseBranch, setupCommand } : undefined
       },
+      isChatArchived: async (workspaceId, chatId) => (await chatOf(workspaceId, chatId))?.archived === true,
       add: (runtime) => tx.mutate.runtimes.insert(runtime),
       save: (runtime) => tx.mutate.runtimes.update(runtime),
       delete: (runtime) => tx.mutate.runtimes.delete(runtime),

@@ -415,6 +415,7 @@ export const promptAgent = async (
   }
   if (readiness.state !== 'ready') {
     takeEarlyRoute(chat)
+    if (readiness.state === 'archived') return undefined
     return waitForRuntime(readiness, isRetry ? messageId : undefined)
   }
   const prompt = await transactor.run((unitOfWork) =>

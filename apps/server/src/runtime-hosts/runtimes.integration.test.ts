@@ -25,6 +25,7 @@ import {
   globex,
   openSharedTestApp,
   openZeroStore,
+  rejectionOf,
   requestMutation,
   succeeded,
   testAuthSettings,
@@ -32,6 +33,7 @@ import {
   testSecretsKeyring,
   testSpyriaAgentImage,
   waitFor,
+  waitingOnLock,
 } from '../testing/testing.ts'
 import { createRuntimeHostGateway } from './gateway.ts'
 
@@ -347,6 +349,29 @@ test('archiving a runtime chat removes its runtime', async () => {
   expect(await archive(chat)).toEqual(succeeded)
   await runtimeIn(chat, 'removed')
   expect(host.containers.has(runtime.id)).toBe(false)
+})
+
+test('a start or retry waiting on an archive in progress is refused once it commits and places no runtime', async () => {
+  const host = await fakeHost('Archived chat host')
+  const [startedChat, retriedChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  for (const [chat, placeDuringArchive] of [
+    [startedChat, ensure],
+    [retriedChat, retry],
+  ] as const) {
+    let placement: Promise<Error> | undefined
+    await database.$client.begin(async (archiving) => {
+      await archiving`update chats set archived = true where workspace_id = ${acme} and id = ${chat}`
+      placement = rejectionOf(placeDuringArchive(chat))
+      await waitFor(() => waitingOnLock(database))
+    })
+    expect(await placement).toMatchObject({ code: 'chat_archived' })
+  }
+  expect(
+    (await database.$client`select id from runtimes where chat_id in (${startedChat}, ${retriedChat})`).map(
+      ({ id }) => id,
+    ),
+  ).toEqual([])
+  expect(host.commands.filter(({ op }) => op === 'create')).toEqual([])
 })
 
 test('commands to an offline host retry until it returns, rows stay untouched meanwhile, and hello reconciles drift', async () => {

@@ -86,6 +86,11 @@ export const RetryRefused = errorKind(
   () => 'Only a runtime that could not start can be retried',
   RuntimeError,
 )
+export const ChatArchived = errorKind(
+  'chat_archived',
+  () => 'This chat is archived: it starts no runtime',
+  RuntimeError,
+)
 export const SpyriaAgentRefused = errorKind(
   'spyria_agent_refused',
   (request: string, status: number) => `spyria-agent answered ${request} with ${status}`,
