@@ -78,6 +78,12 @@ export const OwnerStays = errorKind(
   () => 'The owner keeps the Owner role and stays in the chat',
   ConversationError,
 )
+export const ChatArchived = errorKind(
+  'chat_archived',
+  () => 'This chat is archived: it takes no new messages',
+  ConversationError,
+)
+
 export const ChatFrozen = errorKind(
   'chat_frozen',
   () => 'This chat is frozen: its owner left the workspace',

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, memberId, messageId, workspaceId } from '@spyria/kernel'
 import {
+  ChatArchived,
   ChatFrozen,
   InvalidQuotedMessage,
   InvalidThreadRoot,
@@ -16,7 +17,7 @@ import {
   isChangeableBy,
   type Message,
   quotedMessageOf,
-  requireNotFrozen,
+  requireOpenChat,
   threadRootOf,
 } from './message.ts'
 import { MessageBody } from './message-body.ts'
@@ -100,6 +101,7 @@ const channel: ConversationChat = {
   baseBranch: null,
   toolServersOff: [],
   isOwnerRemoved: false,
+  archived: false,
 }
 
 test('threadRootOf accepts a top-level message of the same channel that is not deleted', () => {
@@ -121,10 +123,18 @@ test('threadRootOf refuses any root in a runtime chat', () => {
   )
 })
 
-test('requireNotFrozen refuses a runtime chat whose owner was removed and allows any other, channels included', () => {
-  expect(() => requireNotFrozen({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
-  expect(() => requireNotFrozen({ ...channel, type: 'runtime' })).not.toThrow()
-  expect(() => requireNotFrozen({ ...channel, isOwnerRemoved: true })).not.toThrow()
+test('requireOpenChat refuses a runtime chat whose owner was removed and allows any other, channels included', () => {
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', isOwnerRemoved: true })).toThrow(ChatFrozen)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime' })).not.toThrow()
+  expect(() => requireOpenChat({ ...channel, isOwnerRemoved: true })).not.toThrow()
+})
+
+test('requireOpenChat refuses an archived chat, channel or runtime, before checking whether it is frozen', () => {
+  expect(() => requireOpenChat({ ...channel, archived: true })).toThrow(ChatArchived)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', archived: true })).toThrow(ChatArchived)
+  expect(() => requireOpenChat({ ...channel, type: 'runtime', isOwnerRemoved: true, archived: true })).toThrow(
+    ChatArchived,
+  )
 })
 
 test('only what the agent wrote is agent activity: its replies and steps, not a member’s pull request card or messages', () => {

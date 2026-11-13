@@ -3,6 +3,7 @@ import type { StoredStep } from './agent-steps.ts'
 import type { Attachment } from './attachments.ts'
 import { isDevLoopPrompt } from './dev-loop.ts'
 import {
+  ChatArchived,
   ChatFrozen,
   InvalidQuotedMessage,
   InvalidThreadRoot,
@@ -50,6 +51,7 @@ export type ConversationChat = Readonly<{
   baseBranch: string | null
   toolServersOff: readonly string[]
   isOwnerRemoved: boolean
+  archived: boolean
 }>
 
 export const agentActivityKinds: readonly Message['kind'][] = ['agent', 'step']
@@ -61,7 +63,8 @@ export const isFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>
 
 export const showsConversation = (chat: Readonly<{ archived: boolean }>) => !chat.archived
 
-export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved'>) => {
+export const requireOpenChat = (chat: Pick<ConversationChat, 'type' | 'isOwnerRemoved' | 'archived'>) => {
+  if (chat.archived) throw new ChatArchived()
   if (isFrozen(chat)) throw new ChatFrozen()
 }
 
