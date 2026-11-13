@@ -18,6 +18,8 @@ import {
   sendTo,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
 } from './testing/testing.ts'
 
 const { database, resultOf, eventsOf, changesOf, chatRow } = await openSharedTestApp()
@@ -93,7 +95,7 @@ test('an edit waiting on a deletion in progress is refused once it commits, so t
       messageId: 'message-deleted-while-edited',
       text: 'Secret plan',
     })
-    await Bun.sleep(500)
+    await waitFor(() => waitingOnLock(database))
   })
 
   expect(await edit).toEqual(failedWith('A deleted message cannot be changed'))
