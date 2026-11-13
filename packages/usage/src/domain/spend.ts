@@ -55,9 +55,12 @@ export type MergedPull = {
   number: number
   title: string
   url: string
+  mergedAt: string
   costMicros: number
 }
-export type MergedPullsCost = { pulls: MergedPull[]; costMicros: number; perPullMicros: number | null }
+export type MergedPullsTotals = { pulls: MergedPull[]; costMicros: number; perPullMicros: number | null }
+export type MergedPullsPoint = { bucket: string; perPullMicros: number | null }
+export type MergedPullsCost = MergedPullsTotals & { trend: MergedPullsPoint[] }
 export type SpendReport = {
   from: string
   to: string
@@ -227,7 +230,7 @@ export const spendTrendOf = (filter: SpendFilter, bucketCounts: readonly SpendBu
   )
 }
 
-export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost => {
+export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsTotals => {
   const costMicros = [...new Map(pulls.map((pull) => [pull.chatId, pull.costMicros])).values()].reduce(
     (sum, cost) => sum + cost,
     0,
@@ -237,6 +240,18 @@ export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost
 
 export const scopeChoicesOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendScopeChoice[] =>
   spendRowsOf(rows, dimension).map(({ key, name }) => ({ key, name }))
+
+export const mergedPullsTrendOf = (
+  pulls: readonly MergedPull[],
+  range: SpendRange,
+  granularity: SpendGranularity,
+): MergedPullsPoint[] =>
+  bucketStartsOf(range, granularity).map((bucket) => ({
+    bucket,
+    perPullMicros: mergedPullsCostOf(
+      pulls.filter((pull) => isoDateOf(bucketStartOf(new Date(pull.mergedAt), granularity)) === bucket),
+    ).perPullMicros,
+  }))
 
 export const spendReportOf = ({
   filter,
@@ -268,6 +283,9 @@ export const spendReportOf = ({
       tableDimensions.map((dimension) => [dimension, scopeChoicesOf(choiceRows, dimension)]),
     ),
     decomposition: decompositionOf(counts.current, counts.previous),
-    mergedPulls: mergedPulls && mergedPullsCostOf(mergedPulls),
+    mergedPulls: mergedPulls && {
+      ...mergedPullsCostOf(mergedPulls),
+      trend: mergedPullsTrendOf(mergedPulls, filter.current, filter.granularity),
+    },
   }
 }

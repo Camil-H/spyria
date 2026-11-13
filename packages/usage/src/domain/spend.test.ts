@@ -3,6 +3,7 @@ import {
   bucketStartsOf,
   decompositionOf,
   mergedPullsCostOf,
+  mergedPullsTrendOf,
   type SpendCounts,
   type SpendDimensionRow,
   type SpendTotals,
@@ -222,7 +223,14 @@ test('the chart fills every bucket and folds series past the fifth into Other', 
 })
 
 test('cost per merged PR counts a chat once and has no value without merged PRs', () => {
-  const pull = { chatId: 'chat-invoice-bug', chatName: 'Invoice bug', repository: 'acme/app', title: '', url: '' }
+  const pull = {
+    chatId: 'chat-invoice-bug',
+    chatName: 'Invoice bug',
+    repository: 'acme/app',
+    title: '',
+    url: '',
+    mergedAt: '2026-10-02T13:00:00Z',
+  }
   expect(
     mergedPullsCostOf([
       { ...pull, number: 7, costMicros: 60_000 },
@@ -231,6 +239,23 @@ test('cost per merged PR counts a chat once and has no value without merged PRs'
     ]),
   ).toMatchObject({ costMicros: 90_000, perPullMicros: 30_000 })
   expect(mergedPullsCostOf([])).toEqual({ pulls: [], costMicros: 0, perPullMicros: null })
+})
+
+test('the merged PR trend gives each bucket the average cost of the PRs merged in it, none where none merged', () => {
+  const pull = { chatName: '', repository: 'acme/app', title: '', url: '' }
+  const pulls = [
+    { ...pull, chatId: 'chat-a', number: 1, costMicros: 10_000, mergedAt: '2026-10-01T09:00:00Z' },
+    { ...pull, chatId: 'chat-b', number: 2, costMicros: 30_000, mergedAt: '2026-10-01T23:59:59Z' },
+    { ...pull, chatId: 'chat-c', number: 3, costMicros: 50_000, mergedAt: '2026-10-03T00:00:00Z' },
+  ]
+  expect(mergedPullsTrendOf(pulls, rangeOf('2026-10-01T00:00:00Z', '2026-10-04T00:00:00Z'), 'day')).toEqual([
+    { bucket: '2026-10-01', perPullMicros: 20_000 },
+    { bucket: '2026-10-02', perPullMicros: null },
+    { bucket: '2026-10-03', perPullMicros: 50_000 },
+  ])
+  expect(mergedPullsTrendOf(pulls, rangeOf('2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z'), 'month')).toEqual([
+    { bucket: '2026-10-01', perPullMicros: 30_000 },
+  ])
 })
 
 test('the trend fills every bucket of the period with its counts, zero where nothing was spent', () => {
