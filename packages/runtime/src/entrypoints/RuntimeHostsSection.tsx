@@ -122,7 +122,7 @@ const HostCapacity = ({ host }: { host: RuntimeHostRow }) => {
             : 'Docker on this host runs as root: containers are isolated but the daemon has root on the host'
         }
       >
-        {host.capacity.rootless ? 'Docker: rootless' : 'Docker: root'}
+        {host.capacity.rootless ? 'Rootless Docker' : 'Docker runs as root'}
       </span>
       {!host.capacity.limitsEnforced && <span className={riskBadgeClass}>Limits not enforced</span>}
     </span>
@@ -156,13 +156,11 @@ export const RuntimeHostsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
                   <span className="truncate font-medium">{host.name}</span>
                   <StatusBadge tone={statusTones[status]}>{statusLabels[status]}</StatusBadge>
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="min-w-0 flex-1">
                   <HostCapacity host={host} />
-                  <span className="flex flex-wrap items-center gap-2">
-                    <HostVersion host={host} />
-                  </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
+                  <HostVersion host={host} />
                   {status === 'expired' && (
                     <button
                       type="button"

@@ -1,4 +1,5 @@
 import type { ActorKind, Integration, MemberId } from '@spyria/kernel'
+import { csvFieldOf } from './csv.ts'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
 export const auditKindsByGroup = {
@@ -221,11 +222,6 @@ export const retentionDaysFrom = (value: unknown) => {
   if (value === null) return null
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 36_500) throw new InvalidRetention()
   return value
-}
-
-const csvFieldOf = (text: string) => {
-  const safeText = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
-  return /[",\n\r]/.test(safeText) ? `"${safeText.replaceAll('"', '""')}"` : safeText
 }
 
 export const auditCsvHeader = 'Time,Person,Action,Target,Details\n'

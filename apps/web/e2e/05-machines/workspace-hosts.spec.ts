@@ -125,7 +125,7 @@ test.describe('Workspace hosts', () => {
       await expect(row).toContainText(`${cpus} CPUs`)
       await expect(row).toContainText(`${(memoryBytes / gibibyte).toFixed(1)} GB`)
       await expect(row).toContainText(`0 / ${cap}`)
-      await expect(row.getByText(rootless ? 'Docker: rootless' : 'Docker: root', { exact: true })).toBeVisible()
+      await expect(row.getByText(rootless ? 'Rootless Docker' : 'Docker runs as root', { exact: true })).toBeVisible()
     })
     await test.step('a second spyria-host with the same URL is refused and the first stays online', async () => {
       const secondHost = hosts.start(url)

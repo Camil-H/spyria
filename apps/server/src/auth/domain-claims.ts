@@ -6,6 +6,7 @@ import {
   DomainClaimedElsewhere,
   DomainClaimNotFound,
   type DomainClaimView,
+  domainOfEmail,
   hasVerificationRecord,
   requireOwnAddressInside,
   VerificationRecordNotFound,
@@ -46,6 +47,13 @@ const asClaimsManager = <Result>(database: Database, member: Member, work: (sql:
     if (!enforcesSso) throw new ClaimNeedsSso()
     return work(sql)
   })
+
+export const claimsDomainOf = async (database: Database, workspaceId: string, email: string) =>
+  (
+    await database.$client`
+      select 1 from domain_claims
+      where workspace_id = ${workspaceId} and domain = ${domainOfEmail(email)} and verified_at is not null`
+  ).length > 0
 
 export const listDomainClaims = (database: Database, member: Member) =>
   asManager(database, member, async (sql) => viewsOf(await claimsOf(sql, member.workspaceId)))

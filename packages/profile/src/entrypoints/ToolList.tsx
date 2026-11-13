@@ -12,18 +12,14 @@ export const toolCountsOf = (tools: readonly ConnectionTool[]) => {
   return `${tools.length} ${tools.length === 1 ? 'tool' : 'tools'} · ${readCount} read · ${tools.length - readCount} write`
 }
 
-type ListedTool = ConnectionTool & { summary?: string }
-
 export const ToolList = ({
   label,
   tools,
   controlOf,
-  groupControlOf,
 }: {
   label: string
-  tools: readonly ListedTool[]
+  tools: readonly ConnectionTool[]
   controlOf: (tool: ConnectionTool) => ReactNode
-  groupControlOf?: (title: string, groupTools: readonly ConnectionTool[]) => ReactNode
 }) => {
   const [search, setSearch] = useState('')
   const searched = search.trim().toLowerCase()
@@ -43,24 +39,18 @@ export const ToolList = ({
         if (groupTools.length === 0) return null
         return (
           <section key={title} aria-label={`${title} of ${label}`} className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-semibold uppercase text-muted">
-                {title} ({groupTools.length})
-              </h4>
-              {groupControlOf?.(title, groupTools)}
-            </div>
+            <h4 className="text-xs font-semibold uppercase text-muted">
+              {title} ({groupTools.length})
+            </h4>
             {shown.length === 0 ? (
               <p className="text-xs text-muted">No tool matches</p>
             ) : (
               <ul className="flex flex-col">
                 {shown.map((tool) => (
                   <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
-                    <span className="flex flex-col">
-                      <span>
-                        {tool.name}
-                        {tool.destructive && <span className="ml-2 text-xs text-muted">destructive</span>}
-                      </span>
-                      {tool.summary && <span className="text-xs text-muted">{tool.summary}</span>}
+                    <span>
+                      {tool.name}
+                      {tool.destructive && <span className="ml-2 text-xs text-muted">destructive</span>}
                     </span>
                     {controlOf(tool)}
                   </li>

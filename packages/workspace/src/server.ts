@@ -11,6 +11,7 @@ export {
   AccountBoundElsewhere,
   BranchNotFound,
   ClaimedDomainCannotCreate,
+  ClaimedDomainNotInvited,
   ClaimNeedsSso,
   DomainClaimedElsewhere,
   DomainClaimNotFound,

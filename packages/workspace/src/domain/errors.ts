@@ -164,6 +164,12 @@ export const ClaimedDomainCannotCreate = errorKind(
   () => "Your address belongs to your organization's workspace: it cannot create another one",
   WorkspaceError,
 )
+export const ClaimedDomainNotInvited = errorKind(
+  'claimed_domain_not_invited',
+  (domain: string) =>
+    `${domain} belongs to your organization's workspace, which has not invited you: ask one of its Admins for an invite. Addresses at ${domain} cannot create a workspace of their own.`,
+  WorkspaceError,
+)
 export const InvalidDomain = errorKind(
   'invalid_domain',
   (domain: string) => `${domain} is not a domain name, such as example.com`,

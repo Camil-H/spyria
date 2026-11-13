@@ -4,6 +4,8 @@ import {
   type AccountProvider,
   accountIssuerOf,
   accountProvidersOf,
+  ClaimedDomainNotInvited,
+  domainOfEmail,
   EmailNotConfirmed,
   entraObjectIdPattern,
   InstanceBeingSetUp,
@@ -20,6 +22,7 @@ import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import type { RateLimitName } from '../rate-limits.ts'
+import { claimsDomainOf } from './domain-claims.ts'
 import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
 import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
@@ -225,6 +228,12 @@ export const createAuthRoutes = ({
         : await openSessions(scope.database, userId, workspaceId, providerWorkspaceId, userAgentOf(context))
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     if (opened.length > 0) return popup(context, { status: 'signed_in' })
+    if (
+      workspaceId === undefined &&
+      providerWorkspaceId !== null &&
+      (await claimsDomainOf(scope.database, providerWorkspaceId, email))
+    )
+      return refusedPopup(context, new ClaimedDomainNotInvited(domainOfEmail(email)))
     if (userId === undefined || providerWorkspaceId !== null || workspaceId !== undefined)
       return popup(context, { status: 'not_invited', email }, 403)
     await setSignedCookie(

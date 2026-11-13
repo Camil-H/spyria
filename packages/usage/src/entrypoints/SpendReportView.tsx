@@ -1,15 +1,18 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import {
+  calloutClass,
   ErrorMessage,
   fieldClass,
   focusRing,
   formatCost,
+  ghostButtonClass,
   LabelledSection,
   labelClass,
   SegmentedChoice,
 } from '@spyria/ui'
 import { ChevronRight } from 'lucide-react'
 import { Fragment, lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react'
+import { costHistogramOf, mergedPullsCsvOf } from '../domain/merged-pulls.ts'
 import {
   factorValuesOf,
   type SpendBucketCounts,
@@ -27,6 +30,9 @@ import { UsageTable } from './UsageTable.tsx'
 
 const SpendChart = lazy(() => import('./SpendChart.tsx').then(({ SpendChart }) => ({ default: SpendChart })))
 const TrendChart = lazy(() => import('./TrendChart.tsx').then(({ TrendChart }) => ({ default: TrendChart })))
+const CostHistogram = lazy(() =>
+  import('./CostHistogram.tsx').then(({ CostHistogram }) => ({ default: CostHistogram })),
+)
 
 type Search = { period: SpendPeriod; from: string; to: string; granularity: SpendGranularity; scope: string }
 
@@ -83,28 +89,19 @@ const trendPointsOf = (counts: readonly SpendBucketCounts[], row: DecompositionR
 const formatRowValue = (row: DecompositionRow) => (value: number | null) =>
   row !== 'total' ? formatFactor(row, value) : value === null ? '—' : formatCost(value)
 
-const RowToggle = ({
-  label,
-  isOpen,
-  controls,
-  onToggle,
-}: {
-  label: string
-  isOpen: boolean
-  controls: string
-  onToggle: () => void
-}) => (
+const RowToggle = ({ label, isOpen, controls }: { label: string; isOpen: boolean; controls: string }) => (
   <button
     type="button"
     aria-expanded={isOpen}
     aria-controls={isOpen ? controls : undefined}
-    onClick={onToggle}
-    className={`inline-flex items-center gap-1 rounded-md text-left hover:underline ${focusRing} aria-expanded:[&>svg]:rotate-90`}
+    className={`inline-flex items-center gap-1 rounded-md text-left ${focusRing} aria-expanded:[&>svg]:rotate-90`}
   >
     {label}
     <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted transition-transform" />
   </button>
 )
+
+const toggleRowClass = 'cursor-pointer hover:bg-hover'
 
 export const Decomposition = ({
   decomposition,
@@ -113,7 +110,6 @@ export const Decomposition = ({
   workspaceId,
   trendKey,
   readTrend,
-  children,
 }: {
   decomposition: SpendReport['decomposition']
   isPersonal: boolean
@@ -121,7 +117,6 @@ export const Decomposition = ({
   workspaceId: WorkspaceId
   trendKey: string
   readTrend: ReadTrend
-  children?: ReactNode
 }) => {
   const chartIdPrefix = useId()
   const [openRow, setOpenRow] = useState<DecompositionRow | null>(null)
@@ -165,7 +160,6 @@ export const Decomposition = ({
     )
   return (
     <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
-      {children}
       <table aria-label="Spend decomposition" className="w-full text-sm">
         <thead className="text-xs text-muted">
           <tr>
@@ -191,18 +185,14 @@ export const Decomposition = ({
                 <Fragment key={factor.name}>
                   <tr
                     aria-current={isBiggestMover || undefined}
-                    className={`border-t border-line ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
+                    onClick={() => toggle(factor.name)}
+                    className={`border-t border-line ${toggleRowClass} ${isBiggestMover ? 'bg-selected font-semibold' : ''}`}
                   >
                     <td aria-hidden className={operatorClass}>
                       {index > 0 && '×'}
                     </td>
                     <th scope="row" className="px-2 py-1.5 text-left font-normal">
-                      <RowToggle
-                        label={label}
-                        isOpen={openRow === factor.name}
-                        controls={chartIdOf(factor.name)}
-                        onToggle={() => toggle(factor.name)}
-                      />
+                      <RowToggle label={label} isOpen={openRow === factor.name} controls={chartIdOf(factor.name)} />
                       {isBiggestMover && <span className="ml-1 text-xs text-muted"> · Biggest mover</span>}
                     </th>
                     <td className={cellClass}>{formatFactor(factor.name, factor.current)}</td>
@@ -213,17 +203,12 @@ export const Decomposition = ({
                 </Fragment>
               )
             })}
-          <tr className="border-t border-line font-semibold">
+          <tr onClick={() => toggle('total')} className={`border-t border-line font-semibold ${toggleRowClass}`}>
             <td aria-hidden className={operatorClass}>
               =
             </td>
             <th scope="row" className="px-2 py-1.5 text-left">
-              <RowToggle
-                label="Total spend"
-                isOpen={openRow === 'total'}
-                controls={chartIdOf('total')}
-                onToggle={() => toggle('total')}
-              />
+              <RowToggle label="Total spend" isOpen={openRow === 'total'} controls={chartIdOf('total')} />
             </th>
             <td className={cellClass}>{formatCost(decomposition.current.costMicros)}</td>
             <td className={cellClass}>{formatCost(decomposition.previous.costMicros)}</td>
@@ -242,8 +227,28 @@ export const Decomposition = ({
   )
 }
 
-const MergedPulls = ({ mergedPulls }: { mergedPulls: NonNullable<SpendReport['mergedPulls']> }) => (
+const downloadCsv = (fileName: string, csv: string) => {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = Object.assign(document.createElement('a'), { href: url, download: fileName })
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const MergedPulls = ({
+  mergedPulls,
+  granularity,
+  period,
+  isScoped,
+}: {
+  mergedPulls: NonNullable<SpendReport['mergedPulls']>
+  granularity: SpendGranularity
+  period: { from: string; to: string }
+  isScoped: boolean
+}) => (
   <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="font-medium">
+    {isScoped && (
+      <p className="text-sm text-muted">Counted over the whole workspace, whatever the usage is narrowed to</p>
+    )}
     {mergedPulls.perPullMicros === null ? (
       <p className="text-sm text-muted">No pull request merged in this period</p>
     ) : (
@@ -252,91 +257,92 @@ const MergedPulls = ({ mergedPulls }: { mergedPulls: NonNullable<SpendReport['me
           {formatCost(mergedPulls.perPullMicros)} per merged PR · {mergedPulls.pulls.length} merged ·{' '}
           {formatCost(mergedPulls.costMicros)} spent in their chats
         </p>
-        <table aria-label="Merged pull requests" className="w-full text-sm">
-          <thead className="text-xs text-muted">
-            <tr>
-              {['Chat', 'Pull request', 'Chat cost'].map((title, index) => (
-                <th
-                  key={title}
-                  scope="col"
-                  className={`${index === 2 ? cellClass : 'px-2 py-1.5 text-left'} font-medium`}
-                >
-                  {title}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {mergedPulls.pulls.map((pull) => (
-              <tr key={`${pull.repository}#${pull.number}`} className="border-t border-line">
-                <th scope="row" className="px-2 py-1.5 text-left font-normal">
-                  {pull.chatName}
-                </th>
-                <td className="px-2 py-1.5">
-                  <a href={pull.url} target="_blank" rel="noreferrer" className="text-link underline">
-                    {pull.repository}#{pull.number}
-                  </a>{' '}
-                  <span className="text-muted">{pull.title}</span>
-                </td>
-                <td className={cellClass}>{formatCost(pull.costMicros)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Suspense fallback={<p className="text-sm text-muted">Loading the charts…</p>}>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <h4 className="text-xs font-medium text-muted">Average cost per merged PR</h4>
+              <TrendChart
+                points={mergedPulls.trend.map(({ bucket, perPullMicros }) => ({ bucket, value: perPullMicros }))}
+                granularity={granularity}
+                formatValue={(value) => (value === null ? '—' : formatCost(value))}
+                label="Average cost per merged PR over time"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h4 className="text-xs font-medium text-muted">Merged PRs by cost</h4>
+              <CostHistogram
+                bins={costHistogramOf(mergedPulls.pulls.map((pull) => pull.costMicros))}
+                label="Merged PRs by chat cost"
+              />
+            </div>
+          </div>
+        </Suspense>
+        <button
+          type="button"
+          className={`self-start ${ghostButtonClass}`}
+          onClick={() =>
+            downloadCsv(
+              `merged-prs-${period.from.slice(0, 10)}-${period.to.slice(0, 10)}.csv`,
+              mergedPullsCsvOf(mergedPulls.pulls),
+            )
+          }
+        >
+          Export data
+        </button>
       </>
     )}
   </LabelledSection>
 )
 
 const ScopePicker = ({
-  tables,
+  choices,
   dimensions,
   isPersonal,
   value,
   onChange,
 }: {
-  tables: SpendReport['tables']
+  choices: SpendReport['scopeChoices']
   dimensions: readonly SpendDimension[]
   isPersonal: boolean
   value: string
   onChange: (scope: string) => void
 }) => {
   const dimension = (scopeSearchOf(value).scope ?? '') as SpendDimension | ''
-  const rows = dimension ? (tables[dimension] ?? []) : []
+  const rows = dimension ? (choices[dimension] ?? []) : []
   return (
-    <fieldset aria-label="Narrow the decomposition" className="flex flex-wrap items-end gap-2">
-      <label className={labelClass}>
-        For
+    <>
+      <select
+        aria-label="Narrow to"
+        className={fieldClass}
+        value={dimension}
+        onChange={(event) => {
+          const picked = event.target.value as SpendDimension | ''
+          const firstRow = picked ? choices[picked]?.[0] : undefined
+          onChange(firstRow ? `${picked}:${firstRow.key}` : '')
+        }}
+      >
+        <option value="">{isPersonal ? 'All my usage' : 'Whole workspace'}</option>
+        {dimensions.map((choice) => (
+          <option key={choice} value={choice} disabled={(choices[choice] ?? []).length === 0}>
+            {dimensionLabels[choice]}
+          </option>
+        ))}
+      </select>
+      {dimension && (
         <select
+          aria-label={dimensionLabels[dimension]}
           className={fieldClass}
-          value={dimension}
-          onChange={(event) => {
-            const picked = event.target.value as SpendDimension | ''
-            const firstRow = picked ? tables[picked]?.[0] : undefined
-            onChange(firstRow ? `${picked}:${firstRow.key}` : '')
-          }}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
         >
-          <option value="">{isPersonal ? 'All my usage' : 'Whole workspace'}</option>
-          {dimensions.map((choice) => (
-            <option key={choice} value={choice} disabled={(tables[choice] ?? []).length === 0}>
-              {dimensionLabels[choice]}
+          {rows.map((row) => (
+            <option key={row.key} value={`${dimension}:${row.key}`}>
+              {row.name}
             </option>
           ))}
         </select>
-      </label>
-      {dimension && (
-        <label className={labelClass}>
-          {dimensionLabels[dimension]}
-          <select className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)}>
-            {rows.map((row) => (
-              <option key={row.key} value={`${dimension}:${row.key}`}>
-                {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
       )}
-    </fieldset>
+    </>
   )
 }
 
@@ -386,22 +392,23 @@ export const SpendReportView = ({
   const chart = report?.charts[stack]
   return (
     <LabelledSection title={title}>
+      <p className={calloutClass}>
+        Sessions run on a member's own machine (Claude Code, Codex) use their own subscription and are not counted here.
+      </p>
       {children}
-      <fieldset aria-label="Period" className="flex flex-wrap items-end gap-2">
-        <label className={labelClass}>
-          Period
-          <select
-            className={fieldClass}
-            value={search.period}
-            onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, scope: '' })}
-          >
-            {spendPeriods.map((period) => (
-              <option key={period} value={period}>
-                {periodLabels[period]}
-              </option>
-            ))}
-          </select>
-        </label>
+      <fieldset aria-label="Filters" className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Period"
+          className={fieldClass}
+          value={search.period}
+          onChange={(event) => setSearch({ ...search, period: event.target.value as SpendPeriod, scope: '' })}
+        >
+          {spendPeriods.map((period) => (
+            <option key={period} value={period}>
+              {periodLabels[period]}
+            </option>
+          ))}
+        </select>
         {search.period === 'custom' &&
           (['from', 'to'] as const).map((bound) => (
             <label key={bound} className={labelClass}>
@@ -424,6 +431,15 @@ export const SpendReportView = ({
           value={search.granularity}
           onChange={(granularity) => setSearch({ ...search, granularity })}
         />
+        {report && (
+          <ScopePicker
+            choices={report.scopeChoices}
+            dimensions={tableDimensions}
+            isPersonal={isPersonal}
+            value={search.scope}
+            onChange={(scope) => setSearch({ ...search, scope })}
+          />
+        )}
       </fieldset>
       <ErrorMessage message={loadError} />
       {report === null ? (
@@ -476,16 +492,15 @@ export const SpendReportView = ({
             workspaceId={workspaceId}
             trendKey={JSON.stringify(searchOf(search))}
             readTrend={readTrend}
-          >
-            <ScopePicker
-              tables={report.tables}
-              dimensions={tableDimensions}
-              isPersonal={isPersonal}
-              value={search.scope}
-              onChange={(scope) => setSearch({ ...search, scope })}
+          />
+          {report.mergedPulls && (
+            <MergedPulls
+              mergedPulls={report.mergedPulls}
+              granularity={report.granularity}
+              period={report}
+              isScoped={search.scope !== ''}
             />
-          </Decomposition>
-          {report.mergedPulls && <MergedPulls mergedPulls={report.mergedPulls} />}
+          )}
         </>
       )}
     </LabelledSection>
