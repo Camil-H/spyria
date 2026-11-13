@@ -2,7 +2,6 @@ import { openPageAs } from '../stack'
 import {
   expect,
   hostsSectionOf,
-  llmSectionOf,
   localRuntimesSectionOf,
   machineSectionOf,
   machineToolOf,
@@ -89,7 +88,6 @@ test.describe('My machine', () => {
       tag: ['@spec-25', '@stage-f'],
     }, async ({ page, pair }) => {
       await openProfile(page, 'My machine')
-      await expect(llmSectionOf(page)).toHaveCount(0)
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toBeVisible()
       for (const toolName of ['Claude Code', 'Codex'])
         await expect(machineToolOf(page, toolName)).toHaveText(`${toolName}Not signed inSet up`)

@@ -20,7 +20,7 @@ import {
 import { type ComponentType, use } from 'react'
 import { useOutletContext, useParams } from 'react-router'
 import { sharedAuthMode } from './auth.ts'
-import { CardGrid, CardPage, type PageCard, pagePaddingClass } from './card-pages.tsx'
+import { CardGrid, CardPage, countLabelOf, type PageCard, pagePaddingClass } from './card-pages.tsx'
 
 type SettingsCard = PageCard & {
   permissions: readonly WorkspacePermission[]
@@ -135,8 +135,6 @@ const aiProvidersStatusOf = (workspace: Snapshot['workspaces'][number] | undefin
   const allowList = workspace?.aiProviderAllowList ?? null
   return allowList === null ? 'Every provider allowed' : countLabelOf(allowList.length, 'allowed provider')
 }
-
-const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
 const cardStatusesOf =
   (workspaceId: WorkspaceId, isDexSignIn: boolean) =>

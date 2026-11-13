@@ -7,6 +7,8 @@ export type PageCard = { path: string; title: string; description: string; isWid
 
 export const pagePaddingClass = 'px-6 py-6 md:px-12 xl:px-16'
 
+export const countLabelOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+
 export const CardGrid = ({
   basePath,
   cards,

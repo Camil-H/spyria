@@ -21,7 +21,7 @@ export const LlmAccessSection = ({ workspaceId, memberId }: { workspaceId: Works
       {credentials.length === 0 ? (
         <p className={`${cardClass} px-4 py-6 text-center text-sm text-muted`}>No LLM keys yet</p>
       ) : (
-        <ul aria-label="LLM keys" className={rowListClass}>
+        <ul aria-label="Your keys" className={rowListClass}>
           {credentials.map(({ id, provider, last4 }) => (
             <li key={id} className={rowClass}>
               <span className="w-40 truncate font-medium">{provider}</span>
