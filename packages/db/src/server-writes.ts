@@ -993,7 +993,8 @@ export const scheduleWorkspaceDeletion = (tx: Transaction, workspaceId: string, 
     `with deleted as (
        update workspaces set deleted_at = now(), purge_at = to_timestamp($2::double precision / 1000)
        where workspace_id = $1 and deleted_at is null returning workspace_id),
-     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)),
+     ended_sessions as (delete from sessions where workspace_id in (select workspace_id from deleted)
+       or provider_workspace_id in (select workspace_id from deleted)),
      released_domains as (delete from domain_claims where workspace_id in (select workspace_id from deleted)),
      cancelled_jobs as (
        delete from jobs where workspace_id in (select workspace_id from deleted) and state = 'queued')

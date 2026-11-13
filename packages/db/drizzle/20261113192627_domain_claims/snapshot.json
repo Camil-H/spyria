@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3f81ed6f-2581-4c77-abf5-7c931c80f6b8",
+  "id": "3d6a5fac-6b7a-4be2-8b53-982c19f363e4",
   "prevIds": ["4def1cd8-0216-4bf3-8605-8d52073377df"],
   "ddl": [
     {
@@ -6159,6 +6159,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "sessions_member_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "provider_workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sessions_provider_workspace_index",
       "entityType": "indexes",
       "schema": "public",
       "table": "sessions"

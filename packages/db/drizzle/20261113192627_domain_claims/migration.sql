@@ -12,6 +12,7 @@ ALTER TABLE "sessions" ADD COLUMN "provider_workspace_id" text;--> statement-bre
 UPDATE "sessions" SET "provider_workspace_id" = "workspace_id" WHERE "opened_through_workspace_sso";--> statement-breakpoint
 ALTER TABLE "sessions" DROP COLUMN "opened_through_workspace_sso";--> statement-breakpoint
 CREATE UNIQUE INDEX "domain_claims_one_verified_per_domain" ON "domain_claims" ("domain") WHERE "verified_at" is not null;--> statement-breakpoint
+CREATE INDEX "sessions_provider_workspace_index" ON "sessions" ("provider_workspace_id");--> statement-breakpoint
 ALTER TABLE "domain_claims" ADD CONSTRAINT "domain_claims_workspace_id_workspace_sso_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace_sso"("workspace_id") ON DELETE CASCADE;--> statement-breakpoint
 CREATE FUNCTION provider_opens_workspace(provider_workspace_id text, opened_workspace_id text, opening_user_id text)
 RETURNS boolean LANGUAGE sql STABLE AS $$
