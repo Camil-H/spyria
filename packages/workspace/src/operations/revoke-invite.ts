@@ -9,7 +9,7 @@ type Input = { invitationId: string; actorId: MemberId; now: number }
 export const revokeInvite = ({ transactor }: Dependencies, { invitationId, actorId, now }: Input) =>
   transactor.run(async ({ memberships, invitations, workspaceEvents }) => {
     await requireWorkspacePermission(memberships, actorId, 'members.invite')
-    const invitation = await invitations.get(invitationId)
+    const invitation = await invitations.lock(invitationId)
     if (!invitation || !isOpen(invitation)) throw new InviteNotFound(invitationId)
     await invitations.save({ ...invitation, revokedAt: now })
     await workspaceEvents.record({

@@ -5,7 +5,9 @@ import {
   deleteMemberSessions,
   enqueueJob,
   lockActiveAdminIds,
+  lockInvitation,
   lockMembership,
+  lockOpenInvitation,
   scheduleWorkspaceDeletion,
   signOutMemberEverywhere,
 } from '@spyria/db/server-writes'
@@ -225,11 +227,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
         tx.mutate.memberships.update({ workspaceId: context.workspaceId, userId: id, role, removedAt }),
     },
     invitations: {
-      get: async (id) => {
+      lock: async (id) => {
+        await lockInvitation(tx, context.workspaceId, id)
         const row = await tx.run(invitationsInContext.where('id', id).one())
         return row && toInvitation(row)
       },
-      findOpen: async (email) => {
+      lockOpen: async (email) => {
+        await lockOpenInvitation(tx, context.workspaceId, email)
         const row = await tx.run(
           invitationsInContext
             .where('email', email)

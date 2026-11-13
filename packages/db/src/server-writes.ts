@@ -101,6 +101,16 @@ export const lockMembership = (tx: Transaction, workspaceId: string, userId: str
     userId,
   ])
 
+export const lockInvitation = (tx: Transaction, workspaceId: string, id: string) =>
+  onServer(tx, 'select 1 from invitations where workspace_id = $1 and id = $2 for update', [workspaceId, id])
+
+export const lockOpenInvitation = (tx: Transaction, workspaceId: string, email: string) =>
+  onServer(
+    tx,
+    'select 1 from invitations where workspace_id = $1 and email = $2 and revoked_at is null and accepted_at is null for update',
+    [workspaceId, email],
+  )
+
 export const lockActiveAdminIds = async (tx: Transaction, workspaceId: string) =>
   (
     await onServer<{ userId: string }>(
