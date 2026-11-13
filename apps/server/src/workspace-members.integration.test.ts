@@ -20,6 +20,8 @@ import {
   sendTo,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -165,7 +167,7 @@ test('a role change waiting on a removal in progress is refused once it commits,
   await database.$client.begin(async (removal) => {
     await removal`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${dana}`
     roleChange = changeRole(aliceInAcme, dana, 'admin')
-    await Bun.sleep(500)
+    await waitFor(() => waitingOnLock(database))
   })
 
   expect(await roleChange).toEqual(failedWith(`${dana} is not a member of this workspace`))
