@@ -26,6 +26,14 @@ test('two separate edits in one write become two hunks with their own context an
   ])
 })
 
+test('a gap that would hide a single unchanged line shows that line instead', () => {
+  const before = numberedLines(9)
+  const after = before.map((line, index) => (index === 0 || index === 8 ? `${line} changed` : line))
+  const diff = lineDiffOf(before, after)
+  expect(diff.some((line) => line.kind === 'gap')).toBe(false)
+  expect(diff.filter((line) => line.kind === 'context').map((line) => line.text)).toEqual(before.slice(1, 8))
+})
+
 test('edits close together share one hunk, and an insertion and a deletion keep the unchanged lines between them', () => {
   const before = ['a', 'b', 'c', 'd', 'e', 'f']
   const after = ['a', 'inserted', 'b', 'c', 'd', 'f']
