@@ -669,6 +669,26 @@ test('an interrupt naming a prompt that waits for the session to start stops onl
   expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).not.toBe('cancelled')
 })
 
+test('a Stop naming no prompt stops every prompt waiting for the session to start', async () => {
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 1500 })
+  const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
+  const socket = open(id)
+  const restarting = call('POST', `/api/conversations/${id}/restart`)
+  for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
+    if (Date.now() > deadline) throw new Error('The session did not start reloading')
+  await prompt(id, 'first')
+  await prompt(id, 'second')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.stopReason)).toEqual([
+    'cancelled',
+    'cancelled',
+  ])
+  await restarting
+})
+
 test('a restart while a timed-out adapter is still stopping brings the conversation back to a working session', async () => {
   const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
   const silentOnce = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
