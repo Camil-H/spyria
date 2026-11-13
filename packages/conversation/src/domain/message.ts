@@ -65,8 +65,13 @@ export const requireNotFrozen = (chat: Pick<ConversationChat, 'type' | 'isOwnerR
   if (isFrozen(chat)) throw new ChatFrozen()
 }
 
+export const isChangeableBy = (
+  message: Readonly<{ kind: string; authorId: MemberId | null; step?: Readonly<{ type: string }> | null }>,
+  memberId: MemberId,
+) => message.kind === 'member' && message.authorId === memberId && !isDevLoopPrompt(message)
+
 const changeableBy = (message: Message, memberId: MemberId): LiveMessage => {
-  if (message.authorId !== memberId || isDevLoopPrompt(message)) throw new NotMessageAuthor()
+  if (!isChangeableBy(message, memberId)) throw new NotMessageAuthor()
   if (message.status === 'deleted') throw new MessageDeleted()
   return message
 }

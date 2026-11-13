@@ -27,7 +27,7 @@ import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf, taskReportOf } from '../domain/delegation.ts'
 import { devLoopAuthorName, isDevLoopPrompt, movedCardLabelOf } from '../domain/dev-loop.ts'
-import { isAgentActivity, isFrozen, quotableKinds } from '../domain/message.ts'
+import { isAgentActivity, isChangeableBy, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 import { conversationChatIn } from './conversation-chat.ts'
@@ -366,7 +366,7 @@ export const getConversation =
         step,
         replyToId: message.replyToId,
         isOnViewersPrompt: message.replyToId !== null && chatMessageById.get(message.replyToId)?.authorId === viewerId,
-        canEdit: canPost && message.authorId === viewerId && !isDevLoopPrompt(message),
+        canEdit: canPost && isChangeableBy(message, viewerId),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
