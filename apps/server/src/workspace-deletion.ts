@@ -37,6 +37,7 @@ export const abandonFailedCleanup = async (database: Database, workspaceId: stri
   database.$client<{ type: string; lastError: string | null }[]>`
     delete from jobs using workspaces
     where jobs.workspace_id = ${workspaceId} and workspaces.workspace_id = jobs.workspace_id
-      and workspaces.deleted_at is not null and jobs.state = 'failed'
+      and workspaces.deleted_at is not null
+      and (jobs.state = 'failed' or (jobs.state = 'queued' and jobs.last_error is not null))
       and jobs.type = any(${[...workspaceCleanupJobTypes]}::text[])
     returning jobs.type, jobs.last_error as "lastError"`

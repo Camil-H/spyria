@@ -5,6 +5,7 @@ import {
   lockDuePurge,
   purgeWorkspaceChunk,
   purgeWorkspaceRows,
+  requeueFailedCleanup,
   workspaceCleanupOf,
   workspacePurgeTargetsOf,
 } from '@spyria/db/server-writes'
@@ -49,13 +50,14 @@ const deletedWorkspaceIn = (tx: ServerTransaction, workspaceId: WorkspaceId, act
   reportFailedCleanup: async ({ failed }) => {
     log.error({
       event: 'workspace.purge_blocked',
-      body: 'A deleted workspace waits for failed cleanup jobs before it is erased',
+      body: 'A deleted workspace waits for its failed cleanup jobs, retried in an hour, before it is erased',
       attributes: {
         'workspace.id': workspaceId,
         'job.types': failed.map(({ type, count }) => `${type}×${count}`).join(','),
       },
     })
   },
+  retryFailedCleanupLater: (delayMilliseconds) => requeueFailedCleanup(tx, workspaceId, delayMilliseconds),
   deleteChunk: () => purgeWorkspaceChunk(tx, workspaceId, purgeChunkRows),
   deleteAll: async () => {
     await purgeWorkspaceRows(tx, workspaceId)

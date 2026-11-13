@@ -22,6 +22,7 @@ export const purgeWorkspace = (
     if (cleanup.isPending) return { retryInMilliseconds: cleanupPollMilliseconds }
     if (cleanup.failed.length > 0) {
       await deletedWorkspace.reportFailedCleanup(cleanup)
+      await deletedWorkspace.retryFailedCleanupLater(failedCleanupRetryMilliseconds)
       return { retryInMilliseconds: failedCleanupRetryMilliseconds }
     }
     if ((await deletedWorkspace.deleteChunk()) > 0) return { retryInMilliseconds: 0 }
