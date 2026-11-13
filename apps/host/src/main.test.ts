@@ -8,12 +8,17 @@ const directory = mkdtempSync(join(tmpdir(), 'spyria-host-main-'))
 const dockerSocket = join(directory, 'docker.sock')
 const dockerPaths: string[] = []
 const restartPolicyUpdates: unknown[] = []
+let isArchiveUnreadable = false
 const docker = Bun.serve({
   unix: dockerSocket,
   fetch: async (request) => {
     const { pathname } = new URL(request.url)
     dockerPaths.push(pathname)
     if (pathname === '/info') await Bun.sleep(300)
+    if (pathname.endsWith('/archive'))
+      return isArchiveUnreadable
+        ? new Response('Docker is busy', { status: 500 })
+        : Response.json({ message: 'No such file' }, { status: 404 })
     if (pathname === '/containers/spyria-host/json') return Response.json({ Config: { Hostname: hostname() } })
     if (pathname === '/containers/spyria-host/update') restartPolicyUpdates.push(await request.json())
     return Response.json(pathname === '/info' ? { NCPU: 2, MemTotal: 8 * 1024 ** 3, ServerVersion: '29' } : [])
@@ -183,6 +188,63 @@ test(
         if (Date.now() > deadline) throw new Error('The host sent no heartbeat')
       expect(typesOf()).toEqual(['hello', 'heartbeat'])
     } finally {
+      host.kill()
+      await host.exited
+      void listeningSpyria.stop(true)
+    }
+  },
+  testMilliseconds,
+)
+
+test(
+  'a personal host whose sign-ins cannot be read says no hello until they can, so nothing is relayed unredacted',
+  async () => {
+    writeFileSync(join(directory, 'token'), 'host-token')
+    isArchiveUnreadable = true
+    let openedConnections = 0
+    const frames: { type: string }[] = []
+    const listeningSpyria = Bun.serve({
+      port: 0,
+      fetch: (request, server) => (server.upgrade(request) ? undefined : new Response('Not found', { status: 404 })),
+      websocket: {
+        open: () => void openedConnections++,
+        message: (_, message) => void frames.push(JSON.parse(String(message))),
+      },
+    })
+    const host = spawnHost(
+      [
+        'bun',
+        new URL('./main.ts', import.meta.url).pathname,
+        '--personal',
+        `ws://127.0.0.1:${listeningSpyria.port}/h/CODE`,
+      ],
+      {
+        env: {
+          ...process.env,
+          DOCKER_SOCKET: dockerSocket,
+          SPYRIA_DEPLOYMENT: 'spyria',
+          SPYRIA_HOST_STATE_DIR: directory,
+          SPYRIA_HOST_GATEWAY_PORT: '0',
+          SPYRIA_HOST_HEARTBEAT_MS: '600000',
+          OTEL_EXPORTER_OTLP_ENDPOINT: '',
+        },
+        stdout: 'ignore',
+        stderr: 'ignore',
+      },
+    )
+    try {
+      for (const deadline = Date.now() + startupMilliseconds; openedConnections < 2; await Bun.sleep(20))
+        if (Date.now() > deadline) throw new Error('The host did not connect again after failing its hello')
+      expect(frames).toEqual([])
+      isArchiveUnreadable = false
+      for (
+        const deadline = Date.now() + startupMilliseconds;
+        !frames.some(({ type }) => type === 'hello');
+        await Bun.sleep(20)
+      )
+        if (Date.now() > deadline) throw new Error('The host did not say hello once its sign-ins were readable')
+    } finally {
+      isArchiveUnreadable = false
       host.kill()
       await host.exited
       void listeningSpyria.stop(true)
