@@ -106,7 +106,7 @@ const AuditEntryItem = ({ entry, dayLabel }: { entry: AuditEntry; dayLabel?: str
   const Chevron = isOpen ? ChevronDown : ChevronRight
   return (
     <li className="flex flex-col border-t border-line text-sm first:border-t-0">
-      {dayLabel && <p className="bg-app px-4 py-1.5 text-xs font-medium text-muted">{dayLabel}</p>}
+      {dayLabel && <h2 className="bg-app px-4 py-1.5 text-xs font-medium text-muted">{dayLabel}</h2>}
       <button
         type="button"
         aria-expanded={isOpen}

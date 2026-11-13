@@ -22,7 +22,7 @@ export const UsageSection = ({
     <div className="flex flex-col gap-10">
       {mayManageBudgets && budgetAlertCount > 0 && (
         <p className={calloutClass}>
-          {budgetAlertCount === 1 ? '1 budget is' : `${budgetAlertCount} budgets are`} over 80% this month.{' '}
+          {budgetAlertCount === 1 ? '1 budget alert' : `${budgetAlertCount} budget alerts`} this month.{' '}
           <a href={`#${budgetsAnchor}`} className="underline">
             See the budgets
           </a>

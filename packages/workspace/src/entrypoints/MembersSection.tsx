@@ -183,7 +183,7 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         </div>
         <ul aria-label="Members" className="flex flex-col divide-y divide-line">
           {members.map((member) => (
-            <li key={member.id} className={`${rowClass} flex-nowrap`}>
+            <li key={member.id} className="flex items-center gap-x-3 px-4 py-3 text-sm">
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-medium">
                   {member.name}

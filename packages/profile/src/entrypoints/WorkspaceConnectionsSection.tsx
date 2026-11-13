@@ -19,6 +19,7 @@ import {
   dangerButtonClass,
   ErrorMessage,
   fieldClass,
+  ghostButtonClass,
   LabelledSection,
   labelClass,
   RowMenu,
@@ -166,10 +167,12 @@ const ToolMarkings = ({
   target,
   connection,
   onSaved,
+  onCancel,
 }: {
   target: Target
   connection: ListedWorkspaceConnection
   onSaved?: () => void
+  onCancel?: () => void
 }) => {
   const commands = useProfileCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
@@ -204,10 +207,15 @@ const ToolMarkings = ({
           </select>
         )}
       />
-      <span>
+      <span className="flex gap-2">
         <button type="button" className={buttonClass} disabled={isPending} onClick={save}>
           {connection.isReviewed ? 'Save' : 'Confirm'}
         </button>
+        {onCancel && (
+          <button type="button" className={ghostButtonClass} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
       </span>
       <ErrorMessage message={errorMessage} />
     </section>
@@ -374,8 +382,11 @@ const ServerHeader = ({ name, status, children }: { name: string; status: ReactN
 
 const connectionStatusOf = (connection: ListedWorkspaceConnection) => {
   if (connection.setupId !== null) return <StatusBadge tone="attention">Waiting for the sign-in</StatusBadge>
-  if (!connection.isReviewed) return <StatusBadge tone="attention">To review</StatusBadge>
-  return <StatusBadge tone="ok">{toolCountsOf(connection.tools)}</StatusBadge>
+  return (
+    <StatusBadge tone={connection.isReviewed ? 'ok' : 'attention'}>
+      {connection.isReviewed ? toolCountsOf(connection.tools) : `To review · ${toolCountsOf(connection.tools)}`}
+    </StatusBadge>
+  )
 }
 
 const ConnectionCard = ({
@@ -395,7 +406,7 @@ const ConnectionCard = ({
     <li aria-label={connection.name} className={serverCardClass}>
       <ServerHeader name={connection.name} status={connectionStatusOf(connection)}>
         <span className="min-w-0 flex-1 truncate text-muted" title={connection.url}>
-          {signInSummaryOf(connection)}
+          {signInSummaryOf(connection)} · {connection.url}
         </span>
         <RowMenu
           label={`Actions for ${connection.name}`}
@@ -417,7 +428,12 @@ const ConnectionCard = ({
         ) : (
           <>
             {(!connection.isReviewed || isCorrecting) && (
-              <ToolMarkings target={target} connection={connection} onSaved={() => setIsCorrecting(false)} />
+              <ToolMarkings
+                target={target}
+                connection={connection}
+                onSaved={() => setIsCorrecting(false)}
+                onCancel={connection.isReviewed ? () => setIsCorrecting(false) : undefined}
+              />
             )}
             {connection.isReviewed && <ServerAccess target={target} connection={connection} />}
           </>
