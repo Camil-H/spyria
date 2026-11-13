@@ -5,6 +5,8 @@ const openingFenceOf = (line: string) => /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]
 const isClosingFence = (line: string, fence: string) =>
   new RegExp(`^ {0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}\\s*$`).test(line)
 
+export const imageCountOf = (markdown: string) => markdown.match(/!\[/g)?.length ?? 0
+
 export const streamedBlocksOf = (text: string) => {
   const lines = text.split('\n')
   const completed: StreamedBlock[] = []

@@ -4,7 +4,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
 import { mentionSegmentsOf } from '../domain/mentions.ts'
-import { streamedBlocksOf } from '../domain/streamed-markdown.ts'
+import { imageCountOf, streamedBlocksOf } from '../domain/streamed-markdown.ts'
 import { RuntimeMedia } from './Media.tsx'
 import { LoadedRemoteImagesContext } from './providers.tsx'
 
@@ -54,10 +54,10 @@ const lineBreaksKept = () => (tree: MarkdownNode) => {
   tree.children = withBreaks(tree).children
 }
 
-const laterImagesOnDemand = () => (tree: MarkdownNode) => {
+const laterImagesOnDemand = (autoLoadedImages: number) => () => (tree: MarkdownNode) => {
   let imageCount = 0
   const markLaterImages = (node: MarkdownNode) => {
-    if (node.type === 'image' && ++imageCount > autoLoadedImagesPerMessage)
+    if (node.type === 'image' && ++imageCount > autoLoadedImages)
       node.data = { ...node.data, hProperties: { ...node.data?.hProperties, [onDemandProperty]: 'true' } }
     node.children?.forEach(markLaterImages)
   }
@@ -179,34 +179,44 @@ const components: Components = {
 }
 
 type MarkdownProps = { text: string; keepsLineBreaks?: boolean; mentionNames?: readonly string[] }
+type MarkdownBlocksProps = MarkdownProps & { autoLoadedImages?: number }
 
 const markdownClassName =
   'flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs'
 
-const MarkdownBlocks = memo(({ text, keepsLineBreaks = false, mentionNames = [] }: MarkdownProps) => (
-  <ReactMarkdown
-    remarkPlugins={[
-      remarkGfm,
-      rawHtmlAsText,
-      underlineFromUnderscores,
-      laterImagesOnDemand,
-      ...(keepsLineBreaks ? [lineBreaksKept] : []),
-      boldMentions(mentionNames),
-    ]}
-    components={components}
-  >
-    {text}
-  </ReactMarkdown>
-))
+const MarkdownBlocks = memo(
+  ({
+    text,
+    keepsLineBreaks = false,
+    mentionNames = [],
+    autoLoadedImages = autoLoadedImagesPerMessage,
+  }: MarkdownBlocksProps) => (
+    <ReactMarkdown
+      remarkPlugins={[
+        remarkGfm,
+        rawHtmlAsText,
+        underlineFromUnderscores,
+        laterImagesOnDemand(autoLoadedImages),
+        ...(keepsLineBreaks ? [lineBreaksKept] : []),
+        boldMentions(mentionNames),
+      ]}
+      components={components}
+    >
+      {text}
+    </ReactMarkdown>
+  ),
+)
 
 export const StreamedMarkdown = ({ text, ...options }: MarkdownProps) => {
   const { completed, tail } = streamedBlocksOf(text)
+  let imagesBefore = 0
   return (
     <div className={markdownClassName}>
-      {completed.map((block) => (
-        <MarkdownBlocks key={block.offset} text={block.text} {...options} />
-      ))}
-      <MarkdownBlocks key={tail.offset} text={tail.text} {...options} />
+      {[...completed, tail].map((block) => {
+        const autoLoadedImages = Math.max(0, autoLoadedImagesPerMessage - imagesBefore)
+        imagesBefore += imageCountOf(block.text)
+        return <MarkdownBlocks key={block.offset} text={block.text} autoLoadedImages={autoLoadedImages} {...options} />
+      })}
     </div>
   )
 }
