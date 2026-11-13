@@ -126,6 +126,10 @@ export type AgentEventRepository = {
     | { id: string; seq: number | null; timestamp: string; replyToId: MessageId | null; sessionUpdate?: string | null }
     | undefined
   >
+  lastOfConversation(
+    chatId: ChatId,
+    conversationId: string,
+  ): Promise<{ id: string; seq: number | null; timestamp: string } | undefined>
   lastSessionId(chatId: ChatId): Promise<string | undefined>
 }
 

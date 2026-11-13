@@ -556,6 +556,15 @@ export const lastAgentEvent = (tx: Transaction, workspaceId: string, chatId: str
     [workspaceId, chatId],
   )
 
+export const lastConversationEvent = (tx: Transaction, workspaceId: string, chatId: string, conversationId: string) =>
+  firstOnServer<{ id: string; seq: number | null; timestamp: string }>(
+    tx,
+    `select id, (payload->'event'->>'seq')::int as seq, payload->'event'->>'timestamp' as timestamp from events
+     where workspace_id = $1 and chat_id = $2 and type = 'agent.event' and starts_with(id, $3 || ':')
+     order by events.seq desc limit 1`,
+    [workspaceId, chatId, conversationId],
+  )
+
 export const lastSessionId = async (tx: Transaction, workspaceId: string, chatId: string) =>
   (
     await firstOnServer<{ sessionId: string | null }>(
