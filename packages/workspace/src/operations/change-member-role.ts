@@ -10,7 +10,7 @@ export const changeMemberRole = ({ transactor }: Dependencies, { memberId, role,
   transactor.run(async ({ memberships, workspaceRoles, memberAccess, workspaceEvents }) => {
     const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.manage')
     requireAnotherMember(memberId, actorId)
-    const member = requireActiveMember(await memberships.get(memberId), memberId)
+    const member = requireActiveMember(await memberships.lock(memberId), memberId)
     requireGrantableRole(actorPermissions, await workspaceRoles.get(member.role), member.role)
     if (member.role === role) return
     requireGrantableRole(actorPermissions, await workspaceRoles.get(role), role)

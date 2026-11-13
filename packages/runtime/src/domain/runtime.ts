@@ -57,8 +57,8 @@ export const runtimeJobTypes = {
 
 const nextStates: Record<RuntimeState, readonly RuntimeState[]> = {
   creating: ['installing', 'running', 'removing', 'failed'],
-  starting: ['installing', 'running', 'removing', 'failed'],
-  installing: ['running', 'removing', 'failed'],
+  starting: ['installing', 'running', 'stopped', 'removing', 'failed'],
+  installing: ['running', 'stopped', 'removing', 'failed'],
   running: ['stopping', 'stopped', 'removing', 'failed'],
   stopping: ['stopped', 'removing', 'failed'],
   stopped: ['starting', 'running', 'removing', 'failed'],
@@ -81,6 +81,12 @@ export const transitioned = (
 ): Runtime => {
   if (!canTransition(runtime.state, state)) throw new TransitionRefused(runtime.state, state)
   return { ...runtime, state, failure, stateChangedAt: now }
+}
+
+export const failedBringUpOf = (runtime: Runtime, now: number, failure: RuntimeFailure) => {
+  if (runtime.hostOnline) return transitioned(runtime, 'failed', now, failure)
+  const hasRun = runtime.agentProtocolVersion !== null
+  return hasRun ? transitioned(runtime, 'stopped', now) : transitioned(runtime, 'failed', now, 'no_host')
 }
 
 export const ensureStepOf = (runtime: Runtime | undefined) => {

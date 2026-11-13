@@ -3,6 +3,7 @@ import { runtimeHostId } from '@spyria/kernel'
 import {
   canTransition,
   ensureStepOf,
+  failedBringUpOf,
   haltStepOf,
   idleCutoffsAt,
   idleStepOf,
@@ -40,8 +41,8 @@ const runtime = (fields: Partial<Runtime> = {}) =>
   }) as Runtime
 const allowedTransitions: Record<RuntimeState, RuntimeState[]> = {
   creating: ['installing', 'running', 'removing', 'failed'],
-  starting: ['installing', 'running', 'removing', 'failed'],
-  installing: ['running', 'removing', 'failed'],
+  starting: ['installing', 'running', 'stopped', 'removing', 'failed'],
+  installing: ['running', 'stopped', 'removing', 'failed'],
   running: ['stopping', 'stopped', 'removing', 'failed'],
   stopping: ['stopped', 'removing', 'failed'],
   stopped: ['starting', 'running', 'removing', 'failed'],
@@ -64,6 +65,26 @@ test('a transition stamps its time and sets or clears the failure', () => {
   const failed = transitioned(runtime({ state: 'creating' }), 'failed', now + 5, 'create_failed')
   expect(failed).toMatchObject({ state: 'failed', failure: 'create_failed', stateChangedAt: now + 5 })
   expect(transitioned(failed, 'removing', now + 6)).toMatchObject({ failure: null, stateChangedAt: now + 6 })
+})
+
+test('a failed bring-up fails with its reason on an online host; on an offline one a runtime that ran goes back to stopped there, and a new one fails with no_host to be placed elsewhere', () => {
+  const ran = { agentProtocolVersion: 2 }
+  expect(
+    failedBringUpOf(runtime({ state: 'starting', hostOnline: true, ...ran }), now + 1, 'start_failed'),
+  ).toMatchObject({
+    state: 'failed',
+    failure: 'start_failed',
+  })
+  for (const state of ['starting', 'installing'] as const)
+    expect(failedBringUpOf(runtime({ state, hostOnline: false, ...ran }), now + 1, 'start_failed')).toMatchObject({
+      state: 'stopped',
+      failure: null,
+      hostId: 'host-1',
+    })
+  expect(failedBringUpOf(runtime({ state: 'creating', hostOnline: false }), now + 1, 'create_failed')).toMatchObject({
+    state: 'failed',
+    failure: 'no_host',
+  })
 })
 
 test('ensuring a runtime places a missing one or a retryable failure, starts a stopped one, touches a running one', () => {

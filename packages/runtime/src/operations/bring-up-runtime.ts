@@ -3,7 +3,7 @@ import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { isAgentOutOfDate } from '../domain/agent-version.ts'
 import { AgentOutOfDate, HarnessInstallFailed } from '../domain/errors.ts'
-import { installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
+import { failedBringUpOf, installFailureOf, locationOf, transitioned } from '../domain/runtime.ts'
 import { waitUntilReady } from './call-spyria-agent.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
@@ -65,7 +65,7 @@ export const bringUpRuntime = async (
           ? 'create_failed'
           : 'start_failed'
     await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
-      runtimes.save(transitioned(current, 'failed', now, current.hostOnline ? failure : 'no_host')),
+      runtimes.save(failedBringUpOf(current, now, failure)),
     )
     await provider.stop(sandbox).catch(() => {})
     log.error({

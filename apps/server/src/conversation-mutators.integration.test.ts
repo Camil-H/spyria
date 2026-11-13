@@ -12,11 +12,14 @@ import {
   globex,
   jobsOf,
   messageRow,
+  newChat,
   openSharedTestApp,
   requestMutation,
   sendTo,
   succeeded,
   testAuthSettings,
+  waitFor,
+  waitingOnLock,
 } from './testing/testing.ts'
 
 const { database, resultOf, eventsOf, changesOf, chatRow } = await openSharedTestApp()
@@ -78,6 +81,26 @@ test('editMessage and deleteMessage append events and edit the projection, and a
       select chat_id as "chatId", body, deleted_by as "deletedBy" from deleted_message_texts
       where message_id = 'message-to-change'`),
   ]).toEqual([{ chatId: 'chat-standup', body: 'Final plan', deletedBy: bob }])
+})
+
+test('an edit waiting on a deletion in progress is refused once it commits, so the message stays deleted and its new text is never stored', async () => {
+  const chat = await newChat({ ownerId: bob, type: 'channel' })
+  await sendTo(bobInAcme, chat, 'message-deleted-while-edited', 'Draft plan')
+  let edit: ReturnType<typeof resultOf> | undefined
+  await database.$client.begin(async (deletion) => {
+    await deletion`select 1 from chats where workspace_id = ${acme} and id = ${chat} for update`
+    await deletion`update messages set body = '', deleted_at = now() where id = 'message-deleted-while-edited'`
+    edit = resultOf(bobInAcme, 'conversation.editMessage', {
+      workspaceId: acme,
+      messageId: 'message-deleted-while-edited',
+      text: 'Secret plan',
+    })
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await edit).toEqual(failedWith('A deleted message cannot be changed'))
+  expect((await messageRow('message-deleted-while-edited'))?.deletedAt).not.toBeNull()
+  expect(JSON.stringify(await changesOf(chat))).not.toContain('Secret plan')
 })
 
 test('markChatRead moves the marker to the newest seq and never backwards', async () => {

@@ -77,6 +77,7 @@ export type DeletedWorkspace = {
 export type MembershipRepository = {
   add(membership: Membership): Promise<void>
   get(memberId: MemberId): Promise<Member | undefined>
+  lock(memberId: MemberId): Promise<Member | undefined>
   findByEmail(email: string): Promise<Member | undefined>
   permissions(memberId: MemberId): Promise<readonly WorkspacePermission[]>
   activeAdminIds(): Promise<MemberId[]>

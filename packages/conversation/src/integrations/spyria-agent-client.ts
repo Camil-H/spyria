@@ -263,8 +263,13 @@ export const createSpyriaAgentClient = (): AgentClient => ({
     const read = await call(conversation, 'GET', `/api/conversations/${conversation.conversationId}`)
     return read && String(read.execution_status)
   },
-  interrupt: async (conversation) => {
-    await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/interrupt`, {})
+  interrupt: async (conversation, promptId) => {
+    await call(
+      conversation,
+      'POST',
+      `/api/conversations/${conversation.conversationId}/interrupt`,
+      promptId ? { prompt_id: promptId } : {},
+    )
   },
   restartConversation: async (conversation) =>
     String(

@@ -10,7 +10,7 @@ export const removeMember = ({ transactor }: Dependencies, { memberId, actorId, 
   transactor.run(async ({ memberships, workspaceRoles, memberAccess, chats, chatRuntimes, workspaceEvents }) => {
     const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.manage')
     requireAnotherMember(memberId, actorId)
-    const member = requireActiveMember(await memberships.get(memberId), memberId)
+    const member = requireActiveMember(await memberships.lock(memberId), memberId)
     requireGrantableRole(actorPermissions, await workspaceRoles.get(member.role), member.role)
     requireAnotherAdmin(member, await memberships.activeAdminIds())
     await memberships.save({ ...member, removedAt: now })
