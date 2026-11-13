@@ -210,6 +210,34 @@ test('a refresh waiting on a disconnect in progress stores nothing, so the membe
   expect(await connectionRow()).toBeUndefined()
 })
 
+test('a refresh waiting on a reconnection in progress leaves the new connection and its tokens alone', async () => {
+  expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
+  await database.$client`
+    update github_connections set access_expires_at = now() - interval '1 minute'
+    where workspace_id = ${acme} and user_id = ${alice}`
+  const reconnected = { login: 'other-account', accessToken: 'sealed-access-of-other-account' }
+  let connection: ReturnType<typeof request> | undefined
+  await database.$client.begin(async (reconnection) => {
+    await reconnection`
+      update github_connections set login = ${reconnected.login}, encrypted_access_token = ${reconnected.accessToken},
+        encrypted_refresh_token = 'sealed-refresh-of-other-account', access_expires_at = now() + interval '1 hour'
+      where workspace_id = ${acme} and user_id = ${alice}`
+    connection = request(alice, 'GET', '/api/github/connection')
+    await waitFor(() => waitingOnLock(database))
+  })
+
+  expect(await connection).toMatchObject({
+    status: 200,
+    body: { connection: { login: reconnected.login, state: 'connected' } },
+  })
+  expect(await connectionRow()).toMatchObject({
+    login: reconnected.login,
+    encrypted_access_token: reconnected.accessToken,
+    encrypted_refresh_token: 'sealed-refresh-of-other-account',
+    needs_reconnection: false,
+  })
+})
+
 test('returning from GitHub while a removal is in progress stores no token once it commits, and the callback is refused', async () => {
   const dana = `member-${crypto.randomUUID()}`
   await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
