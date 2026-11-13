@@ -39,9 +39,9 @@ const runtime = (fields: Partial<Runtime> = {}) =>
     ...fields,
   }) as Runtime
 const allowedTransitions: Record<RuntimeState, RuntimeState[]> = {
-  creating: ['installing', 'running', 'removing', 'failed'],
-  starting: ['installing', 'running', 'removing', 'failed'],
-  installing: ['running', 'removing', 'failed'],
+  creating: ['installing', 'running', 'stopped', 'removing', 'failed'],
+  starting: ['installing', 'running', 'stopped', 'removing', 'failed'],
+  installing: ['running', 'stopped', 'removing', 'failed'],
   running: ['stopping', 'stopped', 'removing', 'failed'],
   stopping: ['stopped', 'removing', 'failed'],
   stopped: ['starting', 'running', 'removing', 'failed'],
