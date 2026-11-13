@@ -4,6 +4,8 @@ import {
   accountOf,
   addLlmKey,
   addParticipant,
+  approvalsOf,
+  chooseConnectionAction,
   connectionsOf,
   expect,
   githubSectionOf,
@@ -133,7 +135,7 @@ test.describe('Tools catalogue', () => {
     await expect(checkbox).not.toBeChecked()
   }
   const profileCrmOf = async (page: Page) => {
-    await openProfile(page)
+    await openProfile(page, 'Connections')
     return connectionsOf(page).getByRole('listitem', { name: 'CRM' })
   }
 
@@ -191,7 +193,7 @@ test.describe('Tools catalogue', () => {
       notOffered('CRM', 'update'),
     )
 
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'LLM keys')
     await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
     await bobPage.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Remove' }).click()
     await expect
@@ -346,12 +348,13 @@ test.describe('Tools catalogue', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     const bobAccount = accountOf('bob')
     await logInAtFakeProvider(bobPage.context(), bobAccount)
-    await openProfile(bobPage)
+    await openProfile(bobPage, 'Connections')
     const docsRow = connectionsOf(bobPage).getByRole('listitem', { name: 'Docs' })
     await expect(docsRow).toContainText('Not connected')
     await inPopup(bobPage, () => docsRow.getByRole('button', { name: 'Connect Docs' }).click())
     await expect(docsRow).toContainText('Connected')
-    await expect(docsRow.getByRole('button', { name: 'Disconnect Docs' })).toBeVisible()
+    await docsRow.getByRole('button', { name: 'Actions for Docs' }).click()
+    await expect(bobPage.getByRole('menuitem', { name: 'Disconnect' })).toBeVisible()
     await bobPage.context().close()
   })
 
@@ -386,9 +389,9 @@ test.describe('Tools catalogue', () => {
     await test.step('gives the Member role Read on GitHub, so a member chooses approvals for its read tools only', async () => {
       await setLevel(page, 'Member', 'Read', 'GitHub')
       const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await openProfile(bobPage)
-      await connectionsOf(bobPage).getByRole('button', { name: 'Approvals for GitHub' }).click()
-      const approvals = connectionsOf(bobPage).getByRole('region', { name: 'Approvals for GitHub' })
+      await openProfile(bobPage, 'Connections')
+      await chooseConnectionAction(bobPage, 'GitHub', 'Approvals')
+      const approvals = approvalsOf(bobPage, 'GitHub')
       await expect(approvals.getByRole('combobox', { name: 'Approval for read_checks' })).toBeVisible()
       await expect(approvals.getByRole('combobox', { name: 'Approval for push_branch' })).toHaveCount(0)
       await bobPage.context().close()
