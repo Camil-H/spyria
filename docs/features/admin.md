@@ -171,14 +171,13 @@ The page lists the providers in two groups side by side: labs (Anthropic, OpenAI
 
 ## Spend
 
-**Costs** reports the cost of model calls made through the gateway, for a period (this month, last month, last 30 or 90 days, or custom up to a year) at a day, week or month granularity:
+**Costs** reports the cost of model calls made through the gateway, under a notice that sessions on a member's own machine are not counted. Its filters sit on one row: the period (this month, last month, last 30 or 90 days, or custom up to a year), the day, week or month granularity, and **Whole workspace** or one member, project, chat or model, which narrows everything below (spend chart, tables and breakdown) and offers every one that had usage in the period or the one before it:
 
 - spend over time, stacked by member, project or model;
 - tables per member, project, chat and model with cost, tokens, requests and share;
 - a breakdown of spend into users × sessions per user × turns per session × requests per turn × tokens per request × price per token, compared with the previous period of the same length, with the factor that moved spend the most highlighted;
-- clicking a factor or the total spend opens a line chart of it per day, week or month under its row, and clicking it again closes it;
-- **For** narrows the breakdown and its charts to one member, project, chat or model (the tables and the spend chart stay whole);
-- the cost per merged pull request, with the list of those pull requests.
+- clicking a factor's row or the total spend's opens a line chart of it per day, week or month under it, and clicking it again closes it;
+- the cost per merged pull request, always over the whole workspace: a line chart of the average cost of the pull requests merged in each day, week or month, a histogram of how many cost how much, and **Export data**, a CSV of each merged pull request with its merge time, chat, title, link and its chat's cost.
 
 Calls delegated to sub-agents count in the turn that delegated them. Every member sees their own figures in **Profile** > **Usage**, and never anyone else's. Sessions on a member's own Claude or ChatGPT subscription are not metered by Spyria and do not appear.
 
