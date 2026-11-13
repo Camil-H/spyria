@@ -1,5 +1,6 @@
 import { type MemberId, requireWorkspacePermission, type WorkspaceId } from '@spyria/kernel'
 import type { WorkspaceTransactor } from '../contracts/transactor.ts'
+import { domainOfEmail, requireInvitable } from '../domain/domain-claim.ts'
 import { AlreadyMember, InviteAlreadyPending } from '../domain/errors.ts'
 import { Email, isPending, newInvitation } from '../domain/invitation.ts'
 import { isActive } from '../domain/member.ts'
@@ -16,11 +17,12 @@ type Input = {
 }
 
 export const inviteMember = ({ transactor }: Dependencies, { email: text, role, actorId, now, ...input }: Input) =>
-  transactor.run(async ({ memberships, workspaceRoles, invitations, workspaceEvents }) => {
+  transactor.run(async ({ memberships, workspaceRoles, invitations, workspaceEvents, domainClaims }) => {
     const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.invite')
     requireGrantableRole(actorPermissions, await workspaceRoles.get(role), role)
     const email = Email(text)
     if (isActive(await memberships.findByEmail(email))) throw new AlreadyMember(email)
+    requireInvitable(input.workspaceId, email, await domainClaims.of(domainOfEmail(email)))
     const open = await invitations.findOpen(email)
     if (open && isPending(open, now)) throw new InviteAlreadyPending(email)
     if (open) await invitations.save({ ...open, revokedAt: now })

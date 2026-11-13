@@ -4,6 +4,7 @@ import type {
   ChatRoleRepository,
   ChatRuntimeRepository,
   DeletedWorkspace,
+  DomainClaimRepository,
   InvitationRepository,
   MemberAccess,
   MembershipRepository,
@@ -24,6 +25,7 @@ export type UnitOfWork = {
   invitations: InvitationRepository
   memberAccess: MemberAccess
   workspaceEvents: WorkspaceEventLog
+  domainClaims: DomainClaimRepository
 }
 
 export type WorkspaceTransactor = Transactor<UnitOfWork>

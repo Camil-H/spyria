@@ -118,7 +118,7 @@ export const workspaceMutators = defineMutators({
       createWorkspace(dependenciesOf(tx, ctx, args), {
         ...args,
         ownerId: ctx.userId,
-        isSignedInThroughWorkspaceSso: ctx.signedInThroughWorkspaceSso === true,
+        signedInThrough: ctx.signedInThrough ?? 'account',
       }),
     ),
     inviteMember: defineMutator(
