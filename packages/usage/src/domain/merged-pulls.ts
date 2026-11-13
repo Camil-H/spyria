@@ -1,3 +1,4 @@
+import { csvFieldOf } from './csv.ts'
 import type { MergedPull } from './spend.ts'
 
 export type CostBin = { fromMicros: number; toMicros: number; pulls: number }
@@ -20,14 +21,6 @@ export const costHistogramOf = (costsMicros: readonly number[], maximumBins = 10
   }))
 }
 
-const spreadsheetFormulaStart = /^[=+\-@\t\r]/
-
-const csvFieldOf = (value: string | number) => {
-  const text = String(value)
-  const safe = typeof value === 'string' && spreadsheetFormulaStart.test(text) ? `'${text}` : text
-  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe
-}
-
 const mergedPullsCsvHeader = ['Merged at', 'Chat', 'Repository', 'Pull request', 'Title', 'URL', 'Chat cost (USD)']
 
 export const mergedPullsCsvOf = (pulls: readonly MergedPull[]) =>
@@ -43,5 +36,5 @@ export const mergedPullsCsvOf = (pulls: readonly MergedPull[]) =>
       (pull.costMicros / 1_000_000).toFixed(6),
     ]),
   ]
-    .map((fields) => fields.map(csvFieldOf).join(','))
-    .join('\r\n')
+    .map((fields) => `${fields.map((field) => csvFieldOf(String(field))).join(',')}\n`)
+    .join('')
