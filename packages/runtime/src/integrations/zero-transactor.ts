@@ -129,6 +129,12 @@ export const createZeroTransactor = (tx: Transaction): RuntimeTransactor => {
               .where('removedAt', 'IS', null),
           )
         ).map(hostOf),
+      listOnline: async (workspaceId) =>
+        (
+          await tx.run(
+            zql.runtimeHosts.where('workspaceId', workspaceId).where('status', 'online').where('removedAt', 'IS', null),
+          )
+        ).map(hostOf),
       expireClaims: async (workspaceId, now) => {
         await expireRuntimeHostClaims(tx, workspaceId, now)
       },

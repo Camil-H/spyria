@@ -18,7 +18,12 @@ export type HostSystem = {
 
 export type HostDeclaration = { personal: boolean; signedIn: string[]; credentialsChangedAt?: Record<string, number> }
 type HostCapacity = HostSystem &
-  Partial<HostDeclaration> & { cap: number; memoryFreeBytes?: number; expiredSignIns?: Record<string, number> }
+  Partial<HostDeclaration> & {
+    cap: number
+    memoryFreeBytes?: number
+    expiredSignIns?: Record<string, number>
+    heartbeatMilliseconds?: number
+  }
 
 export type RuntimeHost = Readonly<{
   workspaceId: WorkspaceId
@@ -57,6 +62,14 @@ export const capacityOf = (system: HostSystem): HostCapacity => ({
   ...system,
   cap: Math.max(1, Math.floor((system.memoryBytes - reservedMemoryBytes) / gibibyte)),
 })
+
+const defaultHeartbeatMilliseconds = 30_000
+const missedHeartbeatsBeforeStale = 3
+
+export const isHostStale = (host: Pick<RuntimeHost, 'status' | 'lastSeenAt' | 'capacity'>, now: number) =>
+  host.status === 'online' &&
+  now - (host.lastSeenAt ?? 0) >
+    missedHeartbeatsBeforeStale * (host.capacity?.heartbeatMilliseconds ?? defaultHeartbeatMilliseconds)
 
 export const assertNotRemoved = (host: RuntimeHost) => {
   if (host.removedAt !== null) throw new HostNotFound(host.id)

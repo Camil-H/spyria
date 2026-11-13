@@ -16,6 +16,7 @@ export type RuntimeHostRepository = {
   lockLoads(workspaceId: WorkspaceId, chatId: ChatId): Promise<HostLoad[]>
   lockWorkspaceLoads(workspaceId: WorkspaceId): Promise<HostLoad[]>
   listMachines(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
+  listOnline(workspaceId: WorkspaceId): Promise<RuntimeHost[]>
   expireClaims(workspaceId: WorkspaceId, now: number): Promise<void>
 }
 
