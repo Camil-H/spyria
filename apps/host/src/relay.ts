@@ -61,8 +61,10 @@ export const createRelay = ({
   personal?: { secrets: () => readonly string[] }
 }) => {
   const streams = new Map<number, Stream>()
+  const openingSids = new Set<number>()
   const incomingRequests = new Map<number, IncomingRequest>()
   const closeStream = (sid: number) => {
+    openingSids.delete(sid)
     const stream = streams.get(sid)
     if (!stream) return
     streams.delete(sid)
@@ -164,8 +166,10 @@ export const createRelay = ({
     if (stream.isRuntimeClosed && stream.held.length === 0) closeStream(sid)
   }
   const openStream = async (sid: number, frame: Frame) => {
+    openingSids.add(sid)
     try {
       const url = await urlOf(frame, 'WS')
+      if (!openingSids.delete(sid)) return
       url.protocol = 'ws:'
       const stream: Stream = {
         socket: new WebSocket(url),
@@ -188,6 +192,7 @@ export const createRelay = ({
         if (streams.get(sid) === stream && stream.held.length === 0) closeStream(sid)
       }
     } catch (error) {
+      openingSids.delete(sid)
       send({ type: 'ws_close', sid, error: messageOf(error) })
     }
   }
@@ -211,6 +216,7 @@ export const createRelay = ({
     },
     closeAll: () => {
       incomingRequests.clear()
+      openingSids.clear()
       for (const sid of [...streams.keys()]) closeStream(sid)
     },
   }
