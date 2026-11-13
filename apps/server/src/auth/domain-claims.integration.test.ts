@@ -3,6 +3,7 @@ import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/
 import { workspacePermissions } from '@spyria/kernel'
 import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
+import { rateBudgets } from '../rate-limits.ts'
 import { type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
 import { requestMutationWith, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
@@ -346,4 +347,24 @@ test("stopping a workspace's SSO and deleting the workspace release its claims",
     }),
   ).toEqual({})
   expect(await claimsOf('tyrell')).toEqual([])
+})
+
+test('claiming and checking domains answer 429 past their budget per address', async () => {
+  const limitedApp = createApp({
+    database,
+    ...testAuthSettings,
+    authMode: 'sso',
+    secretsKeyring,
+    rateLimits: rateBudgets,
+    resolveTxt: async () => [],
+  })
+  const token = await tokenThrough('acme-sub', ana, 'acme-sub')
+  const check = () =>
+    limitedApp.request('/api/domain-claims/verify', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: 'umbrella.fr' }),
+    })
+  for (let sent = 0; sent < rateBudgets.domainClaims.count; sent++) expect((await check()).status).toBe(400)
+  expect((await check()).status).toBe(429)
 })
