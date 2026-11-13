@@ -146,7 +146,7 @@ import {
 import { createRuntimeHostGateway, type RuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { securityTxtOf, securityTxtPath } from './security-txt.ts'
 import { contextOf, withSpan } from './telemetry.ts'
-import { announceChatToolListChange, announceToolListChange } from './tool-list-changes.ts'
+import { toolListChangesOf } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
 import { createZeroForwarding, isWebSocketUpgrade, zeroPathPrefix } from './zero-forwarding.ts'
@@ -323,7 +323,7 @@ export const createApp = ({
         connectionId,
         body,
       )
-      announceToolListChange(zeroContext.workspaceId)
+      toolListChangesOf(context.get('database')).announceToolListChange(zeroContext.workspaceId)
       return result
     })
   }
@@ -527,7 +527,10 @@ export const createApp = ({
                 runtimeHosts.disconnect(ctx.workspaceId, id)
             }
             if (mutation.name === 'conversation.switchChatToolServer')
-              announceChatToolListChange(ctx.workspaceId, chatId((mutation.args[0] as { chatId: string }).chatId))
+              toolListChangesOf(context.get('database')).announceChatToolListChange(
+                ctx.workspaceId,
+                chatId((mutation.args[0] as { chatId: string }).chatId),
+              )
             if (mutation.name === 'workspace.deleteWorkspace')
               agentBridge.forDatabase(context.get('database')).closeWorkspaceStreams(ctx.workspaceId)
             if (readRevokingMutations.has(mutation.name))

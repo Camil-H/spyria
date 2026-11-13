@@ -58,7 +58,7 @@ import type { ConnectedHost } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { AgentBridge } from './agent-bridge/bridge.ts'
 import { traceHeadersOf, withSpan } from './telemetry.ts'
-import { recordToolListing, watchToolLists } from './tool-list-changes.ts'
+import { toolListChangesOf } from './tool-list-changes.ts'
 
 export type RelayFrame = { sid?: unknown; method?: unknown; path?: unknown; headers?: unknown; body?: unknown }
 type Send = (frame: object) => void
@@ -210,7 +210,7 @@ export const createModelCallRelay = ({
     const answerToolListChanges = async (chatId: ChatId) => {
       const event = (data: string) => send({ type: 'gw_chunk', sid, data })
       send({ type: 'gw_head', sid, status: 200, headers: { 'content-type': 'text/event-stream' } })
-      const stopWatching = watchToolLists(host.workspaceId, chatId, () =>
+      const stopWatching = toolListChangesOf(database).watchToolLists(host.workspaceId, chatId, () =>
         event(`event: message\ndata: ${JSON.stringify(toolListChanged)}\n\n`),
       )
       const heartbeat = setInterval(() => event(': ping\n\n'), toolStreamHeartbeatMilliseconds)
@@ -500,7 +500,8 @@ export const createModelCallRelay = ({
           () => null,
         )
         const noTools = () => answerSpyriaServer(rpc, 'spyria-tools', [])
-        if (rpc?.method === 'tools/list') recordToolListing(turn.chat.chatId, accountId)
+        if (rpc?.method === 'tools/list')
+          toolListChangesOf(database).recordToolListing(host.workspaceId, turn.chat.chatId, accountId)
         if (virtualKey === null) return isToolCall ? toolError(toolGatewayUnreachable) : noTools()
         if (!virtualKey) return isToolCall ? toolError(noticeOf('needs_connection')) : noTools()
         if (rpc?.method === 'initialize')

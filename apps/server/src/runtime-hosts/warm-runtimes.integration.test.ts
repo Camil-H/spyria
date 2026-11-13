@@ -50,7 +50,17 @@ const runtimeJobs = createRuntimeJobs(gateway.sandboxProvider, {
   repositories: repositoryAccess,
 })
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port: Number(server.port), database })
+const runtimeBringUpsSettled = () =>
+  waitFor(
+    async () =>
+      (
+        await database.$client`
+          select 1 from jobs where workspace_id = ${acme} and type in ('runtime.create', 'runtime.start')
+            and state in ('queued', 'running')`
+      ).length === 0,
+  )
 afterEach(async () => {
+  await runtimeBringUpsSettled()
   await disconnectFakeHosts()
   await database.$client`update workspaces set setup_commands = '[]'::jsonb where workspace_id = ${acme}`
   await database.$client`update runtime_hosts set removed_at = now() where workspace_id = ${acme} and removed_at is null`
