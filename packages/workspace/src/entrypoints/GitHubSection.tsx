@@ -1,14 +1,20 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
+  cardClass,
   ErrorMessage,
   fieldClass,
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  rowClass,
+  rowListClass,
+  SettingRow,
+  StatusBadge,
+  type StatusTone,
   useGuardedAction,
 } from '@spyria/ui'
-import { Check } from 'lucide-react'
+import { GitBranch } from 'lucide-react'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import type { GitHubMemberAccount, GitHubSecrets, GitHubSettingsView } from '../domain/github.ts'
@@ -28,22 +34,49 @@ const accountStatusOf = ({ login, needsReconnection }: GitHubMemberAccount) => {
   return needsReconnection ? `${login}, needs reconnection` : login
 }
 
+const accountToneOf = ({ login, needsReconnection }: GitHubMemberAccount): StatusTone => {
+  if (!login) return 'off'
+  return needsReconnection ? 'attention' : 'ok'
+}
+
 const MemberAccounts = ({ accounts }: { accounts: readonly GitHubMemberAccount[] }) => (
-  <>
-    <h3 className="text-sm font-medium">Members' accounts</h3>
-    <p className="text-sm text-muted">
-      Each member connects their own GitHub account in their profile: the agent pushes and opens pull requests with the
-      account of the member who prompted.
+  <LabelledSection title="Members' accounts" titleClass="text-sm font-medium">
+    <p className="-mt-2 text-sm text-muted">
+      The agent pushes and opens pull requests with the account of the member who prompted. Each member connects theirs
+      in their profile.
     </p>
-    <ul aria-label="Members' accounts" className="flex flex-col gap-1 text-sm">
+    <ul aria-label="Members' accounts" className={rowListClass}>
       {accounts.map((account) => (
-        <li key={account.memberId} className="flex gap-3">
-          <span className="font-medium">{account.name}</span>
-          <span className="text-muted">{accountStatusOf(account)}</span>
+        <li key={account.memberId} className={rowClass}>
+          <span className="w-48 truncate font-medium">{account.name}</span>
+          <StatusBadge tone={accountToneOf(account)}>{accountStatusOf(account)}</StatusBadge>
         </li>
       ))}
     </ul>
-  </>
+  </LabelledSection>
+)
+
+const GrantedRepositories = ({ settings }: { settings: GitHubSettingsView }) => (
+  <LabelledSection title="Granted repositories" titleClass="text-sm font-medium">
+    <p className="-mt-2 text-sm text-muted">To add or remove one, change the App's installation on GitHub.</p>
+    {settings.listingFailure ? (
+      <ErrorMessage message={settings.listingFailure} />
+    ) : settings.repositories.length === 0 ? (
+      <p className={`${cardClass} px-4 py-6 text-center text-sm text-muted`}>The App is installed on no repository</p>
+    ) : (
+      <ul aria-label="Granted repositories" className={rowListClass}>
+        {settings.repositories.map(({ fullName, defaultBranch }) => (
+          <li key={fullName} className={rowClass}>
+            <span className="min-w-0 flex-1 truncate font-medium">{fullName}</span>
+            <span className="flex items-center gap-1 text-muted">
+              <GitBranch aria-hidden className="size-3.5" />
+              {defaultBranch}
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </LabelledSection>
 )
 
 export const useIsGitHubConfigured = (workspaceId: WorkspaceId, isShown: boolean) => {
@@ -79,9 +112,9 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   }, [commands, workspaceId])
   if (settings === undefined)
     return (
-      <LabelledSection title="GitHub">
+      <section aria-label="GitHub">
         <p className="text-sm text-muted">Loading…</p>
-      </LabelledSection>
+      </section>
     )
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -90,104 +123,104 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
     setIsSaved(saved)
   }
   const placeholder = settings ? 'Set: enter a new value to replace it' : 'Not set'
+  const toolsLink = mayManageTools ? (
+    <Link to={`/w/${workspaceId}/settings/tools`} className="text-ink underline">
+      Tools
+    </Link>
+  ) : (
+    'Tools'
+  )
+  const manualToggle = (
+    <button
+      type="button"
+      aria-expanded={isManual}
+      className={settings ? ghostButtonClass : `self-start ${ghostButtonClass}`}
+      onClick={() => setIsManual(!isManual)}
+    >
+      {settings ? 'Change the App credentials' : 'Create it manually'}
+    </button>
+  )
   return (
-    <LabelledSection title="GitHub">
-      <p className="text-sm text-muted">
-        Who may use GitHub's tools, and which of them, is set with the other tools in{' '}
-        {mayManageTools ? (
-          <Link to={`/w/${workspaceId}/settings/tools`} className="text-ink underline">
-            Tools
-          </Link>
-        ) : (
-          'Tools'
-        )}
-        .
-      </p>
+    <section aria-label="GitHub" className="flex max-w-3xl flex-col gap-6">
+      {settings ? (
+        <div className={rowListClass}>
+          <SettingRow
+            title={<span role="status">GitHub App connected</span>}
+            description="Dev chats clone, fetch and push through this App"
+          >
+            <StatusBadge tone="ok">Connected</StatusBadge>
+            {manualToggle}
+          </SettingRow>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted">
+            Dev chats need a GitHub App to clone your repositories and open pull requests. Create it on GitHub in one
+            step, then pick its repositories.
+          </p>
+          <GitHubAppCreationForm workspaceId={workspaceId} />
+          {manualToggle}
+        </div>
+      )}
+      {isManual && (
+        <form onSubmit={submit} className={`${cardClass} flex flex-col gap-3 p-4`}>
+          <GitHubAppGuide />
+          <label className={labelClass}>
+            App id
+            <input
+              className={fieldClass}
+              value={ids.appId}
+              onChange={(event) => setIds({ ...ids, appId: event.target.value })}
+            />
+          </label>
+          <label className={labelClass}>
+            Client id
+            <input
+              className={fieldClass}
+              value={ids.clientId}
+              onChange={(event) => setIds({ ...ids, clientId: event.target.value })}
+            />
+          </label>
+          <label className={labelClass}>
+            Private key
+            <textarea
+              className={`${fieldClass} h-20 font-mono text-xs`}
+              placeholder={placeholder}
+              value={secrets.privateKey}
+              onChange={(event) => setSecrets({ ...secrets, privateKey: event.target.value })}
+            />
+          </label>
+          {(['clientSecret', 'webhookSecret'] as const).map((name) => (
+            <label key={name} className={labelClass}>
+              {secretLabels[name]}
+              <input
+                type="password"
+                autoComplete="off"
+                className={fieldClass}
+                placeholder={placeholder}
+                value={secrets[name]}
+                onChange={(event) => setSecrets({ ...secrets, [name]: event.target.value })}
+              />
+            </label>
+          ))}
+          <ErrorMessage message={errorMessage} />
+          <div className="flex items-center gap-3">
+            <button type="submit" className={buttonClass} disabled={isPending}>
+              Save
+            </button>
+            {isSaved && <span className="text-sm text-muted">Saved</span>}
+          </div>
+        </form>
+      )}
       {settings && (
         <>
-          <p role="status" title="GitHub App connected" className="text-sm font-medium flex items-center gap-2">
-            <Check className="size-4 text-green-500" aria-hidden />
-            <span className="sr-only">GitHub App connected</span>
-          </p>
-          <h3 className="text-sm font-medium">Granted repositories</h3>
-          {settings.listingFailure ? (
-            <ErrorMessage message={settings.listingFailure} />
-          ) : settings.repositories.length === 0 ? (
-            <p className="text-sm text-muted">The App is installed on no repository</p>
-          ) : (
-            <ul aria-label="Granted repositories" className="flex flex-col gap-1 text-sm">
-              {settings.repositories.map(({ fullName, defaultBranch }) => (
-                <li key={fullName} className="flex gap-3">
-                  <span className="font-medium">{fullName}</span>
-                  <span className="text-muted">{defaultBranch}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <GrantedRepositories settings={settings} />
           <MemberAccounts accounts={settings.memberAccounts} />
         </>
       )}
-      {!settings && <GitHubAppCreationForm workspaceId={workspaceId} />}
-      <button
-        type="button"
-        aria-expanded={isManual}
-        className={`self-start ${ghostButtonClass}`}
-        onClick={() => setIsManual(!isManual)}
-      >
-        {settings ? 'Change the App credentials' : 'Create it manually'}
-      </button>
-      {isManual && (
-        <>
-          <GitHubAppGuide />
-          <form onSubmit={submit} className="flex flex-col gap-3">
-            <label className={labelClass}>
-              App id
-              <input
-                className={fieldClass}
-                value={ids.appId}
-                onChange={(event) => setIds({ ...ids, appId: event.target.value })}
-              />
-            </label>
-            <label className={labelClass}>
-              Client id
-              <input
-                className={fieldClass}
-                value={ids.clientId}
-                onChange={(event) => setIds({ ...ids, clientId: event.target.value })}
-              />
-            </label>
-            <label className={labelClass}>
-              Private key
-              <textarea
-                className={`${fieldClass} h-20 font-mono text-xs`}
-                placeholder={placeholder}
-                value={secrets.privateKey}
-                onChange={(event) => setSecrets({ ...secrets, privateKey: event.target.value })}
-              />
-            </label>
-            {(['clientSecret', 'webhookSecret'] as const).map((name) => (
-              <label key={name} className={labelClass}>
-                {secretLabels[name]}
-                <input
-                  type="password"
-                  autoComplete="off"
-                  className={fieldClass}
-                  placeholder={placeholder}
-                  value={secrets[name]}
-                  onChange={(event) => setSecrets({ ...secrets, [name]: event.target.value })}
-                />
-              </label>
-            ))}
-            <ErrorMessage message={errorMessage} />
-            <div className="flex items-center gap-3">
-              <button type="submit" className={buttonClass} disabled={isPending}>
-                Save
-              </button>
-              {isSaved && <span className="text-sm text-muted">Saved</span>}
-            </div>
-          </form>
-        </>
-      )}
-    </LabelledSection>
+      <p className="text-sm text-muted">
+        Who may use GitHub's tools, and which of them, is set with the other tools in {toolsLink}.
+      </p>
+    </section>
   )
 }

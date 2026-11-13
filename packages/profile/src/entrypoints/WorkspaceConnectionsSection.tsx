@@ -14,12 +14,17 @@ import {
 import { useSession } from '@spyria/session'
 import {
   buttonClass,
+  cardClass,
   Dialog,
+  dangerButtonClass,
   ErrorMessage,
   fieldClass,
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  RowMenu,
+  rowClass,
+  StatusBadge,
   Switch,
   smallGhostButtonClass,
   useGuardedAction,
@@ -54,13 +59,13 @@ const levelLabels: Record<AccessLevel, string> = { none: 'None', read: 'Read', w
 const ConnectionForm = ({
   label,
   connection,
+  isPending,
   onSubmit,
-  onCancel,
 }: {
   label: string
   connection?: Editing
+  isPending: boolean
   onSubmit: (input: ConnectionInput) => Promise<boolean>
-  onCancel?: () => void
 }) => {
   const [name, setName] = useState(connection?.name ?? '')
   const [url, setUrl] = useState(connection?.url ?? '')
@@ -81,12 +86,12 @@ const ConnectionForm = ({
     setHeaderValue('')
   }
   return (
-    <form aria-label={label} onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <label className={`${labelClass} min-w-32 flex-1`}>
+    <form aria-label={label} onSubmit={submit} className="flex flex-col gap-3">
+      <label className={labelClass}>
         Name
         <input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} />
       </label>
-      <label className={`${labelClass} min-w-56 flex-[2]`}>
+      <label className={labelClass}>
         Address
         <input
           type="url"
@@ -98,7 +103,7 @@ const ConnectionForm = ({
         />
       </label>
       {!connection && (
-        <fieldset className="flex basis-full flex-wrap gap-x-4 gap-y-1 text-sm">
+        <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           <legend className={labelClass}>Sign-in</legend>
           {Object.values(connectionSignIns).map((mode) => (
             <label key={mode} className="flex items-center gap-1.5">
@@ -115,7 +120,7 @@ const ConnectionForm = ({
       )}
       {isShared && (
         <>
-          <label className={`${labelClass} min-w-32 flex-1`}>
+          <label className={labelClass}>
             Secret header
             <input
               className={fieldClass}
@@ -124,7 +129,7 @@ const ConnectionForm = ({
               onChange={(event) => setHeaderName(event.target.value)}
             />
           </label>
-          <label className={`${labelClass} min-w-32 flex-1`}>
+          <label className={labelClass}>
             Secret value
             <input
               type="password"
@@ -137,21 +142,16 @@ const ConnectionForm = ({
           </label>
         </>
       )}
-      <button type="submit" className={buttonClass} disabled={name.trim() === '' || url.trim() === ''}>
-        {connection ? 'Save' : 'Add server'}
-      </button>
-      {onCancel && (
-        <button type="button" className={ghostButtonClass} onClick={onCancel}>
-          Cancel
-        </button>
-      )}
       {connection && (
-        <p className="basis-full text-xs text-muted">
+        <p className="text-xs text-muted">
           {isShared
             ? 'A new address registers the server again in the gateway: enter the secret value again.'
             : 'Members sign in at this address: remove the server and add it again to change it.'}
         </p>
       )}
+      <button type="submit" className={buttonClass} disabled={isPending || name.trim() === '' || url.trim() === ''}>
+        {connection ? 'Save' : 'Add server'}
+      </button>
     </form>
   )
 }
@@ -167,10 +167,12 @@ const ToolMarkings = ({
   target,
   connection,
   onSaved,
+  onCancel,
 }: {
   target: Target
   connection: ListedWorkspaceConnection
   onSaved?: () => void
+  onCancel?: () => void
 }) => {
   const commands = useProfileCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
@@ -205,10 +207,15 @@ const ToolMarkings = ({
           </select>
         )}
       />
-      <span>
+      <span className="flex gap-2">
         <button type="button" className={buttonClass} disabled={isPending} onClick={save}>
           {connection.isReviewed ? 'Save' : 'Confirm'}
         </button>
+        {onCancel && (
+          <button type="button" className={ghostButtonClass} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
       </span>
       <ErrorMessage message={errorMessage} />
     </section>
@@ -362,6 +369,26 @@ const ServerAccess = ({ target, connection }: { target: Target; connection: Serv
   )
 }
 
+const serverCardClass = `${cardClass} flex flex-col text-sm`
+const serverBodyClass = 'flex flex-col gap-4 px-4 py-3'
+
+const ServerHeader = ({ name, status, children }: { name: string; status: ReactNode; children?: ReactNode }) => (
+  <div className={`${rowClass} border-b border-line`}>
+    <span className="font-medium">{name}</span>
+    {status}
+    {children}
+  </div>
+)
+
+const connectionStatusOf = (connection: ListedWorkspaceConnection) => {
+  if (connection.setupId !== null) return <StatusBadge tone="attention">Waiting for the sign-in</StatusBadge>
+  return (
+    <StatusBadge tone={connection.isReviewed ? 'ok' : 'attention'}>
+      {connection.isReviewed ? toolCountsOf(connection.tools) : `To review · ${toolCountsOf(connection.tools)}`}
+    </StatusBadge>
+  )
+}
+
 const ConnectionCard = ({
   workspaceId,
   connection,
@@ -376,61 +403,65 @@ const ConnectionCard = ({
   const [isCorrecting, setIsCorrecting] = useState(false)
   const target = { workspaceId, connectionId: connection.id }
   return (
-    <li aria-label={connection.name} className="flex flex-col gap-3 rounded-lg border border-line p-3 text-sm">
-      {isEditing ? (
-        <ConnectionForm
-          label={`Edit ${connection.name}`}
-          connection={connection}
-          onCancel={() => setIsEditing(false)}
-          onSubmit={async (input) => {
-            const isSaved = await run(() => commands.editWorkspaceConnection({ ...target, ...input }))
-            if (isSaved) setIsEditing(false)
-            return isSaved
-          }}
+    <li aria-label={connection.name} className={serverCardClass}>
+      <ServerHeader name={connection.name} status={connectionStatusOf(connection)}>
+        <span className="min-w-0 flex-1 truncate text-muted" title={connection.url}>
+          {signInSummaryOf(connection)} · {connection.url}
+        </span>
+        <RowMenu
+          label={`Actions for ${connection.name}`}
+          items={[
+            { label: 'Edit', onSelect: () => setIsEditing(true) },
+            ...(connection.isReviewed && connection.setupId === null
+              ? [{ label: 'Correct read and write', onSelect: () => setIsCorrecting(true) }]
+              : []),
+            { label: 'Remove', onSelect: () => setIsRemoving(true) },
+          ]}
         />
-      ) : (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-medium">{connection.name}</span>
-          <span className="truncate text-muted">{connection.url}</span>
-          <span className="text-muted">{signInSummaryOf(connection)}</span>
-          <span className="ml-auto flex gap-2">
-            <button type="button" className={ghostButtonClass} onClick={() => setIsEditing(true)}>
-              Edit
-            </button>
-            <button type="button" className={ghostButtonClass} onClick={() => setIsRemoving(true)}>
-              Remove
-            </button>
-          </span>
-        </div>
-      )}
-      {connection.setupId !== null ? (
-        <p className="text-muted">
-          Waiting for the sign-in that lists its tools. If that window was closed, remove this server and add it again.
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <span>{toolCountsOf(connection.tools)}</span>
-            {connection.isReviewed && (
-              <button type="button" className={smallGhostButtonClass} onClick={() => setIsCorrecting(!isCorrecting)}>
-                Correct read and write
-              </button>
+      </ServerHeader>
+      <div className={serverBodyClass}>
+        {connection.setupId !== null ? (
+          <p className="text-muted">
+            Waiting for the sign-in that lists its tools. If that window was closed, remove this server and add it
+            again.
+          </p>
+        ) : (
+          <>
+            {(!connection.isReviewed || isCorrecting) && (
+              <ToolMarkings
+                target={target}
+                connection={connection}
+                onSaved={() => setIsCorrecting(false)}
+                onCancel={connection.isReviewed ? () => setIsCorrecting(false) : undefined}
+              />
             )}
-          </div>
-          {(!connection.isReviewed || isCorrecting) && (
-            <ToolMarkings target={target} connection={connection} onSaved={() => setIsCorrecting(false)} />
-          )}
-          {connection.isReviewed && <ServerAccess target={target} connection={connection} />}
-        </>
+            {connection.isReviewed && <ServerAccess target={target} connection={connection} />}
+          </>
+        )}
+        {!isRemoving && !isEditing && <ErrorMessage message={errorMessage} />}
+      </div>
+      {isEditing && (
+        <Dialog label={`Edit ${connection.name}`} isWide onClose={() => setIsEditing(false)}>
+          <ConnectionForm
+            label={`Edit ${connection.name}`}
+            connection={connection}
+            isPending={isPending}
+            onSubmit={async (input) => {
+              const isSaved = await run(() => commands.editWorkspaceConnection({ ...target, ...input }))
+              if (isSaved) setIsEditing(false)
+              return isSaved
+            }}
+          />
+          <ErrorMessage message={errorMessage} />
+        </Dialog>
       )}
-      {!isRemoving && <ErrorMessage message={errorMessage} />}
       {isRemoving && (
         <Dialog label="Remove server" subject={connection.name} onClose={() => setIsRemoving(false)}>
           <p className="text-sm text-muted">Agents lose its tools at once, in every chat of this workspace.</p>
           <ErrorMessage message={errorMessage} />
           <button
             type="button"
-            className={buttonClass}
+            className={dangerButtonClass}
             disabled={isPending}
             onClick={() => run(() => commands.removeWorkspaceConnection(target))}
           >
@@ -471,15 +502,15 @@ const BuiltInTools = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const mayManageGitHub = useMayManageGitHub(workspaceId)
   return (
     <LabelledSection title="Built in">
-      <section aria-label="Spyria" className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
-        <p className="text-muted">
-          Spyria's own tools, which every agent has. Nothing to set here: their settings live with their feature.
-        </p>
-        <ul aria-label="Built-in tools" className="flex flex-col">
+      <p className="-mt-2 text-sm text-muted">
+        Spyria's own tools, which every agent has. Nothing to set here: their settings live with their feature.
+      </p>
+      <section aria-label="Spyria" className={`${cardClass} text-sm`}>
+        <ul aria-label="Built-in tools" className="grid md:grid-cols-2">
           {builtInTools.map((tool) => (
-            <li key={tool.name} className="flex items-center justify-between gap-3 py-0.5">
-              <span className="flex flex-col">
-                <span>{tool.name}</span>
+            <li key={tool.name} className="flex items-start justify-between gap-3 px-4 py-2.5">
+              <span className="flex min-w-0 flex-col">
+                <span className="font-mono text-xs">{tool.name}</span>
                 <span className="text-xs text-muted">{tool.summary}</span>
               </span>
               {featureSettingOf(workspaceId, tool.feature, mayManageGitHub)}
@@ -496,49 +527,70 @@ const GitHubServerCard = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const mayManageGitHub = useMayManageGitHub(workspaceId)
   const [isListOpen, setIsListOpen] = useState(false)
   return (
-    <li aria-label={github.name} className="flex flex-col gap-3 rounded-lg border border-line p-3 text-sm">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="font-medium">{github.name}</span>
-        <span className="text-muted">Built in · {signInLabels.member}</span>
-        <span className="ml-auto">
-          <SettingsCardLink to={`/w/${workspaceId}/settings/github`} isAllowed={mayManageGitHub}>
-            Set up in Connect GitHub
-          </SettingsCardLink>
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <span>{toolCountsOf(github.tools)}</span>
-        <button type="button" className={smallGhostButtonClass} onClick={() => setIsListOpen(!isListOpen)}>
+    <li aria-label={github.name} className={serverCardClass}>
+      <ServerHeader name={github.name} status={<StatusBadge tone="ok">{toolCountsOf(github.tools)}</StatusBadge>}>
+        <span className="min-w-0 flex-1 truncate text-muted">Built in · {signInLabels.member}</span>
+        <SettingsCardLink to={`/w/${workspaceId}/settings/github`} isAllowed={mayManageGitHub}>
+          Set up in GitHub
+        </SettingsCardLink>
+      </ServerHeader>
+      <div className={serverBodyClass}>
+        <button
+          type="button"
+          aria-expanded={isListOpen}
+          className={`self-start ${smallGhostButtonClass}`}
+          onClick={() => setIsListOpen(!isListOpen)}
+        >
           What each tool does
         </button>
+        {isListOpen && <ToolList label={`${github.name} tools`} tools={github.tools} controlOf={() => null} />}
+        <ServerAccess target={{ workspaceId, connectionId: github.id }} connection={github} />
       </div>
-      {isListOpen && <ToolList label={`${github.name} tools`} tools={github.tools} controlOf={() => null} />}
-      <ServerAccess target={{ workspaceId, connectionId: github.id }} connection={github} />
     </li>
   )
 }
 
-export const WorkspaceConnectionsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+const AddServerDialog = ({ workspaceId, onClose }: { workspaceId: WorkspaceId; onClose: () => void }) => {
   const commands = useProfileCommands()
-  const connections = useQuery(listWorkspaceConnections, workspaceId)
   const { errorMessage, isPending, run } = useGuardedAction()
   return (
-    <>
-      <BuiltInTools workspaceId={workspaceId} />
+    <Dialog label="Add server" isWide onClose={onClose}>
+      <ConnectionForm
+        label="Add server"
+        isPending={isPending}
+        onSubmit={async (input) => {
+          const isAdded = await run(() => commands.addWorkspaceConnection({ workspaceId, ...input }))
+          if (isAdded) onClose()
+          return isAdded
+        }}
+      />
+      {isPending && <p className="text-sm text-muted">Listing the server's tools…</p>}
+      <ErrorMessage message={errorMessage} />
+    </Dialog>
+  )
+}
+
+export const WorkspaceConnectionsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+  const connections = useQuery(listWorkspaceConnections, workspaceId)
+  const [isAdding, setIsAdding] = useState(false)
+  return (
+    <div className="flex flex-col gap-10">
       <LabelledSection title="Servers">
-        <ul aria-label="Servers" className="flex flex-col gap-3">
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">The tool servers agents may call, and what each role may use</p>
+          <button type="button" className={buttonClass} onClick={() => setIsAdding(true)}>
+            Add server
+          </button>
+        </div>
+        <ul aria-label="Servers" className="flex flex-col gap-4">
           <GitHubServerCard workspaceId={workspaceId} />
           {connections.map((connection) => (
             <ConnectionCard key={connection.id} workspaceId={workspaceId} connection={connection} />
           ))}
         </ul>
-        <ConnectionForm
-          label="Add server"
-          onSubmit={(input) => run(() => commands.addWorkspaceConnection({ workspaceId, ...input }))}
-        />
-        {isPending && <p className="text-sm text-muted">Listing the server's tools…</p>}
-        <ErrorMessage message={errorMessage} />
+        {isAdding && <AddServerDialog workspaceId={workspaceId} onClose={() => setIsAdding(false)} />}
       </LabelledSection>
-    </>
+      <BuiltInTools workspaceId={workspaceId} />
+    </div>
   )
 }

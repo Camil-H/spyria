@@ -2,8 +2,10 @@ import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import {
   buttonClass,
+  cardClass,
   ErrorMessage,
   fieldClass,
+  focusRing,
   ghostButtonClass,
   LabelledSection,
   labelClass,
@@ -93,27 +95,34 @@ const RetentionForm = ({ workspaceId, onSaved }: { workspaceId: WorkspaceId; onS
   )
 }
 
-const AuditEntryItem = ({ entry }: { entry: AuditEntry }) => {
+const recordColumnsClass =
+  'grid grid-cols-[1rem_4.5rem_minmax(6rem,10rem)_minmax(0,1.3fr)_minmax(0,1fr)] items-baseline gap-x-3'
+const dayLabelOf = (at: string) =>
+  new Date(at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+const timeLabelOf = (at: string) => new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+const AuditEntryItem = ({ entry, dayLabel }: { entry: AuditEntry; dayLabel?: string }) => {
   const [isOpen, setIsOpen] = useState(false)
   const Chevron = isOpen ? ChevronDown : ChevronRight
   return (
-    <li className="flex flex-col gap-1 border-b border-line py-2 text-sm">
+    <li className="flex flex-col border-t border-line text-sm first:border-t-0">
+      {dayLabel && <h2 className="bg-app px-4 py-1.5 text-xs font-medium text-muted">{dayLabel}</h2>}
       <button
         type="button"
         aria-expanded={isOpen}
-        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-left"
+        className={`${recordColumnsClass} px-4 py-2 text-left hover:bg-hover ${focusRing}`}
         onClick={() => setIsOpen(!isOpen)}
       >
         <Chevron aria-hidden className="size-4 self-center text-muted" />
-        <time dateTime={entry.at} className="text-muted">
-          {new Date(entry.at).toLocaleString()}
+        <time dateTime={entry.at} title={new Date(entry.at).toLocaleString()} className="text-muted tabular-nums">
+          {timeLabelOf(entry.at)}
         </time>
-        <span className="font-medium">{entry.person}</span>
-        <span>{entry.action}</span>
-        <span className="text-muted">{entry.target}</span>
+        <span className="truncate font-medium">{entry.person}</span>
+        <span className="truncate">{entry.action}</span>
+        <span className="truncate text-muted">{entry.target}</span>
       </button>
       {isOpen && (
-        <dl aria-label="Details" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pl-6 text-muted">
+        <dl aria-label="Details" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pr-4 pb-3 pl-32 text-muted">
           {entry.details.map(({ label, value }) => (
             <div key={label} className="contents">
               <dt>{label}</dt>
@@ -125,6 +134,36 @@ const AuditEntryItem = ({ entry }: { entry: AuditEntry }) => {
     </li>
   )
 }
+
+const AuditRecords = ({ entries }: { entries: readonly AuditEntry[] }) => (
+  <div className={`${cardClass} overflow-x-auto`}>
+    <div className="min-w-[40rem]">
+      <div
+        aria-hidden
+        className={`${recordColumnsClass} border-b border-line px-4 py-2 text-xs font-medium text-muted`}
+      >
+        <span />
+        <span>Time</span>
+        <span>Person</span>
+        <span>Action</span>
+        <span>Target</span>
+      </div>
+      <ul aria-label="Audit records" className="flex flex-col">
+        {entries.map((entry, index) => {
+          const dayLabel = dayLabelOf(entry.at)
+          const previous = entries[index - 1]
+          return (
+            <AuditEntryItem
+              key={entry.key}
+              entry={entry}
+              dayLabel={previous && dayLabelOf(previous.at) === dayLabel ? undefined : dayLabel}
+            />
+          )
+        })}
+      </ul>
+    </div>
+  </div>
+)
 
 export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useUsageCommands()
@@ -169,9 +208,8 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
     onChange: (event: { target: { value: string } }) => setFilters({ ...filters, [name]: event.target.value }),
   })
   return (
-    <LabelledSection title="Audit log">
-      <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
-      <fieldset aria-label="Filters" className="flex flex-wrap items-end gap-2">
+    <section aria-label="Audit log" className="flex flex-col gap-4">
+      <fieldset aria-label="Filters" className="flex flex-wrap items-end gap-3">
         <label className={labelClass}>
           Person
           <select {...filterField('person')}>
@@ -210,13 +248,9 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
       {entries === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-muted">No audit records</p>
+        <p className={`${cardClass} px-4 py-6 text-center text-sm text-muted`}>No audit records</p>
       ) : (
-        <ul aria-label="Audit records" className="flex flex-col">
-          {entries.map((entry) => (
-            <AuditEntryItem key={entry.key} entry={entry} />
-          ))}
-        </ul>
+        <AuditRecords entries={entries} />
       )}
       {nextCursor && (
         <button
@@ -228,6 +262,11 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
           Load more
         </button>
       )}
-    </LabelledSection>
+      <LabelledSection title="Retention" titleClass="text-sm font-medium" className="mt-6 flex flex-col gap-3">
+        <div className={`${cardClass} p-4`}>
+          <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
+        </div>
+      </LabelledSection>
+    </section>
   )
 }

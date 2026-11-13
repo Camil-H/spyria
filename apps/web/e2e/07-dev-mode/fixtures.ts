@@ -35,7 +35,7 @@ export const newDevChat = async (page: Page, name: string, repository: string, b
   return page.url().split('/').at(-1) ?? ''
 }
 export const setSetupCommand = async (page: Page, repository: string, command: string) => {
-  await openSettings(page, 'Connect runtime')
+  await openSettings(page, 'Runtimes')
   const section = mainOf(page).getByRole('region', { name: 'Setup commands' })
   const tab = section
     .getByRole('tablist', { name: 'Setup commands' })

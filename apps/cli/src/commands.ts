@@ -154,7 +154,7 @@ const removeHostOfThisMachine = (folder: string, environment: Environment) => {
   console.log(
     [
       `The runtime host of this machine is removed and its ${stopped} runtime${stopped === 1 ? ' is' : 's are'} stopped, their files kept.`,
-      'Remove it in Workspace settings > Connect runtime too, which revokes its token; the Machines guide shows how to delete its runtimes and their files.',
+      'Remove it in Workspace settings > Runtimes too, which revokes its token; the Machines guide shows how to delete its runtimes and their files.',
     ].join(' '),
   )
 }

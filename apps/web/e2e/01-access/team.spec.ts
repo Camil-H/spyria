@@ -1,6 +1,7 @@
 import { openPageAs, type WorkerStack } from '../stack'
 import {
   agentReplyText,
+  chooseMemberAction,
   composerOf,
   creationFormOf,
   expect,
@@ -40,9 +41,7 @@ const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('r
 const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
 
 const removeMember = async (page: Page, name: string) => {
-  await membersSectionOf(page)
-    .getByRole('button', { name: `Remove ${name}` })
-    .click()
+  await chooseMemberAction(page, name, 'Remove from workspace')
   await page.getByRole('dialog', { name: 'Remove member' }).getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByRole('dialog', { name: 'Remove member' })).toHaveCount(0)
   await expect(memberRowOf(page, name)).toHaveCount(0)
@@ -68,7 +67,7 @@ const insertBobsRuntimeChat = async (workerStack: WorkerStack) => {
 test.describe('Team', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
-    await openSettings(page, 'Manage Team')
+    await openSettings(page, 'Members and roles')
   })
 
   test('As a member who can invite, I invite a person by email: they sign in through the auth provider, land in Acme and are listed as a member', {
@@ -115,7 +114,7 @@ test.describe('Team', () => {
 
     await membersSectionOf(page).getByRole('combobox', { name: 'Role of Bob' }).selectOption('admin')
     await expect(settingsLinkOf(bobPage)).toBeVisible()
-    await openSettings(bobPage, 'Manage Team')
+    await openSettings(bobPage, 'Members and roles')
     await expect(membersSectionOf(bobPage)).toBeVisible()
     await expect(memberRowOf(bobPage, 'Bob').getByRole('combobox')).toHaveCount(0)
     await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox', { name: 'Role of Alice' })).toBeEnabled()
@@ -133,7 +132,7 @@ test.describe('Team', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChatWithStream(bobPage, 'Welcome')
 
-    await membersSectionOf(page).getByRole('button', { name: 'Sign Bob out everywhere' }).click()
+    await chooseMemberAction(page, 'Bob', 'Sign out everywhere')
     const dialog = page.getByRole('dialog', { name: 'Sign out everywhere' })
     await dialog.getByRole('button', { name: 'Sign out everywhere' }).click()
     await expect(dialog).toHaveCount(0)
@@ -162,7 +161,7 @@ test.describe('Team', () => {
       await sendMessage(page, 'Watch this')
       await expect(messageContaining(bobPage, 'Understood,')).toHaveCount(1)
 
-      await openSettings(page, 'Manage Team')
+      await openSettings(page, 'Members and roles')
       await removeMember(page, 'Bob')
       await expect(signedOutScreenOf(bobPage, 'Acme')).toBeVisible()
       await expect(messageItemsOf(bobPage)).toHaveCount(0)
@@ -237,11 +236,12 @@ test.describe('Team', () => {
     tag: ['@spec-36', '@spec-50'],
   }, async ({ page }) => {
     const aliceRow = memberRowOf(page, 'Alice')
-    await expect(aliceRow).toContainText('Admin (you)')
+    await expect(aliceRow).toContainText('Alice (you)')
+    await expect(aliceRow).toContainText('Admin')
     await expect(aliceRow.getByRole('combobox')).toHaveCount(0)
     await expect(aliceRow.getByRole('button')).toHaveCount(0)
     await expect(memberRowOf(page, 'Bob').getByRole('combobox', { name: 'Role of Bob' })).toBeEnabled()
-    await expect(memberRowOf(page, 'Bob').getByRole('button', { name: 'Remove Bob' })).toBeEnabled()
+    await expect(memberRowOf(page, 'Bob').getByRole('button', { name: 'Actions for Bob' })).toBeEnabled()
   })
 
   const roleOptionsOf = (page: Page, name: string) =>
@@ -261,7 +261,7 @@ test.describe('Team', () => {
     await expect(sidebarOf(leePage).getByRole('link', { name: 'Profile' })).toBeVisible()
     await expect(settingsLinkOf(leePage)).toHaveCount(0)
 
-    await openSettings(bobPage, 'Manage Team')
+    await openSettings(bobPage, 'Members and roles')
     expect(await roleOptionsOf(bobPage, 'Lee')).toEqual(['Member', 'Manager'])
     await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
@@ -279,16 +279,17 @@ test.describe('Team', () => {
     await insertWorkspaceRole(workerStack, 'role-manager', 'Manager', ['members.manage'])
     await giveWorkspaceRole(workerStack, 'member-bob', 'role-manager')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openSettings(bobPage, 'Manage Team')
+    await openSettings(bobPage, 'Members and roles')
     await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
     await expect(memberRowOf(bobPage, 'Alice').getByRole('button')).toHaveCount(0)
-    await expect(memberRowOf(page, 'Alice')).toContainText('Admin (you)')
+    await expect(memberRowOf(page, 'Alice')).toContainText('Alice (you)')
+    await expect(memberRowOf(page, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(page, 'Alice').getByRole('combobox')).toHaveCount(0)
 
     await memberRowOf(page, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Admin' })
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
-    await openSettings(leePage, 'Manage Team')
+    await openSettings(leePage, 'Members and roles')
     const alicesRole = memberRowOf(leePage, 'Alice').getByRole('combobox', { name: 'Role of Alice' })
     await alicesRole.selectOption({ label: 'Member' })
     await expect(alicesRole).toHaveValue('member')

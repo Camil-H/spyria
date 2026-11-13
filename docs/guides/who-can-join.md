@@ -23,7 +23,7 @@ The sign-in screen asks for an email address first. It then shows the account pr
 
 ## Workspaces enforcing SSO
 
-A workspace can enforce its organization's own provider in **Workspace settings › Setup SSO** ([administration](../features/admin.md#sign-in-and-sso)): Google Workspace, Microsoft Entra of one tenant, or any OIDC provider. Then only that provider opens the workspace, for everyone, Admins included, so people lose access when their organization account is removed.
+A workspace can enforce its organization's own provider in **Workspace settings › Single sign-on** ([administration](../features/admin.md#sign-in-and-sso)): Google Workspace, Microsoft Entra of one tenant, or any OIDC provider. Then only that provider opens the workspace, for everyone, Admins included, so people lose access when their organization account is removed.
 
 A session opened through a workspace's own provider opens only that workspace: it cannot open or list the person's other workspaces, or create a workspace. Model keys, tool connections, machines and sessions belong to each workspace membership anyway.
 

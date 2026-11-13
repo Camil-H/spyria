@@ -435,8 +435,9 @@ export const SpendReportView = ({
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm">
-                  {formatCost(report.total.costMicros)} · {report.total.requests.toLocaleString('en-US')} requests
+                <p className="text-sm text-muted">
+                  <span className="text-2xl font-semibold text-ink">{formatCost(report.total.costMicros)}</span> ·{' '}
+                  {report.total.requests.toLocaleString('en-US')} requests
                 </p>
                 <SegmentedChoice
                   label="Stack by"
