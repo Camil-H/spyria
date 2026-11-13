@@ -48,6 +48,7 @@ export type RuntimeReadiness =
   | { state: 'ready'; endpoint: AgentEndpoint; signedIn: readonly string[] }
   | { state: 'starting' }
   | { state: 'host_offline' }
+  | { state: 'archived' }
   | { state: 'failed'; failure: string | null }
 
 export type AgentRuntimes = {
