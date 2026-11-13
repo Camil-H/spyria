@@ -11,7 +11,7 @@ import {
   VerificationRecordNotFound,
   verificationRecordOf,
 } from '@spyria/workspace/server'
-import type { Sql } from './sessions.ts'
+import { endSessionsNoLongerTrusted, type Sql } from './sessions.ts'
 import { recordWorkspaceEvent, requireMemberPermission } from './sso.ts'
 
 export type ResolveTxt = (domain: string) => Promise<string[][]>
@@ -40,14 +40,19 @@ const asManager = <Result>(database: Database, member: Member, work: (sql: Sql) 
     return work(sql)
   })
 
+const asClaimsManager = <Result>(database: Database, member: Member, work: (sql: Sql) => Promise<Result>) =>
+  asManager(database, member, async (sql) => {
+    const [enforcesSso] = await sql`select 1 from workspace_sso where workspace_id = ${member.workspaceId} for update`
+    if (!enforcesSso) throw new ClaimNeedsSso()
+    return work(sql)
+  })
+
 export const listDomainClaims = (database: Database, member: Member) =>
   asManager(database, member, async (sql) => viewsOf(await claimsOf(sql, member.workspaceId)))
 
 export const claimDomain = (database: Database, member: Member, text: unknown) =>
-  asManager(database, member, async (sql) => {
+  asClaimsManager(database, member, async (sql) => {
     const domain = ClaimableDomain(String(text ?? ''))
-    const [enforcesSso] = await sql`select 1 from workspace_sso where workspace_id = ${member.workspaceId}`
-    if (!enforcesSso) throw new ClaimNeedsSso()
     const [claimedElsewhere] = await sql`
       select 1 from domain_claims where domain = ${domain} and verified_at is not null
         and workspace_id <> ${member.workspaceId}`
@@ -67,7 +72,7 @@ export const verifyDomainClaim = async (database: Database, resolveTxt: ResolveT
   if (!pending) throw new DomainClaimNotFound(domain)
   if (!pending.isVerified && !hasVerificationRecord(await resolveTxt(domain).catch(() => []), pending.token))
     throw new VerificationRecordNotFound(domain)
-  return asManager(database, member, async (sql) => {
+  return asClaimsManager(database, member, async (sql) => {
     const claims = await claimsOf(sql, member.workspaceId)
     requireOwnAddressInside(await emailOf(sql, member.userId), [...verifiedDomainsOf(claims), domain])
     const verified = await sql`
@@ -78,16 +83,18 @@ export const verifyDomainClaim = async (database: Database, resolveTxt: ResolveT
       if (error.code === uniqueViolation) throw new DomainClaimedElsewhere(domain)
       throw error
     })
-    if (verified.length > 0)
+    if (verified.length > 0) {
+      await endSessionsNoLongerTrusted(sql, member.workspaceId, domain)
       await recordWorkspaceEvent(sql, member.workspaceId, 'domain.claimed', memberActor(memberId(member.userId)), {
         domain,
       })
+    }
     return viewsOf(await claimsOf(sql, member.workspaceId))
   })
 }
 
 export const releaseDomainClaim = (database: Database, member: Member, text: unknown) =>
-  asManager(database, member, async (sql) => {
+  asClaimsManager(database, member, async (sql) => {
     const domain = ClaimableDomain(String(text ?? ''))
     const claims = await claimsOf(sql, member.workspaceId)
     const released = claims.find((claim) => claim.domain === domain)
@@ -98,9 +105,11 @@ export const releaseDomainClaim = (database: Database, member: Member, text: unk
         verifiedDomainsOf(claims).filter((claimed) => claimed !== domain),
       )
     await sql`delete from domain_claims where workspace_id = ${member.workspaceId} and domain = ${domain}`
-    if (released.isVerified)
+    if (released.isVerified) {
+      await endSessionsNoLongerTrusted(sql, member.workspaceId, domain)
       await recordWorkspaceEvent(sql, member.workspaceId, 'domain.released', memberActor(memberId(member.userId)), {
         domain,
       })
+    }
     return viewsOf(await claimsOf(sql, member.workspaceId))
   })
