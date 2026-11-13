@@ -356,7 +356,7 @@ const ScopePicker = ({
           summary={scopeSummaryOf(rows, dimension, value.scopeKeys)}
           options={rows.map((row) => ({ value: row.key, label: row.name }))}
           values={value.scopeKeys}
-          onChange={(scopeKeys) => onChange({ scope: dimension, scopeKeys })}
+          onChange={(scopeKeys) => onChange(scopeKeys.length > 0 ? { scope: dimension, scopeKeys } : noScope)}
         />
       )}
     </>
