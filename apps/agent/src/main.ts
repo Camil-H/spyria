@@ -14,6 +14,7 @@ const agent = startAgent({
   port: Number(process.env.PORT ?? 8000),
   workspaceDirectory: process.env.SPYRIA_WORKSPACE_DIR,
   browserDirectory: process.env.SPYRIA_BROWSER_DIR,
+  attachmentsDirectory: process.env.SPYRIA_ATTACHMENTS_DIR,
 })
 log.info({ event: 'agent.listening', body: 'spyria-agent is listening', attributes: { 'server.port': agent.port } })
 for (const signal of ['SIGTERM', 'SIGINT'] as const)

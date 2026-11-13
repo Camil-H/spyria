@@ -8,13 +8,33 @@ export type QuotedMessage = Pick<Message, 'kind' | 'body' | 'attachments' | 'cre
     authorName: string
   }
 
+const describedOf = (label: string, { mediaType, size }: Attachment) => `${label} (${mediaType}, ${fileSizeOf(size)})`
+
+const attachmentListOf = (attachments: readonly Attachment[]) =>
+  attachments.map((attachment) => describedOf(attachment.name, attachment)).join(', ')
+
 const attachedLineOf = (attachments: readonly Attachment[]) =>
-  `Attached, not readable by you: ${attachments
-    .map(({ name, mediaType, size }) => `${name} (${mediaType}, ${fileSizeOf(size)})`)
-    .join(', ')}`
+  attachments.length === 0 ? '' : `Attached, not readable by you: ${attachmentListOf(attachments)}`
 
 const withAttachmentsNoted = ({ body, attachments }: Pick<Message, 'body' | 'attachments'>) =>
-  attachments.length === 0 ? body : [body, attachedLineOf(attachments)].filter(Boolean).join('\n\n')
+  [body, attachedLineOf(attachments)].filter(Boolean).join('\n\n')
+
+const savedLineOf = (saved: readonly (Attachment & { path: string })[]) =>
+  saved.length === 0
+    ? ''
+    : `Attached files, saved in your workspace: ${saved.map((attachment) => describedOf(attachment.path, attachment)).join(', ')}`
+
+const withPromptAttachmentsNoted = (
+  { body, attachments }: Pick<Message, 'body' | 'attachments'>,
+  savedPaths: ReadonlyMap<string, string>,
+) => {
+  const saved = attachments.flatMap((attachment) => {
+    const path = savedPaths.get(attachment.id)
+    return path ? [{ ...attachment, path }] : []
+  })
+  const unsaved = attachments.filter((attachment) => !savedPaths.has(attachment.id))
+  return [body, savedLineOf(saved), attachedLineOf(unsaved)].filter(Boolean).join('\n\n')
+}
 
 const quotedTimeOf = (at: Date) => `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`
 
@@ -46,9 +66,10 @@ export const agentPromptTextOf = (
   prompt: Pick<Message, 'body' | 'attachments'>,
   seed: Pick<Message, 'body'> | undefined,
   quoted?: QuotedMessage | undefined,
+  savedPaths: ReadonlyMap<string, string> = new Map(),
 ) =>
   [
     ...(seed ? [seed.body] : []),
     ...(quoted?.status === 'live' ? [inReplyToOf(quoted)] : []),
-    withAttachmentsNoted(prompt),
+    withPromptAttachmentsNoted(prompt, savedPaths),
   ].join('\n\n')

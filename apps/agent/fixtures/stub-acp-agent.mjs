@@ -489,6 +489,13 @@ const turn = async (id, { sessionId, prompt }) => {
   session.current = state
   save(sessionId, session)
   const text = prompt.map((block) => block.text ?? '').join('\n')
+  const seen = prompt
+    .filter((block) => block.type !== 'text')
+    .map((block) => {
+      const mimeType = block.mimeType ?? block.resource?.mimeType
+      const bytes = Buffer.from(block.data ?? block.resource?.blob ?? '', 'base64').length
+      return `${block.type} ${mimeType} ${bytes} B`
+    })
   const has = (part) => new RegExp(`stub:${part}(?![\\w-])`).test(text)
   const update = isPi ? piUpdate : (body) => send({ method: 'session/update', params: { sessionId, update: body } })
   const finish = (stopReason) => {
@@ -824,6 +831,7 @@ const turn = async (id, { sessionId, prompt }) => {
     if (has('linger')) await lingerAs('linger')
     if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
     if (has('usage')) update({ sessionUpdate: 'usage_update', used: 53_000, size: 200_000 })
+    if (seen.length > 0) await say(`Saw ${seen.join(', ')}. `)
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     finish('end_turn')
   } catch (error) {
@@ -858,7 +866,11 @@ const handlers = {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
     return {
       protocolVersion: 1,
-      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
+      agentCapabilities: {
+        loadSession: true,
+        sessionCapabilities: { resume: {} },
+        ...(!process.env.STUB_TEXT_ONLY && { promptCapabilities: { image: true, embeddedContext: true } }),
+      },
       agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
       authMethods: [],
     }
@@ -945,7 +957,10 @@ const onPiCommand = async ({ id, type, ...fields }) => {
   if (type === 'prompt') {
     isPiRunning = true
     return queue(piSessionId, () =>
-      turn(id, { sessionId: piSessionId, prompt: [{ text: fields.message }] }).finally(() => {
+      turn(id, {
+        sessionId: piSessionId,
+        prompt: [{ type: 'text', text: fields.message }, ...(fields.images ?? [])],
+      }).finally(() => {
         isPiRunning = false
       }),
     )

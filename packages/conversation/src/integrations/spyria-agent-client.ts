@@ -23,6 +23,7 @@ export type AgentLlm = { model: string }
 const requestTimeoutMilliseconds = 30_000
 const checkoutTimeoutMilliseconds = 120_000
 const bundleTimeoutMilliseconds = 110_000
+const attachmentTimeoutMilliseconds = 60_000
 const githubToolTimeoutSeconds = 120
 const notFoundStatus = 404
 
@@ -122,10 +123,11 @@ const piProviderOf = (baseUrl: string, api: string, models: readonly PiModel[]) 
   baseUrl,
   api,
   apiKey: `\${SPYRIA_LLM_TOKEN}`,
-  models: models.map(({ id, name, reasoning, contextWindow }) => ({
+  models: models.map(({ id, name, reasoning, readsImages, contextWindow }) => ({
     id,
     name,
     reasoning,
+    input: readsImages ? ['text', 'image'] : ['text'],
     ...(contextWindow !== undefined && { contextWindow }),
     ...(api === 'openai-completions' && {
       compat: { supportsLongCacheRetention: false, ...(!id.startsWith('openai/') && { supportsDeveloperRole: false }) },
@@ -242,13 +244,27 @@ export const createSpyriaAgentClient = (): AgentClient => ({
       ...(thoughtLevel && { thoughtLevel }),
     })
   },
-  sendMessage: async (conversation, text, promptId) => {
+  sendMessage: async (conversation, text, promptId, attachments = []) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {
       role: 'user',
-      content: [{ type: 'text', text }],
+      content: [
+        { type: 'text', text },
+        ...attachments.map(({ path, mediaType }) => ({ type: 'attachment', path, mimeType: mediaType })),
+      ],
       run: true,
       ...(promptId && { prompt_id: promptId }),
     })
+  },
+  saveAttachment: async (conversation, { id, name, content }) => {
+    const saved = await call(
+      conversation,
+      'POST',
+      `/api/conversations/${conversation.conversationId}/attachments`,
+      { id, name, content: Buffer.from(content).toString('base64') },
+      attachmentTimeoutMilliseconds,
+    )
+    if (typeof saved?.path !== 'string') throw new Error('spyria-agent saved the attachment without saying where')
+    return saved.path
   },
   answerQuestion: async (conversation, questionId, answer) =>
     (
