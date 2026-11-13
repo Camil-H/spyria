@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
@@ -644,6 +644,30 @@ test.each([
     expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).toBe('error')
   },
 )
+
+test('an interrupt naming a prompt that waits for the session to start stops only that prompt, not a later one also waiting', async () => {
+  const { call, open, create } = started({ requestTimeoutMilliseconds: 1500 })
+  const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
+  const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const restarting = call('POST', `/api/conversations/${id}/restart`)
+  for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
+    if (Date.now() > deadline) throw new Error('The session did not start reloading')
+  await promptWithId('hello', 'prompt-stopped')
+  await promptWithId('hello', 'prompt-next')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-stopped' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-stopped' },
+  ])
+  await restarting
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({ promptId: 'prompt-next' })
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update.stopReason).not.toBe('cancelled')
+})
 
 test('a restart while a timed-out adapter is still stopping brings the conversation back to a working session', async () => {
   const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
