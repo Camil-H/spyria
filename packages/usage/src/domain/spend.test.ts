@@ -250,6 +250,7 @@ test('the report total sums the whole period from the tables, whatever scope nar
       ...call({ costMicros: 30_000, tokens: 3000, requests: 3 }),
       ...call({ model: 'openai/gpt-5', costMicros: 10_000, tokens: 1000, requests: 1 }),
     ],
+    choiceRows: [],
     counts: { current: counts({ costMicros: 10_000, tokens: 1000, requests: 1 }), previous: counts() },
     tableDimensions: ['member', 'model'],
     chartDimensions: [],
@@ -257,4 +258,23 @@ test('the report total sums the whole period from the tables, whatever scope nar
   })
   expect(report.total).toEqual({ costMicros: 40_000, tokens: 4000, requests: 4 })
   expect(report.decomposition.current.costMicros).toBe(10_000)
+})
+
+test('the scope choices list every key of both periods, whatever the scope narrows the tables to', () => {
+  const report = spendReportOf({
+    filter: { ...spendFilterFrom({ scope: 'member', scopeKey: 'member-alice' }, now) },
+    rows: call({}),
+    choiceRows: [...call({}), ...call({ prompterId: 'member-bob', prompterName: 'Bob', costMicros: 20_000 })],
+    counts: { current: counts(), previous: counts() },
+    tableDimensions: ['member'],
+    chartDimensions: [],
+    mergedPulls: null,
+  })
+  expect(report.tables.member?.map(({ name }) => name)).toEqual(['Alice'])
+  expect(report.scopeChoices).toEqual({
+    member: [
+      { key: 'member-bob', name: 'Bob' },
+      { key: 'member-alice', name: 'Alice' },
+    ],
+  })
 })

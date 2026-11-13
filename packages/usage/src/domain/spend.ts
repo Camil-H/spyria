@@ -25,6 +25,7 @@ export type SpendDimensionRow = SpendTotals & {
 export type SpendCounts = SpendTotals & { users: number; sessions: number; turns: number }
 export type SpendBucketCounts = SpendCounts & { bucket: string }
 export type SpendRow = SpendTotals & { key: string; name: string; share: number }
+export type SpendScopeChoice = { key: string; name: string }
 export type SpendChart = { buckets: string[]; series: { key: string; name: string; costs: number[] }[] }
 export const spendFactorNames = [
   'users',
@@ -65,6 +66,7 @@ export type SpendReport = {
   total: SpendTotals
   charts: Partial<Record<SpendDimension, SpendChart>>
   tables: Partial<Record<SpendDimension, SpendRow[]>>
+  scopeChoices: Partial<Record<SpendDimension, SpendScopeChoice[]>>
   decomposition: SpendDecomposition
   mergedPulls: MergedPullsCost | null
 }
@@ -233,9 +235,13 @@ export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsCost
   return { pulls: [...pulls], costMicros, perPullMicros: pulls.length === 0 ? null : costMicros / pulls.length }
 }
 
+export const scopeChoicesOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendScopeChoice[] =>
+  spendRowsOf(rows, dimension).map(({ key, name }) => ({ key, name }))
+
 export const spendReportOf = ({
   filter,
   rows,
+  choiceRows,
   counts,
   tableDimensions,
   chartDimensions,
@@ -243,6 +249,7 @@ export const spendReportOf = ({
 }: {
   filter: SpendFilter
   rows: readonly SpendDimensionRow[]
+  choiceRows: readonly SpendDimensionRow[]
   counts: { current: SpendCounts; previous: SpendCounts }
   tableDimensions: readonly SpendDimension[]
   chartDimensions: readonly SpendDimension[]
@@ -257,6 +264,9 @@ export const spendReportOf = ({
     total: spendTotalOf(rows.filter((row) => row.dimension === tableDimensions[0])),
     charts: Object.fromEntries(chartDimensions.map((dimension) => [dimension, spendChartOf(rows, dimension, buckets)])),
     tables: Object.fromEntries(tableDimensions.map((dimension) => [dimension, spendRowsOf(rows, dimension)])),
+    scopeChoices: Object.fromEntries(
+      tableDimensions.map((dimension) => [dimension, scopeChoicesOf(choiceRows, dimension)]),
+    ),
     decomposition: decompositionOf(counts.current, counts.previous),
     mergedPulls: mergedPulls && mergedPullsCostOf(mergedPulls),
   }

@@ -10,6 +10,15 @@ import {
 } from '../domain/spend.ts'
 import { workspacePermissionsStatement } from './postgres-audit-log.ts'
 
+const scopeCondition = (dimension: string, key: string) => `
+  (${dimension}::text is null or ${key} = case ${dimension}
+    when 'member' then call.prompter_id
+    when 'chat' then call.chat_id
+    when 'model' then call.provider || '/' || call.model
+    when 'project' then coalesce(
+      (select chat.project_id from chats chat where chat.workspace_id = $1 and chat.id = call.chat_id), 'none')
+  end)`
+
 const rowsStatement = `
   with grouped as (
     select to_char(date_trunc($4::text, call.called_at at time zone 'UTC'), 'YYYY-MM-DD') as bucket,
@@ -17,7 +26,7 @@ const rowsStatement = `
       sum(call.input_tokens + call.output_tokens) as tokens, count(*) as requests
     from model_calls call
     where call.workspace_id = $1 and call.called_at >= $2 and call.called_at < $3
-      and ($5::text is null or call.prompter_id = $5)
+      and ($5::text is null or call.prompter_id = $5) and ${scopeCondition('$8', '$9')}
     group by 1, 2, 3, 4)
   select dimension.name as dimension, case when dimension.name = any($7::text[]) then grouped.bucket end as bucket,
     dimension.key, dimension.label as name, sum(grouped.cost_micros)::float8 as "costMicros",
@@ -33,15 +42,6 @@ const rowsStatement = `
     ('model', grouped.model, grouped.model)) as dimension(name, key, label)
   where dimension.name = any($6::text[])
   group by 1, 2, 3, 4`
-
-const scopeCondition = (dimension: string, key: string) => `
-  (${dimension}::text is null or ${key} = case ${dimension}
-    when 'member' then call.prompter_id
-    when 'chat' then call.chat_id
-    when 'model' then call.provider || '/' || call.model
-    when 'project' then coalesce(
-      (select chat.project_id from chats chat where chat.workspace_id = $1 and chat.id = call.chat_id), 'none')
-  end)`
 
 const countColumns = `count(distinct call.prompter_id collate "C")::int as users,
     count(distinct call.session_id collate "C")::int as sessions,
@@ -93,7 +93,7 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
           (await query<{ permission: WorkspacePermission }>(workspacePermissionsStatement, [memberId])).map(
             (granted) => granted.permission,
           ),
-        rows: (range, granularity, prompterId, { tableDimensions, chartDimensions }) =>
+        rows: (range, granularity, prompterId, { tableDimensions, chartDimensions }, scope) =>
           query<SpendDimensionRow>(rowsStatement, [
             range.from.toISOString(),
             range.to.toISOString(),
@@ -101,6 +101,8 @@ export const createPostgresSpendTransactor = (transact: Transact, workspaceId: W
             prompterId,
             tableDimensions,
             chartDimensions,
+            scope?.dimension ?? null,
+            scope?.key ?? null,
           ]),
         counts: async ({ current, previous, scope }, prompterId) => {
           const rows = await query<SpendCounts & { isCurrent: boolean }>(countsStatement, [
