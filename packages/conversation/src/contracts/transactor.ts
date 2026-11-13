@@ -10,6 +10,7 @@ import type {
   DevLoopRepository,
   MemberDirectory,
   MessageRepository,
+  PublicChatDirectory,
   ReadMarkerRepository,
   RoutingRepository,
   ToolCallRepository,
@@ -25,6 +26,7 @@ export type UnitOfWork = {
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
   browserPages: BrowserPageRepository
+  publicChats: PublicChatDirectory
   routing: RoutingRepository
   delegations: DelegationRepository
   toolCalls: ToolCallRepository

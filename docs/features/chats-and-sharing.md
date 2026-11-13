@@ -43,7 +43,7 @@ An image with a web address in a message shows as a **Load image from** *site* b
 
 ## Public and private chats
 
-Channels are where members talk without an agent; AI chats add one. Either kind is public or private. A **public** chat is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel** (**Join chat** for an AI chat). **Browse public chats** in the sidebar lists the public chats a member has not joined, channels and AI chats alike. A **private** chat is visible only to its participants. A runtime chat started from a channel message, and a fork, start private.
+Channels are where members talk without an agent; AI chats add one. Either kind is public or private. A **public** chat is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel** (**Join chat** for an AI chat). **Browse public chats** in the sidebar lists the public chats a member has not joined, channels and AI chats alike. A **private** chat is visible only to its participants. Agents read public chats too, to find what the workspace already discussed; they never read a private one (see [Agents](./agents.md#public-chats)). A runtime chat started from a channel message, and a fork, start private.
 
 Changing a chat's visibility needs the chat admin permission. When a chat becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public chat already lets everyone post. In a public AI chat, anyone who joins prompts the agent as a guest, on their own key, with the reach described in [Prompts from someone other than the owner](#prompts-from-someone-other-than-the-owner); a session on the owner's machine still answers only its owner.
 

@@ -30,6 +30,13 @@ export const builtInTools: readonly BuiltInTool[] = [
     summary: 'Searches the web with a model of the member who prompted, on their key and budget',
     feature: null,
   },
+  { name: 'list_public_chats', summary: "Lists the workspace's public channels and AI chats", feature: null },
+  {
+    name: 'search_public_chats',
+    summary: "Searches the messages of the workspace's public channels and AI chats",
+    feature: null,
+  },
+  { name: 'read_public_chat', summary: 'Reads the messages of a public channel or AI chat', feature: null },
   { name: 'delegate', summary: "Hands a task to a subagent that shares the runtime's files", feature: null },
   { name: 'await_task', summary: 'Waits for a task handed to a subagent', feature: null },
   { name: 'check_task', summary: 'Reads the steps of a task handed to a subagent, or stops it', feature: null },
