@@ -22,6 +22,7 @@ export type WorkspaceCommands = {
   createProject: Command<{ name: Name }>
   createChat: Command<{ type: Chat['type']; visibility?: ChatVisibility; name: Name; projectId: ProjectId | null }>
   moveChat: Command<{ chatId: ChatId; projectId: ProjectId | null }>
+  reorderChats: Command<{ chatIds: readonly ChatId[] }>
   archiveChat: Command<{ chatId: ChatId }>
   archiveProject: Command<{ projectId: ProjectId; chatsPolicy: ChatsPolicy }>
   renameChat: Command<{ chatId: ChatId; name: Name }>

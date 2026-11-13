@@ -48,12 +48,13 @@ export const withChat = (
     chats: [...snapshot.chats, { ...welcome, id, name, type, visibility, ownerId: bob, projectId: null }],
     chatMembers: [
       ...snapshot.chatMembers,
-      { workspaceId: welcome.workspaceId, chatId: id, memberId: bob, roleId: 'owner' },
+      { workspaceId: welcome.workspaceId, chatId: id, memberId: bob, roleId: 'owner', sidebarPosition: null },
       ...participantIds.map((memberId) => ({
         workspaceId: welcome.workspaceId,
         chatId: id,
         memberId,
         roleId: 'prompter',
+        sidebarPosition: null,
       })),
     ],
   }

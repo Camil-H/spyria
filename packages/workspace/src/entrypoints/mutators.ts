@@ -22,6 +22,7 @@ import { moveChat } from '../operations/move-chat.ts'
 import { removeMember } from '../operations/remove-member.ts'
 import { renameChat } from '../operations/rename-chat.ts'
 import { renameProject } from '../operations/rename-project.ts'
+import { reorderChats } from '../operations/reorder-chats.ts'
 import { revokeInvite } from '../operations/revoke-invite.ts'
 import { setDevLoop } from '../operations/set-dev-loop.ts'
 import { setSetupCommands } from '../operations/set-setup-commands.ts'
@@ -95,6 +96,10 @@ export const workspaceMutators = defineMutators({
     moveChat: defineMutator(
       z.extend(workspaceArguments, { chatId: chatIdArgument, projectId: z.nullable(projectIdArgument) }),
       ({ tx, ctx, args }) => moveChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
+    ),
+    reorderChats: defineMutator(
+      z.extend(workspaceArguments, { chatIds: z.array(chatIdArgument).check(z.maxLength(1000)) }),
+      ({ tx, ctx, args }) => reorderChats(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),
     ),
     archiveChat: defineMutator(z.extend(workspaceArguments, { chatId: chatIdArgument }), ({ tx, ctx, args }) =>
       archiveChat(dependenciesOf(tx, ctx, args), { ...args, actorId: ctx.userId }),

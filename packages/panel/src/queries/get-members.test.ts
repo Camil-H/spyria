@@ -19,7 +19,10 @@ test('members lists the owner first, then the participants with their role names
 test('the controls follow the viewer’s permissions on the chat', () => {
   const withBobEditorOfResearch = {
     ...snapshot,
-    chatMembers: [...snapshot.chatMembers, { workspaceId: acme, chatId: research, memberId: bob, roleId: 'editor' }],
+    chatMembers: [
+      ...snapshot.chatMembers,
+      { workspaceId: acme, chatId: research, memberId: bob, roleId: 'editor', sidebarPosition: null },
+    ],
   }
   const controlsOf = (members: ReturnType<ReturnType<typeof getMembers>>) =>
     members && {
@@ -93,7 +96,10 @@ test('custom roles are assignable within the actor’s own permissions, never as
       customRole('poster', ['chat.read', 'chat.post', 'session.configure']),
       customRole('superuser', chatPermissions),
     ],
-    chatMembers: [...snapshot.chatMembers, { workspaceId: acme, chatId: research, memberId: bob, roleId: 'editor' }],
+    chatMembers: [
+      ...snapshot.chatMembers,
+      { workspaceId: acme, chatId: research, memberId: bob, roleId: 'editor', sidebarPosition: null },
+    ],
   }
   const rolesOf = (chat: ChatId, viewerId: MemberId) => {
     const members = getMembers(acme, chat, viewerId)(withCustomRoles)
