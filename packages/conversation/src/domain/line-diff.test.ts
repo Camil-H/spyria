@@ -70,17 +70,28 @@ test('a file rewritten beyond the edit budget falls back to one replaced block',
   expect(diff.slice(3000).every((line) => line.kind === 'added')).toBe(true)
 })
 
-test('two edits in a 5,000-line file diff in under 5 ms once warm', () => {
+test('two edits in a 5,000-line file diff within a few times the cost of the same file unchanged, once warm', () => {
   const before = numberedLines(5000)
   const after = before.map((line, index) => (index === 1200 || index === 3800 ? `${line} edited` : line))
   after.splice(2500, 0, 'inserted')
-  for (let warmUp = 0; warmUp < 5; warmUp++) lineDiffOf(before, after)
-  const durations = Array.from({ length: 11 }, () => {
+  const unchanged = [...before]
+  const millisecondsOf = (diff: () => unknown) => {
     const startedAt = performance.now()
-    lineDiffOf(before, after)
+    diff()
     return performance.now() - startedAt
-  }).sort((first, second) => first - second)
-  expect(durations[5]).toBeLessThan(5)
+  }
+  const medianOf = (durations: number[]) => durations.toSorted((first, second) => first - second)[5] as number
+  for (let warmUp = 0; warmUp < 5; warmUp++) {
+    lineDiffOf(before, after)
+    lineDiffOf(before, unchanged)
+  }
+  const edited: number[] = []
+  const baseline: number[] = []
+  for (let round = 0; round < 11; round++) {
+    edited.push(millisecondsOf(() => lineDiffOf(before, after)))
+    baseline.push(millisecondsOf(() => lineDiffOf(before, unchanged)))
+  }
+  expect(medianOf(edited) / medianOf(baseline)).toBeLessThan(20)
   const diff = lineDiffOf(before, after)
   expect(diff.filter((line) => line.kind === 'added')).toHaveLength(3)
   expect(diff.filter((line) => line.kind === 'removed')).toHaveLength(2)
