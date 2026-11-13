@@ -211,18 +211,25 @@ const ServerCard = ({
   name,
   status,
   summary,
-  isInitiallyOpen = false,
+  needsAttention = false,
   actions,
+  dialogs,
   children,
 }: {
   name: string
   status: ReactNode
-  summary: ReactNode
-  isInitiallyOpen?: boolean
+  summary: string
+  needsAttention?: boolean
   actions?: ReactNode
+  dialogs?: ReactNode
   children: ReactNode
 }) => {
-  const [isOpen, setIsOpen] = useState(isInitiallyOpen)
+  const [isOpen, setIsOpen] = useState(needsAttention)
+  const [neededAttention, setNeededAttention] = useState(needsAttention)
+  if (needsAttention !== neededAttention) {
+    setNeededAttention(needsAttention)
+    if (needsAttention) setIsOpen(true)
+  }
   return (
     <li aria-label={name} className={serverCardClass}>
       <div className={`${rowClass} gap-2 ${isOpen ? 'border-b border-line' : ''}`}>
@@ -235,11 +242,14 @@ const ServerCard = ({
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted transition-transform" />
           <span className="font-medium">{name}</span>
           {status}
-          <span className="min-w-0 flex-1 truncate text-muted">{summary}</span>
+          <span className="min-w-0 flex-1 truncate text-muted" title={summary}>
+            {summary}
+          </span>
         </button>
         {actions}
       </div>
       {isOpen && <div className={serverBodyClass}>{children}</div>}
+      {dialogs}
     </li>
   )
 }
@@ -271,7 +281,7 @@ const ConnectionCard = ({
       name={connection.name}
       status={connectionStatusOf(connection)}
       summary={`${signInSummaryOf(connection)} · ${connection.url}`}
-      isInitiallyOpen={!connection.isReviewed || connection.setupId !== null}
+      needsAttention={!connection.isReviewed || connection.setupId !== null || isCorrecting}
       actions={
         <RowMenu
           label={`Actions for ${connection.name}`}
@@ -283,6 +293,39 @@ const ConnectionCard = ({
             { label: 'Remove', onSelect: () => setIsRemoving(true) },
           ]}
         />
+      }
+      dialogs={
+        <>
+          {isEditing && (
+            <Dialog label={`Edit ${connection.name}`} isWide onClose={() => setIsEditing(false)}>
+              <ConnectionForm
+                label={`Edit ${connection.name}`}
+                connection={connection}
+                isPending={isPending}
+                onSubmit={async (input) => {
+                  const isSaved = await run(() => commands.editWorkspaceConnection({ ...target, ...input }))
+                  if (isSaved) setIsEditing(false)
+                  return isSaved
+                }}
+              />
+              <ErrorMessage message={errorMessage} />
+            </Dialog>
+          )}
+          {isRemoving && (
+            <Dialog label="Remove server" subject={connection.name} onClose={() => setIsRemoving(false)}>
+              <p className="text-sm text-muted">Agents lose its tools at once, in every chat of this workspace.</p>
+              <ErrorMessage message={errorMessage} />
+              <button
+                type="button"
+                className={dangerButtonClass}
+                disabled={isPending}
+                onClick={() => run(() => commands.removeWorkspaceConnection(target))}
+              >
+                Remove
+              </button>
+            </Dialog>
+          )}
+        </>
       }
     >
       {connection.setupId !== null ? (
@@ -303,35 +346,6 @@ const ConnectionCard = ({
         </>
       )}
       {!isRemoving && !isEditing && <ErrorMessage message={errorMessage} />}
-      {isEditing && (
-        <Dialog label={`Edit ${connection.name}`} isWide onClose={() => setIsEditing(false)}>
-          <ConnectionForm
-            label={`Edit ${connection.name}`}
-            connection={connection}
-            isPending={isPending}
-            onSubmit={async (input) => {
-              const isSaved = await run(() => commands.editWorkspaceConnection({ ...target, ...input }))
-              if (isSaved) setIsEditing(false)
-              return isSaved
-            }}
-          />
-          <ErrorMessage message={errorMessage} />
-        </Dialog>
-      )}
-      {isRemoving && (
-        <Dialog label="Remove server" subject={connection.name} onClose={() => setIsRemoving(false)}>
-          <p className="text-sm text-muted">Agents lose its tools at once, in every chat of this workspace.</p>
-          <ErrorMessage message={errorMessage} />
-          <button
-            type="button"
-            className={dangerButtonClass}
-            disabled={isPending}
-            onClick={() => run(() => commands.removeWorkspaceConnection(target))}
-          >
-            Remove
-          </button>
-        </Dialog>
-      )}
     </ServerCard>
   )
 }
