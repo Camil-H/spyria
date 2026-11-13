@@ -43,7 +43,7 @@ test.describe('Profile', () => {
     await openProfile(page, 'LLM keys')
     await expect(credentialRowOf(page, 'Anthropic')).toHaveText('Anthropic••••a1b2Remove')
 
-    await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-1234567890' })
+    await addCredential(page, { provider: 'OpenAI', secret: 'fake-key-7890' })
     await expect(credentialRowOf(page, 'OpenAI')).toHaveText('OpenAI••••7890Remove')
     await expect(page.getByRole('dialog', { name: 'Add LLM key' })).toHaveCount(0)
 
