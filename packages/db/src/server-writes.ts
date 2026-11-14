@@ -453,6 +453,33 @@ export const rememberAgentConversation = async (
     )
   )?.id ?? conversationId
 
+export const advanceChatReadMarker = async (
+  tx: Transaction,
+  marker: { workspaceId: string; userId: string; chatId: string; lastReadSeq: number },
+) => {
+  await onServer(
+    tx,
+    `insert into read_markers (workspace_id, user_id, chat_id, last_read_seq) values ($1, $2, $3, $4)
+     on conflict (workspace_id, user_id, chat_id)
+     do update set last_read_seq = greatest(read_markers.last_read_seq, excluded.last_read_seq)`,
+    [marker.workspaceId, marker.userId, marker.chatId, marker.lastReadSeq],
+  )
+}
+
+export const advanceThreadReadMarker = async (
+  tx: Transaction,
+  marker: { workspaceId: string; userId: string; chatId: string; threadRootId: string; lastReadSeq: number },
+) => {
+  await onServer(
+    tx,
+    `insert into thread_read_markers (workspace_id, user_id, chat_id, thread_root_id, last_read_seq)
+     values ($1, $2, $3, $4, $5)
+     on conflict (workspace_id, user_id, thread_root_id)
+     do update set last_read_seq = greatest(thread_read_markers.last_read_seq, excluded.last_read_seq)`,
+    [marker.workspaceId, marker.userId, marker.chatId, marker.threadRootId, marker.lastReadSeq],
+  )
+}
+
 export const lockChat = (tx: Transaction, workspaceId: string, chatId: string) =>
   onServer(tx, 'select 1 from chats where workspace_id = $1 and id = $2 for update', [workspaceId, chatId])
 

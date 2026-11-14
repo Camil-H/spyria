@@ -47,6 +47,8 @@ export const deleteWarmRuntime = skippedOnClient
 export const serverOnlyRuntimeValueOf = skippedOnClient
 export const setServerOnlyRuntimeValue = skippedOnClient
 export const rememberAgentConversation = skippedOnClient
+export const advanceChatReadMarker = skippedOnClient
+export const advanceThreadReadMarker = skippedOnClient
 export const lockChat = skippedOnClient
 export const lockChatTurn = async () => null
 export const setChatTurnPrompter = skippedOnClient
