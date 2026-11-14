@@ -29,6 +29,7 @@ import {
   mcpCall,
   openSharedTestApp,
   promptedBy,
+  rejectionOf,
   rpcOf,
   runtimeTurn,
   testAuthSettings,
@@ -137,21 +138,40 @@ const runSync = (toolGateway: typeof llmGateway, memberId: string = alice) =>
     transact: (work) => zeroDrizzle(schema, database).transaction(work),
   })
 
-test('a sync whose check of one server fails keeps that server’s status and still settles the others', async () => {
+test('a sync whose check of one server fails keeps that server’s status, settles the others, then fails so the worker retries it', async () => {
   await connectAlice(aliceCookie)
   await database.$client`
     insert into tool_connections (workspace_id, user_id, connection_id, status)
     values (${acme}, ${alice}, 'connection-Slack', 'Connected')`
-  await runSync({
+  const sync = runSync({
     ...llmGateway,
     isToolSessionAuthorized: async () => {
       throw new Error('The tool server did not answer')
     },
   })
+  expect(String(await rejectionOf(sync))).toContain('The sign-ins to fake could not be checked with the gateway')
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
   expect(
     await database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`,
   ).toHaveLength(0)
+})
+
+test('a Disconnect whose sync cannot read the gateway leaves the connection for the retry to clear, instead of finishing with it Connected', async () => {
+  await connectAlice(aliceCookie)
+  const key = await virtualKeyOf(alice)
+  const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
+  if (!server) throw new Error('The fake tool server is not on the gateway')
+  for (const session of await llmGateway.toolSessions(key.id, server)) await llmGateway.removeToolSession(session.id)
+  const failedSync = runSync({
+    ...llmGateway,
+    toolSessions: async () => {
+      throw new Error('The gateway answered GET /api/mcp/sessions with 503')
+    },
+  })
+  expect(String(await rejectionOf(failedSync))).toContain('could not be checked with the gateway')
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+  await runSync(llmGateway)
+  expect(await connectionRows()).toEqual([])
 })
 
 test('a sync for a member who is no longer active writes nothing', async () => {

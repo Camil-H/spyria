@@ -25,6 +25,11 @@ export const NotOwnProfile = errorKind(
   () => 'A member can only change their own profile in their current workspace',
   ProfileError,
 )
+export const ToolConnectionsNotChecked = errorKind(
+  'tool_connections_not_checked',
+  (tools: string) => `The sign-ins to ${tools} could not be checked with the gateway`,
+  ProfileError,
+)
 export const ToolNotInCatalog = errorKind(
   'tool_not_in_catalog',
   (tool: string) => `${tool} is not in this workspace's tools catalogue`,
