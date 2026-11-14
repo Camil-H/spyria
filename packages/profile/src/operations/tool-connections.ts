@@ -134,9 +134,7 @@ export const syncToolConnections = async ({ transactor, gateway }: Dependencies)
     }
     return true
   })
-  const uncheckedNames = connections
-    .filter(({ id }) => checkedById.has(id) && !checkedById.get(id))
-    .map(({ name }) => name)
+  const uncheckedNames = connections.filter(({ id }) => !checkedById.get(id)).map(({ name }) => name)
   if (isActive && uncheckedNames.length > 0) throw new ToolConnectionsNotChecked(uncheckedNames.join(', '))
 }
 

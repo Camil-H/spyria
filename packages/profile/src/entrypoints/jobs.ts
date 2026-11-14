@@ -1,7 +1,8 @@
 import type { Job } from '@spyria/db/zero-queries'
-import { memberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
+import { log, memberId, type WorkspaceId, workspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
+import { ToolConnectionsNotChecked } from '../domain/errors.ts'
 import { profileJobTypes } from '../domain/llm-credential.ts'
 import { createTransactingZeroTransactor, memberContext } from '../integrations/zero-transactor.ts'
 import { runGatewaySync } from '../operations/sync-member-gateway-key.ts'
@@ -28,12 +29,18 @@ export const createProfileJobs = (
   },
   [profileJobTypes.toolServerRemoval]: ({ payload }: Job) =>
     gateway.removeToolServer(toolServerRemovalPayload.parse(payload).gatewayName),
-  [profileJobTypes.toolConnectionsSync]: ({ workspaceId: workspace, payload, transact }: Job) =>
-    syncToolConnections({
-      transactor: createTransactingZeroTransactor(
-        transact,
-        memberContext(workspaceId(workspace), toolConnectionsSyncPayload.parse(payload).memberId),
-      ),
-      gateway,
-    }),
+  [profileJobTypes.toolConnectionsSync]: async ({ workspaceId: workspace, payload, transact, isLastAttempt }: Job) => {
+    const member = memberContext(workspaceId(workspace), toolConnectionsSyncPayload.parse(payload).memberId)
+    await syncToolConnections({ transactor: createTransactingZeroTransactor(transact, member), gateway }).catch(
+      (error: unknown) => {
+        if (!(isLastAttempt && error instanceof ToolConnectionsNotChecked)) throw error
+        log.warn({
+          event: 'tool_connections.not_checked',
+          body: 'Tool sign-ins kept their stored status after their last check with the gateway failed',
+          attributes: { 'workspace.id': workspace, 'member.id': member.userId },
+          error,
+        })
+      },
+    )
+  },
 })
