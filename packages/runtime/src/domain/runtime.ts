@@ -195,3 +195,9 @@ export const haltStepOf = (runtime: Runtime) => {
   if (runtime.state === 'creating' || runtime.state === 'installing' || runtime.state === 'starting') return 'remove'
   return undefined
 }
+
+export const sandboxCleanupOf = (runtime: Runtime) => {
+  if (runtime.state === 'removing' || runtime.state === 'removed') return 'remove'
+  if (runtime.state === 'stopping' || runtime.state === 'stopped' || runtime.state === 'failed') return 'stop'
+  return undefined
+}
