@@ -211,6 +211,59 @@ test('a queued job wakes an idle worker at once instead of waiting for its next 
   await worker.stop()
 })
 
+test('a job waits while another job with its serial key runs, and is claimed once that one is no longer running', async () => {
+  const sandboxProvider = { remove: async () => {} } as unknown as SandboxProvider
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, serial_key, claimed_at) values
+      (${acme}, 'job-serial-running', 'runtime.discard', '{"runtimeId": "runtime-serial", "hostId": "host-serial"}',
+        now() + interval '1 hour', 1, 'running', 'serial-one', now()),
+      (${acme}, 'job-serial-queued', 'runtime.discard', '{"runtimeId": "runtime-serial", "hostId": "host-serial"}',
+        now(), 0, 'queued', 'serial-one')`
+  const worker = startWorker({ sandboxProvider })
+  await sleep(200)
+  expect(await jobRow('job-serial-queued')).toMatchObject({ state: 'queued', attempts: 0 })
+  await database.$client`update jobs set state = 'done', finished_at = now() where id = 'job-serial-running'`
+  await waitFor(async () => (await jobRow('job-serial-queued'))?.state === 'done', 2_000)
+  await worker.stop()
+})
+
+test('a second job queued under the serial key of a queued job is dropped, and a failing job whose key has a newer queued job fails at once instead of retrying', async () => {
+  const discardPayload = JSON.stringify({ runtimeId: 'runtime-serial-two', hostId: 'host-serial-two' })
+  const queueUnderKey = (id: string, runAt: string) =>
+    database.$client`
+      insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, serial_key) values
+        (${acme}, ${id}, 'runtime.discard', ${discardPayload}::jsonb, ${runAt}::timestamptz, 0, 'queued', 'serial-two')
+      on conflict do nothing`
+  await queueUnderKey('job-serial-failing', 'now')
+  await queueUnderKey('job-serial-dropped', 'now')
+  expect(await jobRow('job-serial-dropped')).toBeUndefined()
+  let failRemoval = () => {}
+  const removalFailed = new Promise<void>((resolve) => {
+    failRemoval = resolve
+  })
+  const sandboxProvider = {
+    remove: async () => {
+      await removalFailed
+      throw new Error('The host refused the removal')
+    },
+  } as unknown as SandboxProvider
+  const logged = captureLogs()
+  const worker = startWorker({ sandboxProvider, retryDelayMilliseconds: 60_000 })
+  try {
+    await waitFor(async () => (await jobRow('job-serial-failing'))?.state === 'running', 2_000)
+    await queueUnderKey('job-serial-next', '2999-01-01')
+    expect(await jobRow('job-serial-next')).toMatchObject({ state: 'queued' })
+    failRemoval()
+    await waitFor(async () => (await jobRow('job-serial-failing'))?.state !== 'running', 2_000)
+    expect(await jobRow('job-serial-failing')).toMatchObject({ state: 'failed', attempts: 1 })
+  } finally {
+    failRemoval()
+    await worker.stop()
+    logged.restore()
+    await database.$client`delete from jobs where serial_key = 'serial-two'`
+  }
+})
+
 test('the session sweep runs without a log line, deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
   await database.$client`
     insert into sessions (workspace_id, id, user_id, created_at, expires_at) values

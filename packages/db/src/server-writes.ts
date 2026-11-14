@@ -201,17 +201,18 @@ const traceContextOf = (delayMilliseconds: number) => {
 
 export const enqueueJob = (
   tx: Transaction,
-  job: { workspaceId: string; type: string; payload: object; delayMilliseconds: number },
+  job: { workspaceId: string; type: string; payload: object; delayMilliseconds: number; serialKey?: string },
 ) =>
   onServer(
     tx,
-    `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued') on conflict do nothing`,
+    `insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, serial_key) values ($1, $2, $3, $4::jsonb, now() + make_interval(secs => $5::double precision / 1000), 0, 'queued', $6) on conflict do nothing`,
     [
       job.workspaceId,
       crypto.randomUUID(),
       job.type,
       JSON.stringify({ ...job.payload, ...traceContextOf(job.delayMilliseconds) }),
       job.delayMilliseconds,
+      job.serialKey ?? null,
     ],
   )
 
