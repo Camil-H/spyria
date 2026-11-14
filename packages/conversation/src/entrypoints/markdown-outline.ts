@@ -1,6 +1,6 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
 
-export type OutlinedNode = {
+type OutlinedNode = {
   type: string
   identifier?: string
   children?: OutlinedNode[]
