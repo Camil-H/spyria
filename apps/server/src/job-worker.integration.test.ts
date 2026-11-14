@@ -155,8 +155,16 @@ describe('a job whose worker stopped while running it', () => {
 
   test('a sweep taken over after scheduling its next run fails without a retry when it throws again, leaving the next run queued', async () => {
     await database.$client`
-      insert into audit_settings (workspace_id, retention_days) values (${globex}, 2147483647)
+      insert into audit_settings (workspace_id, retention_days) values (${globex}, 30)
       on conflict (workspace_id) do update set retention_days = excluded.retention_days`
+    await database.$client.unsafe(
+      `create function refuse_audit_sweep() returns trigger language plpgsql
+       as $ begin raise exception 'The audit sweep is refused'; end $`,
+    )
+    await database.$client.unsafe(
+      `create trigger refuse_audit_sweep before delete on workspace_events
+       for each statement execute function refuse_audit_sweep()`,
+    )
     await addAgentPromptJob('job-audit-sweep-taken-over', 'unused', {
       ...abandoned,
       workspaceId: globex,
@@ -178,9 +186,11 @@ describe('a job whose worker stopped while running it', () => {
     expect(logged.events.filter(({ event }) => event === 'job.record_failed')).toEqual([])
     expect(await jobRow('job-audit-sweep-taken-over')).toMatchObject({
       attempts: 2,
-      lastError: expect.stringContaining('22008'),
+      lastError: expect.stringContaining('P0001'),
     })
     expect(await jobRow('job-audit-sweep-next')).toMatchObject({ state: 'queued', attempts: 0 })
+    await database.$client.unsafe('drop trigger refuse_audit_sweep on workspace_events')
+    await database.$client.unsafe('drop function refuse_audit_sweep')
     await database.$client`delete from audit_settings where workspace_id = ${globex}`
     await database.$client`delete from jobs where workspace_id = ${globex} and type = 'audit.sweep'`
   })
