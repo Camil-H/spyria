@@ -181,6 +181,9 @@ export const startJobWorker = (
          where (workspace_id, id) = (
            select workspace_id, id from jobs
            where state in ('queued', 'running') and run_at <= now() and type = any($1::text[])
+             and (serial_key is null or not exists(select 1 from jobs as running
+               where running.workspace_id = jobs.workspace_id and running.serial_key = jobs.serial_key
+                 and running.state = 'running' and running.id <> jobs.id))
              and (type = any($3::text[]) or not exists(select 1 from workspaces
                where workspaces.workspace_id = jobs.workspace_id and workspaces.deleted_at is not null))
            order by run_at limit 1 for update skip locked)
@@ -298,7 +301,10 @@ export const startJobWorker = (
       const [recorded] = await database.$client.unsafe<{ isFailed: boolean }[]>(
         `with outcome as (
            select $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
-             where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued')) as is_failed)
+             where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued'))
+             or exists(select 1 from jobs as this_run join jobs as next_run
+               on next_run.workspace_id = this_run.workspace_id and next_run.serial_key = this_run.serial_key
+               where this_run.workspace_id = $1 and this_run.id = $2 and next_run.state = 'queued') as is_failed)
          update jobs set state = case when is_failed then 'failed' else 'queued' end, last_error = $5,
            attempts = attempts + 1, run_at = now() + make_interval(secs => $6::double precision / 1000),
            finished_at = case when is_failed then now() end
@@ -351,7 +357,11 @@ export const startJobWorker = (
             error,
           }),
         )
-        .finally(() => runningJobs.delete(running))
+        .finally(() => {
+          runningJobs.delete(running)
+          isJobQueuedSinceClaim = true
+          wakeUp()
+        })
       runningJobs.add(running)
     }
     await Promise.all(runningJobs)
@@ -380,11 +390,15 @@ export const listFailedJobs = (database: Database) =>
 export const retryFailedJobs = async (database: Database, jobIdOrAll: string) => {
   const retried = await database.$client<{ id: string; isRequeued: boolean }[]>`
     with matched as (
-      select workspace_id, id, (type like '%.sweep' or type = 'usage.sync') and (
+      select workspace_id, id, ((type like '%.sweep' or type = 'usage.sync') and (
         exists(select 1 from jobs as queued
           where queued.workspace_id = jobs.workspace_id and queued.type = jobs.type and queued.state = 'queued')
         or row_number() over (partition by workspace_id, type order by finished_at desc nulls last, id) > 1
-      ) as is_superseded
+      )) or (serial_key is not null and (
+        exists(select 1 from jobs as queued
+          where queued.workspace_id = jobs.workspace_id and queued.serial_key = jobs.serial_key and queued.state = 'queued')
+        or row_number() over (partition by workspace_id, serial_key order by finished_at desc nulls last, id) > 1
+      )) as is_superseded
       from jobs where state = 'failed' and (${jobIdOrAll} = 'all' or id = ${jobIdOrAll})),
     superseded as (
       delete from jobs using matched
