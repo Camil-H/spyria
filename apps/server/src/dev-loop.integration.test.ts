@@ -471,23 +471,25 @@ test('As a chat owner, a quality gates job run again after the loop moved on, fo
   expect(reviewing).toMatchObject({ position: 1, outcomes: ['passed', null], checksRunId: null })
   const [{ id: loopId } = {}] = await database.$client`
     select id from messages where chat_id = ${id} and step->>'type' = 'dev_loop' order by seq desc limit 1`
-  for (const [jobId, type, payload] of [
-    ['job-after-earlier-turn', 'dev_loop.after_turn', { loopId, promptId: reviewing?.startPromptId }],
-    ['job-poll-judged-checks', 'dev_loop.poll_checks', { loopId, checksRunId: quickRunId }],
-  ] as const)
+  const runAgain = async (jobId: string, type: string, payload: object) => {
     await database.$client`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-      values (${acme}, ${jobId}, ${type}, ${JSON.stringify(payload)}::jsonb, now(), 1, 'queued')`
-  await waitFor(async () => {
-    const states = await database.$client`
-      select state from jobs where id in ('job-after-earlier-turn', 'job-poll-judged-checks')`
-    return states.every(({ state }) => state === 'done')
-  })
+      values (${acme}, ${jobId}, ${type}, ${JSON.stringify({ loopId, ...payload })}::jsonb, now(), 1, 'queued')`
+    await waitFor(async () => (await database.$client`select state from jobs where id = ${jobId}`)[0]?.state === 'done')
+  }
+  await runAgain('job-after-earlier-turn', 'dev_loop.after_turn', { promptId: reviewing?.startPromptId })
   expect((await loopOf(id))?.step).toEqual(reviewing ?? {})
 
   await stack.holds.release('review')
   await loopStateIs(id, 'done')
   expect((await loopOf(id))?.step).toMatchObject({ outcomes: ['passed', 'passed'] })
+
+  await database.$client`
+    update messages set step = step || '{"state": "running", "position": 0, "checksRunId": "run-current"}'::jsonb
+    where id = ${loopId}`
+  const runningLaterChecks = (await loopOf(id))?.step
+  await runAgain('job-poll-judged-checks', 'dev_loop.poll_checks', { checksRunId: quickRunId })
+  expect((await loopOf(id))?.step).toEqual(runningLaterChecks ?? {})
 })
 
 const moveMainTotals = (total: number) =>
