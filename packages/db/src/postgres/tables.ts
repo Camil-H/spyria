@@ -626,21 +626,16 @@ export const connectionAccess = table(
   {
     ...tenant,
     connectionId: text().notNull(),
-    id: text().notNull(),
-    roleId: text(),
-    userId: text(),
+    roleId: text().notNull(),
     level: text().$type<AccessLevel>().notNull(),
     toolChanges: jsonb().$type<Record<string, boolean>>().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.connectionId, table.id] }),
-    index().on(table.workspaceId, table.userId),
-    check('connection_access_subject', sql`num_nonnulls(${table.roleId}, ${table.userId}) = 1`),
+    primaryKey({ columns: [table.workspaceId, table.connectionId, table.roleId] }),
     check('connection_access_level', sql`${table.level} in ('none', 'read', 'write')`),
     tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
       'cascade',
     ),
-    memberReference(table, table.userId),
   ],
 )
 
@@ -1046,12 +1041,6 @@ export const relations = defineRelations(
       },
       machineCounts: {
         memberships: r.many.memberships({ from: r.machineCounts.workspaceId, to: r.memberships.workspaceId }),
-      },
-      connectionAccess: {
-        memberships: r.many.memberships({
-          from: r.connectionAccess.workspaceId,
-          to: r.memberships.workspaceId,
-        }),
       },
       chats: {
         participants: r.many.chatParticipants({

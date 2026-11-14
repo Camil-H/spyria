@@ -25,11 +25,13 @@ import { getWorkspacePermissions } from '../queries/get-workspace-permissions.ts
 import {
   type ListedWorkspaceConnection,
   listGitHubToolAccess,
+  listToolRoles,
   listWorkspaceConnections,
 } from '../queries/list-workspace-connections.ts'
 import { useProfileCommands } from './providers.tsx'
-import { ServerAccessGrid } from './ServerAccessGrid.tsx'
+import { AllToolsCheckbox, RoleHeading, ServerAccessGrid } from './ServerAccessGrid.tsx'
 import { ToolList, toolCountsOf } from './ToolList.tsx'
+import { ToolTable } from './ToolTable.tsx'
 
 type Editing = Pick<ListedWorkspaceConnection, 'name' | 'url' | 'headerName' | 'signIn'>
 
@@ -377,24 +379,37 @@ const featureSettingOf = (workspaceId: WorkspaceId, feature: string | null, mayM
 
 const BuiltInToolsCard = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const mayManageGitHub = useMayManageGitHub(workspaceId)
+  const roles = useQuery(listToolRoles, workspaceId)
   return (
     <ServerCard
       name="Spyria"
-      status={<StatusBadge tone="ok">{`${builtInTools.length} tools`}</StatusBadge>}
-      summary="Built in · every agent has them"
+      status={<StatusBadge tone="ok">{toolCountsOf(builtInTools)}</StatusBadge>}
+      summary="Built in · every role has them"
     >
-      <p className="text-muted">Nothing to set here: their settings live with their feature.</p>
-      <ul aria-label="Built-in tools" className="grid md:grid-cols-2">
-        {builtInTools.map((tool) => (
-          <li key={tool.name} className="flex items-start justify-between gap-3 py-2">
-            <span className="flex min-w-0 flex-col">
-              <span className="font-mono text-xs">{tool.name}</span>
-              <span className="text-xs text-muted">{tool.summary}</span>
-            </span>
-            {featureSettingOf(workspaceId, tool.feature, mayManageGitHub)}
-          </li>
-        ))}
-      </ul>
+      <section aria-label="Access to Spyria" className="flex flex-col gap-3">
+        <h4 className="text-xs font-semibold uppercase text-muted">Access by role</h4>
+        <ToolTable
+          serverName="Spyria"
+          tools={builtInTools}
+          detailOf={(tool) => featureSettingOf(workspaceId, tool.feature, mayManageGitHub)}
+          columns={roles.map((role) => ({
+            key: role.id,
+            heading: (shownTools, kind) => (
+              <RoleHeading name={role.name}>
+                <AllToolsCheckbox
+                  label={`All ${kind.toLowerCase()} tools shown for ${role.name}, always given`}
+                  allowedCount={shownTools.length}
+                  toolCount={shownTools.length}
+                  disabled
+                />
+              </RoleHeading>
+            ),
+            cell: (tool) => (
+              <input type="checkbox" aria-label={`${tool.name} for ${role.name}, always given`} checked disabled />
+            ),
+          }))}
+        />
+      </section>
     </ServerCard>
   )
 }

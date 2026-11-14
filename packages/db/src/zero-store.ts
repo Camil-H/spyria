@@ -299,10 +299,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     }),
   )
   const workspaceConnectionsOf = mappedRows((connection: ZeroRows['workspaceConnections'][number]) => connection)
-  const connectionAccessOf = mappedRows(({ userId, ...access }: ZeroRows['connectionAccess'][number]) => ({
-    ...access,
-    memberId: userId,
-  }))
+  const connectionAccessOf = mappedRows((access: ZeroRows['connectionAccess'][number]) => access)
   const toolApprovalsOf = mappedRows(withMemberId<ZeroRows['toolApprovals'][number]>)
   const runtimeHostsOf = mappedRows(
     ({ lastSeenAt, createdBy, createdAt, removedAt, protocolVersion, ...host }: ZeroRows['runtimeHosts'][number]) => ({

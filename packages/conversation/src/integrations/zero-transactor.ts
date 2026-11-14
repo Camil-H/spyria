@@ -574,10 +574,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         )
         return {
           holder: membership && { memberId: memberOfChat, roleId: membership.role },
-          accessRows: accessRows.map(({ userId, ...access }) => ({
-            ...access,
-            memberId: userId === null ? null : memberId(userId),
-          })),
+          accessRows,
           approvals: approvals && {
             connectionId: githubConnectionId,
             serverApproval: approvals.serverApproval,
