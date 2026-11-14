@@ -1,4 +1,4 @@
-import { SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
+import { ServerUnreachableScreen, SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
 import {
   createWorkspaceOfAccount,
@@ -84,5 +84,12 @@ const showSignIn = async (notice?: string) => {
   )
 }
 
-const opened = await openApp()
-if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)
+const boot = async () => {
+  const opened = await openApp()
+  if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)
+}
+
+await boot().catch((error: unknown) => {
+  console.error(error)
+  root.render(<ServerUnreachableScreen />)
+})

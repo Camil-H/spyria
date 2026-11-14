@@ -4,6 +4,7 @@ export { GitHubSection, useIsGitHubConfigured } from './entrypoints/GitHubSectio
 export { MembersAndRolesSection } from './entrypoints/MembersAndRolesSection.tsx'
 export { NoChatSelected } from './entrypoints/NoChatSelected.tsx'
 export { WorkspaceProvider } from './entrypoints/providers.tsx'
+export { ServerUnreachableScreen } from './entrypoints/ServerUnreachableScreen.tsx'
 export { SetupCommandsSection } from './entrypoints/SetupCommandsSection.tsx'
 export { SignInScreen } from './entrypoints/SignInScreen.tsx'
 export { SignInSection } from './entrypoints/SignInSection.tsx'
