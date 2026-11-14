@@ -17,6 +17,7 @@ import {
   asMember,
   bob,
   captureConsole,
+  captureLogs,
   connectAlice,
   connectionPath,
   connectionRows,
@@ -130,11 +131,11 @@ test('every refresh, check and Disconnect only queues the member’s sync, and a
   await toolConnectionSyncsSettled()
 })
 
-const runSync = (toolGateway: typeof llmGateway, memberId: string = alice) =>
+const runSync = (toolGateway: typeof llmGateway, memberId: string = alice, isLastAttempt = false) =>
   createProfileJobs(toolGateway)['profile.tool-connections-sync']({
     workspaceId: acme,
     payload: { memberId },
-    isLastAttempt: false,
+    isLastAttempt,
     transact: (work) => zeroDrizzle(schema, database).transaction(work),
   })
 
@@ -154,6 +155,30 @@ test('a sync whose check of one server fails keeps that server’s status, settl
   expect(
     await database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`,
   ).toHaveLength(0)
+})
+
+test('the last attempt of a sync that still cannot check a server ends with a warning instead of a failed job, keeping the stored status', async () => {
+  await connectAlice(aliceCookie)
+  const logged = captureLogs()
+  try {
+    await runSync(
+      {
+        ...llmGateway,
+        toolSessions: async () => {
+          throw new Error('The gateway answered GET /api/mcp/sessions with 503')
+        },
+      },
+      alice,
+      true,
+    )
+    expect(logged.events.find(({ event }) => event === 'tool_connections.not_checked')).toMatchObject({
+      severity: 'warn',
+      attributes: { 'workspace.id': acme, 'member.id': alice },
+    })
+  } finally {
+    logged.restore()
+  }
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
 })
 
 test('a Disconnect whose sync cannot read the gateway leaves the connection for the retry to clear, instead of finishing with it Connected', async () => {
