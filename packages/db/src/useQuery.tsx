@@ -1,7 +1,7 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { createContext, type ReactNode, use, useEffect, useState, useSyncExternalStore } from 'react'
 import type { DraftRow, Snapshot } from './schema.ts'
-import type { ScopedQueryName, Store } from './zero-store.ts'
+import type { ScopedQueryName, ScopedStatus, Store } from './zero-store.ts'
 
 const isContainer = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
@@ -89,6 +89,9 @@ export const openingSinceOf = (now: number) =>
 
 const oldestSeqOf = (roots: readonly object[]) => Math.min(...roots.map((root) => (root as { seq: number }).seq))
 
+export const hasChatWindowOf = (roots: ScopedStatus | undefined, hasShownWindow: boolean) =>
+  roots?.isComplete === true || roots?.isLastComplete === true || hasShownWindow
+
 export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const [shown, setShown] = useState(() => ({
     chatId,
@@ -106,10 +109,7 @@ export const useChatMessages = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const hasEarlier = rowCount === limit || (since !== unbounded && (earlierRoot?.rows.length ?? 0) > 0)
   const isComplete = roots?.isComplete === true && (since === unbounded || earlierRoot?.isComplete === true)
   const oldestSeq = roots?.isComplete && rowCount > 0 ? oldestSeqOf(roots.rows) : undefined
-  const hasWindow =
-    roots?.isComplete === true ||
-    roots?.isLastComplete === true ||
-    (isShownChat && shown.oldestSeq !== Number.POSITIVE_INFINITY)
+  const hasWindow = hasChatWindowOf(roots, isShownChat && shown.oldestSeq !== Number.POSITIVE_INFINITY)
   const loadEarlier = () => setShown({ ...shown, chatId, since: unbounded, limit: rowCount + chatPageSize })
   if (!isShownChat) setShown({ chatId, limit, since, oldestSeq: Number.POSITIVE_INFINITY })
   else if (isComplete && rowCount === 0 && hasEarlier) loadEarlier()

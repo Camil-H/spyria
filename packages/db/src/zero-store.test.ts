@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test'
 import { chatId, messageId, workspaceId } from '@spyria/kernel'
 import { alice } from './mock-data.ts'
-import { createSnapshotBuilder, createZeroStore, scopedStatusOf, windowMessagesIn } from './zero-store.ts'
+import {
+  createChatWindowCache,
+  createSnapshotBuilder,
+  createZeroStore,
+  scopedStatusOf,
+  windowMessagesIn,
+} from './zero-store.ts'
 
 const storageOf = (items: Map<string, string>): Storage => ({
   get length() {
@@ -239,4 +245,49 @@ test('a chat window waiting on zero-cache shows its last complete rows under the
   expect(scopedStatusOf([sent], 'complete', lastComplete)).toEqual({ isComplete: true, rows: [sent] })
   expect(scopedStatusOf([], 'error', lastComplete)).toEqual({ isComplete: false, rows: [] })
   expect(scopedStatusOf([sent], 'unknown', undefined)).toEqual({ isComplete: false, rows: [sent] })
+})
+
+const acme = { workspaceId: workspaceId('workspace-acme'), name: 'chatMessages' as const }
+const globex = { workspaceId: workspaceId('workspace-globex'), name: 'chatMessages' as const }
+
+test('a chat window answered by zero-cache is shown again while the same chat reopens, and only for the chat messages query', () => {
+  const chatWindows = createChatWindowCache()
+  const answered = [messageOf(1), messageOf(2)]
+  chatWindows.statusOf('acme/research', acme, answered, 'complete')
+  expect(chatWindows.statusOf('acme/research', acme, [], 'unknown')).toEqual({
+    isComplete: false,
+    isLastComplete: true,
+    rows: answered,
+  })
+  expect(chatWindows.statusOf('acme/other', acme, [], 'unknown')).toEqual({ isComplete: false, rows: [] })
+  const usage = { workspaceId: workspaceId('workspace-acme'), name: 'chatUsage' as const }
+  chatWindows.statusOf('acme/usage', usage, answered, 'complete')
+  expect(chatWindows.statusOf('acme/usage', usage, [], 'unknown')).toEqual({ isComplete: false, rows: [] })
+})
+
+test('a chat window whose query fails is forgotten, so a refused chat never shows its old messages', () => {
+  const chatWindows = createChatWindowCache()
+  chatWindows.statusOf('acme/research', acme, [messageOf(1)], 'complete')
+  expect(chatWindows.statusOf('acme/research', acme, [], 'error')).toEqual({ isComplete: false, rows: [] })
+  expect(chatWindows.statusOf('acme/research', acme, [], 'unknown')).toEqual({ isComplete: false, rows: [] })
+})
+
+test('only the most recently answered chat windows are kept', () => {
+  const chatWindows = createChatWindowCache(2)
+  chatWindows.statusOf('acme/first', acme, [messageOf(1)], 'complete')
+  chatWindows.statusOf('acme/second', acme, [messageOf(2)], 'complete')
+  chatWindows.statusOf('acme/first', acme, [messageOf(1)], 'complete')
+  chatWindows.statusOf('acme/third', acme, [messageOf(3)], 'complete')
+  expect(chatWindows.statusOf('acme/second', acme, [], 'unknown').isLastComplete).toBeUndefined()
+  expect(chatWindows.statusOf('acme/first', acme, [], 'unknown').isLastComplete).toBe(true)
+  expect(chatWindows.statusOf('acme/third', acme, [], 'unknown').isLastComplete).toBe(true)
+})
+
+test('closing a workspace forgets its chat windows and keeps those of the other workspaces', () => {
+  const chatWindows = createChatWindowCache()
+  chatWindows.statusOf('acme/research', acme, [messageOf(1)], 'complete')
+  chatWindows.statusOf('globex/research', globex, [messageOf(2)], 'complete')
+  chatWindows.forgetWorkspace(workspaceId('workspace-acme'))
+  expect(chatWindows.statusOf('acme/research', acme, [], 'unknown')).toEqual({ isComplete: false, rows: [] })
+  expect(chatWindows.statusOf('globex/research', globex, [], 'unknown').isLastComplete).toBe(true)
 })

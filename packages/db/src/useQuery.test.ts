@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { chatId, workspaceId } from '@spyria/kernel'
 import { alice, createMockSnapshot } from './mock-data.ts'
 import type { DraftRow, Snapshot } from './schema.ts'
-import { createQueryCache, openingSinceOf } from './useQuery.tsx'
+import { createQueryCache, hasChatWindowOf, openingSinceOf } from './useQuery.tsx'
 
 const runs: string[] = []
 const chatNamesIn = (workspaceId: string) => (snapshot: Snapshot) => {
@@ -48,4 +48,12 @@ test('a chat opens on the week before now, from the start of that hour so the wi
   const now = Date.parse('2026-11-10T20:42:17.123Z')
   expect(new Date(openingSinceOf(now)).toISOString()).toBe('2026-11-03T20:00:00.000Z')
   expect(openingSinceOf(Date.parse('2026-11-10T20:59:59.999Z'))).toBe(openingSinceOf(now))
+})
+
+test('a chat shows its window once zero-cache answers, while its last answered window is kept, or once it has shown one', () => {
+  expect(hasChatWindowOf(undefined, false)).toBe(false)
+  expect(hasChatWindowOf({ isComplete: false, rows: [] }, false)).toBe(false)
+  expect(hasChatWindowOf({ isComplete: true, rows: [] }, false)).toBe(true)
+  expect(hasChatWindowOf({ isComplete: false, isLastComplete: true, rows: [] }, false)).toBe(true)
+  expect(hasChatWindowOf({ isComplete: false, rows: [] }, true)).toBe(true)
 })
