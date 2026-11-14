@@ -43,7 +43,7 @@ import {
   recordToolCall,
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
-import { publishBranch, recordPullRequest } from '../operations/publish-branch.ts'
+import { applyPullRequestEvent, publishBranch } from '../operations/publish-branch.ts'
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
@@ -200,8 +200,8 @@ export const createAgentHandlers = ({
       githubToolPolicy(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
       runGitAction(dependenciesOf(input.chat.workspaceId), input),
-    recordPullRequest: (input: Parameters<typeof recordPullRequest>[1]) =>
-      recordPullRequest(dependenciesOf(input.chat.workspaceId), input),
+    applyPullRequestEvent: (workspaceId: WorkspaceId, input: Parameters<typeof applyPullRequestEvent>[1]) =>
+      applyPullRequestEvent(dependenciesOf(workspaceId), input),
     wakeWorkspace: (chat: AgentChat, member: MemberId) =>
       wakeWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member }),
     answerQuestion: async (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>
