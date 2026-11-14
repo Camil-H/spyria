@@ -5,9 +5,9 @@ import { iconButtonClass } from './classes.ts'
 type ToastTone = 'success' | 'info' | 'error'
 
 const toneLooks = {
-  success: { Icon: CircleCheck, iconClass: 'text-agent-done', barClass: 'bg-agent-done' },
+  success: { Icon: CircleCheck, iconClass: 'text-success', barClass: 'bg-success' },
   info: { Icon: Info, iconClass: 'text-link', barClass: 'bg-accent' },
-  error: { Icon: CircleAlert, iconClass: 'text-agent-error', barClass: 'bg-agent-error' },
+  error: { Icon: CircleAlert, iconClass: 'text-danger', barClass: 'bg-danger' },
 } as const
 
 export const Toast = ({

@@ -14,6 +14,7 @@ import {
   ErrorMessage,
   fieldClass,
   labelClass,
+  overlineClass,
   smallGhostButtonClass,
   tabTriggerClass,
   useGuardedAction,
@@ -70,7 +71,7 @@ export const ServerAccessGrid = ({ target, connection }: { target: Target; conne
   const searched = search.trim().toLowerCase()
   return (
     <section aria-label={`Access to ${connection.name}`} className="flex flex-col gap-3">
-      <h4 className="text-xs font-semibold uppercase text-muted">Access</h4>
+      <h4 className={overlineClass}>Access</h4>
       {groups.length === 0 && <p className="text-sm text-muted">This server lists no tools</p>}
       <Root
         value={openKind}

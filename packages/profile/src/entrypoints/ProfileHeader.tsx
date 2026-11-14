@@ -10,7 +10,7 @@ export const ProfileHeader = ({ workspaceId, memberId }: { workspaceId: Workspac
     <div className="flex items-center gap-4">
       <MemberAvatar name={profile.displayName} image={profile.avatar} size={56} />
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-lg font-semibold">{profile.displayName}</span>
+        <span className="truncate text-heading">{profile.displayName}</span>
         <span className="truncate text-sm text-muted">{profile.email}</span>
       </div>
     </div>

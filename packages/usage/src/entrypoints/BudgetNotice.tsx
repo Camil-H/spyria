@@ -24,8 +24,8 @@ export const BudgetNotice = ({ workspaceId, memberId }: { workspaceId: Workspace
 }
 
 const barClassOf = (percent: number) => {
-  if (percent >= 100) return 'bg-red-500'
-  return percent >= 80 ? 'bg-yellow-500' : 'bg-accent'
+  if (percent >= 100) return 'bg-danger'
+  return percent >= 80 ? 'bg-warning' : 'bg-accent'
 }
 
 export const BudgetBar = ({ label, progress }: { label: string; progress: BudgetProgress }) => {

@@ -105,7 +105,7 @@ const HostCapacity = ({ host }: { host: RuntimeHostRow }) => {
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="flex items-center gap-2">
         <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-selected">
-          <span className="block h-full bg-agent-done" style={{ width: `${usedShare * 100}%` }} />
+          <span className="block h-full bg-success" style={{ width: `${usedShare * 100}%` }} />
         </span>
         <span>
           {host.runningRuntimes} / {host.capacity.cap} runtimes

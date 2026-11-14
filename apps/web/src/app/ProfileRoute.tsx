@@ -80,7 +80,7 @@ const ProfileRoute = () => {
     )
   return (
     <div className={`flex flex-col gap-8 ${pagePaddingClass}`}>
-      <h1 className="text-2xl font-semibold">Profile</h1>
+      <h1 className="text-title">Profile</h1>
       <ProfileHeader workspaceId={workspaceId} memberId={memberId} />
       <ChecklistBlock workspaceId={workspaceId} scope="member" />
       <CardGrid basePath={profilePath} cards={profileCards} statusOf={(path) => statuses[path]} />

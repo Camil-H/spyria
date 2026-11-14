@@ -19,7 +19,7 @@ export const SignedOutScreen = ({
   )
   return (
     <main className={fullScreenClass}>
-      <p className="text-xl font-medium">You are signed out of {signedOutName}</p>
+      <p className="text-heading">You are signed out of {signedOutName}</p>
       <button type="button" className={buttonClass} onClick={() => signIn(workspaceId)}>
         Sign in
       </button>
