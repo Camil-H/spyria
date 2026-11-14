@@ -60,6 +60,8 @@ export const syncMemberGatewayKey = (
     } catch (error) {
       if (savedId !== virtualKeyId || error instanceof MemberNotFound) await gateway.removeVirtualKey(savedId)
       else await gateway.saveVirtualKey({ id: virtualKeyId, name, keys })
+      if (virtualKeyId === undefined)
+        await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(null))
       throw error
     }
     await grantTools()
