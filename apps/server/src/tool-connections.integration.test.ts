@@ -30,6 +30,7 @@ import {
   testAuthSettings,
   testSecretsKeyring,
   textOf,
+  toolConnectionVersionOf,
   virtualKeyOf,
   waitFor,
   whoami,
@@ -77,43 +78,81 @@ test('Connect grants the server on the member key, runs the consent through Spyr
   expect(await connectionRows()).toEqual([])
 })
 
+const holdingAliceToolConnections = async (
+  whileHeld: () => Promise<void>,
+  storedStatus: string | null,
+  readThenStore: () => ReturnType<typeof asMember>,
+) => {
+  let stored: ReturnType<typeof asMember> | undefined
+  await database.$client.begin(async (held) => {
+    const [blocking] = await held<{ pid: number }[]>`select pg_backend_pid() as pid`
+    await held`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
+    await held`select pg_advisory_xact_lock(hashtext('tool_connections/' || ${acme} || '/' || ${alice}))`
+    stored = readThenStore()
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
+    await whileHeld()
+    await held`
+      delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`
+    if (storedStatus)
+      await held`
+        insert into tool_connections (workspace_id, user_id, connection_id, status)
+        values (${acme}, ${alice}, 'connection-fake', ${storedStatus})`
+    await held`
+      insert into tool_connection_versions (workspace_id, user_id, version) values (${acme}, ${alice}, 1)
+      on conflict (workspace_id, user_id) do update set version = tool_connection_versions.version + 1`
+  })
+  return stored
+}
+const refreshAlice = () => asMember(alice, 'POST', connectionPath('refresh'))
+const checkAlice = () => asMember(alice, 'POST', '/api/tool-connections/check')
+
 test.each([
-  ['a refresh', () => asMember(alice, 'POST', connectionPath('refresh')), { status: 200, body: '{"status":null}' }],
-  ['a check', () => asMember(alice, 'POST', '/api/tool-connections/check'), { status: 204, body: '' }],
+  ['a refresh', refreshAlice, { status: 200, body: '{"status":null}' }],
+  ['a check', checkAlice, { status: 204, body: '' }],
 ])(
-  '%s that read the gateway before a Disconnect stores nothing once the Disconnect commits, instead of showing Connected again',
+  '%s that read the gateway before a Disconnect reads it again once the Disconnect commits, instead of showing Connected again',
   async (_, readThenStore, answer) => {
     await connectAlice(aliceCookie)
     const key = await virtualKeyOf(alice)
     const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
     if (!server) throw new Error('The fake tool server is not on the gateway')
-    let stored: ReturnType<typeof asMember> | undefined
-    await database.$client.begin(async (disconnect) => {
-      const [blocking] = await disconnect<{ pid: number }[]>`select pg_backend_pid() as pid`
-      await disconnect`select pg_advisory_xact_lock(hashtext('tool_connections/' || ${acme} || '/' || ${alice}))`
-      stored = readThenStore()
-      await waitFor(() => isBlockedBy(database, blocking?.pid))
-      for (const session of await llmGateway.toolSessions(key.id, server))
-        await llmGateway.removeToolSession(session.id)
-      await disconnect`
-        insert into tool_disconnects (workspace_id, user_id, count) values (${acme}, ${alice}, 1)
-        on conflict (workspace_id, user_id) do update set count = tool_disconnects.count + 1`
-      await disconnect`
-        delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`
-    })
+    const stored = await holdingAliceToolConnections(
+      async () => {
+        for (const session of await llmGateway.toolSessions(key.id, server))
+          await llmGateway.removeToolSession(session.id)
+      },
+      null,
+      readThenStore,
+    )
     expect(await stored).toEqual(answer)
     expect(await connectionRows()).toEqual([])
   },
 )
 
-test('Disconnect counts itself for the member, so a refresh or check that read the gateway before it knows to store nothing', async () => {
-  const disconnectsOf = async () =>
-    (await database.$client`select count from tool_disconnects where workspace_id = ${acme} and user_id = ${alice}`)[0]
-      ?.count ?? 0
+test('a check that read the gateway before a newer refresh stored Connected reads it again instead of clearing the connection', async () => {
+  const started = await asMember(alice, 'POST', connectionPath('connect'))
+  expect(started.status).toBe(200)
+  const stored = await holdingAliceToolConnections(
+    async () => {
+      expect((await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, aliceCookie)).page).toContain(
+        '"connected":true',
+      )
+    },
+    'Connected',
+    checkAlice,
+  )
+  expect(await stored).toEqual({ status: 204, body: '' })
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+})
+
+test('a refresh that stores a new status and Disconnect move the member’s tool connection version, and a refresh that finds no change leaves it', async () => {
+  const before = await toolConnectionVersionOf(alice)
   await connectAlice(aliceCookie)
-  const before = await disconnectsOf()
+  expect(await toolConnectionVersionOf(alice)).toBe(before + 1)
+  expect(await refreshAlice()).toEqual({ status: 200, body: JSON.stringify({ status: 'Connected' }) })
+  expect(await toolConnectionVersionOf(alice)).toBe(before + 1)
   expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
-  expect(await disconnectsOf()).toBe(before + 1)
+  expect(await toolConnectionVersionOf(alice)).toBe(before + 2)
 })
 
 test('a refused consent shows the failure page and creates no connection', async () => {

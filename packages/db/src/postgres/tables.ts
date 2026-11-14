@@ -674,12 +674,12 @@ export const toolConnections = table(
   ],
 )
 
-export const toolDisconnects = table(
-  'tool_disconnects',
+export const toolConnectionVersions = table(
+  'tool_connection_versions',
   {
     ...tenant,
     userId: text().notNull(),
-    count: integer().notNull(),
+    version: integer().notNull(),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )

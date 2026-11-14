@@ -1,7 +1,6 @@
 import type { Transaction } from '@rocicorp/zero'
 import {
   appendWorkspaceEvent,
-  countToolDisconnect,
   deleteGitHubConnection,
   enqueueJob,
   gatewayKeyRefOf,
@@ -9,9 +8,10 @@ import {
   insertLlmCredential,
   lockMembership,
   lockMemberToolConnections,
+  moveToolConnectionVersion,
   reserveVirtualKeyName,
   setVirtualKeyId,
-  toolDisconnectsOf,
+  toolConnectionVersionOf,
   virtualKeyIdOf,
   virtualKeyIdsIn,
   virtualKeyNameOf,
@@ -58,6 +58,14 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
   const connectionRows = (id: WorkspaceId) => zql.workspaceConnections.where('workspaceId', inContextWorkspace(id))
   const ownToolConnections = zql.toolConnections.where('workspaceId', workspaceId).where('userId', userId)
   const ownToolApprovals = zql.toolApprovals.where('workspaceId', workspaceId).where('userId', userId)
+  const lockToolConnectionsOf = async (workspace: string, memberId: string) => {
+    await lockMembership(tx, workspace, memberId)
+    await lockMemberToolConnections(tx, workspace, memberId)
+  }
+  const changeToolConnectionsOf = async (workspace: string, memberId: string) => {
+    await lockToolConnectionsOf(workspace, memberId)
+    await moveToolConnectionVersion(tx, workspace, memberId)
+  }
   const gatewayKeys = async () =>
     (await gatewayKeyRefsOf(tx, workspaceId, userId)).flatMap((ref) => gatewayKeyOf(ref) ?? [])
   const unitOfWork: UnitOfWork = {
@@ -159,23 +167,18 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       },
     },
     toolConnections: {
+      lock: () => lockToolConnectionsOf(workspaceId, userId),
+      version: () => toolConnectionVersionOf(tx, workspaceId, userId),
       connect: async ({ connectionId, status }) => {
-        await lockMembership(tx, workspaceId, userId)
+        await changeToolConnectionsOf(workspaceId, userId)
         await tx.mutate.toolConnections.upsert({ ...owner, connectionId, status })
       },
-      lock: async () => {
-        await lockMemberToolConnections(tx, workspaceId, userId)
-      },
-      disconnects: () => toolDisconnectsOf(tx, workspaceId, userId),
-      clear: (connectionId) => tx.mutate.toolConnections.delete({ ...owner, connectionId }),
       disconnect: async (connectionId) => {
-        await lockMemberToolConnections(tx, workspaceId, userId)
-        await countToolDisconnect(tx, workspaceId, userId)
+        await changeToolConnectionsOf(workspaceId, userId)
         await tx.mutate.toolConnections.delete({ ...owner, connectionId })
       },
       removeAll: async () => {
-        await lockMemberToolConnections(tx, workspaceId, userId)
-        await countToolDisconnect(tx, workspaceId, userId)
+        await changeToolConnectionsOf(workspaceId, userId)
         for (const { connectionId } of await tx.run(ownToolConnections))
           await tx.mutate.toolConnections.delete({ ...owner, connectionId })
         await deleteGitHubConnection(tx, workspaceId, userId)
@@ -226,10 +229,9 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await tx.mutate.connectionAccess.upsert({ ...key, level: access.level, toolChanges: access.toolChanges })
       },
       removeSignIn: async (workspaceId, connectionId, memberId) => {
-        const workspace = inContextWorkspace(workspaceId)
-        await lockMemberToolConnections(tx, workspace, memberId)
-        await countToolDisconnect(tx, workspace, memberId)
-        await tx.mutate.toolConnections.delete({ workspaceId: workspace, userId: memberId, connectionId })
+        const signIn = { workspaceId: inContextWorkspace(workspaceId), userId: memberId, connectionId }
+        await changeToolConnectionsOf(signIn.workspaceId, memberId)
+        await tx.mutate.toolConnections.delete(signIn)
       },
     },
     toolApprovals: {

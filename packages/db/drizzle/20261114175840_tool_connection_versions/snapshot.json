@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ff4b9351-1348-407f-b041-44f850d383bb",
+  "id": "b2d86516-627a-4a45-b5c5-3850d06347fb",
   "prevIds": ["590f7762-1424-496b-b30f-31795c334cf8"],
   "ddl": [
     {
@@ -246,13 +246,13 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "tool_connections",
+      "name": "tool_connection_versions",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "tool_disconnects",
+      "name": "tool_connections",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4350,6 +4350,45 @@
       "name": "workspace_id",
       "entityType": "columns",
       "schema": "public",
+      "table": "tool_connection_versions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_connection_versions"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "tool_connection_versions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "tool_connections"
     },
     {
@@ -4390,45 +4429,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "tool_connections"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tool_disconnects"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tool_disconnects"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tool_disconnects"
     },
     {
       "type": "text",
@@ -7328,6 +7328,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["workspace_id", "user_id"],
+      "schemaTo": "public",
+      "tableTo": "memberships",
+      "columnsTo": ["workspace_id", "user_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "tool_connection_versions_qggCdC8YhMeJ_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "tool_connection_versions"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["workspace_id", "connection_id"],
       "schemaTo": "public",
       "tableTo": "workspace_connections",
@@ -7351,19 +7364,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "tool_connections"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["workspace_id", "user_id"],
-      "schemaTo": "public",
-      "tableTo": "memberships",
-      "columnsTo": ["workspace_id", "user_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "tool_disconnects_WpICaP0DQBb0_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "tool_disconnects"
     },
     {
       "nameExplicit": false,
@@ -7805,20 +7805,20 @@
       "table": "tool_calls"
     },
     {
+      "columns": ["workspace_id", "user_id"],
+      "nameExplicit": false,
+      "name": "tool_connection_versions_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "tool_connection_versions"
+    },
+    {
       "columns": ["workspace_id", "user_id", "connection_id"],
       "nameExplicit": false,
       "name": "tool_connections_pkey",
       "entityType": "pks",
       "schema": "public",
       "table": "tool_connections"
-    },
-    {
-      "columns": ["workspace_id", "user_id"],
-      "nameExplicit": false,
-      "name": "tool_disconnects_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "tool_disconnects"
     },
     {
       "columns": ["workspace_id", "month", "chat_id", "user_id", "model"],
