@@ -17,6 +17,7 @@ import {
   reconciledStateOf,
   removalStepOf,
   runtimeStatusOf,
+  sandboxCleanupOf,
   transitioned,
   unknownRuntimeIdsOf,
 } from './runtime.ts'
@@ -220,4 +221,18 @@ test.each([
   ['failed', undefined],
 ] as const)('halting a %s runtime of a deleted workspace: %s', (state, step) => {
   expect(haltStepOf(runtime({ state }))).toBe(step)
+})
+
+test('a bring-up overtaken by a removal removes its container, by a stop or a failure stops it, and leaves it otherwise', () => {
+  expect(states.map((state) => [state, sandboxCleanupOf(runtime({ state }))])).toEqual([
+    ['creating', undefined],
+    ['starting', undefined],
+    ['installing', undefined],
+    ['running', undefined],
+    ['stopping', 'stop'],
+    ['stopped', 'stop'],
+    ['removing', 'remove'],
+    ['failed', 'stop'],
+    ['removed', 'remove'],
+  ])
 })

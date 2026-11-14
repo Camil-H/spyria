@@ -6,8 +6,9 @@ export const recordIfUnchanged = (
   started: Runtime,
   record: (unitOfWork: UnitOfWork, current: Runtime) => Promise<void>,
 ) =>
-  transactor.run(async (unitOfWork) => {
+  transactor.run(async (unitOfWork): Promise<Runtime | undefined> => {
     const current = await unitOfWork.runtimes.lock(started.workspaceId, started.id)
-    if (current.state === started.state && current.stateChangedAt === started.stateChangedAt)
-      await record(unitOfWork, current)
+    if (current.state !== started.state || current.stateChangedAt !== started.stateChangedAt) return current
+    await record(unitOfWork, current)
+    return undefined
   })

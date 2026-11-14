@@ -351,6 +351,23 @@ test('archiving a runtime chat removes its runtime', async () => {
   expect(host.containers.has(runtime.id)).toBe(false)
 })
 
+test('archiving a chat while its container is being created removes the container once the creation ends', async () => {
+  const host = await fakeHost('Archived while creating host')
+  const chat = await newRuntimeChat()
+  const releaseCreate = host.hold('create')
+  const runtime = await ensure(chat)
+  await waitFor(() => host.commands.some(({ op, runtimeId }) => op === 'create' && runtimeId === runtime.id))
+  expect(await archive(chat)).toEqual(succeeded)
+  await runtimeIn(chat, 'removed')
+  releaseCreate()
+  await waitFor(async () => (await jobsOf('runtime.create', runtime.id)).every((job) => job.state === 'done'))
+  await waitFor(
+    () => host.commands.filter(({ op, runtimeId }) => op === 'remove' && runtimeId === runtime.id).length === 2,
+  )
+  expect(host.containers.has(runtime.id)).toBe(false)
+  expect((await runtimeOf(chat)).state).toBe('removed')
+})
+
 test('a start or retry waiting on an archive in progress is refused once it commits and places no runtime', async () => {
   const host = await fakeHost('Archived chat host')
   const [startedChat, retriedChat] = [await newRuntimeChat(), await newRuntimeChat()]
