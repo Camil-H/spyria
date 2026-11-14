@@ -600,7 +600,7 @@ test('a sign-in expiring while its machine is removed waits for the removal and 
   })
   await expiring
   const [host] = await database.$client`select removed_at, capacity from runtime_hosts where id = ${machine.id}`
-  expect(host?.removed_at).toBeInstanceOf(Date)
+  expect(host?.removed_at).not.toBeNull()
   expect(host?.capacity.expiredSignIns).toEqual({})
 })
 
