@@ -38,7 +38,7 @@ export const bringUpRuntime = async (
   const sandbox = locationOf(runtime)
   if (!sandbox) return
   if (!['creating', 'starting', 'installing'].includes(runtime.state))
-    return cleanUpOvertaken(provider, sandbox, runtime)
+    return cleanUpOvertaken(provider, sandbox, runtime).catch(() => {})
   let started = runtime
   try {
     const status = await provider.status(sandbox)
