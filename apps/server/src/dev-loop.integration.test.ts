@@ -442,6 +442,54 @@ test('As a chat owner, the quality gates card shows each command of a group pass
   })
 })
 
+test('As a chat owner, a quality gates job run again after the loop moved on, for an earlier turn or checks run, changes nothing', async () => {
+  expect(await setDevLoop(alice, settingsWith([commandStep('Quick', 'true'), { kind: 'review', fixes: 1 }]))).toEqual(
+    succeeded,
+  )
+  await stack.agentHost('Rerun jobs host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({
+    steps: [committing('one', 'Try once'), finish],
+    text: 'Done.',
+    whenPrompted: [
+      {
+        includes: 'Quality gates review your work',
+        script: { steps: [{ tool: 'report_review', arguments: { findings: [] }, hold: 'review' }], text: 'Reviewed.' },
+      },
+    ],
+  })
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'reviewing')
+  await stack.holds.reached('review')
+  const [{ checksRunId: quickRunId } = {}] = await database.$client`
+    select payload->'step'->>'checksRunId' as "checksRunId" from events
+    where chat_id = ${id} and type = 'message.step_changed' and payload->'step'->>'checksRunId' is not null
+    order by seq limit 1`
+  const reviewing = (await loopOf(id))?.step
+  expect(reviewing).toMatchObject({ position: 1, outcomes: ['passed', null], checksRunId: null })
+  const [{ id: loopId } = {}] = await database.$client`
+    select id from messages where chat_id = ${id} and step->>'type' = 'dev_loop' order by seq desc limit 1`
+  for (const [jobId, type, payload] of [
+    ['job-after-earlier-turn', 'dev_loop.after_turn', { loopId, promptId: reviewing?.startPromptId }],
+    ['job-poll-judged-checks', 'dev_loop.poll_checks', { loopId, checksRunId: quickRunId }],
+  ] as const)
+    await database.$client`
+      insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+      values (${acme}, ${jobId}, ${type}, ${JSON.stringify(payload)}::jsonb, now(), 1, 'queued')`
+  await waitFor(async () => {
+    const states = await database.$client`
+      select state from jobs where id in ('job-after-earlier-turn', 'job-poll-judged-checks')`
+    return states.every(({ state }) => state === 'done')
+  })
+  expect((await loopOf(id))?.step).toEqual(reviewing ?? {})
+
+  await stack.holds.release('review')
+  await loopStateIs(id, 'done')
+  expect((await loopOf(id))?.step).toMatchObject({ outcomes: ['passed', 'passed'] })
+})
+
 const moveMainTotals = (total: number) =>
   fakeGitHub.commitToBranch('acme/app', {
     branch: 'main',

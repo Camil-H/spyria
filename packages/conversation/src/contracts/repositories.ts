@@ -18,7 +18,7 @@ import type { AgentEvent } from '../domain/agent-events.ts'
 import type { StepDelegation, StoredStep } from '../domain/agent-steps.ts'
 import type { Attachment, StoredBytes } from '../domain/attachments.ts'
 import type { OpenedPage } from '../domain/browser-pages.ts'
-import type { DevLoopJobType } from '../domain/dev-loop.ts'
+import type { DevLoopJobPayload, DevLoopJobType } from '../domain/dev-loop.ts'
 import type { ConversationChat, Message, MessageChange } from '../domain/message.ts'
 import type { PublicChat, PublicChatMessage, PublicChatReading, PublicChatSearch } from '../domain/public-chats.ts'
 import type { AgentInterrupt, SessionRestart } from './agent.ts'
@@ -140,7 +140,7 @@ export type DraftRepository = { replace(draft: Draft): Promise<void> }
 export type DevLoopRepository = {
   settings(): Promise<DevLoopSettings | null>
   costSince(chatId: ChatId, since: number): Promise<number>
-  enqueue(job: DevLoopJobType, loopId: MessageId, delayMilliseconds?: number): Promise<void>
+  enqueue(job: DevLoopJobType, payload: DevLoopJobPayload, delayMilliseconds?: number): Promise<void>
 }
 
 export type PublicChatDirectory = {

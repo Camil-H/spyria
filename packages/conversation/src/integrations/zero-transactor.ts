@@ -548,7 +548,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       settings: async () =>
         devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
       costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
-      enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
+      enqueue: (job, payload, delayMilliseconds) => enqueue(job, payload, delayMilliseconds),
     },
     toolCalls: {
       record: async (call) => {
