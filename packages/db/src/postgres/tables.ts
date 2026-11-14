@@ -674,16 +674,6 @@ export const toolConnections = table(
   ],
 )
 
-export const toolConnectionVersions = table(
-  'tool_connection_versions',
-  {
-    ...tenant,
-    userId: text().notNull(),
-    version: integer().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
-)
-
 export const githubConnections = table(
   'github_connections',
   {

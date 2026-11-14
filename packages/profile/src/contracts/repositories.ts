@@ -67,8 +67,6 @@ export type LlmGateway = {
 }
 
 export type ToolConnectionRepository = {
-  lock(): Promise<void>
-  version(): Promise<number>
   connect(connection: ToolConnection): Promise<void>
   disconnect(connectionId: string): Promise<void>
   statusOf(connectionId: string): Promise<string | undefined>
