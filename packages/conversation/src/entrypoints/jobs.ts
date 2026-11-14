@@ -67,6 +67,8 @@ const restartSessionPayload = z.object({
   promptId: z.nullable(z.pipe(id, z.transform(messageId))),
 })
 const loopPayload = z.object({ loopId: z.pipe(id, z.transform(messageId)) })
+const afterTurnPayload = z.extend(loopPayload, { promptId: z.pipe(id, z.transform(messageId)) })
+const pollChecksPayload = z.extend(loopPayload, { checksRunId: z.string() })
 const memberRemovedPayload = z.object({
   memberId: z.pipe(id, z.transform(memberId)),
   actorId: z.pipe(id, z.transform(memberId)),
@@ -139,11 +141,11 @@ export const createAgentHandlers = ({
       [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
       [devLoopJobTypes.afterTurn]: ({ workspaceId, payload }: AgentJob) =>
-        continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+        continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...afterTurnPayload.parse(payload) }),
       [devLoopJobTypes.run]: ({ workspaceId, payload }: AgentJob) =>
         runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
-        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...pollChecksPayload.parse(payload) }),
       [devLoopJobTypes.ci]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
         judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }, isLastAttempt),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>

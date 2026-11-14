@@ -54,6 +54,7 @@ type Dependencies = Pick<
   'transactor' | 'runtimes' | 'agentClient' | 'checkouts' | 'isBudgetUsedUp' | 'devLoopPollMilliseconds'
 >
 type LoopJob = { workspaceId: WorkspaceId; loopId: MessageId }
+type ChecksJob = LoopJob & { checksRunId: string }
 type ChecksRun = { state?: string; id?: string | null; results?: CheckResult[] }
 
 const chatOf = ({ card }: Loop): AgentChat => ({ workspaceId: card.workspaceId, chatId: card.chatId })
@@ -94,7 +95,7 @@ const postLoopPrompt = async (
 
 const moveOn = async (unitOfWork: UnitOfWork, loop: Loop, step: DevLoopStep, position: number) => {
   await saveLoop(unitOfWork, loop, { ...step, state: 'running', next: null, position })
-  await unitOfWork.devLoop.enqueue(devLoopJobTypes.run, loop.card.id)
+  await unitOfWork.devLoop.enqueue(devLoopJobTypes.run, { loopId: loop.card.id })
 }
 
 const sendBack = (unitOfWork: UnitOfWork, loop: Loop, failing: number[], promptOf: (rounds: number[]) => string) => {
@@ -169,9 +170,10 @@ const headOf = async ({ transactor, agentClient }: Dependencies, loop: Loop, end
   return runtimeHeadsOf(status)[0] ?? null
 }
 
-export const continueLoopAfterTurn = (dependencies: Dependencies, job: LoopJob) =>
+export const continueLoopAfterTurn = (dependencies: Dependencies, job: LoopJob & { promptId: MessageId }) =>
   withLoop(dependencies, job, ['working', 'reviewing', 'handing_off'], async (unitOfWork, loop) => {
     const { step } = loop
+    if (step.lastPromptId !== job.promptId) return undefined
     if (step.state === 'handing_off') return endLoop(unitOfWork, loop, stopped(step, step.outcome ?? pausedOutcome))
     if (step.state === 'working' && step.next === 'run') return moveOn(unitOfWork, loop, restarted(step), 0)
     if (step.state === 'reviewing' && step.next === 'review_verdict') {
@@ -214,7 +216,11 @@ const startCommands = async (dependencies: Dependencies, job: LoopJob, loop: Loo
   if ((started as ChecksRun).id !== runId) return keepPolling(dependencies, job, 'running', checksPollOf(dependencies))
   return withLoop(dependencies, job, ['running'], async (unitOfWork, current) => {
     await saveLoop(unitOfWork, current, { ...current.step, checksRunId: runId })
-    await unitOfWork.devLoop.enqueue(devLoopJobTypes.pollChecks, job.loopId, checksPollOf(dependencies))
+    await unitOfWork.devLoop.enqueue(
+      devLoopJobTypes.pollChecks,
+      { loopId: job.loopId, checksRunId: runId },
+      checksPollOf(dependencies),
+    )
   })
 }
 
@@ -324,7 +330,7 @@ export const runLoop = async (dependencies: Dependencies, job: LoopJob) => {
       return endLoop(unitOfWork, current, finished(current.step, readyOutcomeOf(current.step)))
     if (config.kind === 'ci') {
       await saveLoop(unitOfWork, current, { ...current.step, state: 'waiting_for_ci' })
-      return unitOfWork.devLoop.enqueue(devLoopJobTypes.ci, current.card.id, ciPollOf(dependencies))
+      return unitOfWork.devLoop.enqueue(devLoopJobTypes.ci, { loopId: current.card.id }, ciPollOf(dependencies))
     }
     const { baseBranch } = await unitOfWork.chats.get(current.card.chatId)
     const reviewing = {
@@ -344,11 +350,20 @@ export const runLoop = async (dependencies: Dependencies, job: LoopJob) => {
   })
 }
 
-const judgeCommands = (dependencies: Dependencies, job: LoopJob, results: CheckResult[], head: string | null) =>
-  withLoop(dependencies, job, ['running'], async (unitOfWork, loop) => {
+const withPolledRun = <Result>(
+  dependencies: Dependencies,
+  job: ChecksJob,
+  work: (unitOfWork: UnitOfWork, loop: Loop) => Promise<Result>,
+) =>
+  withLoop(dependencies, job, ['running'], async (unitOfWork, loop) =>
+    loop.step.checksRunId === job.checksRunId ? work(unitOfWork, loop) : undefined,
+  )
+
+const judgeCommands = (dependencies: Dependencies, job: ChecksJob, results: CheckResult[], head: string | null) =>
+  withPolledRun(dependencies, job, async (unitOfWork, loop) => {
     const group = commandGroupAt(loop.step.pipeline, loop.step.position)
     const failing = group.filter((_, offset) => results[offset]?.exitCode !== 0)
-    const step = { ...loop.step, ...(head !== null && { checkedHead: head }) }
+    const step = { ...loop.step, checksRunId: null, ...(head !== null && { checkedHead: head }) }
     const passing = group.filter((index) => !failing.includes(index))
     const judged = withOutcomes(
       step,
@@ -374,29 +389,29 @@ const judgeCommands = (dependencies: Dependencies, job: LoopJob, results: CheckR
 const keepPolling = (dependencies: Dependencies, job: LoopJob, state: DevLoopStep['state'], every: number) =>
   withLoop(dependencies, job, [state], async () => ({ retryInMilliseconds: every }))
 
-const recordFinishedChecks = (dependencies: Dependencies, job: LoopJob, run: ChecksRun | undefined) =>
-  withLoop(dependencies, job, ['running'], async (unitOfWork, loop) => {
-    const checked = run?.id === loop.step.checksRunId ? withFinishedChecks(loop.step, run.results ?? []) : undefined
+const recordFinishedChecks = (dependencies: Dependencies, job: ChecksJob, run: ChecksRun | undefined) =>
+  withPolledRun(dependencies, job, async (unitOfWork, loop) => {
+    const checked = run?.id === job.checksRunId ? withFinishedChecks(loop.step, run.results ?? []) : undefined
     if (checked) await saveLoop(unitOfWork, loop, checked)
     return { retryInMilliseconds: checksPollOf(dependencies) }
   })
 
-export const pollLoopChecks = async (dependencies: Dependencies, job: LoopJob) => {
+export const pollLoopChecks = async (dependencies: Dependencies, job: ChecksJob) => {
   const loop = await loopIn(dependencies, job)
-  if (loop?.step.state !== 'running') return undefined
+  if (loop?.step.state !== 'running' || loop.step.checksRunId !== job.checksRunId) return undefined
   const endpoint = await endpointOfLoop(dependencies, loop)
   if (!endpoint)
-    return withLoop(dependencies, job, ['running'], (unitOfWork, current) =>
+    return withPolledRun(dependencies, job, (unitOfWork, current) =>
       endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime stopped: over to you')),
     )
   const run = (await dependencies.agentClient
     .readWorkspace(endpoint, '/api/workspace/checks')
     .catch(() => undefined)) as ChecksRun | undefined
   if (run?.state === 'idle')
-    return withLoop(dependencies, job, ['running'], (unitOfWork, current) =>
+    return withPolledRun(dependencies, job, (unitOfWork, current) =>
       endLoop(unitOfWork, current, stopped(current.step, 'The checks stopped when the runtime restarted: over to you')),
     )
-  if (run && run.id !== loop.step.checksRunId) return runLoop(dependencies, job)
+  if (run && run.id !== job.checksRunId) return runLoop(dependencies, job)
   if (run?.state !== 'finished') return recordFinishedChecks(dependencies, job, run)
   await judgeCommands(dependencies, job, run.results ?? [], await headOf(dependencies, loop, endpoint))
   return undefined
