@@ -128,6 +128,64 @@ describe('a job longer than its lease', () => {
   })
 })
 
+describe('a job whose worker stopped while running it', () => {
+  const abandoned = {
+    state: 'running' as const,
+    runAt: new Date(Date.now() - 1000),
+    claimedAt: new Date(Date.now() - 60_000),
+  }
+  const errorsOf = (events: ReturnType<typeof captureLogs>['events'], jobId: string) =>
+    events.filter(({ severity, attributes }) => severity === 'ERROR' && attributes?.['job.id'] === jobId)
+
+  test('fails once its last attempt stopped the server, instead of being taken over again', async () => {
+    await addAgentPromptJob('job-crashing', 'message-missing', { ...abandoned, attempts: maximumJobAttempts - 1 })
+    const logged = captureLogs()
+    const worker = startWorker()
+    await waitFor(async () => (await jobRow('job-crashing'))?.state === 'failed')
+    await sleep(50)
+    await worker.stop()
+    logged.restore()
+    expect(await jobRow('job-crashing')).toMatchObject({
+      attempts: maximumJobAttempts,
+      lastError: 'The server stopped while running this job',
+    })
+    expect(errorsOf(logged.events, 'job-crashing')).toHaveLength(1)
+    await database.$client`delete from jobs where id = 'job-crashing'`
+  })
+
+  test('a sweep taken over after scheduling its next run fails without a retry when it throws again, leaving the next run queued', async () => {
+    await database.$client`
+      insert into audit_settings (workspace_id, retention_days) values (${globex}, 2147483647)
+      on conflict (workspace_id) do update set retention_days = excluded.retention_days`
+    await addAgentPromptJob('job-audit-sweep-taken-over', 'unused', {
+      ...abandoned,
+      workspaceId: globex,
+      type: 'audit.sweep',
+      payload: {},
+      attempts: 0,
+    })
+    await addAgentPromptJob('job-audit-sweep-next', 'unused', {
+      workspaceId: globex,
+      type: 'audit.sweep',
+      payload: {},
+      runAt: new Date(Date.now() + 60 * 60_000),
+    })
+    const logged = captureLogs()
+    const worker = startWorker()
+    await waitFor(async () => (await jobRow('job-audit-sweep-taken-over'))?.state === 'failed')
+    await worker.stop()
+    logged.restore()
+    expect(logged.events.filter(({ event }) => event === 'job.record_failed')).toEqual([])
+    expect(await jobRow('job-audit-sweep-taken-over')).toMatchObject({
+      attempts: 1,
+      lastError: expect.stringContaining('22008'),
+    })
+    expect(await jobRow('job-audit-sweep-next')).toMatchObject({ state: 'queued', attempts: 0 })
+    await database.$client`delete from audit_settings where workspace_id = ${globex}`
+    await database.$client`delete from jobs where workspace_id = ${globex} and type = 'audit.sweep'`
+  })
+})
+
 test('a queued job wakes an idle worker at once instead of waiting for its next poll', async () => {
   const sandboxProvider = { remove: async () => {} } as unknown as SandboxProvider
   const worker = startWorker({ sandboxProvider, pollIntervalMilliseconds: 60_000 })
