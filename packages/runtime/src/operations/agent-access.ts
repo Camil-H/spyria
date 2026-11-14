@@ -28,8 +28,9 @@ export const expireSignIn = (
 ) =>
   transactor.run(async ({ runtimes, runtimeHosts }) => {
     const runtime = await runtimes.findByChat(workspaceId, chatId)
-    const host = runtime?.hostId && (await runtimeHosts.find(workspaceId, runtime.hostId))
-    if (host?.capacity) await runtimeHosts.save({ ...host, capacity: withExpiredSignIn(host.capacity, tool) })
+    const host = runtime?.hostId ? await runtimeHosts.get(workspaceId, runtime.hostId) : undefined
+    if (host?.capacity && host.removedAt === null)
+      await runtimeHosts.save({ ...host, capacity: withExpiredSignIn(host.capacity, tool) })
   })
 
 export const isRuntimeWaitingOnHost = ({ transactor }: Dependencies, { workspaceId, chatId }: ChatRuntime) =>

@@ -7,6 +7,7 @@ import {
   createRuntimeJobs,
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  expireSignIn,
   retryRuntime,
   touchRuntime,
 } from '@spyria/runtime/server'
@@ -571,6 +572,27 @@ test('a machine session installs its harness once while the runtime reads instal
   expect(harnessCommands(machine)).toEqual(['installed', 'start', 'create', 'installed', 'start'])
   expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('installed')
   expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('install')
+})
+
+test('a sign-in expiring while its machine is removed waits for the removal and leaves the machine removed', async () => {
+  const machine = await newMachine()
+  const chat = await newRuntimeChat('Machine chat', undefined, defaultHarness)
+  await runningRuntime(chat)
+  let expiring: Promise<void> | undefined
+  await database.$client.begin(async (removing) => {
+    await removing`update runtime_hosts set removed_at = now() where id = ${machine.id}`
+    expiring = zeroDatabase.transaction((tx) =>
+      expireSignIn(
+        { transactor: createRuntimeTransactor(tx) },
+        { workspaceId: acme, chatId: chat, tool: defaultHarness },
+      ),
+    )
+    await waitFor(() => waitingOnLock(database))
+  })
+  await expiring
+  const [host] = await database.$client`select removed_at, capacity from runtime_hosts where id = ${machine.id}`
+  expect(host?.removed_at).toBeInstanceOf(Date)
+  expect(host?.capacity.expiredSignIns).toEqual({})
 })
 
 test("a failed install fails the runtime at once with npm's reason, and a retry installs and runs", async () => {
