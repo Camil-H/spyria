@@ -83,6 +83,53 @@ test.describe('Workspaces', () => {
         await expect(page.getByText(/Acme|Globex/)).toHaveCount(0)
       })
     })
+
+    test('As a person signed in without a workspace, when my new workspace fails to open, trying again opens it without creating a second one', {
+      tag: ['@spec-05'],
+    }, async ({ page, workerStack }) => {
+      await signInThroughProvider(page, 'olive@example.com')
+      const form = creationFormOf(page)
+      let failsNextSessionsRead = true
+      await page.route('**/auth/sessions', (route) => {
+        if (route.request().method() !== 'GET' || !failsNextSessionsRead) return route.continue()
+        failsNextSessionsRead = false
+        return route.fulfill({ status: 503, body: 'Service unavailable' })
+      })
+
+      await form.getByRole('textbox', { name: 'Workspace name' }).fill('Olive studio')
+      await form.getByRole('button', { name: 'Create workspace' }).click()
+      await expect(page.getByText('Something went wrong. Try again.')).toBeVisible()
+      await form.getByRole('button', { name: 'Create workspace' }).click()
+
+      await expect(switcherOf(page)).toContainText('Olive studio')
+      expect(
+        await workerStack.database.$client`
+          select 1 from workspaces join users on users.id = workspaces.created_by
+          where users.email = 'olive@example.com'`,
+      ).toHaveLength(1)
+    })
+  })
+
+  test('As a member, when my new workspace fails to open, confirming again opens it without creating a second one', {
+    tag: ['@spec-05'],
+  }, async ({ page, workerStack }) => {
+    let failsNextSessionOpening = true
+    await page.route('**/auth/sessions', (route) => {
+      if (route.request().method() !== 'POST' || !failsNextSessionOpening) return route.continue()
+      failsNextSessionOpening = false
+      return route.fulfill({ status: 503, body: 'Service unavailable' })
+    })
+    await openMenu(page)
+    await page.getByRole('menuitem', { name: 'New workspace' }).click()
+    const dialog = page.getByRole('dialog', { name: 'New workspace' })
+    await dialog.getByRole('textbox', { name: 'Workspace name' }).fill('Initech')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await expect(dialog.getByText('Something went wrong. Try again.')).toBeVisible()
+
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(switcherOf(page)).toContainText('Initech')
+    expect(await workerStack.database.$client`select 1 from workspaces where name = 'Initech'`).toHaveLength(1)
   })
 
   test('As a member, I create a workspace, signed in at once, build in it without touching the others, then log out of another and go to the next', async ({
