@@ -32,10 +32,12 @@ test.describe('Spend', () => {
     const narrowTo = async (page: Page, filters: Locator, dimension: string, names: readonly string[]) => {
       await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: dimension })
       await filters.getByRole('button', { name: dimension }).click()
-      for (const item of await page.getByRole('menuitemcheckbox').all()) {
-        const isWanted = names.includes((await item.textContent()) ?? '')
-        if (((await item.getAttribute('aria-checked')) === 'true') !== isWanted) await item.click()
-      }
+      const itemOf = (name: string) => page.getByRole('menuitemcheckbox', { name, exact: true })
+      for (const name of names)
+        if ((await itemOf(name).getAttribute('aria-checked')) !== 'true') await itemOf(name).click()
+      for (const name of await page.getByRole('menuitemcheckbox', { checked: true }).allTextContents())
+        if (!names.includes(name)) await itemOf(name).click()
+      await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(names.length)
       await page.keyboard.press('Escape')
     }
 
