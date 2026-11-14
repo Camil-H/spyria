@@ -54,6 +54,7 @@ export type AgentJobs = {
   prompt(message: Message): Promise<void>
   startSession(chatId: ChatId): Promise<void>
   interrupt(interrupt: AgentInterrupt): Promise<void>
+  isInterruptRequested(chatId: ChatId, promptId: MessageId): Promise<boolean>
   restartSession(restart: SessionRestart): Promise<void>
   sweepLater(): Promise<void>
 }

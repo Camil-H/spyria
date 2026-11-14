@@ -818,6 +818,18 @@ export const stopRunningDelegations = async (tx: Transaction, workspaceId: strin
     )
   ).flatMap((row) => row.conversationId ?? [])
 
+export const isJobPending = async (
+  tx: Transaction,
+  workspaceId: string,
+  type: string,
+  payload: Record<string, string>,
+) =>
+  (await firstOnServer(
+    tx,
+    `select 1 from jobs where workspace_id = $1 and type = $2 and state in ('queued', 'running') and payload @> $3::jsonb`,
+    [workspaceId, type, JSON.stringify(payload)],
+  )) !== undefined
+
 export const runningDelegationsIn = (tx: Transaction, workspaceId: string) =>
   onServer<{ id: string; chatId: string; conversationId: string | null }>(
     tx,
