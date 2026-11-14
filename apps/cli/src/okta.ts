@@ -7,6 +7,8 @@ type OktaApp = {
   credentials: { oauthClient: { client_id: string; client_secret?: string } }
 }
 
+const clientSecretsPerAppLimit = 2
+
 const loopbackHostnames = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 const carriesTokenSafely = ({ protocol, hostname }: URL) =>
@@ -55,10 +57,16 @@ export const registerOktaApp = async ({
   const appsFound = await call<OktaApp[]>('GET', `/api/v1/apps?${new URLSearchParams({ q: label })}`)
   const earlierApp = appsFound.find((candidate) => candidate.label === label && candidate.status === 'ACTIVE')
   const app = earlierApp ?? (await call<OktaApp>('POST', '/api/v1/apps', newAppOf(label, origin)))
-  const clientSecret = earlierApp
-    ? (await call<{ client_secret: string }>('POST', `/api/v1/apps/${earlierApp.id}/credentials/secrets`, {}))
-        .client_secret
-    : app.credentials.oauthClient.client_secret
+  const newClientSecretOf = async (appId: string) => {
+    const secretsPath = `/api/v1/apps/${appId}/credentials/secrets`
+    const secrets = await call<{ id: string }[]>('GET', secretsPath)
+    if (secrets.length >= clientSecretsPerAppLimit)
+      throw new OktaRefused(
+        `The Okta app ${label}, created by an earlier setup, already has ${secrets.length} client secrets, the most Okta allows: delete one you no longer use in its General tab under Client secrets, or delete the app, then run setup again`,
+      )
+    return (await call<{ client_secret: string }>('POST', secretsPath, {})).client_secret
+  }
+  const clientSecret = earlierApp ? await newClientSecretOf(earlierApp.id) : app.credentials.oauthClient.client_secret
   if (!clientSecret) throw new OktaRefused(`Okta did not return a client secret for the app ${label}`)
   const builtInGroups = await call<{ id: string; profile: { name: string } }[]>(
     'GET',

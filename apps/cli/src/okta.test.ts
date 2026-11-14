@@ -10,6 +10,7 @@ type FakeApp = {
 const requests: { method: string; path: string; body?: unknown }[] = []
 const apps: FakeApp[] = []
 const assignments: string[] = []
+const secretsOfApps = new Map<string, string[]>()
 const listed = (app: FakeApp) => ({
   ...app,
   credentials: { oauthClient: { client_id: app.credentials.oauthClient.client_id } },
@@ -40,8 +41,18 @@ const okta = Bun.serve({
       return Response.json(app)
     }
     const secretsOf = url.pathname.match(/^\/api\/v1\/apps\/([\w-]+)\/credentials\/secrets$/)
-    if (secretsOf && request.method === 'POST')
-      return Response.json({ id: 'secret-id', status: 'ACTIVE', client_secret: `new-secret-of-${secretsOf[1]}` })
+    if (secretsOf) {
+      const appId = secretsOf[1] ?? ''
+      const secrets = secretsOfApps.get(appId) ?? ['first-secret']
+      if (request.method === 'GET') return Response.json(secrets.map((id) => ({ id, status: 'ACTIVE' })))
+      if (secrets.length >= 2)
+        return Response.json(
+          { errorSummary: 'Api validation failed: You can have at most two secrets' },
+          { status: 400 },
+        )
+      secretsOfApps.set(appId, [...secrets, `secret-${secrets.length + 1}`])
+      return Response.json({ id: 'secret-id', status: 'ACTIVE', client_secret: `new-secret-of-${appId}` })
+    }
     const assignment = url.pathname.match(/^\/api\/v1\/apps\/([\w-]+)\/groups\/([\w-]+)$/)
     if (assignment && request.method === 'PUT') assignments.push(`${assignment[1]} ${assignment[2]}`)
     if (url.pathname === '/api/v1/groups')
@@ -61,6 +72,7 @@ beforeEach(() => {
   requests.length = 0
   apps.length = 0
   assignments.length = 0
+  secretsOfApps.clear()
 })
 
 const register = (origin = 'https://spyria.example.com') =>
@@ -99,6 +111,19 @@ test('setting Okta up again reuses the app of the same label with a new secret, 
   expect(apps.filter((app) => app.label === 'Spyria spyria.example.com' && app.status === 'ACTIVE')).toHaveLength(1)
   expect(requests.filter((request) => request.method === 'POST' && request.path === '/api/v1/apps')).toHaveLength(1)
   expect(assignments).toEqual(['app-3 everyone-1', 'app-3 everyone-1'])
+})
+
+test('setting Okta up again refuses an app that already has the two client secrets Okta allows, rather than deactivate one that may be in use', async () => {
+  await register()
+  await register()
+  const secretsBefore = secretsOfApps.get('app-1')
+  expect(await register().catch((error: Error) => error.message)).toBe(
+    'The Okta app Spyria spyria.example.com, created by an earlier setup, already has 2 client secrets, the most Okta allows: delete one you no longer use in its General tab under Client secrets, or delete the app, then run setup again',
+  )
+  expect(secretsOfApps.get('app-1')).toEqual(secretsBefore)
+  expect(
+    requests.filter((request) => request.method === 'POST' && request.path.endsWith('/credentials/secrets')),
+  ).toHaveLength(1)
 })
 
 test("a refused Okta token fails with Okta's reason", async () => {
