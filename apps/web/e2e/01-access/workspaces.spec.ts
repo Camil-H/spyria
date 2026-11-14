@@ -108,6 +108,32 @@ test.describe('Workspaces', () => {
           where users.email = 'olive@example.com'`,
       ).toHaveLength(1)
     })
+
+    test('As a person signed in without a workspace, when my new workspace fails to open and I correct its name, trying again creates the workspace I named', {
+      tag: ['@spec-05'],
+    }, async ({ page, workerStack }) => {
+      await signInThroughProvider(page, 'olive@example.com')
+      const form = creationFormOf(page)
+      let failsNextSessionsRead = true
+      await page.route('**/auth/sessions', (route) => {
+        if (route.request().method() !== 'GET' || !failsNextSessionsRead) return route.continue()
+        failsNextSessionsRead = false
+        return route.fulfill({ status: 503, body: 'Service unavailable' })
+      })
+
+      await form.getByRole('textbox', { name: 'Workspace name' }).fill('Olive stuido')
+      await form.getByRole('button', { name: 'Create workspace' }).click()
+      await expect(page.getByText('Something went wrong. Try again.')).toBeVisible()
+      await form.getByRole('textbox', { name: 'Workspace name' }).fill('Olive studio')
+      await form.getByRole('button', { name: 'Create workspace' }).click()
+
+      await expect(switcherOf(page)).toBeVisible()
+      expect(
+        await workerStack.database.$client`
+          select workspaces.name from workspaces join users on users.id = workspaces.created_by
+          where users.email = 'olive@example.com' order by workspaces.name`,
+      ).toEqual([{ name: 'Olive stuido' }, { name: 'Olive studio' }])
+    })
   })
 
   test('As a member, when my new workspace fails to open, confirming again opens it without creating a second one', {
