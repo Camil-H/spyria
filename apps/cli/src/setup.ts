@@ -7,6 +7,7 @@ import {
   assertNoOtherProjectIn,
   assertPostgresRuns,
   backup,
+  dataVolumesOnThisMachineOf,
   forgetEarlierHostPairing,
   installFolderOf,
   readEnvironment,
@@ -17,7 +18,14 @@ import {
 } from './commands.ts'
 import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
-import { type Environment, environmentOf, isDeploymentName, pairingCodeOf, type SetupAnswers } from './environment.ts'
+import {
+  type Environment,
+  environmentOf,
+  isDeploymentName,
+  pairingCodeOf,
+  type SetupAnswers,
+  secretNames,
+} from './environment.ts'
 import { askerOf, type Flags, type ProcessEnvironment, secretVariables } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
 import { type Asker, firstWorkspaceProviderOf, removal } from './setup-steps.ts'
@@ -49,6 +57,13 @@ const workspaceExistsInRunningStack = (folder: string) => {
   const output = answer.output.trim()
   if (answer.exitCode !== 0 || (output !== 'yes' && output !== 'no')) return undefined
   return output === 'yes'
+}
+
+const assertNoEarlierData = (folder: string, deployment: string, dataVolumes: string[]) => {
+  if (dataVolumes.length > 0)
+    throw new Error(
+      `This machine holds the data of an earlier deployment named ${deployment} (${dataVolumes.join(', ')}), but ${folder} has no .env with its secrets: put back the .env you copied off the machine with your backups and run setup again, choose another deployment name with --name, or, to start over without that data, remove it with docker volume rm ${dataVolumes.join(' ')}`,
+    )
 }
 
 const addRuntimeHostGuide =
@@ -166,11 +181,13 @@ export const setup = async (
     az = runAz,
     processEnvironment = process.env,
     workspaceExistsIn = workspaceExistsInRunningStack,
+    dataVolumesOf = dataVolumesOnThisMachineOf,
   }: {
     cloudflareApiUrl?: string
     az?: AzRunner
     processEnvironment?: ProcessEnvironment
     workspaceExistsIn?: (folder: string) => boolean | undefined
+    dataVolumesOf?: (deployment: string) => string[]
   } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
@@ -230,6 +247,7 @@ export const setup = async (
   const oidc = oidcAccountAppOf(asker, origin, existing)
   const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
   const setUpFirstWorkspaceProvider = firstWorkspaceProviderOf({ asker, hostname, origin, cloudflare }, { az })
+  if (secretNames.every((name) => !existing[name])) assertNoEarlierData(folder, deployment, dataVolumesOf(deployment))
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   let answers: SetupAnswers = {

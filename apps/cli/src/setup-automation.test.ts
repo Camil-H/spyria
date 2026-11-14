@@ -47,6 +47,7 @@ test('setup with Cloudflare Access prints the provider values once and stores on
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' },
+        dataVolumesOf: () => [],
       },
     )
   } finally {
@@ -76,6 +77,7 @@ test('setup shows the Access client secret even when routing the admin mail fail
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' },
+        dataVolumesOf: () => [],
       },
     ).catch((error: Error) => error.message)
     expect(failure).toBe('Cloudflare refused POST /zones/zone-1/email/routing/dns: Email Routing is unavailable')

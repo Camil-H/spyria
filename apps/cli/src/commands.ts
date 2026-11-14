@@ -159,6 +159,24 @@ const removeHostOfThisMachine = (folder: string, environment: Environment) => {
   )
 }
 
+const dataVolumeNamesOf = (deployment: string) =>
+  ['postgres-data', 'zero-data', 'gateway-data'].map((volume) => `${deployment}-${volume}`)
+
+export const dataVolumesOnThisMachineOf = (deployment: string) => {
+  if (Bun.which('docker', { PATH: process.env.PATH ?? '' }) === null) return []
+  const listed = Bun.spawnSync([dockerOf(), 'volume', 'ls', '-q', '--filter', `name=${deployment}-`], {
+    env: shellEnvironmentOf(process.env),
+    stdout: 'pipe',
+    stderr: 'ignore',
+  })
+  if (listed.exitCode !== 0)
+    throw new Error(
+      'Docker does not answer, so setup cannot tell whether this machine holds the data of an earlier deployment: start Docker and run setup again',
+    )
+  const volumes = new Set(listed.stdout.toString().split('\n'))
+  return dataVolumeNamesOf(deployment).filter((volume) => volumes.has(volume))
+}
+
 export const forgetEarlierHostPairing = (folder: string, environment: Environment) => {
   if (Bun.which('docker', { PATH: process.env.PATH ?? '' }) === null) return
   if (hasHostContainer(folder)) removeHostContainer(folder)
