@@ -14,9 +14,6 @@ export const listedModelsOf = () => []
 export const setVirtualKeyId = skippedOnClient
 export const lockMembership = skippedOnClient
 export const lockInvitation = skippedOnClient
-export const lockMemberToolConnections = skippedOnClient
-export const toolConnectionVersionOf = async () => 0
-export const moveToolConnectionVersion = skippedOnClient
 export const lockWorkspaceRole = skippedOnClient
 export const lockOpenInvitation = skippedOnClient
 export const lockActiveAdminIds = async () => []
