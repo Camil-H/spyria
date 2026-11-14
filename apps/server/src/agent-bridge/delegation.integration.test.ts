@@ -380,6 +380,29 @@ test('stopping the turn interrupts the running subagent, marks its delegation st
   ])
 })
 
+test('a delegation left running by a server that stopped is failed by the next sweep and its subagent interrupted, while a delegation this server runs is left alone', async () => {
+  const { relay } = await fakeAgent()
+  const chat = await newRuntimeChat()
+  setFakeLlmScript(delegatingScript({ subagents: { 'mistral-small-latest': heldWork } }))
+  const promptId = await prompt(chat, 'Delegate and hold')
+  await holds.reached('sub')
+  await database.$client`
+    insert into delegations (workspace_id, chat_id, id, prompt_id, conversation_id, task, effort_hint, policy, model,
+      reason, status, token_hash, created_at)
+    values (${acme}, ${chat}, 'delegation-orphaned', ${promptId}, 'sub-orphaned', 'Count the files', 'small', 'auto',
+      'mistral-small-latest', 'default', 'running', 'hash-orphaned', now())`
+
+  await agentBridge.forDatabase(database).jobs['agent.sweep']({ workspaceId: acme, payload: {}, isLastAttempt: false })
+  const statusOf = async (id: string) => (await delegationsOf(chat)).find((delegation) => delegation.id === id)?.status
+  expect(await statusOf('delegation-orphaned')).toBe('failed')
+  expect(relay.interrupts).toContain('sub-orphaned')
+  const [tracked] = await delegationsOf(chat)
+  expect(tracked?.status).toBe('running')
+  expect(relay.interrupts).not.toContain(String(tracked?.conversation_id))
+  await holds.release('sub')
+  await waitFor(async () => (await turnOf(chat)) === null, 20_000)
+})
+
 test('a failed subagent answers the tool call with an error in Spyria wording and leaves the main turn untouched', async () => {
   await fakeAgent()
   const chat = await newRuntimeChat()

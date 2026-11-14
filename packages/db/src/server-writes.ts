@@ -818,6 +818,14 @@ export const stopRunningDelegations = async (tx: Transaction, workspaceId: strin
     )
   ).flatMap((row) => row.conversationId ?? [])
 
+export const runningDelegationsIn = (tx: Transaction, workspaceId: string) =>
+  onServer<{ id: string; chatId: string; conversationId: string | null }>(
+    tx,
+    `select id, chat_id as "chatId", conversation_id as "conversationId" from delegations
+     where workspace_id = $1 and status = 'running'`,
+    [workspaceId],
+  )
+
 export const runningDelegationOfTokenHash = (tx: Transaction, workspaceId: string, hostId: string, hash: string) =>
   firstOnServer<{ chatId: string; id: string; promptId: string }>(
     tx,

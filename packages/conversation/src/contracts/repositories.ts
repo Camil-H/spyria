@@ -227,6 +227,7 @@ export type DelegationRepository = {
   start(delegation: Delegation): Promise<void>
   update(id: string, fields: { conversationId?: string; status?: 'finished' | 'failed' | 'stopped' }): Promise<void>
   stopRunning(chatId: ChatId, promptId: MessageId): Promise<string[]>
+  running(): Promise<{ id: string; chatId: ChatId; conversationId: string | null }[]>
   runningOfTokenHash(
     hostId: string,
     tokenHash: string,
