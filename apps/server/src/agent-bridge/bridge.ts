@@ -122,6 +122,7 @@ export const createAgentBridge = ({
         conversationId: string
         promptId: string | null
         streamedText: string
+        isTextShown: boolean
         segment?: Segment
         isReasoning: boolean
         drainingPromptId: MessageId | null
@@ -282,6 +283,7 @@ export const createAgentBridge = ({
         isReady: Promise.race([ready.promise, Bun.sleep(readyTimeoutMilliseconds)]),
         promptId: promptId as string | null,
         streamedText: '',
+        isTextShown: false,
         segment: undefined as Segment | undefined,
         isReasoning: false,
         drainingPromptId: null as MessageId | null,
@@ -423,7 +425,14 @@ export const createAgentBridge = ({
             const lastStreamed = streamedSeqs.get(keyOf(chat))
             if (seq > (lastStreamed?.conversationId === conversation.conversationId ? lastStreamed.seq : 0)) {
               streamedSeqs.set(keyOf(chat), { conversationId: conversation.conversationId, seq })
-              broadcast(chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
+              const isSnapshot = !chatSocket.isTextShown
+              chatSocket.isTextShown = true
+              broadcast(chat, {
+                promptId: chatSocket.promptId,
+                text: isSnapshot ? chatSocket.streamedText : text,
+                ...(isSnapshot && { isSnapshot }),
+                ...(isReasoning && { isReasoning }),
+              })
             }
           }
           if (streamed) return
