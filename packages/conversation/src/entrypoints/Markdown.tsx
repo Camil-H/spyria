@@ -4,8 +4,9 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
 import { mentionSegmentsOf } from '../domain/mentions.ts'
-import { imageCountOf, streamedBlocksOf } from '../domain/streamed-markdown.ts'
+import { streamedBlocksOf } from '../domain/streamed-markdown.ts'
 import { RuntimeMedia } from './Media.tsx'
+import { isShownImage, withDefinitionsShared } from './markdown-outline.ts'
 import { LoadedRemoteImagesContext } from './providers.tsx'
 
 type MarkdownNode = {
@@ -57,7 +58,7 @@ const lineBreaksKept = () => (tree: MarkdownNode) => {
 const laterImagesOnDemand = (autoLoadedImages: number) => () => (tree: MarkdownNode) => {
   let imageCount = 0
   const markLaterImages = (node: MarkdownNode) => {
-    if (node.type === 'image' && ++imageCount > autoLoadedImages)
+    if (isShownImage(node) && ++imageCount > autoLoadedImages)
       node.data = { ...node.data, hProperties: { ...node.data?.hProperties, [onDemandProperty]: 'true' } }
     node.children?.forEach(markLaterImages)
   }
@@ -212,9 +213,9 @@ export const StreamedMarkdown = ({ text, ...options }: MarkdownProps) => {
   let imagesBefore = 0
   return (
     <div className={markdownClassName}>
-      {[...completed, tail].map((block) => {
+      {withDefinitionsShared(completed, tail).map((block) => {
         const autoLoadedImages = Math.max(0, autoLoadedImagesPerMessage - imagesBefore)
-        imagesBefore += imageCountOf(block.text)
+        imagesBefore += block.shownImages
         return <MarkdownBlocks key={block.offset} text={block.text} autoLoadedImages={autoLoadedImages} {...options} />
       })}
     </div>

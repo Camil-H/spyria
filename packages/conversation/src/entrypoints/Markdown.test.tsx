@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ConversationCommands } from './commands.ts'
 import Markdown, { StreamedMarkdown } from './Markdown.tsx'
@@ -140,4 +141,56 @@ test('a streamed answer loads its first four runtime images on their own across 
   expect([...html.matchAll(/aria-label="Loading Shot \d"/g)].map(([label]) => label)).toEqual(
     [1, 2, 3, 4].map((shot) => `aria-label="Loading Shot ${shot}"`),
   )
+})
+
+const renderInRuntimeChat = (markdown: ReactElement) => {
+  const commands = { readMedia: async () => new Blob() } as unknown as ConversationCommands
+  return renderToStaticMarkup(
+    <ConversationProvider commands={commands} agentStream={{ subscribe: () => () => undefined }}>
+      <ChatMediaContext value={{ chatId: 'chat-1', isRuntime: true }}>{markdown}</ChatMediaContext>
+    </ConversationProvider>,
+  )
+}
+const autoLoadedShotsOf = (html: string) =>
+  [...html.matchAll(/aria-label="Loading (Shot \d)"/g)].map(([, shot]) => shot)
+
+test('a streamed answer links a reference whose definition comes in a later block, as the stored answer does', () => {
+  const text = 'See [the pricing][pricing] first.\n\nThen decide.\n\n[pricing]: https://docs.example.com/pricing'
+  const html = renderToStaticMarkup(<StreamedMarkdown text={text} />)
+  expect(html).toContain('href="https://docs.example.com/pricing"')
+  expect(html).not.toContain('[the pricing]')
+  expect(html).not.toContain('[pricing]:')
+  expect(html.match(/<a /g)).toHaveLength(render(text).match(/<a /g)?.length ?? 0)
+})
+
+test('a streamed answer counts only the images it shows: not image syntax in code or escaped, nor a reference never defined', () => {
+  const text = [
+    'Write `![alt](path.png)` for an image, or \\![this] to keep it as text.',
+    '```md\n![Not shown](out/0.png)\n```',
+    '![Missing][nowhere]',
+    ...[1, 2, 3, 4, 5].map((shot) => `![Shot ${shot}](out/${shot}.png)`),
+  ].join('\n\n')
+  expect(autoLoadedShotsOf(renderInRuntimeChat(<StreamedMarkdown text={text} />))).toEqual([
+    'Shot 1',
+    'Shot 2',
+    'Shot 3',
+    'Shot 4',
+  ])
+  expect(autoLoadedShotsOf(renderInRuntimeChat(<Markdown text={text} />))).toEqual([
+    'Shot 1',
+    'Shot 2',
+    'Shot 3',
+    'Shot 4',
+  ])
+})
+
+test('a streamed answer counts images by reference across its blocks, with their definitions at the end', () => {
+  const text = [
+    ...[1, 2, 3].map((shot) => `Shot ${shot}:\n\n![Shot ${shot}][shot-${shot}]`),
+    '![Shot 4](out/4.png) and ![Shot 5][shot-5]',
+    ...[1, 2, 3, 5].map((shot) => `[shot-${shot}]: out/${shot}.png`),
+  ].join('\n\n')
+  const streamed = autoLoadedShotsOf(renderInRuntimeChat(<StreamedMarkdown text={text} />))
+  expect(streamed).toEqual(['Shot 1', 'Shot 2', 'Shot 3', 'Shot 4'])
+  expect(streamed).toEqual(autoLoadedShotsOf(renderInRuntimeChat(<Markdown text={text} />)))
 })
