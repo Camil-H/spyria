@@ -10,7 +10,7 @@ export const deleteWorkspaceRole = ({ transactor }: Dependencies, { roleId, acto
     const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'roles.manage')
     const role = requireGrantableRole(
       actorPermissions,
-      requireCustomRole(await workspaceRoles.get(roleId), roleId),
+      requireCustomRole(await workspaceRoles.lock(roleId), roleId),
       roleId,
     )
     requireUnheldWorkspaceRole(role, await workspaceRoles.holders(roleId))

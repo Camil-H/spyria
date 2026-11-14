@@ -14,6 +14,7 @@ import {
   removeFromAcme,
   succeeded,
   waitFor,
+  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -209,6 +210,35 @@ test('a held workspace role is not deleted, with members and pending invites cou
     target: 'Bob',
     details: expect.arrayContaining([{ label: 'Role', value: 'Member' }]),
   })
+})
+
+test('an invite waiting on the deletion of its role is refused once the deletion commits, so no open invite names a deleted role', async () => {
+  expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
+  let invite: ReturnType<typeof resultOf> | undefined
+  await database.$client.begin(async (deletion) => {
+    await deletion`select 1 from workspace_roles where workspace_id = ${acme} and id = ${financeId} for update`
+    await deletion`delete from workspace_role_permissions where workspace_id = ${acme} and role_id = ${financeId}`
+    await deletion`delete from workspace_roles where workspace_id = ${acme} and id = ${financeId}`
+    invite = resultOf(aliceInAcme, 'workspace.inviteMember', inviteArgs('nina@example.com', financeId))
+    await waitFor(() => waitingOnLock(database))
+  })
+  expect(await invite).toEqual(failedWith(`${financeId} is not a role of this workspace`))
+  expect(await database.$client`select 1 from invitations where email = 'nina@example.com'`).toHaveLength(0)
+})
+
+test('a role deletion waiting on an invite to that role is refused once the invite commits, since the role is then held', async () => {
+  expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
+  let deletion: ReturnType<typeof resultOf> | undefined
+  await database.$client.begin(async (invite) => {
+    await invite`select 1 from workspace_roles where workspace_id = ${acme} and id = ${financeId} for update`
+    await invite`
+      insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
+      values (${acme}, ${crypto.randomUUID()}, 'nina@example.com', ${financeId}, ${alice}, now(), now() + interval '7 days')`
+    deletion = deleteRole(financeId)
+    await waitFor(() => waitingOnLock(database))
+  })
+  expect(await deletion).toEqual(failedWith('Finance is held by 1 pending invite; change their role first'))
+  expect(await customRolesOf()).toEqual([{ id: financeId, name: 'Finance', permissions: ['costs.view'] }])
 })
 
 test('a custom role syncs what its permissions open and stops at once when they are taken away', async () => {

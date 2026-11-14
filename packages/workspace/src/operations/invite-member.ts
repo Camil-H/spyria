@@ -19,7 +19,7 @@ type Input = {
 export const inviteMember = ({ transactor }: Dependencies, { email: text, role, actorId, now, ...input }: Input) =>
   transactor.run(async ({ memberships, workspaceRoles, invitations, workspaceEvents, domainClaims }) => {
     const actorPermissions = await requireWorkspacePermission(memberships, actorId, 'members.invite')
-    requireGrantableRole(actorPermissions, await workspaceRoles.get(role), role)
+    requireGrantableRole(actorPermissions, await workspaceRoles.lock(role), role)
     const email = Email(text)
     if (isActive(await memberships.findByEmail(email))) throw new AlreadyMember(email)
     requireInvitable(input.workspaceId, email, await domainClaims.of(domainOfEmail(email)))
