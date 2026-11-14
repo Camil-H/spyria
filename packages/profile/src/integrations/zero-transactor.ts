@@ -7,6 +7,7 @@ import {
   gatewayKeyRefsOf,
   insertLlmCredential,
   lockMembership,
+  lockMemberToolConnections,
   reserveVirtualKeyName,
   setVirtualKeyId,
   virtualKeyIdOf,
@@ -161,10 +162,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await tx.mutate.toolConnections.upsert({ ...owner, connectionId, status })
       },
       lock: async () => {
-        await lockMembership(tx, workspaceId, userId)
+        await lockMemberToolConnections(tx, workspaceId, userId)
       },
       disconnect: async (connectionId) => {
-        await lockMembership(tx, workspaceId, userId)
+        await lockMemberToolConnections(tx, workspaceId, userId)
         await tx.mutate.toolConnections.delete({ ...owner, connectionId })
       },
       removeAll: async () => {
