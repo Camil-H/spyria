@@ -1,5 +1,5 @@
 import { chatId, type WorkspaceId } from '@spyria/kernel'
-import { DiffView, focusRing } from '@spyria/ui'
+import { DiffView, focusRing, smallGhostButtonClass } from '@spyria/ui'
 import { Check, LoaderCircle, X } from 'lucide-react'
 import { lazy, Suspense, use, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
@@ -31,9 +31,9 @@ const CommandStep = ({ id, step, isRunning }: { id: string; step: StepOf<'comman
     step.exitCode === null ? (
       isRunning && <LoaderCircle role="img" aria-label="Running" className="size-4 shrink-0 animate-spin" />
     ) : hasFailed ? (
-      <X role="img" aria-label="Failed" className="size-4 shrink-0 text-red-500" />
+      <X role="img" aria-label="Failed" className="size-4 shrink-0 text-danger" />
     ) : (
-      <Check role="img" aria-label="Succeeded" className="size-4 shrink-0 text-green-500" />
+      <Check role="img" aria-label="Succeeded" className="size-4 shrink-0 text-success" />
     )
   return (
     <Disclosure
@@ -124,7 +124,7 @@ const ToolStep = ({ step, isOnViewersPrompt }: { step: StepOf<'tool'>; isOnViewe
           <button
             type="button"
             onClick={() => commands.connectTool({ workspaceId, tool: connection.server }).catch(console.error)}
-            className={`mt-1 ml-5.5 rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
+            className={`mt-1 ml-5.5 ${smallGhostButtonClass}`}
           >
             {connection.isReconnect ? 'Reconnect' : 'Connect'} {connection.server}
           </button>

@@ -19,3 +19,5 @@ export const rowListClass = `flex flex-col divide-y divide-line ${cardClass}`
 export const rowClass = 'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm'
 export const calloutClass = 'rounded-lg border border-callout-edge bg-callout px-4 py-3 text-sm'
 export const rowHeaderClass = 'flex items-center gap-x-3 px-4 py-2 text-xs font-medium text-muted'
+export const overlineClass = 'text-overline uppercase text-muted'
+export const inlineActionClass = `rounded-md font-medium text-ink underline-offset-2 hover:underline ${focusRing}`

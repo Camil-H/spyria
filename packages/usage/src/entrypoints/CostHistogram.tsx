@@ -2,7 +2,7 @@ import { formatCost } from '@spyria/ui'
 import type { CostBin } from '../domain/merged-pulls.ts'
 import { useChartWidth } from './useChartWidth.ts'
 
-const barColor = 'light-dark(#2a78d6, #3987e5)'
+const barColor = 'var(--color-chart-1)'
 const height = 160
 const axisWidth = 40
 const rightPadding = 12
@@ -27,7 +27,7 @@ export const CostHistogram = ({ bins, label }: { bins: readonly CostBin[]; label
         {[0, largest].map((pulls) => (
           <g key={pulls}>
             <line x1={axisWidth} x2={width - rightPadding} y1={yOf(pulls)} y2={yOf(pulls)} className="stroke-line" />
-            <text x={axisWidth - 6} y={yOf(pulls) + 4} textAnchor="end" className="fill-muted text-[11px]">
+            <text x={axisWidth - 6} y={yOf(pulls) + 4} textAnchor="end" className="fill-muted text-chart-label">
               {pulls}
             </text>
           </g>
@@ -51,7 +51,7 @@ export const CostHistogram = ({ bins, label }: { bins: readonly CostBin[]; label
             x={axisWidth + index * slotWidth}
             y={height - 4}
             textAnchor={index === 0 ? 'start' : index === bins.length ? 'end' : 'middle'}
-            className="fill-muted text-[11px]"
+            className="fill-muted text-chart-label"
           >
             {formatCost(edgeOf(index))}
           </text>

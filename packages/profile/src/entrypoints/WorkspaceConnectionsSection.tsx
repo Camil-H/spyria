@@ -12,6 +12,7 @@ import {
   ghostButtonClass,
   LabelledSection,
   labelClass,
+  overlineClass,
   RowMenu,
   rowClass,
   StatusBadge,
@@ -387,7 +388,7 @@ const BuiltInToolsCard = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
       summary="Built in · every role has them"
     >
       <section aria-label="Access to Spyria" className="flex flex-col gap-3">
-        <h4 className="text-xs font-semibold uppercase text-muted">Access by role</h4>
+        <h4 className={overlineClass}>Access by role</h4>
         <ToolTable
           serverName="Spyria"
           tools={builtInTools}

@@ -5,7 +5,7 @@ import { useChartWidth } from './useChartWidth.ts'
 
 type TrendPoint = { bucket: string; value: number | null }
 
-const lineColor = 'light-dark(#2a78d6, #3987e5)'
+const lineColor = 'var(--color-chart-1)'
 const height = 160
 const axisWidth = 64
 const rightPadding = 12
@@ -70,7 +70,12 @@ export const TrendChart = ({
               y2={yOf(largest * step)}
               className="stroke-line"
             />
-            <text x={axisWidth - 6} y={yOf(largest * step) + 4} textAnchor="end" className="fill-muted text-[11px]">
+            <text
+              x={axisWidth - 6}
+              y={yOf(largest * step) + 4}
+              textAnchor="end"
+              className="fill-muted text-chart-label"
+            >
               {formatValue(largest * step)}
             </text>
           </g>
@@ -83,7 +88,7 @@ export const TrendChart = ({
                 x={xOf(index)}
                 y={height - 4}
                 textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'}
-                className="fill-muted text-[11px]"
+                className="fill-muted text-chart-label"
               >
                 {formatBucket(point.bucket, granularity)}
               </text>
@@ -114,7 +119,7 @@ export const TrendChart = ({
               x={xOf(lastIndex)}
               y={(positioned[lastIndex]?.y ?? 0) - 8}
               textAnchor="end"
-              className="fill-ink text-[11px]"
+              className="fill-ink text-chart-label"
             >
               {formatValue(points[lastIndex]?.value ?? null)}
             </text>

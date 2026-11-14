@@ -1,4 +1,4 @@
-import { focusRing } from '@spyria/ui'
+import { focusRing, smallGhostButtonClass } from '@spyria/ui'
 import { ArrowDown, ChevronRight } from 'lucide-react'
 import { type Ref, use, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
@@ -147,11 +147,7 @@ export const MessageList = ({
               {conversation.isSettingUp ? 'Setting up the repository…' : 'Agent is working…'}
             </span>
             {conversation.hasActiveTurn && onStop && (
-              <button
-                type="button"
-                onClick={onStop}
-                className={`rounded-full border border-line px-2 py-0.5 text-xs text-ink hover:bg-hover ${focusRing}`}
-              >
+              <button type="button" onClick={onStop} className={smallGhostButtonClass}>
                 Stop
               </button>
             )}

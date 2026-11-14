@@ -1,3 +1,4 @@
+import { overlineClass } from '@spyria/ui'
 import type { ReactNode } from 'react'
 import { SpiresBackground } from './SpiresBackground.tsx'
 
@@ -14,8 +15,8 @@ export const AuthScreen = ({
     <SpiresBackground />
     <section className="relative flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-card-edge bg-raised/80 p-8 shadow-xl shadow-card-glow backdrop-blur-md">
       <header className="flex flex-col gap-2">
-        <p className="text-xs font-medium tracking-[0.3em] text-muted uppercase">Spyria</p>
-        <h1 className="text-2xl font-medium">{title}</h1>
+        <p className={overlineClass}>Spyria</p>
+        <h1 className="text-title">{title}</h1>
         {description && <p className="text-sm text-muted">{description}</p>}
       </header>
       {children}

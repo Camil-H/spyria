@@ -1,5 +1,5 @@
 import type { ConnectionTool } from '@spyria/kernel'
-import { fieldClass } from '@spyria/ui'
+import { fieldClass, overlineClass } from '@spyria/ui'
 import { type ReactNode, useState } from 'react'
 
 const groups = [
@@ -39,7 +39,7 @@ export const ToolList = ({
         if (groupTools.length === 0) return null
         return (
           <section key={title} aria-label={`${title} of ${label}`} className="flex flex-col gap-1">
-            <h4 className="text-xs font-semibold uppercase text-muted">
+            <h4 className={overlineClass}>
               {title} ({groupTools.length})
             </h4>
             {shown.length === 0 ? (

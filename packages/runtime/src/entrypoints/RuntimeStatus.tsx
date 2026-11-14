@@ -1,17 +1,17 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { focusRing, Spinner } from '@spyria/ui'
+import { inlineActionClass, Spinner } from '@spyria/ui'
 import { type ReactNode, useState } from 'react'
 import type { RuntimeStatus as Status } from '../domain/runtime.ts'
 import { getRuntimeFailureReason, getRuntimeStatus } from '../queries/get-runtime-status.ts'
 
 const dotClasses: Partial<Record<Status, string>> = {
-  'Not started': 'bg-grey-500',
-  'Starting…': 'bg-primary-500',
-  Ready: 'bg-green-500',
-  Sleeping: 'bg-grey-500',
-  'Host offline': 'bg-red-500',
-  'Could not start': 'bg-red-500',
+  'Not started': 'bg-muted',
+  'Starting…': 'bg-accent',
+  Ready: 'bg-success',
+  Sleeping: 'bg-muted',
+  'Host offline': 'bg-danger',
+  'Could not start': 'bg-danger',
 }
 
 export const RuntimeStatus = ({
@@ -39,9 +39,7 @@ export const RuntimeStatus = ({
     })
   }
   const statusClass = 'inline-flex items-center gap-1.5 text-xs text-muted'
-  const dot = (
-    <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dotClasses[status] ?? 'bg-primary-500'}`} />
-  )
+  const dot = <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${dotClasses[status] ?? 'bg-accent'}`} />
   if (status === 'Ready' && menu)
     return (
       <span role="status" aria-label="Runtime" className={statusClass}>
@@ -62,7 +60,7 @@ export const RuntimeStatus = ({
           Retrying…
         </>
       ) : status === 'Could not start' && onRetry ? (
-        <button type="button" onClick={retry} className={`rounded-md text-ink hover:underline ${focusRing}`}>
+        <button type="button" onClick={retry} className={inlineActionClass}>
           Could not start · Retry
         </button>
       ) : (

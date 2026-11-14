@@ -6,7 +6,7 @@ import {
   type ToolServerAccess,
   type WorkspaceId,
 } from '@spyria/kernel'
-import { ErrorMessage, useGuardedAction } from '@spyria/ui'
+import { ErrorMessage, overlineClass, useGuardedAction } from '@spyria/ui'
 import { type ReactNode, useLayoutEffect, useRef } from 'react'
 import type { ServerAccessList } from '../queries/list-workspace-connections.ts'
 import { useProfileCommands } from './providers.tsx'
@@ -72,7 +72,7 @@ export const ServerAccessGrid = ({ target, connection }: { target: Target; conne
     )
   return (
     <section aria-label={`Access to ${connection.name}`} className="flex flex-col gap-3">
-      <h4 className="text-xs font-semibold uppercase text-muted">Access by role</h4>
+      <h4 className={overlineClass}>Access by role</h4>
       <ToolTable<TableTool>
         serverName={connection.name}
         tools={connection.tools}
