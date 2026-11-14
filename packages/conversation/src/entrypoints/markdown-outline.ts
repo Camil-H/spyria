@@ -3,7 +3,6 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 type OutlinedNode = {
   type: string
   identifier?: string
-  label?: string | null
   url?: string
   title?: string | null
   children?: OutlinedNode[]
@@ -29,8 +28,8 @@ export const isShownImage = (node: OutlinedNode) => node.type === 'image' || nod
 
 const escaped = (text: string, characters: RegExp) => text.replace(characters, (character) => `\\${character}`)
 
-const definitionSourceOf = ({ label, identifier = '', url = '', title }: OutlinedNode) =>
-  `[${label ?? identifier}]: <${escaped(url, /[\\<>]/g)}>${title ? ` "${escaped(title, /[\\"]/g)}"` : ''}`
+const definitionSourceOf = ({ identifier = '', url = '', title }: OutlinedNode) =>
+  `[${identifier}]: <${escaped(url, /[\\<>&]/g)}>${title ? ` "${escaped(title, /[\\"&]/g)}"` : ''}`
 
 const definitionSourcesOf = (text: string) =>
   nodesOf(fromMarkdown(text)).flatMap((node) =>
