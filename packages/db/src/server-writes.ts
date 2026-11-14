@@ -47,18 +47,40 @@ export const gatewayKeyRefOf = async (tx: Transaction, workspaceId: string, id: 
 
 export const virtualKeyIdOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   (
-    await firstOnServer<{ id: string }>(
+    await firstOnServer<{ id: string | null }>(
       tx,
       'select virtual_key_id as id from member_gateway_keys where workspace_id = $1 and user_id = $2',
       [workspaceId, userId],
     )
-  )?.id
+  )?.id ?? undefined
+
+export const virtualKeyNameOf = async (tx: Transaction, workspaceId: string, userId: string) =>
+  (
+    await firstOnServer<{ name: string }>(
+      tx,
+      'select virtual_key_name as name from member_gateway_keys where workspace_id = $1 and user_id = $2',
+      [workspaceId, userId],
+    )
+  )?.name
+
+export const reserveVirtualKeyName = async (tx: Transaction, workspaceId: string, userId: string) =>
+  (
+    await firstOnServer<{ name: string }>(
+      tx,
+      `insert into member_gateway_keys (workspace_id, user_id, virtual_key_name)
+       values ($1, $2, 'vk_' || gen_random_uuid())
+       on conflict (workspace_id, user_id) do update set virtual_key_name = member_gateway_keys.virtual_key_name
+       returning virtual_key_name as name`,
+      [workspaceId, userId],
+    )
+  )?.name
 
 export const virtualKeyIdsIn = (tx: Transaction, workspaceId: string) =>
   onServer<{ memberId: string; virtualKeyId: string }>(
     tx,
     `select user_id as "memberId", virtual_key_id as "virtualKeyId" from member_gateway_keys
-     join memberships using (workspace_id, user_id) where workspace_id = $1 and removed_at is null`,
+     join memberships using (workspace_id, user_id)
+     where workspace_id = $1 and removed_at is null and virtual_key_id is not null`,
     [workspaceId],
   )
 
@@ -90,7 +112,8 @@ export const setVirtualKeyId = (tx: Transaction, workspaceId: string, userId: st
     ? onServer(tx, 'delete from member_gateway_keys where workspace_id = $1 and user_id = $2', [workspaceId, userId])
     : onServer(
         tx,
-        `insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values ($1, $2, $3)
+        `insert into member_gateway_keys (workspace_id, user_id, virtual_key_id, virtual_key_name)
+         values ($1, $2, $3, 'vk_' || gen_random_uuid())
          on conflict (workspace_id, user_id) do update set virtual_key_id = excluded.virtual_key_id`,
         [workspaceId, userId, id],
       )

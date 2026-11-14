@@ -4,6 +4,8 @@ export const insertLlmCredential = skippedOnClient
 export const gatewayKeyRefsOf = async () => []
 export const gatewayKeyRefOf = skippedOnClient
 export const virtualKeyIdOf = skippedOnClient
+export const virtualKeyNameOf = skippedOnClient
+export const reserveVirtualKeyName = skippedOnClient
 export const virtualKeyIdsIn = async () => []
 export const memberModelsOf = skippedOnClient
 export const aiProviderAllowListOf = async () => null

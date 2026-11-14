@@ -575,7 +575,7 @@ export const llmCredentials = table(
 
 export const memberGatewayKeys = table(
   'member_gateway_keys',
-  { ...tenant, userId: text().notNull(), virtualKeyId: text().notNull() },
+  { ...tenant, userId: text().notNull(), virtualKeyId: text(), virtualKeyName: text().notNull() },
   (table) => [primaryKey({ columns: [table.workspaceId, table.userId] }), memberReference(table, table.userId)],
 )
 

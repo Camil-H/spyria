@@ -28,6 +28,7 @@ type BifrostGateway = LlmGateway &
 
 const notFound = 404
 const mcpClientPageSize = 100
+const virtualKeySearchLimit = 100
 const maximumCachedVirtualKeys = 1000
 const maximumCachedModelInputs = 1000
 const unauthorizedToolAnswer = /Authentication required for |request failed with status 401\b/
@@ -370,10 +371,21 @@ export const createLlmGateway = ({
     removeProviderKey: async ({ provider, id }) => {
       await request('DELETE', `/api/providers/${provider}/keys/${id}`)
     },
-    saveVirtualKey: async ({ id, keys }) => {
-      if (id && (await request('PUT', `/api/governance/virtual-keys/${id}`, bindingOf(keys))).found) return id
+    virtualKeyNamed: async (name) => {
+      const { body } = await request(
+        'GET',
+        `/api/governance/virtual-keys?search=${encodeURIComponent(name)}&limit=${virtualKeySearchLimit}`,
+      )
+      return ((body.virtual_keys ?? []) as { id: string; name: string }[]).find((key) => key.name === name)?.id
+    },
+    saveVirtualKey: async ({ id, name, keys }) => {
+      const isBound = async (savedId: string) =>
+        (await request('PUT', `/api/governance/virtual-keys/${savedId}`, bindingOf(keys))).found
+      if (id && (await isBound(id))) return id
+      const namedId = await gateway.virtualKeyNamed(name)
+      if (namedId && (await isBound(namedId))) return namedId
       const { body } = await request('POST', '/api/governance/virtual-keys', {
-        name: `vk_${crypto.randomUUID()}`,
+        name,
         is_active: true,
         ...bindingOf(keys),
       })
