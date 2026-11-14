@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from
 import { createHash } from 'node:crypto'
 import { testCrmConnection } from '@spyria/db/testing'
 import { chatId as toChatId } from '@spyria/kernel'
+import { startJobWorker } from './job-worker.ts'
 import { sharedToolServer } from './testing/fake-mcp.ts'
 import {
   acme,
@@ -26,6 +27,7 @@ import {
   startAgentStack,
   succeeded,
   textOf,
+  toolConnectionSyncsSettled,
   waitFor,
   whoami,
 } from './testing/testing.ts'
@@ -38,16 +40,23 @@ const approvals = await startAgentStack({
   approvalWindowMilliseconds,
   now: () => Date.now() + clockOffsetMilliseconds,
 })
-const { database, port, fakeMcp } = await openSharedTestApp()
+const { database, port, fakeMcp, llmGateway } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
+const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, llmGateway })
 afterEach(() => disconnectFakeHosts())
-afterAll(() => disconnectFakeHosts())
+afterAll(async () => {
+  await disconnectFakeHosts()
+  await worker.stop()
+})
 
 const aliceAccount = `alice-${crypto.randomUUID().slice(0, 8)}`
 const aliceCookie = `fake_mcp_user=${aliceAccount}`
 const bobAccount = `bob-${crypto.randomUUID().slice(0, 8)}`
 const bobCookie = `fake_mcp_user=${bobAccount}`
-beforeEach(() => asMember(alice, 'POST', connectionPath('disconnect')))
+beforeEach(async () => {
+  await asMember(alice, 'POST', connectionPath('disconnect'))
+  await toolConnectionSyncsSettled()
+})
 
 const update = rpcOf('tools/call', { name: `${sharedToolServer}-update`, arguments: { text: 'new' } })
 const toolCallRows = async (chatId: string, count: number) => {
@@ -96,6 +105,7 @@ test('on a guest’s prompt a server each member signs in to runs on the guest�
     )
   } finally {
     await asMember(bob, 'POST', connectionPath('disconnect'))
+    await toolConnectionSyncsSettled()
   }
   const audited = { owner_id: alice, server: 'fake', tool: 'whoami', read_only: true, decided_by: null }
   expect(await toolCallRows(chatId, 3)).toEqual([
@@ -445,5 +455,6 @@ test('on a server each member signs in to, the prompter’s approval choices app
     await chooseApproval(bobInAcme, null)
     await chooseApproval(aliceInAcme, null)
     await asMember(bob, 'POST', connectionPath('disconnect'))
+    await toolConnectionSyncsSettled()
   }
 })

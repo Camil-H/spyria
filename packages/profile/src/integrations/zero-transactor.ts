@@ -79,6 +79,10 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await lockMembership(tx, workspaceId, userId)
         if (!(await isActiveMember(tx, workspaceId, userId))) throw new MemberNotFound(userId)
       },
+      lockIfActive: async () => {
+        await lockMembership(tx, workspaceId, userId)
+        return isActiveMember(tx, workspaceId, userId)
+      },
       holders: async (workspace) =>
         (
           await tx.run(
@@ -146,6 +150,15 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
           delayMilliseconds: 0,
         })
       },
+      syncToolConnectionsLater: async (memberId) => {
+        await enqueueJob(tx, {
+          workspaceId,
+          type: profileJobTypes.toolConnectionsSync,
+          payload: { memberId },
+          delayMilliseconds: 0,
+          serialKey: `tool-connections/${memberId}`,
+        })
+      },
       removeToolServerLater: async ({ workspaceId: workspace, gatewayName }) => {
         await enqueueJob(tx, {
           workspaceId: inContextWorkspace(workspace),
@@ -206,17 +219,15 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         (await tx.run(zql.connectionAccess.where('workspaceId', inContextWorkspace(workspaceId)))).map(
           ({ connectionId, roleId, level, toolChanges }) => ({ connectionId, roleId, level, toolChanges }),
         ),
+      signIns: async (workspaceId) =>
+        (await tx.run(zql.toolConnections.where('workspaceId', inContextWorkspace(workspaceId)))).map(
+          ({ userId: id, connectionId }) => ({ memberId: toMemberId(id), connectionId }),
+        ),
       setAccess: async (workspaceId, connectionId, roleId, access) => {
         const key = { workspaceId: inContextWorkspace(workspaceId), connectionId, roleId }
         if (!access) return tx.mutate.connectionAccess.delete(key)
         await tx.mutate.connectionAccess.upsert({ ...key, level: access.level, toolChanges: access.toolChanges })
       },
-      removeSignIn: (workspaceId, connectionId, memberId) =>
-        tx.mutate.toolConnections.delete({
-          workspaceId: inContextWorkspace(workspaceId),
-          userId: memberId,
-          connectionId,
-        }),
     },
     toolApprovals: {
       get: async (connectionId) => {

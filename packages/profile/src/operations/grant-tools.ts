@@ -79,7 +79,7 @@ export const releaseLostSignIns = async (
   workspaceId: WorkspaceId,
   { connectionId, memberIds }: { connectionId?: string; memberIds?: readonly MemberId[] },
 ) => {
-  const { connections, accessRows, holders, virtualKeys } = await transactor.run(
+  const { connections, accessRows, holders, virtualKeys, signedIn } = await transactor.run(
     async ({ workspaceConnections, memberGatewayKeys, members }) => ({
       connections: (await workspaceConnections.list(workspaceId)).filter(
         (connection) =>
@@ -89,6 +89,7 @@ export const releaseLostSignIns = async (
       accessRows: await workspaceConnections.accessOf(workspaceId),
       holders: await members.holders(workspaceId),
       virtualKeys: await memberGatewayKeys.virtualKeysIn(workspaceId),
+      signedIn: await workspaceConnections.signIns(workspaceId),
     }),
   )
   if (connections.length === 0) return
@@ -97,17 +98,21 @@ export const releaseLostSignIns = async (
   const accessRowsByConnection = Map.groupBy(accessRows, (access) => access.connectionId)
   const keptMemberIds = memberIds && new Set(memberIds)
   const keysOfMembers = virtualKeys.filter((key) => keptMemberIds?.has(key.memberId) ?? true)
+  const losingMemberIds = new Set<MemberId>()
   for (const connection of connections) {
     const server = serverByName.get(connection.gatewayName)
     const accessToConnection = accessRowsByConnection.get(connection.id) ?? []
     for (const { memberId, virtualKeyId } of keysOfMembers) {
       const holder = holderById.get(memberId)
       if (holder && grantedToolsOf(connection, accessToConnection, holder).length > 0) continue
-      for (const session of server ? await gateway.toolSessions(virtualKeyId, server) : [])
-        await gateway.removeToolSession(session.id)
-      await transactor.run(({ workspaceConnections }) =>
-        workspaceConnections.removeSignIn(workspaceId, connection.id, memberId),
+      const sessions = server ? await gateway.toolSessions(virtualKeyId, server) : []
+      for (const session of sessions) await gateway.removeToolSession(session.id)
+      const isSignedIn = signedIn.some(
+        (signIn) => signIn.memberId === memberId && signIn.connectionId === connection.id,
       )
+      if (sessions.length > 0 || isSignedIn) losingMemberIds.add(memberId)
     }
   }
+  for (const memberId of losingMemberIds)
+    await transactor.run(({ gatewayJobs }) => gatewayJobs.syncToolConnectionsLater(memberId))
 }

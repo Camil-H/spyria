@@ -753,7 +753,7 @@ export const createApp = ({
     )
     .post(`${toolConnectionsPath}/:tool/:action{connect|refresh|disconnect}`, (context) => {
       const action = context.req.param('action')
-      return endpointResponse('A tool connection request', action === 'disconnect' ? 204 : 200, () =>
+      return endpointResponse('A tool connection request', action === 'connect' ? 200 : 204, () =>
         toolConnectionFromRequest(
           context.get('transact'),
           context.get('zeroContext'),
