@@ -30,6 +30,7 @@ const jobLogs = {
   done: { severity: 'info', body: 'Job finished' },
   rescheduled: { severity: 'info', body: 'Job rescheduled' },
   retried: { severity: 'warn', body: 'Job failed and will be retried' },
+  superseded: { severity: 'warn', body: 'Job failed and a newer job with its serial key will redo it' },
   failed: { severity: 'error', body: 'Job failed after its last attempt' },
 } as const
 
@@ -299,31 +300,34 @@ export const startJobWorker = (
         if (outcome?.retryInMilliseconds !== undefined) return { outcome: 'rescheduled' }
       }
     } catch (error) {
-      const recordFailure = (isFailed: boolean) =>
-        database.$client.unsafe<{ isFailed: boolean }[]>(
+      const recordFailure = (isSuperseded: boolean) =>
+        database.$client.unsafe<{ isFailed: boolean; isSuperseded: boolean }[]>(
           `with outcome as (
-           select $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
-             where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued'))
-             or exists(select 1 from jobs as this_run join jobs as next_run
+           select $9::boolean or exists(select 1 from jobs as this_run join jobs as next_run
                on next_run.workspace_id = this_run.workspace_id and next_run.serial_key = this_run.serial_key
-               where this_run.workspace_id = $1 and this_run.id = $2 and next_run.state = 'queued') as is_failed)
-         update jobs set state = case when is_failed then 'failed' else 'queued' end, last_error = $5,
-           attempts = attempts + 1, run_at = now() + make_interval(secs => $6::double precision / 1000),
-           finished_at = case when is_failed then now() end
+               where this_run.workspace_id = $1 and this_run.id = $2 and next_run.state = 'queued') as is_superseded,
+             $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
+               where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued')) as is_failed)
+         update jobs set state = case when is_superseded then 'done' when is_failed then 'failed' else 'queued' end,
+           last_error = $5, attempts = attempts + 1,
+           run_at = now() + make_interval(secs => $6::double precision / 1000),
+           finished_at = case when is_superseded or is_failed then now() end
          from outcome where ${claimedJob}
-         returning is_failed as "isFailed"`,
+         returning is_failed and not is_superseded as "isFailed", is_superseded as "isSuperseded"`,
           [
             ...jobKey,
-            isFailed,
+            isLastAttempt,
             errorSummaryOf(error),
-            isFailed ? 0 : retryDelayOf(job.type, job.attempt, retryDelays),
+            isLastAttempt ? 0 : retryDelayOf(job.type, job.attempt, retryDelays),
             isOneQueuedJobType(job.type),
             job.type,
+            isSuperseded,
           ],
         )
-      const [recorded] = await recordFailure(isLastAttempt).catch((recordError: unknown) =>
+      const [recorded] = await recordFailure(false).catch((recordError: unknown) =>
         (recordError as { code?: string }).code === uniqueViolation ? recordFailure(true) : Promise.reject(recordError),
       )
+      if (recorded?.isSuperseded) return { outcome: 'superseded', error }
       return { outcome: (recorded?.isFailed ?? isLastAttempt) ? 'failed' : 'retried', error }
     }
     return { outcome: 'done' }

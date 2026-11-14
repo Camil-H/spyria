@@ -227,7 +227,7 @@ test('a job waits while another job with its serial key runs, and is claimed onc
   await worker.stop()
 })
 
-test('a second job queued under the serial key of a queued job is dropped, and a failing job whose key has a newer queued job fails at once instead of retrying', async () => {
+test('a second job queued under the serial key of a queued job is dropped, and a failing job whose key has a newer queued job ends at once, keeping its error, since the newer one redoes it', async () => {
   const discardPayload = JSON.stringify({ runtimeId: 'runtime-serial-two', hostId: 'host-serial-two' })
   const queueUnderKey = (id: string, runAt: string) =>
     database.$client`
@@ -255,7 +255,16 @@ test('a second job queued under the serial key of a queued job is dropped, and a
     expect(await jobRow('job-serial-next')).toMatchObject({ state: 'queued' })
     failRemoval()
     await waitFor(async () => (await jobRow('job-serial-failing'))?.state !== 'running', 2_000)
-    expect(await jobRow('job-serial-failing')).toMatchObject({ state: 'failed', attempts: 1 })
+    expect(await jobRow('job-serial-failing')).toMatchObject({
+      state: 'done',
+      attempts: 1,
+      lastError: 'Error',
+    })
+    await waitFor(() => logged.events.some(({ attributes }) => attributes?.['job.id'] === 'job-serial-failing'))
+    expect(logged.events.find(({ attributes }) => attributes?.['job.id'] === 'job-serial-failing')).toMatchObject({
+      severity: 'warn',
+      attributes: { 'job.outcome': 'superseded' },
+    })
   } finally {
     failRemoval()
     await worker.stop()
