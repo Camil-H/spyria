@@ -1,5 +1,5 @@
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
-import { type AccessLevel, type MemberId, memberId, type WorkspaceId } from '@spyria/kernel'
+import type { AccessLevel, MemberId, WorkspaceId } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import { Secret } from '../domain/secret.ts'
 import type { ConnectionSignIn } from '../domain/workspace-connection.ts'
@@ -105,8 +105,6 @@ const markingsOf = (value: unknown) =>
   })
 const toolChangesOf = (value: unknown) =>
   Object.fromEntries(Object.entries(recordOf(value)).filter(([, isAllowed]) => typeof isAllowed === 'boolean'))
-const accessSubjectOf = ({ roleId, memberId: member }: Record<string, unknown>) =>
-  typeof roleId === 'string' ? { roleId } : { memberId: memberId(textOf(member)) }
 const secretHeaderOf = (value: unknown) => {
   if (value === null) return null
   const { name, value: secret } = (value ?? {}) as Record<string, unknown>
@@ -139,7 +137,7 @@ export const workspaceConnectionFromRequest = (
     access: () =>
       setConnectionAccess(dependencies, {
         ...target,
-        ...accessSubjectOf(fields),
+        roleId: textOf(fields.roleId),
         level: fields.level === null ? null : (textOf(fields.level) as AccessLevel),
         toolChanges: toolChangesOf(fields.toolChanges),
       }),

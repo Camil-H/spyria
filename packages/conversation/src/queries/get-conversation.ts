@@ -26,7 +26,13 @@ import type { AgentStep, StoredStep, ThoughtStep } from '../domain/agent-steps.t
 import { toolServerNamerOf } from '../domain/agent-steps.ts'
 import type { Attachment } from '../domain/attachments.ts'
 import { stillRunningOf, taskReportOf } from '../domain/delegation.ts'
-import { devLoopAuthorName, isDevLoopPrompt, movedCardLabelOf } from '../domain/dev-loop.ts'
+import {
+  type DevLoopStep,
+  devLoopAuthorName,
+  isActiveLoop,
+  isDevLoopPrompt,
+  movedCardLabelOf,
+} from '../domain/dev-loop.ts'
 import { isAgentActivity, isChangeableBy, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
@@ -104,6 +110,7 @@ export type Conversation = Readonly<{
   isReadMarkerBehind: boolean
   messages: readonly ConversationMessage[]
   items: readonly ConversationItem[]
+  activeDevLoop: DevLoopStep | null
 }>
 
 export const durationLabelOf = (milliseconds: number) => {
@@ -395,12 +402,16 @@ export const getConversation =
         (marker) => marker.workspaceId === workspaceId && marker.chatId === chatId && marker.memberId === viewerId,
       )?.lastReadSeq ?? 0
     const messages = flowMessages.map(conversationMessageOf)
-    const pullRequest = [...snapshot.pinnedSteps, ...chatMessages]
-      .filter((message) => message.chatId === chatId && message.step?.type === 'pull_request')
-      .reduce<MessageRow | undefined>(
-        (latest, message) => (latest && latest.seq > message.seq ? latest : message),
-        undefined,
-      )?.step as PullRequestStep | undefined
+    const latestCardOf = (type: 'pull_request' | 'dev_loop') =>
+      [...snapshot.pinnedSteps, ...chatMessages]
+        .filter((message) => message.chatId === chatId && message.step?.type === type)
+        .reduce<MessageRow | undefined>(
+          (latest, message) => (latest && latest.seq > message.seq ? latest : message),
+          undefined,
+        )
+    const pullRequest = latestCardOf('pull_request')?.step as PullRequestStep | undefined
+    const loopCard = latestCardOf('dev_loop')
+    const activeLoopCard = loopCard && isActiveLoop(loopCard.step as DevLoopStep) ? loopCard : undefined
     return {
       title: chat.name,
       type: chat.type,
@@ -440,6 +451,9 @@ export const getConversation =
       hasActiveTurn,
       isReadMarkerBehind: flowMessages.some((message) => message.seq > lastReadSeq),
       messages,
-      items: withLoopCardsAfterTheirRound(turnItemsOf(messages.flatMap(withThoughtsApart))),
+      items: withLoopCardsAfterTheirRound(
+        turnItemsOf(messages.filter((message) => message.id !== activeLoopCard?.id).flatMap(withThoughtsApart)),
+      ),
+      activeDevLoop: (activeLoopCard?.step as DevLoopStep | undefined) ?? null,
     }
   }

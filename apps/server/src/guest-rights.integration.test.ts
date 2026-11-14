@@ -59,13 +59,13 @@ const toolCallRows = async (chatId: string, count: number) => {
   await waitFor(async () => (await rows()).length >= count)
   return rows()
 }
-const allowOnlySharedTools = async (memberId: string, allowedTools: string[] | null) => {
+const allowOnlySharedTools = async (roleId: string, allowedTools: string[] | null) => {
   const answer = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/access', {
-    memberId,
-    level: allowedTools === null ? null : 'none',
+    roleId,
+    level: allowedTools === null ? 'write' : 'none',
     toolChanges: Object.fromEntries((allowedTools ?? []).map((tool) => [tool, true])),
   })
-  if (answer.status !== 200) throw new Error(`Setting the access of ${memberId} answered ${answer.status}`)
+  if (answer.status !== 200) throw new Error(`Setting the access of ${roleId} answered ${answer.status}`)
 }
 const refused = (answer: { status: number | undefined; result: { content?: { text: string }[] } }) => ({
   status: answer.status,
@@ -113,20 +113,20 @@ test('on a guest’s prompt a shared-login tool needs both the owner’s and the
   try {
     expect(textOf((await mcpCall(host, token, lookup)).result)).toBe('ran lookup')
 
-    await allowOnlySharedTools(bob, ['update'])
+    await allowOnlySharedTools('member', ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `Bob's access to ${testCrmConnection.name} does not include lookup in this chat`,
     })
-    await allowOnlySharedTools(bob, null)
-    await allowOnlySharedTools(alice, ['update'])
+    await allowOnlySharedTools('member', null)
+    await allowOnlySharedTools('admin', ['update'])
     expect(refused(await mcpCall(host, token, lookup))).toEqual({
       status: 200,
       text: `${testCrmConnection.name} isn't available on Bob's prompts in this chat`,
     })
   } finally {
-    await allowOnlySharedTools(alice, null)
-    await allowOnlySharedTools(bob, null)
+    await allowOnlySharedTools('admin', null)
+    await allowOnlySharedTools('member', null)
   }
   expect(fakeMcp.records.slice(callsBefore)).toEqual([{ tool: 'lookup', user: 'shared' }])
   const audited = {

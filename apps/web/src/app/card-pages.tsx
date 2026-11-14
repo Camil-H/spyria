@@ -16,13 +16,15 @@ export const CardGrid = ({
   cards,
   statusOf,
   badgeOf,
+  columnsClass = 'sm:grid-cols-2 2xl:grid-cols-4',
 }: {
   basePath: string
   cards: readonly PageCard[]
   statusOf: (path: string) => CardStatus | undefined
   badgeOf?: (path: string) => ReactNode
+  columnsClass?: string
 }) => (
-  <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+  <ul className={`grid auto-rows-fr gap-3 ${columnsClass}`}>
     {cards.map(({ path, title, description }) => {
       const status = statusOf(path)
       return (

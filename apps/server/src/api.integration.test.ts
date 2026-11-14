@@ -22,7 +22,6 @@ afterAll(async () => {
 
 const app = createApp({ database: testDatabase.database, ...testAuthSettings })
 const memberPrivateTables = ['read_markers', 'thread_read_markers', 'llm_credentials', 'tool_approvals']
-const ownConnectionTables = ['tool_connections', 'connection_access']
 type ReplicatedTable = {
   name: string
   serverName?: string
@@ -136,16 +135,13 @@ const expectedCount = async (table: string, workspace: string, user: string) => 
   const readableChats = `select id from chats where workspace_id = '${workspace}' and (visibility = 'public'
     or id in (${participatedChats}))`
   const userCondition = memberPrivateTables.includes(table) ? `and user_id = '${user}'` : ''
-  const adminCondition = `or exists (select 1 from memberships where workspace_id = '${workspace}'
-    and user_id = '${user}' and role = 'admin' and removed_at is null)`
   const chatCondition =
     table === 'chats'
       ? `and id in (${readableChats})`
       : serverSchema[table]?.chat_id
         ? `and chat_id in (${readableChats})`
-        : ownConnectionTables.includes(table)
-          ? `and (user_id = '${user}'
-              ${table === 'connection_access' ? `or user_id is null ${adminCondition}` : ''})`
+        : table === 'tool_connections'
+          ? `and user_id = '${user}'`
           : ''
   const [{ count }] = await testDatabase.database.$client.unsafe<[{ count: number }]>(
     `select count(*)::int as count from "${table}" where workspace_id = '${workspace}' ${userCondition} ${chatCondition}`,
@@ -170,10 +166,10 @@ await testDatabase.database.$client`
     (${acme}, 'connection-acme-docs', 'Docs', 'docs_api001', 'http://docs/mcp', 'member', null, '[]', true),
     (${globex}, 'connection-globex-erp', 'ERP', 'erp_api001', 'http://erp/mcp', 'shared', null, '[]', true)`
 await testDatabase.database.$client`
-  insert into connection_access (workspace_id, connection_id, id, role_id, user_id, level, tool_changes)
-  values (${acme}, 'connection-acme-crm', 'role:member', 'member', null, 'write', '{}'),
-    (${acme}, 'connection-acme-crm', ${`member:${bob}`}, null, ${bob}, 'read', '{}'),
-    (${acme}, 'connection-acme-crm', ${`member:${lee}`}, null, ${lee}, 'none', '{}')`
+  insert into connection_access (workspace_id, connection_id, role_id, level, tool_changes)
+  values (${acme}, 'connection-acme-crm', 'member', 'write', '{}'),
+    (${acme}, 'connection-acme-docs', 'admin', 'read', '{}'),
+    (${globex}, 'connection-globex-erp', 'member', 'none', '{}')`
 await testDatabase.database.$client`
   insert into tool_approvals (workspace_id, user_id, connection_id, server_approval, tool_approvals)
   values (${acme}, ${alice}, 'connection-acme-crm', 'always', '{}'),
@@ -327,7 +323,7 @@ test('the member-private rows of Bob are not visible to Alice', () => {
   }
 })
 
-test('workspace connections and the access of roles are visible to every member of their workspace, a member’s own access to them and to admins', () => {
+test('workspace connections and the access of roles are visible to every member of their workspace only', () => {
   const columnOf = (reader: string, table: string, column: string) =>
     rowsByReader
       .get(reader)
@@ -336,11 +332,15 @@ test('workspace connections and the access of roles are visible to every member 
   for (const reader of ['Alice in Acme', 'Bob in Acme', 'Lee in Acme'])
     expect(columnOf(reader, 'workspace_connections', 'name')).toEqual(['CRM', 'Docs'])
   expect(columnOf('Alice in Globex', 'workspace_connections', 'name')).toEqual(['ERP'])
-  const accessIdsOf = (reader: string) => columnOf(reader, 'connection_access', 'id')?.toSorted()
-  expect(accessIdsOf('Alice in Acme')).toEqual([`member:${bob}`, `member:${lee}`, 'role:member'])
-  expect(accessIdsOf('Bob in Acme')).toEqual([`member:${bob}`, 'role:member'])
-  expect(accessIdsOf('Lee in Acme')).toEqual([`member:${lee}`, 'role:member'])
-  expect(accessIdsOf('Alice in Globex')).toEqual([])
+  const accessOf = (reader: string) =>
+    rowsByReader
+      .get(reader)
+      ?.get('connection_access')
+      ?.map((row) => `${row.connection_id}:${row.role_id}`)
+      .toSorted()
+  for (const reader of ['Alice in Acme', 'Bob in Acme', 'Lee in Acme'])
+    expect(accessOf(reader)).toEqual(['connection-acme-crm:member', 'connection-acme-docs:admin'])
+  expect(accessOf('Alice in Globex')).toEqual(['connection-globex-erp:member'])
 })
 
 test('a member’s tool sign-ins are visible to them only, never to the participants of the chats they own', () => {
@@ -383,20 +383,6 @@ test("workspaces lists only the current workspace to a session opened through th
   } finally {
     await testDatabase.database.$client`delete from workspace_sso where workspace_id = ${acme}`
   }
-})
-
-test('an ownership change never shows the access of Bob to the participants of a chat he takes over', async () => {
-  const restrictedOf = async (workspace: string, user: string) =>
-    ((await readAll(workspace, user)).get('connection_access') ?? [])
-      .flatMap((row) => (row.user_id === null ? [] : [row.user_id]))
-      .toSorted()
-  expect(await restrictedOf(acme, lee)).toEqual([lee])
-  await testDatabase.database.$client`update chats set owner_user_id = ${bob} where id = 'chat-invoice-bug'`
-  expect(await restrictedOf(acme, lee)).toEqual([lee])
-  await testDatabase.database.$client`update chats set owner_user_id = ${alice} where owner_user_id = ${bob}`
-  expect(await restrictedOf(acme, lee)).toEqual([lee])
-  expect(await restrictedOf(acme, bob)).toEqual([bob])
-  expect(await restrictedOf(acme, alice)).toEqual([bob, lee])
 })
 
 test('crafted query arguments cannot reach another workspace or member', async () => {

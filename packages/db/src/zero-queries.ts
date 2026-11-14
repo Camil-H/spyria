@@ -72,7 +72,7 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
   )
 
 const id = z.string().check(z.minLength(1))
-export const pinnedStepTypes = ['question', 'pull_request']
+export const pinnedStepTypes = ['question', 'pull_request', 'dev_loop']
 export const searchTextMinimumLength = 2
 export const searchResultLimit = 30
 export const searchTextMaximumLength = 200
@@ -248,17 +248,7 @@ export const queries = defineQueries({
   workspaceConnections: defineQuery(({ ctx }) =>
     zql.workspaceConnections.where('workspaceId', ctx.workspaceId).orderBy('name', 'asc'),
   ),
-  connectionAccess: defineQuery(({ ctx }) =>
-    zql.connectionAccess
-      .where('workspaceId', ctx.workspaceId)
-      .where(({ or, cmp, exists }) =>
-        or(
-          cmp('userId', 'IS', null),
-          cmp('userId', ctx.userId),
-          exists('memberships', activeMemberWith(ctx.userId, 'tools.manage')),
-        ),
-      ),
-  ),
+  connectionAccess: defineQuery(({ ctx }) => zql.connectionAccess.where('workspaceId', ctx.workspaceId)),
   toolApprovals: defineQuery(({ ctx }) =>
     zql.toolApprovals.where('workspaceId', ctx.workspaceId).where('userId', ctx.userId),
   ),
