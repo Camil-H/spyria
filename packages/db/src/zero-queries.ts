@@ -72,7 +72,7 @@ const readableBy = (userId: MemberId) => (chat: Query<'chats', Schema>) =>
   )
 
 const id = z.string().check(z.minLength(1))
-export const pinnedStepTypes = ['question', 'pull_request']
+export const pinnedStepTypes = ['question', 'pull_request', 'dev_loop']
 export const searchTextMinimumLength = 2
 export const searchResultLimit = 30
 export const searchTextMaximumLength = 200
