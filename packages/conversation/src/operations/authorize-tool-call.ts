@@ -5,6 +5,7 @@ import {
   guestPrompterOf,
   needsApproval,
   notApprovedOf,
+  stoppedBeforeCall,
   type ToolRefusal,
   toolGatewayUnreachable,
   toolRefusalOf,
@@ -66,5 +67,15 @@ export const authorizeToolCall = async (
       answererName,
     },
   })
-  return { readOnly, ...decided, ...(decided.decision !== 'approved' && { refusal: notApprovedOf(answererName) }) }
+  if (decided.decision !== 'approved') return { readOnly, ...decided, refusal: notApprovedOf(answererName) }
+  const isTurnActive =
+    promptId === null ||
+    (await dependencies.transactor.run(
+      async ({ agentTurns, agentJobs }) =>
+        (await agentTurns.lock(chat.chatId)) === promptId &&
+        !(await agentJobs.isInterruptRequested(chat.chatId, promptId)),
+    ))
+  return isTurnActive
+    ? { readOnly, ...decided }
+    : { readOnly, decision: 'cancelled', decidedBy: null, refusal: stoppedBeforeCall }
 }

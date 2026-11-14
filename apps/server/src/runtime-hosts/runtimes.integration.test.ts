@@ -7,7 +7,9 @@ import {
   createRuntimeJobs,
   createRuntimeTransactor,
   ensureRuntimeRunning,
+  expireSignIn,
   retryRuntime,
+  stopChatRuntime,
   touchRuntime,
 } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
@@ -351,6 +353,23 @@ test('archiving a runtime chat removes its runtime', async () => {
   expect(host.containers.has(runtime.id)).toBe(false)
 })
 
+test('archiving a chat while its container is being created removes the container once the creation ends', async () => {
+  const host = await fakeHost('Archived while creating host')
+  const chat = await newRuntimeChat()
+  const releaseCreate = host.hold('create')
+  const runtime = await ensure(chat)
+  await waitFor(() => host.commands.some(({ op, runtimeId }) => op === 'create' && runtimeId === runtime.id))
+  expect(await archive(chat)).toEqual(succeeded)
+  await runtimeIn(chat, 'removed')
+  releaseCreate()
+  await waitFor(async () => (await jobsOf('runtime.create', runtime.id)).every((job) => job.state === 'done'))
+  await waitFor(
+    () => host.commands.filter(({ op, runtimeId }) => op === 'remove' && runtimeId === runtime.id).length === 2,
+  )
+  expect(host.containers.has(runtime.id)).toBe(false)
+  expect((await runtimeOf(chat)).state).toBe('removed')
+})
+
 test('a start or retry waiting on an archive in progress is refused once it commits and places no runtime', async () => {
   const host = await fakeHost('Archived chat host')
   const [startedChat, retriedChat] = [await newRuntimeChat(), await newRuntimeChat()]
@@ -374,7 +393,7 @@ test('a start or retry waiting on an archive in progress is refused once it comm
   expect(host.commands.filter(({ op }) => op === 'create')).toEqual([])
 })
 
-test('commands to an offline host retry until it returns, rows stay untouched meanwhile, and hello reconciles drift', async () => {
+test('commands to an offline host retry until it returns, rows stay untouched meanwhile, the idle sweep stops nothing there, and hello reconciles drift', async () => {
   const host = await fakeHost('Flaky host')
   const [stoppingChat, vanishedChat, revivedChat] = [
     await newRuntimeChat(),
@@ -389,6 +408,14 @@ test('commands to an offline host retry until it returns, rows stay untouched me
 
   await idleFor(stoppingChat, '2 hours')
   await sweep()
+  expect((await runtimeOf(stoppingChat)).state).toBe('running')
+  expect(await jobsOf('runtime.stop', stopping.id)).toEqual([])
+  await zeroDatabase.transaction((tx) =>
+    stopChatRuntime(
+      { transactor: createRuntimeTransactor(tx) },
+      { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
+    ),
+  )
   await waitFor(async () =>
     (await jobsOf('runtime.stop', stopping.id)).some((job) => job.last_error !== null && job.attempts >= 2),
   )
@@ -554,6 +581,27 @@ test('a machine session installs its harness once while the runtime reads instal
   expect(harnessCommands(machine)).toEqual(['installed', 'start', 'create', 'installed', 'start'])
   expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('installed')
   expect(workspaceHost.commands.map(({ op }) => op)).not.toContain('install')
+})
+
+test('a sign-in expiring while its machine is removed waits for the removal and leaves the machine removed', async () => {
+  const machine = await newMachine()
+  const chat = await newRuntimeChat('Machine chat', undefined, defaultHarness)
+  await runningRuntime(chat)
+  let expiring: Promise<void> | undefined
+  await database.$client.begin(async (removing) => {
+    await removing`update runtime_hosts set removed_at = now() where id = ${machine.id}`
+    expiring = zeroDatabase.transaction((tx) =>
+      expireSignIn(
+        { transactor: createRuntimeTransactor(tx) },
+        { workspaceId: acme, chatId: chat, tool: defaultHarness },
+      ),
+    )
+    await waitFor(() => waitingOnLock(database))
+  })
+  await expiring
+  const [host] = await database.$client`select removed_at, capacity from runtime_hosts where id = ${machine.id}`
+  expect(host?.removed_at).not.toBeNull()
+  expect(host?.capacity.expiredSignIns).toEqual({})
 })
 
 test("a failed install fails the runtime at once with npm's reason, and a retry installs and runs", async () => {

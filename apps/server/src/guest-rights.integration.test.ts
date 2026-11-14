@@ -309,6 +309,36 @@ test('an approval nobody answers expires, Stop cancels a pending one, and the ow
   expect(frames.filter((frame) => JSON.parse(frame).question).length).toBe(2)
 })
 
+test('a call approved after Stop was asked for, before its turn has stopped, is refused and never runs', async () => {
+  const host = await approvals.fakeHost('Stopping approvals host')
+  const { chatId, token, promptId } = await runtimeTurn(host, bob)
+  const { frames } = await approvals.openStream(toChatId(chatId))
+  const callsBefore = fakeMcp.records.length
+  const approvedCall = mcpCall(host, token, update)
+  const asked = await approvalOf(frames, 1)
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
+    values (${acme}, ${`job-stop-${promptId}`}, 'agent.interrupt',
+      ${JSON.stringify({ chatId, promptId, memberId: alice })}::jsonb, now() + interval '1 hour', 0, 'queued')`
+
+  expect(await answerAs(alice, chatId, asked.questionId, true)).toBe(200)
+  expect(refused(await approvedCall)).toEqual({ status: 200, text: 'The turn was stopped before this call ran' })
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+  expect(await toolCallRows(chatId, 1)).toEqual([
+    {
+      prompter_id: bob,
+      owner_id: alice,
+      server: sharedToolServer,
+      tool: 'update',
+      read_only: false,
+      decision: 'cancelled',
+      decided_by: null,
+      status: 'refused',
+    },
+  ])
+  await database.$client`delete from jobs where id = ${`job-stop-${promptId}`}`
+})
+
 test('a pending approval is cancelled when its request aborts or its turn ends, and its card shows Stopped', async () => {
   const { host, chatId, token, frames } = await guestTurnWithApprovals('Cancelled approvals host')
   const aborted = new AbortController()

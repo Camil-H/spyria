@@ -155,6 +155,65 @@ test('an interrupt naming a prompt that already ended cancels nothing, one namin
   })
 })
 
+test('an interrupt naming a prompt queued behind the running one ends only that prompt, and the running prompt goes on', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
+  await promptWithId('stub:long', 'prompt-running')
+  await socket.until((event) => event.update.status === 'in_progress')
+  await promptWithId('hello', 'prompt-queued')
+
+  expect((await interrupt('prompt-queued')).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  await Bun.sleep(100)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-queued' },
+  ])
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
+
+  expect((await interrupt('prompt-running')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({
+    stopReason: 'cancelled',
+    promptId: 'prompt-running',
+  })
+  await promptWithId('hello', 'prompt-after')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-after',
+  })
+})
+
+test('stopping a prompt queued behind one waiting on a question leaves that question open, and its answer still reaches the adapter', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  await promptWithId('stub:ask', 'prompt-asking')
+  const questionId = await questionAt(socket, 1)
+  await promptWithId('hello', 'prompt-queued')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-queued' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('question_closed'))).toEqual([])
+  const answered = await call('POST', `/api/conversations/${id}/questions/${questionId}`, {
+    answers: { question_0: 'SQLite' },
+  })
+  expect(answered.status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(answerOf(socket.events)).toEqual({ action: 'accept', content: { question_0: 'SQLite' } })
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => [update.promptId, update.stopReason])).toEqual([
+    ['prompt-queued', 'cancelled'],
+    ['prompt-asking', 'end_turn'],
+  ])
+})
+
 test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())
@@ -202,7 +261,7 @@ test('a conversation remembers the last 50 prompt ids: an older one sent again r
   expect(textOf(socket.events)).toEndWith('[t52] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
-test('events are numbered per conversation, resent after a sequence number, from a bounded buffer', async () => {
+test('events are numbered per conversation, resent after a sequence number, from a bounded buffer that says how many it no longer holds', async () => {
   const { open, create, prompt } = started({ bufferSize: 4 })
   const id = await create(launchOf())
   const live = open(id)
@@ -219,7 +278,18 @@ test('events are numbered per conversation, resent after a sequence number, from
   expect(resent.events.map(({ seq }) => seq)).toEqual([workspaceSeq, lastSeq - 1, lastSeq])
   const everything = open(id)
   await everything.until(kindOf('turn_end'))
-  expect(everything.events.map(({ seq }) => seq)).toEqual([lastSeq - 3, lastSeq - 2, lastSeq - 1, lastSeq])
+  expect(everything.events.map(({ seq }) => seq)).toEqual([lastSeq - 4, lastSeq - 3, lastSeq - 2, lastSeq - 1, lastSeq])
+  expect(everything.events[0]).toMatchObject({
+    id: `${id}:${lastSeq - 4}`,
+    completed: true,
+    update: { sessionUpdate: 'events_lost', count: lastSeq - 4 },
+  })
+  const resentAfterLoss = open(id, 2)
+  await resentAfterLoss.until(kindOf('turn_end'))
+  expect(resentAfterLoss.events.find(kindOf('events_lost'))?.update).toEqual({
+    sessionUpdate: 'events_lost',
+    count: lastSeq - 6,
+  })
 
   const intruder = open(id, 0, 'wrong-key')
   expect(await intruder.closed).toBe(1008)
@@ -238,9 +308,9 @@ test('the replay buffer is also capped by bytes: it keeps the newest events that
   expect(kept.length).toBeLessThan(events.length)
   const replayed = open(id)
   await replayed.until(kindOf('turn_end'))
-  expect(replayed.events.filter((event) => !kindOf('workspace')(event))).toEqual(
-    kept.filter((event) => !kindOf('workspace')(event)),
-  )
+  const [lost, ...resent] = replayed.events.filter((event) => !kindOf('workspace')(event))
+  expect(lost?.update).toEqual({ sessionUpdate: 'events_lost', count: events.length - kept.length })
+  expect(resent).toEqual(kept.filter((event) => !kindOf('workspace')(event)))
 
   const tiny = started({ bufferBytes: 1 })
   const tinyId = await tiny.create(launchOf())
@@ -249,7 +319,9 @@ test('the replay buffer is also capped by bytes: it keeps the newest events that
   const tinyEvents = await tinyLive.until(kindOf('turn_end'))
   const tinyReplay = tiny.open(tinyId)
   await tinyReplay.until(kindOf('turn_end'))
-  expect(tinyReplay.events.filter((event) => !kindOf('workspace')(event))).toEqual(tinyEvents.slice(-1))
+  expect(tinyReplay.events.filter((event) => !kindOf('workspace')(event) && !kindOf('events_lost')(event))).toEqual(
+    tinyEvents.slice(-1),
+  )
 })
 
 test('adapter lines are cut at every newline across chunks: carriage returns and empty lines kept, a last line without newline waits', () => {

@@ -10,6 +10,7 @@ export type GitHubPullRequest = {
   merged?: boolean
   merged_at?: string | null
   head: { sha: string }
+  updated_at?: string
   mergeable?: boolean | null
   commits?: number
 }
@@ -52,7 +53,7 @@ export const pullRequestStepOf = (
   url: pullRequest.html_url,
   title: pullRequest.title,
   state:
-    pullRequest.merged || pullRequest.merged_at
+    pullRequest.merged || pullRequest.merged_at || previous?.state === 'merged'
       ? 'merged'
       : pullRequest.state === 'closed'
         ? 'closed'
@@ -64,7 +65,13 @@ export const pullRequestStepOf = (
   checks: previous?.headSha === pullRequest.head.sha ? previous.checks : {},
   review: previous?.review ?? null,
   comments: previous?.comments ?? [],
+  ...((pullRequest.updated_at ?? previous?.updatedAt) && { updatedAt: pullRequest.updated_at ?? previous?.updatedAt }),
 })
+
+const isOlderThan = (pullRequest: GitHubPullRequest, step: PullRequestStep) =>
+  pullRequest.updated_at !== undefined &&
+  step.updatedAt !== undefined &&
+  Date.parse(pullRequest.updated_at) < Date.parse(step.updatedAt)
 
 const checkOf = (event: string, payload: WebhookPayload) =>
   event === 'check_suite' ? payload.check_suite : event === 'check_run' ? payload.check_run : undefined
@@ -87,7 +94,9 @@ export const updatedPullRequest = (step: PullRequestStep, event: string, payload
   const { action, comment, review, thread } = payload
   const check = checkOf(event, payload)
   if (event === 'pull_request' && payload.pull_request)
-    return pullRequestStepOf(step.repository, payload.pull_request, step)
+    return isOlderThan(payload.pull_request, step)
+      ? step
+      : pullRequestStepOf(step.repository, payload.pull_request, step)
   if (event === 'pull_request_review' && review) {
     const state = review.state.toLowerCase()
     const reviewState = reviewStates.find((known) => known === state) ?? null

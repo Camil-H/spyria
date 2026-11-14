@@ -43,7 +43,7 @@ import {
   recordToolCall,
 } from '../operations/model-calls.ts'
 import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
-import { publishBranch, recordPullRequest } from '../operations/publish-branch.ts'
+import { applyPullRequestEvent, publishBranch } from '../operations/publish-branch.ts'
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
@@ -67,6 +67,8 @@ const restartSessionPayload = z.object({
   promptId: z.nullable(z.pipe(id, z.transform(messageId))),
 })
 const loopPayload = z.object({ loopId: z.pipe(id, z.transform(messageId)) })
+const afterTurnPayload = z.extend(loopPayload, { promptId: z.pipe(id, z.transform(messageId)) })
+const pollChecksPayload = z.extend(loopPayload, { checksRunId: z.string() })
 const memberRemovedPayload = z.object({
   memberId: z.pipe(id, z.transform(memberId)),
   actorId: z.pipe(id, z.transform(memberId)),
@@ -139,11 +141,11 @@ export const createAgentHandlers = ({
       [agentJobTypes.sweep]: ({ workspaceId }: AgentJob) =>
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
       [devLoopJobTypes.afterTurn]: ({ workspaceId, payload }: AgentJob) =>
-        continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+        continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...afterTurnPayload.parse(payload) }),
       [devLoopJobTypes.run]: ({ workspaceId, payload }: AgentJob) =>
         runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
       [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
-        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
+        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...pollChecksPayload.parse(payload) }),
       [devLoopJobTypes.ci]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
         judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }, isLastAttempt),
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>
@@ -198,8 +200,8 @@ export const createAgentHandlers = ({
       githubToolPolicy(dependenciesOf(input.chat.workspaceId), input),
     runGitAction: (input: Parameters<typeof runGitAction>[1]) =>
       runGitAction(dependenciesOf(input.chat.workspaceId), input),
-    recordPullRequest: (input: Parameters<typeof recordPullRequest>[1]) =>
-      recordPullRequest(dependenciesOf(input.chat.workspaceId), input),
+    applyPullRequestEvent: (workspaceId: WorkspaceId, input: Parameters<typeof applyPullRequestEvent>[1]) =>
+      applyPullRequestEvent(dependenciesOf(workspaceId), input),
     wakeWorkspace: (chat: AgentChat, member: MemberId) =>
       wakeWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member }),
     answerQuestion: async (chat: AgentChat, member: MemberId, questionId: string, answer: object) =>

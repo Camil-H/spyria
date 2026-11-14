@@ -22,6 +22,7 @@ export type PullRequestStep = {
   checks: Record<string, CheckState>
   review: 'approved' | 'changes_requested' | 'commented' | null
   comments: ReviewComment[]
+  updatedAt?: string
 }
 export type PullRequestDraft = { title: string; body: string }
 

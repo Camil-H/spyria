@@ -124,7 +124,7 @@ export const idleCutoffsAt = (now: number): IdleCutoffs => ({
 
 export const idleStepOf = (runtime: Runtime, now: number) => {
   const idleMilliseconds = now - runtime.lastActiveAt
-  if (runtime.state === 'running' && idleMilliseconds > idleStopMilliseconds) return 'stopping'
+  if (runtime.state === 'running' && runtime.hostOnline && idleMilliseconds > idleStopMilliseconds) return 'stopping'
   if ((runtime.state === 'stopped' || runtime.state === 'failed') && idleMilliseconds > idleRemovalMilliseconds)
     return 'removing'
   return undefined
@@ -193,5 +193,11 @@ export const locationOf = (runtime: Runtime) =>
 export const haltStepOf = (runtime: Runtime) => {
   if (runtime.state === 'running') return 'stop'
   if (runtime.state === 'creating' || runtime.state === 'installing' || runtime.state === 'starting') return 'remove'
+  return undefined
+}
+
+export const sandboxCleanupOf = (runtime: Runtime) => {
+  if (runtime.state === 'removing' || runtime.state === 'removed') return 'remove'
+  if (runtime.state === 'stopping' || runtime.state === 'stopped' || runtime.state === 'failed') return 'stop'
   return undefined
 }
