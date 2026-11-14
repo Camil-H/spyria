@@ -378,6 +378,16 @@ export const createAgentBridge = ({
             broadcast(chat, { promptId: chatSocket.promptId, question: update })
             return
           }
+          if (update?.sessionUpdate === 'events_lost')
+            log.warn({
+              event: 'agent.events_lost',
+              body: 'The agent no longer held events the server had not stored',
+              attributes: {
+                'workspace.id': chat.workspaceId,
+                'chat.id': chat.chatId,
+                'agent.lost_events': Number((update as { count?: unknown }).count),
+              },
+            })
           if (update?.sessionUpdate === 'session_started') broadcast(chat, { sessionStarted: true })
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update

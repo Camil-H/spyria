@@ -299,6 +299,17 @@ const formResultOf = (shape: FormShape, questions: Json[], { answers = {}, free 
   return Object.keys(content).length > 0 ? { action: 'accept', content } : { action: 'decline' }
 }
 
+const lostEventsFrameOf = (conversationId: string, after: number, firstBufferedSeq: number) => {
+  const seq = firstBufferedSeq - 1
+  return JSON.stringify({
+    id: `${conversationId}:${seq}`,
+    seq,
+    timestamp: new Date().toISOString(),
+    completed: true,
+    update: { sessionUpdate: 'events_lost', count: seq - after },
+  })
+}
+
 export const startAgent = ({
   apiKey,
   port,
@@ -1136,6 +1147,9 @@ export const startAgent = ({
         socket.data.isAuthenticated = true
         const { workspace } = conversation
         if (workspace && workspace.seq <= socket.data.after) socket.send(JSON.stringify(workspace))
+        const firstBufferedSeq = conversation.events[0]?.seq ?? conversation.lastSeq + 1
+        if (firstBufferedSeq > socket.data.after + 1)
+          socket.send(lostEventsFrameOf(conversation.id, socket.data.after, firstBufferedSeq))
         for (const event of conversation.events) if (event.seq > socket.data.after) socket.send(event.frame)
         conversation.sockets.add(socket)
       },
