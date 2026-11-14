@@ -264,6 +264,28 @@ test('a second job queued under the serial key of a queued job is dropped, and a
   }
 })
 
+test('jobs:retry drops a dead job whose serial key already has a newer job waiting, and requeues one whose key has none', async () => {
+  await database.$client`
+    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, serial_key, finished_at) values
+      (${acme}, 'job-key-waiting-dead', 'runtime.discard', '{}', now(), 5, 'failed', 'serial-waiting', now()),
+      (${acme}, 'job-key-waiting-next', 'runtime.discard', '{}', '2999-01-01', 0, 'queued', 'serial-waiting', null),
+      (${acme}, 'job-key-alone-dead', 'runtime.discard', '{}', '2999-01-01', 5, 'failed', 'serial-alone', now())`
+  try {
+    expect(await retryFailedJobs(database, 'job-key-waiting-dead')).toEqual({
+      requeued: [],
+      dropped: ['job-key-waiting-dead'],
+    })
+    expect(await jobRow('job-key-waiting-dead')).toBeUndefined()
+    expect(await retryFailedJobs(database, 'job-key-alone-dead')).toEqual({
+      requeued: ['job-key-alone-dead'],
+      dropped: [],
+    })
+    expect(await jobRow('job-key-alone-dead')).toMatchObject({ state: 'queued', attempts: 0 })
+  } finally {
+    await database.$client`delete from jobs where serial_key in ('serial-waiting', 'serial-alone')`
+  }
+})
+
 test('the session sweep runs without a log line, deletes only expired sessions, done jobs older than a day and webhook deliveries older than a week, then reschedules itself once, a day later', async () => {
   await database.$client`
     insert into sessions (workspace_id, id, user_id, created_at, expires_at) values

@@ -60,6 +60,7 @@ export const retryDelayOf = (
 const isOneQueuedJobType = (type: string) => type.endsWith('.sweep') || type === 'usage.sync'
 const abandonedJobError = 'The server stopped while running this job'
 const queuedJobsChannel = 'jobs_queued'
+const uniqueViolation = '23505'
 const claimedJob = `workspace_id = $1 and id = $2 and state = 'running' and claimed_at = $3::timestamptz`
 
 export const startJobWorker = (
@@ -298,8 +299,9 @@ export const startJobWorker = (
         if (outcome?.retryInMilliseconds !== undefined) return { outcome: 'rescheduled' }
       }
     } catch (error) {
-      const [recorded] = await database.$client.unsafe<{ isFailed: boolean }[]>(
-        `with outcome as (
+      const recordFailure = (isFailed: boolean) =>
+        database.$client.unsafe<{ isFailed: boolean }[]>(
+          `with outcome as (
            select $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
              where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued'))
              or exists(select 1 from jobs as this_run join jobs as next_run
@@ -310,14 +312,17 @@ export const startJobWorker = (
            finished_at = case when is_failed then now() end
          from outcome where ${claimedJob}
          returning is_failed as "isFailed"`,
-        [
-          ...jobKey,
-          isLastAttempt,
-          errorSummaryOf(error),
-          isLastAttempt ? 0 : retryDelayOf(job.type, job.attempt, retryDelays),
-          isOneQueuedJobType(job.type),
-          job.type,
-        ],
+          [
+            ...jobKey,
+            isFailed,
+            errorSummaryOf(error),
+            isFailed ? 0 : retryDelayOf(job.type, job.attempt, retryDelays),
+            isOneQueuedJobType(job.type),
+            job.type,
+          ],
+        )
+      const [recorded] = await recordFailure(isLastAttempt).catch((recordError: unknown) =>
+        (recordError as { code?: string }).code === uniqueViolation ? recordFailure(true) : Promise.reject(recordError),
       )
       return { outcome: (recorded?.isFailed ?? isLastAttempt) ? 'failed' : 'retried', error }
     }
