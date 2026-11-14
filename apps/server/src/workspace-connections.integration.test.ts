@@ -33,6 +33,7 @@ import {
   succeeded,
   testAuthSettings,
   textOf,
+  toolConnectionSyncsSettled,
   virtualKeyOf,
   waitFor,
   workspaceEventsOf,
@@ -207,10 +208,9 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   expect(
     (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=${bobAccount}`)).page,
   ).toContain('"connected":true')
-  expect(await asMember(bob, 'POST', '/api/tool-connections/Docs/refresh')).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: 'Connected' }),
-  })
+  expect(await asMember(bob, 'POST', '/api/tool-connections/Docs/refresh')).toEqual({ status: 204, body: '' })
+  await toolConnectionSyncsSettled()
+  expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Connected' }])
   expect((await grantsOf(bob))[gatewayName]).toEqual(['whoami'])
   await addLlmKey(bob, 'Mistral')
   const host = await fakeHost('Member sign-in host')
@@ -220,8 +220,10 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${bobAccount}`, { method: 'POST' }))
   expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe('Bob needs to reconnect Docs')
   expect((await asMember(bob, 'POST', '/api/tool-connections/check')).status).toBe(204)
+  await toolConnectionSyncsSettled()
   expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Needs reconnection' }])
   expect(await setAccess(connectionId, { roleId: 'member' }, 'none')).toBe(200)
+  await toolConnectionSyncsSettled()
   expect(await signInsOf(connectionId)).toEqual([])
   expect(await sessionsOf(bob, gatewayName)).toEqual([])
   await removeKeysOf(bob)
@@ -369,7 +371,8 @@ test('a member moved to a role without access to a server they signed in to lose
       (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=bob-${crypto.randomUUID()}`))
         .page,
     ).toContain('"connected":true')
-    expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(200)
+    expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(204)
+    await toolConnectionSyncsSettled()
     expect(await signInsOf('connection-fake')).toEqual([{ user_id: bob, status: 'Connected' }])
 
     expect(

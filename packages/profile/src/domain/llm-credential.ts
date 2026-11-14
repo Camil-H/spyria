@@ -5,6 +5,7 @@ import type { Secret } from './secret.ts'
 export const profileJobTypes = {
   gatewaySync: 'profile.gateway-sync',
   toolServerRemoval: 'profile.tool-server-removal',
+  toolConnectionsSync: 'profile.tool-connections-sync',
 } as const
 
 export type LlmCredential = Readonly<{

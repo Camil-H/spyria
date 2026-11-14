@@ -868,10 +868,20 @@ export const connectMember = async (memberId: string, cookie: string) => {
   expect(started.status).toBe(200)
   const consent = await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, cookie)
   expect(consent.page).toContain('"connected":true')
-  expect(await asMember(memberId, 'POST', connectionPath('refresh'))).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: 'Connected' }),
-  })
+  expect(await asMember(memberId, 'POST', connectionPath('refresh'))).toEqual({ status: 204, body: '' })
+  await waitFor(async () =>
+    (await connectionRows()).some((row) => row.user_id === memberId && row.status === 'Connected'),
+  )
+}
+export const toolConnectionSyncsSettled = async () => {
+  const { database } = await openedTestApp()
+  await waitFor(
+    async () =>
+      (
+        await database.$client`
+          select 1 from jobs where type = 'profile.tool-connections-sync' and state in ('queued', 'running') limit 1`
+      ).length === 0,
+  )
 }
 export const connectAlice = (cookie: string) => connectMember(alice, cookie)
 export const connectionRows = async () => [

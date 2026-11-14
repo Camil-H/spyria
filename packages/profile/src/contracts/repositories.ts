@@ -25,6 +25,7 @@ export type MemberRepository = {
   permissions(): Promise<readonly WorkspacePermission[]>
   isActive(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
   lockActive(): Promise<void>
+  lockIfActive(): Promise<boolean>
   holders(workspaceId: WorkspaceId): Promise<ToolHolder[]>
   roleIds(workspaceId: WorkspaceId): Promise<string[]>
 }
@@ -54,6 +55,7 @@ export type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: stri
 export type GatewayJobs = {
   syncLater(job: Pick<GatewaySyncJob, 'key' | 'isLeaving'>): Promise<void>
   regrantLater(memberId: MemberId): Promise<void>
+  syncToolConnectionsLater(memberId: MemberId): Promise<void>
   removeToolServerLater(job: ToolServerRemovalJob): Promise<void>
 }
 
@@ -83,13 +85,13 @@ export type WorkspaceConnectionRepository = {
   save(connection: WorkspaceConnection): Promise<void>
   remove(workspaceId: WorkspaceId, connectionId: string): Promise<void>
   accessOf(workspaceId: WorkspaceId): Promise<ToolServerAccess[]>
+  signIns(workspaceId: WorkspaceId): Promise<{ memberId: MemberId; connectionId: string }[]>
   setAccess(
     workspaceId: WorkspaceId,
     connectionId: string,
     roleId: string,
     access: ToolServerAccess | null,
   ): Promise<void>
-  removeSignIn(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
 }
 
 export type ToolApprovalRepository = {
