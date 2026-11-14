@@ -3,6 +3,7 @@ import type { LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { newLlmCredential } from '../domain/llm-credential.ts'
 import type { Secret } from '../domain/secret.ts'
+import { grantMemberToolsOrRetryLater } from './grant-tools.ts'
 import { syncMemberGatewayKey } from './sync-member-gateway-key.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }
@@ -23,4 +24,5 @@ export const addLlmCredential = async (dependencies: Dependencies, { id, ...inpu
     await gateway.removeProviderKey(key)
     throw error
   }
+  await grantMemberToolsOrRetryLater(dependencies, transactor.member)
 }
