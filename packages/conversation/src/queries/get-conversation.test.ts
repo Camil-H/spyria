@@ -898,32 +898,31 @@ const loopConversationWith = (step: DevLoopStep, rows: Snapshot['messages'] = []
 const firstRound = restarted(newDevLoop(prompt, turnStart, 'acme/app', lintRules, { title: 'Fix totals', body: '' }))
 const secondRound = restarted({ ...firstRound, lastPromptId: fixPrompt })
 
-test('the quality gates card stays where its first round started', () => {
-  expect(itemSummaryOf(loopConversationWith(firstRound))).toEqual([
-    'member',
-    'step file',
-    'step dev_loop',
-    'agent',
-    'member',
-    'agent',
-  ])
-})
-
-test('when the gates start again, the card shows after the turn that started the round, with a marker where it was', () => {
+test('a running loop’s card leaves the chat flow to be pinned above the message box', () => {
   const conversation = loopConversationWith(secondRound)
-  expect(itemSummaryOf(conversation)).toEqual([
-    'member',
-    'step file',
-    'notice',
-    'agent',
-    'member',
-    'agent',
-    'step dev_loop',
-  ])
-  expect(conversation?.items[2]).toMatchObject({ message: { body: 'Quality gates: round 2, see below' } })
+  expect(conversation?.activeDevLoop).toEqual(secondRound)
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'step file', 'agent', 'member', 'agent'])
 })
 
-test('an ended loop’s card stays after its last round, above the outcome and what came after', () => {
+test('the pinned card is the newest loop of the chat, also one older than the synced messages, and none once it ended', () => {
+  const loopCard = (seq: number, step: DevLoopStep) => replyRow(seq, 'step', { step, replyToId: null })
+  const snapshot = snapshotWith({ turn: false, waiting: false })
+  const activeLoopWith = (pinnedSteps: Snapshot['pinnedSteps'], messages: Snapshot['messages']) =>
+    getConversation(acme, research, alice)({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })
+      ?.activeDevLoop
+  expect(activeLoopWith([loopCard(2, firstRound)], [])).toEqual(firstRound)
+  expect(activeLoopWith([loopCard(2, stopped(firstRound, 'Stopped'))], [loopCard(9, secondRound)])).toEqual(secondRound)
+  expect(activeLoopWith([loopCard(2, firstRound)], [loopCard(9, stopped(secondRound, 'Stopped'))])).toBeNull()
+  expect(activeLoopWith([], [])).toBeNull()
+})
+
+test('an ended loop’s card stays where its first round started', () => {
+  const conversation = loopConversationWith(stopped(firstRound, 'Lint failed: over to you'))
+  expect(conversation?.activeDevLoop).toBeNull()
+  expect(itemSummaryOf(conversation)).toEqual(['member', 'step file', 'step dev_loop', 'agent', 'member', 'agent'])
+})
+
+test('an ended loop’s card stays after its last round, with a marker where it was, above the outcome and what came after', () => {
   const conversation = loopConversationWith(stopped(secondRound, 'Lint failed: over to you'), [
     replyRow(7, 'notice', { body: 'Lint failed: over to you', replyToId: fixPrompt }),
     memberRow(8, 'Thanks'),
@@ -939,4 +938,5 @@ test('an ended loop’s card stays after its last round, above the outcome and w
     'notice',
     'member',
   ])
+  expect(conversation?.items[2]).toMatchObject({ message: { body: 'Quality gates: round 2, see below' } })
 })
