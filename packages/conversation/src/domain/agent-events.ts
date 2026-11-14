@@ -30,6 +30,7 @@ export const agentNotices = {
   stoppedEarly: 'The agent stopped before finishing',
   noResponse: 'The agent did not respond',
   newSession: 'The agent started a new session; it does not remember earlier messages',
+  eventsLost: 'Spyria lost part of the agent’s work while reconnecting to it; some steps may be missing above',
 }
 export const setupFailedNoticeOf = ({ command, exitCode, timeoutMinutes, output }: Record<string, unknown> = {}) =>
   `The setup command "${command}" ${timeoutMinutes === undefined ? `failed with exit code ${exitCode}` : `did not finish within ${timeoutMinutes} minutes and was stopped`}; the session started anyway.\n${output}`
@@ -181,6 +182,7 @@ const acpUpdateProjectionOf = (event: AgentEvent): AgentProjection => {
     } as StoredStep)
   }
   if (kind === 'setup_failed') return { type: 'message', body: setupFailedNoticeOf(update), kind: 'notice' }
+  if (kind === 'events_lost') return { type: 'message', body: agentNotices.eventsLost, kind: 'notice' }
   if (kind === 'session_started' && update?.resumeFailed === true)
     return { type: 'message', body: agentNotices.newSession, kind: 'notice' }
   if (kind === 'turn_end' && update?.stopReason !== 'cancelled')
@@ -220,6 +222,7 @@ const storedAcpUpdates = [
   'agent_thought',
   'question_answered',
   'question_closed',
+  'events_lost',
 ]
 
 export const isApprovalQuestion = (event: AgentEvent) => {

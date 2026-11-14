@@ -202,7 +202,7 @@ test('a conversation remembers the last 50 prompt ids: an older one sent again r
   expect(textOf(socket.events)).toEndWith('[t52] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
-test('events are numbered per conversation, resent after a sequence number, from a bounded buffer', async () => {
+test('events are numbered per conversation, resent after a sequence number, from a bounded buffer that says how many it no longer holds', async () => {
   const { open, create, prompt } = started({ bufferSize: 4 })
   const id = await create(launchOf())
   const live = open(id)
@@ -219,7 +219,18 @@ test('events are numbered per conversation, resent after a sequence number, from
   expect(resent.events.map(({ seq }) => seq)).toEqual([workspaceSeq, lastSeq - 1, lastSeq])
   const everything = open(id)
   await everything.until(kindOf('turn_end'))
-  expect(everything.events.map(({ seq }) => seq)).toEqual([lastSeq - 3, lastSeq - 2, lastSeq - 1, lastSeq])
+  expect(everything.events.map(({ seq }) => seq)).toEqual([lastSeq - 4, lastSeq - 3, lastSeq - 2, lastSeq - 1, lastSeq])
+  expect(everything.events[0]).toMatchObject({
+    id: `${id}:${lastSeq - 4}`,
+    completed: true,
+    update: { sessionUpdate: 'events_lost', count: lastSeq - 4 },
+  })
+  const resentAfterLoss = open(id, 2)
+  await resentAfterLoss.until(kindOf('turn_end'))
+  expect(resentAfterLoss.events.find(kindOf('events_lost'))?.update).toEqual({
+    sessionUpdate: 'events_lost',
+    count: lastSeq - 6,
+  })
 
   const intruder = open(id, 0, 'wrong-key')
   expect(await intruder.closed).toBe(1008)
@@ -238,9 +249,9 @@ test('the replay buffer is also capped by bytes: it keeps the newest events that
   expect(kept.length).toBeLessThan(events.length)
   const replayed = open(id)
   await replayed.until(kindOf('turn_end'))
-  expect(replayed.events.filter((event) => !kindOf('workspace')(event))).toEqual(
-    kept.filter((event) => !kindOf('workspace')(event)),
-  )
+  const [lost, ...resent] = replayed.events.filter((event) => !kindOf('workspace')(event))
+  expect(lost?.update).toEqual({ sessionUpdate: 'events_lost', count: events.length - kept.length })
+  expect(resent).toEqual(kept.filter((event) => !kindOf('workspace')(event)))
 
   const tiny = started({ bufferBytes: 1 })
   const tinyId = await tiny.create(launchOf())
@@ -249,7 +260,9 @@ test('the replay buffer is also capped by bytes: it keeps the newest events that
   const tinyEvents = await tinyLive.until(kindOf('turn_end'))
   const tinyReplay = tiny.open(tinyId)
   await tinyReplay.until(kindOf('turn_end'))
-  expect(tinyReplay.events.filter((event) => !kindOf('workspace')(event))).toEqual(tinyEvents.slice(-1))
+  expect(tinyReplay.events.filter((event) => !kindOf('workspace')(event) && !kindOf('events_lost')(event))).toEqual(
+    tinyEvents.slice(-1),
+  )
 })
 
 test('adapter lines are cut at every newline across chunks: carriage returns and empty lines kept, a last line without newline waits', () => {
