@@ -2,6 +2,7 @@ import type { WorkspaceId } from '@spyria/kernel'
 import {
   calloutClass,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   focusRing,
   formatCost,
@@ -129,7 +130,7 @@ export const Decomposition = ({
     let isCurrent = true
     readTrend({ workspaceId, search: JSON.parse(trendKey) }).then(
       (counts) => isCurrent && setTrend({ key: trendKey, counts, error: null }),
-      (error: Error) => isCurrent && setTrend({ key: trendKey, counts: null, error: error.message }),
+      (error: unknown) => isCurrent && setTrend({ key: trendKey, counts: null, error: failureMessageOf(error) }),
     )
     return () => {
       isCurrent = false
@@ -400,7 +401,7 @@ export const SpendReportView = ({
         setReport(loaded)
         setLoadError(null)
       },
-      (error: Error) => isCurrent && setLoadError(error.message),
+      (error: unknown) => isCurrent && setLoadError(failureMessageOf(error)),
     )
     return () => {
       isCurrent = false
@@ -460,7 +461,7 @@ export const SpendReportView = ({
       </fieldset>
       <ErrorMessage message={loadError} />
       {report === null ? (
-        <p className="text-sm text-muted">Loading…</p>
+        !loadError && <p className="text-sm text-muted">Loading…</p>
       ) : (
         <>
           {report.total.requests === 0 ? (

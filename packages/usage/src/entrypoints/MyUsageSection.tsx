@@ -1,5 +1,5 @@
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
-import { formatCost, LabelledSection } from '@spyria/ui'
+import { ErrorMessage, failureMessageOf, formatCost, LabelledSection } from '@spyria/ui'
 import { useEffect, useState } from 'react'
 import type { BudgetProgress } from '../domain/budgets.ts'
 import { BudgetBar, BudgetNotice, useOwnBudgetAlert } from './BudgetNotice.tsx'
@@ -10,14 +10,20 @@ const OwnBudget = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; member
   const commands = useUsageCommands()
   const threshold = useOwnBudgetAlert(workspaceId, memberId)
   const [budget, setBudget] = useState<BudgetProgress | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
-    if (threshold >= 0) commands.readOwnBudget({ workspaceId }).then(setBudget, () => setBudget(null))
+    if (threshold >= 0)
+      commands.readOwnBudget({ workspaceId }).then(setBudget, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId, threshold])
   return (
     <LabelledSection title="Monthly AI budget" Heading="h3" titleClass="text-sm font-medium">
       <BudgetNotice workspaceId={workspaceId} memberId={memberId} />
       {budget === null ? (
-        <p className="text-sm text-muted">Loading…</p>
+        loadError ? (
+          <ErrorMessage message={loadError} />
+        ) : (
+          <p className="text-sm text-muted">Loading…</p>
+        )
       ) : budget.limitMicros === null ? (
         <p className="text-sm text-muted">No monthly budget · {formatCost(budget.spentMicros)} this month</p>
       ) : (
