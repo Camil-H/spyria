@@ -4,6 +4,7 @@ import {
   createWorkspaceOfAccount,
   loadAuthMode,
   loadSessions,
+  ServerUnreachable,
   signInWithEmail,
   signInWithPopup,
   submitInPopup,
@@ -99,6 +100,7 @@ const boot = async () => {
 }
 
 await boot().catch((error: unknown) => {
+  if (!(error instanceof ServerUnreachable)) throw error
   console.error(error)
   root.render(<ServerUnreachableScreen />)
 })
