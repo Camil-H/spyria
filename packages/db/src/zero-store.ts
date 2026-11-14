@@ -26,7 +26,7 @@ export const scopedQueryNames = [
   'searchMessages',
 ] as const
 export type ScopedQueryName = (typeof scopedQueryNames)[number]
-export type ScopedStatus = { isComplete: boolean; rows: readonly object[] }
+export type ScopedStatus = { isComplete: boolean; isLastComplete?: boolean; rows: readonly object[] }
 type ScopedWatch = {
   workspaceId: WorkspaceId
   name: ScopedQueryName
@@ -74,6 +74,19 @@ const isWorkspaceRowIn = (rows: unknown, workspaceId: WorkspaceId) =>
   (rows as readonly { workspaceId: string }[]).some((row) => row.workspaceId === workspaceId)
 const isSameSources = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.length === next.length && previous.every((source, index) => source === next[index])
+const keptChatWindows = 20
+export const scopedStatusOf = (
+  rows: readonly object[],
+  result: string,
+  lastCompleteRows: readonly object[] | undefined,
+): ScopedStatus =>
+  result === 'unknown' && lastCompleteRows
+    ? {
+        isComplete: false,
+        isLastComplete: true,
+        rows: uniqueBy([...lastCompleteRows, ...rows], (row) => (row as { id: string }).id),
+      }
+    : { isComplete: result === 'complete', rows }
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
   `${workspaceId}/${name}/${JSON.stringify(args)}`
 const chatsWithLatestMessage = ['latestMessages', 'latestAgentActivity']
@@ -416,6 +429,13 @@ export const createZeroStore = ({
   const renewalListeners = new Set<(workspaceId: WorkspaceId) => void>()
   const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
   const scopedWatches = new Map<string, ScopedWatch>()
+  const lastChatWindowByKey = new Map<string, { workspaceId: WorkspaceId; rows: readonly object[] }>()
+  const keepChatWindow = (key: string, workspaceId: WorkspaceId, rows: readonly object[]) => {
+    lastChatWindowByKey.delete(key)
+    lastChatWindowByKey.set(key, { workspaceId, rows })
+    const [oldestKey] = lastChatWindowByKey.keys()
+    if (lastChatWindowByKey.size > keptChatWindows && oldestKey !== undefined) lastChatWindowByKey.delete(oldestKey)
+  }
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
@@ -456,9 +476,13 @@ export const createZeroStore = ({
     const request = (queries[watch.name] as unknown as (args: object) => Parameters<Zero['materialize']>[0])(watch.args)
     const view = zero.materialize(request)
     watch.view = view
+    const key = scopedKeyOf(watch.workspaceId, watch.name, watch.args)
     view.addListener((data, result) => {
       if (watch.view !== view) return
-      watch.status = { isComplete: result === 'complete', rows: data as readonly object[] }
+      const rows = data as readonly object[]
+      if (result === 'error') lastChatWindowByKey.delete(key)
+      if (result === 'complete' && watch.name === 'chatMessages') keepChatWindow(key, watch.workspaceId, rows)
+      watch.status = scopedStatusOf(rows, result, lastChatWindowByKey.get(key)?.rows)
       feedScoped(watch.workspaceId, watch.name)
     })
   }
@@ -556,6 +580,8 @@ export const createZeroStore = ({
         watch.view = undefined
         watch.status = undefined
       }
+    for (const [key, chatWindow] of lastChatWindowByKey)
+      if (chatWindow.workspaceId === workspaceId) lastChatWindowByKey.delete(key)
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
     readableByWorkspace.get(workspaceId)?.resolve('closed')
