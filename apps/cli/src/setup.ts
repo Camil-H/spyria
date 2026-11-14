@@ -81,36 +81,31 @@ const pairingCodeFor = (
   return pairingCodeOf(asker.requireSecret('host-claim-url', 'Command of Add runtime host'), origin)
 }
 
-const instanceAppOf = (
-  asker: Asker,
-  provider: 'google' | 'microsoft',
-  origin: string,
-  existing: { clientId?: string; clientSecret?: string },
-  az: AzRunner,
-) => {
+type AccountApp = { clientId: string; clientSecret: string }
+type SavedAccountApp = { clientId?: string; clientSecret?: string }
+type AccountProvider = 'google' | 'microsoft'
+
+const instanceClientIdOf = (asker: Asker, provider: AccountProvider, origin: string, existing: SavedAccountApp) => {
   const guide =
     provider === 'google'
       ? `Sign-in with any Google account, Gmail included, through an app of this Spyria (optional). In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`
       : `Sign-in with Microsoft work, school or personal accounts through an app of this Spyria (optional). In Microsoft Entra > App registrations (https://entra.microsoft.com), register an app for Accounts in any organizational directory and personal Microsoft accounts, with the web redirect URI ${origin}/auth/callback, then create a client secret. Or answer create to register it now with az.`
-  const flagPrefix = `${provider}-client`
   if (!asker.isUnattended && existing.clientId === undefined) console.log(guide)
-  const clientId = asker.ask(
-    `${flagPrefix}-id`,
+  return asker.ask(
+    `${provider}-client-id`,
     `${provider === 'google' ? 'Google' : 'Microsoft'} client id (empty to skip${existing.clientId ? ', - to remove' : ''})`,
     existing.clientId ?? '',
   )
+}
+
+const instanceAppOf = (
+  asker: Asker,
+  provider: AccountProvider,
+  clientId: string,
+  existing: SavedAccountApp,
+): AccountApp | undefined => {
   if (clientId === '' || clientId === removal) return undefined
-  if (provider === 'microsoft' && clientId === 'create') {
-    if (!isAzSignedIn(az)) throw new Error('Sign in with az login first, or register the app by hand')
-    const entra = registerEntraApp({ origin, audience: 'any-account', savedClientId: existing.clientId }, az)
-    const clientSecret =
-      entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
-    if (!clientSecret)
-      throw new Error(
-        `Microsoft Entra already holds the app ${entra.name} (client id ${entra.clientId}), whose secret this install does not have: give its client id and a new client secret of it instead of create`,
-      )
-    return { clientId: entra.clientId, clientSecret }
-  }
+  const flagPrefix = `${provider}-client`
   const pattern = provider === 'google' ? googleClientIdPattern : guidPattern
   if (!pattern.test(clientId))
     throw new Error(
@@ -125,6 +120,19 @@ const instanceAppOf = (
   if (clientSecret === '') throw new Error(`${secretVariables[`${flagPrefix}-secret`]} is required`)
   return { clientId, clientSecret }
 }
+
+const registeredMicrosoftAppOf = (origin: string, existing: SavedAccountApp, az: AzRunner): AccountApp => {
+  const entra = registerEntraApp({ origin, audience: 'any-account', savedClientId: existing.clientId }, az)
+  const clientSecret = entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
+  if (!clientSecret)
+    throw new Error(
+      `Microsoft Entra already holds the app ${entra.name} (client id ${entra.clientId}), whose secret this install does not have: give its client id and a new client secret of it instead of create`,
+    )
+  return { clientId: entra.clientId, clientSecret }
+}
+
+const savedAppOf = ({ clientId, clientSecret }: SavedAccountApp) =>
+  clientId && clientSecret ? { clientId, clientSecret } : undefined
 
 const oidcAccountAppOf = (asker: Asker, origin: string, existing: Environment) => {
   const savedIssuer = existing.SPYRIA_OIDC_ISSUER
@@ -196,53 +204,47 @@ export const setup = async (
     'cloudflare-token',
     `Cloudflare API token with Account > Cloudflare Tunnel > Edit, Zone > DNS > Edit and Zone > Zone > Read, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
   )
-  const tunnelToken = apiToken
-    ? (await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })).token
-    : keepsTunnel
-      ? existing.CLOUDFLARE_TUNNEL_TOKEN
-      : undefined
-  if (!tunnelToken) throw new Error('A Cloudflare API token is required to create the tunnel')
+  if (!apiToken && !keepsTunnel) throw new Error('A Cloudflare API token is required to create the tunnel')
 
+  const savedGoogleApp = {
+    clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
+    clientSecret: existing.SPYRIA_GOOGLE_CLIENT_SECRET,
+  }
   const google = instanceAppOf(
     asker,
     'google',
-    origin,
-    {
-      clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
-      clientSecret: existing.SPYRIA_GOOGLE_CLIENT_SECRET,
-    },
-    az,
+    instanceClientIdOf(asker, 'google', origin, savedGoogleApp),
+    savedGoogleApp,
   )
-  const microsoft = instanceAppOf(
-    asker,
-    'microsoft',
-    origin,
-    {
-      clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
-      clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
-    },
-    az,
-  )
+  const savedMicrosoftApp = {
+    clientId: existing.SPYRIA_MICROSOFT_CLIENT_ID,
+    clientSecret: existing.SPYRIA_MICROSOFT_CLIENT_SECRET,
+  }
+  const microsoftClientId = instanceClientIdOf(asker, 'microsoft', origin, savedMicrosoftApp)
+  const createsMicrosoftApp = microsoftClientId === 'create'
+  if (createsMicrosoftApp && !isAzSignedIn(az))
+    throw new Error('Sign in with az login first, or register the app by hand')
+  const microsoft = createsMicrosoftApp
+    ? savedAppOf(savedMicrosoftApp)
+    : instanceAppOf(asker, 'microsoft', microsoftClientId, savedMicrosoftApp)
   const oidc = oidcAccountAppOf(asker, origin, existing)
   const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
-  const context = { asker, hostname, origin, cloudflare }
-  const providerLines = await firstWorkspaceProviderOf(context, { az })
-  if (providerLines.length > 0) console.log(['', ...providerLines, ''].join('\n'))
+  const setUpFirstWorkspaceProvider = firstWorkspaceProviderOf({ asker, hostname, origin, cloudflare }, { az })
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
-  const answers: SetupAnswers = {
+  let answers: SetupAnswers = {
     deployment,
     version,
     images: flags.values.images ?? existing.SPYRIA_IMAGES ?? defaultImages,
     origin,
-    tunnelToken,
+    tunnelToken: keepsTunnel ? existing.CLOUDFLARE_TUNNEL_TOKEN : undefined,
     runsHost,
     pairingCode,
     dockerGroup: dockerGroupOf(),
     instanceApps: { google, microsoft, oidc },
     localPort,
   }
-  const environment = environmentOf(answers, existing)
+  let environment = environmentOf(answers, existing)
   const releaseFiles =
     version === cliVersion || cliVersion === 'dev'
       ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n` }
@@ -258,6 +260,23 @@ export const setup = async (
     environment.SPYRIA_HOST_CLAIM_URL !== existing.SPYRIA_HOST_CLAIM_URL
   )
     forgetEarlierHostPairing(folder, environment)
+
+  const keepInEnvironment = (created: Partial<SetupAnswers>) => {
+    answers = { ...answers, ...created }
+    environment = environmentOf(answers, environment)
+    writeEnvironment(folder, environment)
+  }
+  if (apiToken)
+    keepInEnvironment({
+      tunnelToken: (
+        await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })
+      ).token,
+    })
+  if (createsMicrosoftApp)
+    keepInEnvironment({
+      instanceApps: { ...answers.instanceApps, microsoft: registeredMicrosoftAppOf(origin, savedMicrosoftApp, az) },
+    })
+  await setUpFirstWorkspaceProvider()
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
@@ -277,7 +296,7 @@ export const setup = async (
           ? 'This machine runs a runtime host: it joins the first workspace when you create it.'
           : '',
       'Then, in Workspace settings, open GitHub to connect it and work on repositories.',
-      google || microsoft || oidc
+      Object.values(answers.instanceApps).some(Boolean)
         ? 'Anyone who signs in with an app of this Spyria can then create a workspace; a workspace can require its own sign-in provider in Single sign-on.'
         : 'People join the first workspace by invite, signing in with its own provider.',
     ]

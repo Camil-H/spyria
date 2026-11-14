@@ -32,10 +32,12 @@ const formLines = (preset: string, fields: Record<string, string>) => [
   'This is the only time Spyria shows the client secret.',
 ]
 
-export const firstWorkspaceProviderOf = async (
+const printed = (lines: string[]) => console.log(['', ...lines, ''].join('\n'))
+
+export const firstWorkspaceProviderOf = (
   context: SetupContext,
   { az = runAz }: { az?: AzRunner } = {},
-): Promise<string[]> => {
+): (() => Promise<void>) => {
   const { asker, origin, hostname } = context
   const provider = asker.choose(
     'provider',
@@ -43,59 +45,74 @@ export const firstWorkspaceProviderOf = async (
     providers,
     'skip',
   )
-  if (provider === 'skip') return []
+  if (provider === 'skip') return async () => {}
   if (provider === 'cloudflare-access') {
     const cloudflare = cloudflareOf(context, 'Cloudflare Access')
     const ownerEmail = asker.require(
       'owner-email',
       'Your own email address, where admin@ your domain forwards its sign-in PINs',
     )
-    const access = await createAccessOidcApp(cloudflare, { hostname, origin, name: `Spyria ${hostname}` })
-    const mail = await routeAdminMail(cloudflare, { hostname, ownerEmail })
-    return [
-      ...formLines('Other OIDC', {
-        Issuer: access.issuer,
-        'Client id': access.clientId,
-        'Client secret': access.clientSecret,
-      }),
-      `Then sign in as ${mail.adminAddress}: Cloudflare emails its one-time PIN to that address.`,
-      adminMailLines[mail.outcome](mail.adminAddress, ownerEmail),
-    ]
+    return async () => {
+      const access = await createAccessOidcApp(cloudflare, { hostname, origin, name: `Spyria ${hostname}` })
+      printed(
+        formLines('Other OIDC', {
+          Issuer: access.issuer,
+          'Client id': access.clientId,
+          'Client secret': access.clientSecret,
+        }),
+      )
+      const mail = await routeAdminMail(cloudflare, { hostname, ownerEmail })
+      printed([
+        `Then sign in as ${mail.adminAddress}: Cloudflare emails its one-time PIN to that address.`,
+        adminMailLines[mail.outcome](mail.adminAddress, ownerEmail),
+      ])
+    }
   }
   if (provider === 'microsoft') {
     if (!isAzSignedIn(az))
-      return [
-        `Register an app in Microsoft Entra > App registrations for accounts in this organizational directory only, with the web redirect URI ${origin}/auth/callback, and create a client secret (or sign in with az login and run spyria setup again).`,
-        'In Create a workspace, choose Microsoft Entra and enter its tenant id, client id and secret.',
-      ]
-    const entra = registerEntraApp({ origin, audience: 'tenant' }, az)
-    if (!entra.clientSecret)
-      return [
-        `Microsoft Entra already holds the app ${entra.name}, registered by an earlier setup.`,
-        `In Create a workspace, choose Microsoft Entra and enter the tenant id ${entra.tenantId}, the client id ${entra.clientId} and the client secret setup showed then, or a new one from Certificates & secrets of that app.`,
-      ]
-    return formLines('Microsoft Entra', {
-      'Tenant id': entra.tenantId,
-      'Client id': entra.clientId,
-      'Client secret': entra.clientSecret,
-    })
+      return async () =>
+        printed([
+          `Register an app in Microsoft Entra > App registrations for accounts in this organizational directory only, with the web redirect URI ${origin}/auth/callback, and create a client secret (or sign in with az login and run spyria setup again).`,
+          'In Create a workspace, choose Microsoft Entra and enter its tenant id, client id and secret.',
+        ])
+    return async () => {
+      const entra = registerEntraApp({ origin, audience: 'tenant' }, az)
+      printed(
+        entra.clientSecret
+          ? formLines('Microsoft Entra', {
+              'Tenant id': entra.tenantId,
+              'Client id': entra.clientId,
+              'Client secret': entra.clientSecret,
+            })
+          : [
+              `Microsoft Entra already holds the app ${entra.name}, registered by an earlier setup.`,
+              `In Create a workspace, choose Microsoft Entra and enter the tenant id ${entra.tenantId}, the client id ${entra.clientId} and the client secret setup showed then, or a new one from Certificates & secrets of that app.`,
+            ],
+      )
+    }
   }
   if (provider === 'okta') {
     const orgUrl = asker.require('okta-url', 'Okta organization URL, for example https://acme.okta.com')
     const apiToken = asker.requireSecret('okta-token', 'Okta API token of an admin (used now, never stored)')
-    const okta = await registerOktaApp({ orgUrl, apiToken, origin })
-    return formLines('Other OIDC', {
-      Issuer: okta.issuer,
-      'Client id': okta.clientId,
-      'Client secret': okta.clientSecret,
-    })
+    return async () => {
+      const okta = await registerOktaApp({ orgUrl, apiToken, origin })
+      printed(
+        formLines('Other OIDC', {
+          Issuer: okta.issuer,
+          'Client id': okta.clientId,
+          'Client secret': okta.clientSecret,
+        }),
+      )
+    }
   }
   if (provider === 'google')
-    return [
-      `In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`,
-      'In Create a workspace, choose Google Workspace and enter its client id and secret.',
-    ]
-  return [
-    `Register a client at your OIDC provider with the redirect URI ${origin}/auth/callback, then choose Other OIDC in Create a workspace.`,
-  ]
+    return async () =>
+      printed([
+        `In Google Cloud > APIs & Services > Credentials (https://console.cloud.google.com/apis/credentials), create an OAuth client of type Web application with the redirect URI ${origin}/auth/callback, and an External consent screen asking for openid, email and profile.`,
+        'In Create a workspace, choose Google Workspace and enter its client id and secret.',
+      ])
+  return async () =>
+    printed([
+      `Register a client at your OIDC provider with the redirect URI ${origin}/auth/callback, then choose Other OIDC in Create a workspace.`,
+    ])
 }
