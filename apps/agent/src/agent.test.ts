@@ -155,6 +155,40 @@ test('an interrupt naming a prompt that already ended cancels nothing, one namin
   })
 })
 
+test('an interrupt naming a prompt queued behind the running one ends only that prompt, and the running prompt goes on', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
+  await promptWithId('stub:long', 'prompt-running')
+  await socket.until((event) => event.update.status === 'in_progress')
+  await promptWithId('hello', 'prompt-queued')
+
+  expect((await interrupt('prompt-queued')).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  await Bun.sleep(100)
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-queued' },
+  ])
+  expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
+
+  expect((await interrupt('prompt-running')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toMatchObject({
+    stopReason: 'cancelled',
+    promptId: 'prompt-running',
+  })
+  await promptWithId('hello', 'prompt-after')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-after',
+  })
+})
+
 test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())

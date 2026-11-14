@@ -98,6 +98,8 @@ type Conversation = {
   started: Promise<void>
   isSettingUp: boolean
   startWaiters: Map<string, () => void>
+  lastTurn: Promise<void>
+  running?: { promptId?: string }
 }
 type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
 type TerminalMeta = {
@@ -704,13 +706,15 @@ export const startAgent = ({
     if (!isUnchanged) setups.delete(cwd)
   }
 
-  const isStoppedWhileStarting = (conversation: Conversation, waiterId: string) =>
+  const isStoppedBeforeItsTurn = (conversation: Conversation, waiterId: string, previousTurn: Promise<void>) =>
     new Promise<boolean>((resolve) => {
       conversation.startWaiters.set(waiterId, () => resolve(true))
-      conversation.started.then(
-        () => resolve(false),
-        () => resolve(false),
-      )
+      previousTurn
+        .then(() => conversation.started)
+        .then(
+          () => resolve(false),
+          () => resolve(false),
+        )
     }).finally(() => {
       conversation.startWaiters.delete(waiterId)
     })
@@ -878,6 +882,7 @@ export const startAgent = ({
       started: Promise.resolve(),
       isSettingUp: false,
       startWaiters: new Map(),
+      lastTurn: Promise.resolve(),
       connection: unspawnedConnection,
     }
     conversations.set(id, conversation)
@@ -908,6 +913,9 @@ export const startAgent = ({
     if (conversation.status === 'error')
       return Response.json({ error: 'The conversation has no running session' }, { status: 409 })
     if (promptId) rememberPrompt(conversation, promptId)
+    const previousTurn = conversation.lastTurn
+    const thisTurn = Promise.withResolvers<void>()
+    conversation.lastTurn = thisTurn.promise
     conversation.status = 'running'
     conversation.promptsInFlight += 1
     const isLastInFlight = () => {
@@ -987,17 +995,24 @@ export const startAgent = ({
       'agent.turn',
       { 'conversation.id': conversation.id },
       async () => {
-        if (await isStoppedWhileStarting(conversation, promptId ?? crypto.randomUUID()))
-          return ended({ stopReason: 'cancelled' })
-        if (!conversation.sessionId || conversation.status === 'error')
-          return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
-        conversation.status = 'running'
-        await promptOnce(async (errorOutput, hasStreamed) => {
-          const notice = new AcpError(restartedNoticeOf(errorOutput))
-          if (hasStreamed) return failed(notice)
+        const running = { promptId }
+        try {
+          if (await isStoppedBeforeItsTurn(conversation, promptId ?? crypto.randomUUID(), previousTurn))
+            return ended({ stopReason: 'cancelled' })
+          if (!conversation.sessionId || conversation.status === 'error')
+            return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
           conversation.status = 'running'
-          await promptOnce(async () => failed(notice))
-        })
+          conversation.running = running
+          await promptOnce(async (errorOutput, hasStreamed) => {
+            const notice = new AcpError(restartedNoticeOf(errorOutput))
+            if (hasStreamed) return failed(notice)
+            conversation.status = 'running'
+            await promptOnce(async () => failed(notice))
+          })
+        } finally {
+          if (conversation.running === running) conversation.running = undefined
+          thisTurn.resolve()
+        }
       },
       contextOf(traceHeaders),
     )
@@ -1023,10 +1038,17 @@ export const startAgent = ({
     const promptId = typeof prompt_id === 'string' ? prompt_id : undefined
     if (promptId && !conversation.turnEnds.has(promptId)) return cancelNeverReceived(conversation, promptId)
     if (promptId && conversation.turnEnds.get(promptId) !== undefined) return Response.json({})
-    if (stopWaitingToStart(conversation, promptId) || conversation.isSettingUp) return Response.json({})
+    const stopsWaiting = promptId !== undefined || !conversation.running
+    if ((stopsWaiting && stopWaitingToStart(conversation, promptId)) || conversation.isSettingUp)
+      return Response.json({})
     await conversation.started
+    if (promptId && conversation.running?.promptId !== promptId) {
+      stopWaitingToStart(conversation, promptId)
+      return Response.json({})
+    }
+    const wasRunning = conversation.running !== undefined
     if (conversation.sessionId) conversation.connection.notify('session/cancel', { sessionId: conversation.sessionId })
-    stopWaitingToStart(conversation, promptId)
+    if (!wasRunning) stopWaitingToStart(conversation, promptId)
     closeQuestions(conversation, 'stopped')
     return Response.json({})
   }
