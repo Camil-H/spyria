@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { chatId, messageId, workspaceId } from '@spyria/kernel'
 import { alice } from './mock-data.ts'
-import { createSnapshotBuilder, createZeroStore, windowMessagesIn } from './zero-store.ts'
+import { createSnapshotBuilder, createZeroStore, scopedStatusOf, windowMessagesIn } from './zero-store.ts'
 
 const storageOf = (items: Map<string, string>): Storage => ({
   get length() {
@@ -227,4 +227,16 @@ test('a workspace whose zero-cache answers nothing reports every materialized qu
   const closed = store.diagnostics()
   expect(closed.workspaces['workspace-acme']).toMatchObject({ state: 'closed', pending: [], clientID: acme?.clientID })
   expect(closed.connectionEvents.map(({ event }) => event)).toContain('closed by the store')
+})
+
+test('a chat window waiting on zero-cache shows its last complete rows under the newer local ones, and only its own once answered', () => {
+  const lastComplete = [messageOf(1), messageOf(2)]
+  const edited = messageOf(2, { body: 'edited' })
+  const sent = messageOf(3)
+  const waiting = scopedStatusOf([edited, sent], 'unknown', lastComplete)
+  expect(waiting).toMatchObject({ isComplete: false, isLastComplete: true })
+  expect(waiting.rows).toEqual([messageOf(1), edited, sent])
+  expect(scopedStatusOf([sent], 'complete', lastComplete)).toEqual({ isComplete: true, rows: [sent] })
+  expect(scopedStatusOf([], 'error', lastComplete)).toEqual({ isComplete: false, rows: [] })
+  expect(scopedStatusOf([sent], 'unknown', undefined)).toEqual({ isComplete: false, rows: [sent] })
 })
