@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import { serverWebSocket } from './runtime-hosts/gateway.ts'
-import { createZeroForwarding } from './zero-forwarding.ts'
+import { createZeroForwarding, type WatchZeroSession } from './zero-forwarding.ts'
 
 type UpstreamSocketData = { protocol: string }
 const upstreamRequests: { method: string; path: string; headers: Record<string, string>; body: string }[] = []
@@ -58,7 +58,18 @@ const upstream = Bun.serve<UpstreamSocketData>({
   },
 })
 
-const app = new Hono().all('/zero/*', createZeroForwarding(upstream.url.origin))
+const watchedSessions: { authToken: string; end: () => void; isWatched: boolean }[] = []
+const watchSession: WatchZeroSession = async (authToken, end) => {
+  const watched = { authToken, end, isWatched: true }
+  watchedSessions.push(watched)
+  return () => {
+    watched.isWatched = false
+  }
+}
+const zeroProtocolOf = (authToken: string) =>
+  encodeURIComponent(btoa(JSON.stringify({ initConnectionMessage: ['initConnection', {}], authToken })))
+
+const app = new Hono().all('/zero/*', createZeroForwarding(upstream.url.origin, watchSession))
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
 const serverUrl = server.url.origin
 const socketUrl = serverUrl.replace('http', 'ws')
@@ -174,7 +185,10 @@ test('closes the browser socket when it sends more than 1 MiB before zero-cache 
 })
 
 test('answers 502 when zero-cache is unreachable', async () => {
-  const unreachableApp = new Hono().all('/zero/*', createZeroForwarding('http://127.0.0.1:1'))
+  const unreachableApp = new Hono().all(
+    '/zero/*',
+    createZeroForwarding('http://127.0.0.1:1', async () => undefined),
+  )
   const response = await unreachableApp.request('/zero/keepalive')
   expect(response.status).toBe(502)
   expect(await response.text()).toBe('The sync service is unreachable')
@@ -194,4 +208,18 @@ test('a path that looks like another host after the prefix stays on zero-cache, 
   } finally {
     other.stop(true)
   }
+})
+
+test('watches the session of the token Zero sends in its subprotocol, closes the browser socket as not signed in once that session ends, and stops watching a socket the browser closed', async () => {
+  const ending = await openSocket('/zero/sync/v51/connect', [zeroProtocolOf('token-of-ending-session')])
+  await waitFor(() => watchedSessions.some(({ authToken }) => authToken === 'token-of-ending-session'))
+  watchedSessions.find(({ authToken }) => authToken === 'token-of-ending-session')?.end()
+  const endedClose = await ending.closed
+  expect(endedClose.code).toBe(4001)
+  expect(endedClose.reason).toBe('Not signed in')
+  const leaving = await openSocket('/zero/sync/v51/connect', [zeroProtocolOf('token-of-leaving-browser')])
+  await waitFor(() => watchedSessions.some(({ authToken }) => authToken === 'token-of-leaving-browser'))
+  leaving.socket.close(1000, 'bye')
+  await leaving.closed
+  await waitFor(() => watchedSessions.every(({ isWatched }) => !isWatched))
 })

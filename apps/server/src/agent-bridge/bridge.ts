@@ -28,6 +28,7 @@ import { createBudgetGuard } from '@spyria/usage/server'
 import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket } from 'hono/bun'
 import type { WSContext } from 'hono/ws'
+import { releaseSessionEndings, sessionEndingsOf } from '../auth/session-endings.ts'
 import type { Authentication } from '../auth/session-tokens.ts'
 import { toolListChangesOf } from '../tool-list-changes.ts'
 
@@ -40,7 +41,7 @@ const commandOutputIntervalMilliseconds = 100
 const slowViewerBytes = 4 * 1024 * 1024
 const slowViewerCloseCode = 4008
 const notSignedInCloseCode = 4001
-type StreamSession = { workspaceId: string; memberId: MemberId; sessionId: string }
+type StreamSession = { workspaceId: string; sessionId: string }
 const keyOf = (chat: AgentChat) => `${chat.workspaceId}/${chat.chatId}`
 const turnKeyOf = (workspace: string, promptId: string) => `${workspace}/${promptId}`
 
@@ -137,11 +138,7 @@ export const createAgentBridge = ({
     const streamedSeqs = new Map<string, { conversationId: string; seq: number }>()
     const viewers = new Map<string, Map<WSContext, MemberId>>()
     const watchedKeys = new Map<WSContext, Set<string>>()
-    const streams = new Map<WSContext, StreamSession>()
-    const closeStreamsWhere = (isClosed: (session: StreamSession) => boolean) => {
-      for (const [viewer, session] of streams)
-        if (isClosed(session)) viewer.close(notSignedInCloseCode, 'Not signed in')
-    }
+    const streamWatches = new Map<WSContext, () => void>()
     const viewersOf = (chat: AgentChat) => viewers.get(keyOf(chat))?.keys() ?? []
     const watchChat = (viewer: WSContext, key: string, memberId: MemberId) => {
       viewers.set(key, (viewers.get(key) ?? new Map()).set(viewer, memberId))
@@ -560,18 +557,20 @@ export const createAgentBridge = ({
         for (const [viewer, memberId] of viewers.get(keyOf(chat)) ?? [])
           if (!(await isReadableBy(memberId, chat))) unwatchChat(viewer, keyOf(chat))
       },
-      closeMemberStreams: (workspaceId: string, memberId: string) =>
-        closeStreamsWhere((session) => session.workspaceId === workspaceId && session.memberId === memberId),
-      closeSessionStreams: (workspaceId: string, sessionId: string) =>
-        closeStreamsWhere((session) => session.workspaceId === workspaceId && session.sessionId === sessionId),
-      closeWorkspaceStreams: (workspaceId: string) =>
-        closeStreamsWhere((session) => session.workspaceId === workspaceId),
       openStream: (viewer: WSContext, session: StreamSession) => {
-        streams.set(viewer, session)
+        streamWatches.get(viewer)?.()
+        streamWatches.set(
+          viewer,
+          sessionEndingsOf(database).watch({
+            ...session,
+            end: () => viewer.close(notSignedInCloseCode, 'Not signed in'),
+          }),
+        )
       },
       unwatch: (viewer: WSContext, chat: AgentChat) => unwatchChat(viewer, keyOf(chat)),
       endStream: (viewer: WSContext) => {
-        streams.delete(viewer)
+        streamWatches.get(viewer)?.()
+        streamWatches.delete(viewer)
         unwatchEveryChat(viewer)
       },
       retained: () => ({
@@ -598,9 +597,10 @@ export const createAgentBridge = ({
   return {
     forDatabase,
     turnContextOf,
-    release: (database: Database) => {
+    release: async (database: Database) => {
       bridges.get(database)?.release()
       bridges.delete(database)
+      await releaseSessionEndings(database)
     },
     stream: (
       authenticate: (authorization: string | undefined) => Promise<Authentication>,
@@ -628,7 +628,6 @@ export const createAgentBridge = ({
           viewing ??= { context: authentication.context, database, bridge: forDatabase(database) }
           viewing.bridge.openStream(socket, {
             workspaceId: authentication.context.workspaceId,
-            memberId: authentication.context.userId,
             sessionId: authentication.sessionId,
           })
           expiry = setTimeout(

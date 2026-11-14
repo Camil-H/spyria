@@ -26,6 +26,9 @@ type UpstreamClosing = { code: number; reason: string }
 type HonoSocketData = { events: WSEvents; url: URL; protocol: string }
 const unreachableClosing: UpstreamClosing = { code: 1011, reason: 'The sync service is unreachable' }
 const overHeldClosing: UpstreamClosing = { code: 1009, reason: 'Too much was sent before the sync service answered' }
+const signedOutClosing: UpstreamClosing = { code: 4001, reason: 'Not signed in' }
+
+export type WatchZeroSession = (authToken: string, end: () => void) => Promise<(() => void) | undefined>
 
 const byteLengthOf = (message: Relayed) =>
   typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength
@@ -47,13 +50,29 @@ const closeLike = (socket: { close: (code?: number, reason?: string) => void }, 
 const logUnreachable = (error: unknown) =>
   log.warn({ event: 'zero.unreachable', body: 'zero-cache did not answer a forwarded request', error })
 
-const bridgeTo = (url: URL, protocols: string[]): WSEvents => {
+const authTokenOf = (protocol: string) => {
+  try {
+    const { authToken } = JSON.parse(Buffer.from(decodeURIComponent(protocol), 'base64').toString())
+    return typeof authToken === 'string' ? authToken : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const bridgeTo = (url: URL, protocols: string[], watchSession: WatchZeroSession): WSEvents => {
   let upstream: WebSocket | undefined
+  let stopWatching: (() => void) | undefined
   const heldForUpstream: Relayed[] = []
   let heldBytes = 0
   let hasBrowserLeft = false
   return {
     onOpen: (_, downstream) => {
+      const authToken = authTokenOf(protocols[0] ?? '')
+      if (authToken)
+        void watchSession(authToken, () => closeLike(downstream, signedOutClosing)).then((unwatch) => {
+          if (hasBrowserLeft) unwatch?.()
+          else stopWatching = unwatch
+        })
       const opening = new WebSocket(url, protocols)
       upstream = opening
       let hasOpened = false
@@ -83,6 +102,7 @@ const bridgeTo = (url: URL, protocols: string[]): WSEvents => {
     },
     onClose: (event) => {
       hasBrowserLeft = true
+      stopWatching?.()
       heldForUpstream.length = 0
       if (upstream?.readyState === WebSocket.OPEN || upstream?.readyState === WebSocket.CONNECTING)
         closeLike(upstream, { code: event.code, reason: event.reason })
@@ -103,7 +123,7 @@ const unreachable = (context: Context, error: unknown) => {
   return context.text(unreachableClosing.reason, unreachableStatus)
 }
 
-const forwardWebSocket = (context: Context, url: URL) => {
+const forwardWebSocket = (context: Context, url: URL, watchSession: WatchZeroSession) => {
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const protocols = (context.req.header('sec-websocket-protocol') ?? '')
     .split(',')
@@ -111,7 +131,11 @@ const forwardWebSocket = (context: Context, url: URL) => {
     .filter(Boolean)
   const [protocol = ''] = protocols
   const server = context.env as Server<HonoSocketData>
-  const data: HonoSocketData = { events: bridgeTo(url, protocols), url: new URL(context.req.url), protocol }
+  const data: HonoSocketData = {
+    events: bridgeTo(url, protocols, watchSession),
+    url: new URL(context.req.url),
+    protocol,
+  }
   const upgraded = server.upgrade(context.req.raw, {
     headers: protocol ? { 'sec-websocket-protocol': protocol } : undefined,
     data,
@@ -138,7 +162,7 @@ const forwardHttp = async (context: Context, url: URL) => {
 
 export const isWebSocketUpgrade = (context: Context) => context.req.header('upgrade')?.toLowerCase() === 'websocket'
 
-export const createZeroForwarding = (zeroUrl: string) => (context: Context) => {
+export const createZeroForwarding = (zeroUrl: string, watchSession: WatchZeroSession) => (context: Context) => {
   const url = upstreamUrlOf(context.req.raw, zeroUrl)
-  return isWebSocketUpgrade(context) ? forwardWebSocket(context, url) : forwardHttp(context, url)
+  return isWebSocketUpgrade(context) ? forwardWebSocket(context, url, watchSession) : forwardHttp(context, url)
 }

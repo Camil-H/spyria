@@ -126,6 +126,7 @@ import { createOidc, type OidcSettings } from './auth/oidc.ts'
 import { type AuthMode, createAuthRoutes } from './auth/routes.ts'
 import { isSameSecret } from './auth/same-secret.ts'
 import { createSecretBox, type SecretsKeyring, secretsKeyringOf } from './auth/secret-box.ts'
+import { sessionEndingsOf } from './auth/session-endings.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
 import { hasNoWorkspace, readSsoSettings, stopWorkspaceSso } from './auth/sso.ts'
@@ -161,7 +162,7 @@ import { contextOf, withSpan } from './telemetry.ts'
 import { toolListChangesOf } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
 import { createWebPageReader } from './web-pages.ts'
-import { createZeroForwarding, isWebSocketUpgrade, zeroPathPrefix } from './zero-forwarding.ts'
+import { createZeroForwarding, isWebSocketUpgrade, type WatchZeroSession, zeroPathPrefix } from './zero-forwarding.ts'
 
 const healthCheckMilliseconds = 2000
 const passesWithinTimeout = (check: () => Promise<boolean>) =>
@@ -311,6 +312,17 @@ export const createApp = ({
   const databaseOf = (databaseName: string | undefined) =>
     databaseName === undefined ? database : testDatabaseByName?.(databaseName)
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
+  const watchZeroSession: WatchZeroSession = async (authToken, end) => {
+    const authentication = await authenticate(`Bearer ${authToken}`).catch(() => undefined)
+    const sessionDatabase = authentication?.status === 200 ? databaseOf(authentication.databaseName) : undefined
+    return authentication?.status === 200 && sessionDatabase
+      ? sessionEndingsOf(sessionDatabase).watch({
+          workspaceId: authentication.context.workspaceId,
+          sessionId: authentication.sessionId,
+          end,
+        })
+      : undefined
+  }
   const sso = {
     secretBox: secretsKeyring && createSecretBox(secretsKeyring),
     microsoftLoginOrigin,
@@ -414,7 +426,7 @@ export const createApp = ({
     .all(
       `${zeroPathPrefix}/*`,
       (context, next) => (isWebSocketUpgrade(context) ? rateLimited('zeroConnections')(context, next) : next()),
-      zeroUrl ? createZeroForwarding(zeroUrl) : (context) => context.notFound(),
+      zeroUrl ? createZeroForwarding(zeroUrl, watchZeroSession) : (context) => context.notFound(),
     )
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
@@ -481,10 +493,6 @@ export const createApp = ({
         database,
         authenticate,
         testDatabaseByName,
-        closeSessionStreams: (sessionDatabase, workspaceId, sessionId) =>
-          agentBridge.forDatabase(sessionDatabase).closeSessionStreams(workspaceId, sessionId),
-        closeMemberStreams: (sessionDatabase, workspaceId, memberId) =>
-          agentBridge.forDatabase(sessionDatabase).closeMemberStreams(workspaceId, memberId),
         rateLimited,
       }),
     )
@@ -529,13 +537,8 @@ export const createApp = ({
             if ('error' in response.result) return response
             if (mutation.name === 'runtime.removeHost')
               runtimeHosts.disconnect(ctx.workspaceId, (mutation.args[0] as { hostId: RuntimeHostId }).hostId)
-            if (mutation.name === 'workspace.endMemberSessions') {
-              const { memberId } = mutation.args[0] as { memberId: string }
-              agentBridge.forDatabase(context.get('database')).closeMemberStreams(ctx.workspaceId, memberId)
-            }
             if (mutation.name === 'workspace.removeMember') {
               const { memberId } = mutation.args[0] as { memberId: string }
-              agentBridge.forDatabase(context.get('database')).closeMemberStreams(ctx.workspaceId, memberId)
               for (const { id } of await context.get('database').$client<{ id: RuntimeHostId }[]>`
                 select id from runtime_hosts where workspace_id = ${ctx.workspaceId} and owner_id = ${memberId}`)
                 runtimeHosts.disconnect(ctx.workspaceId, id)
@@ -545,8 +548,6 @@ export const createApp = ({
                 ctx.workspaceId,
                 chatId((mutation.args[0] as { chatId: string }).chatId),
               )
-            if (mutation.name === 'workspace.deleteWorkspace')
-              agentBridge.forDatabase(context.get('database')).closeWorkspaceStreams(ctx.workspaceId)
             if (readRevokingMutations.has(mutation.name))
               await agentBridge.forDatabase(context.get('database')).revokeUnreadable({
                 workspaceId: ctx.workspaceId,
