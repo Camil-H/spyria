@@ -31,6 +31,7 @@ import {
   textOf,
   virtualKeyOf,
   waitFor,
+  waitingOnLock,
   whoami,
 } from './testing/testing.ts'
 
@@ -73,6 +74,24 @@ test('Connect grants the server on the member key, runs the consent through Spyr
 
   expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
   expect(await sessionsOf(key.id)).toEqual([])
+  expect(await connectionRows()).toEqual([])
+})
+
+test('a refresh waiting on a Disconnect in progress reads the gateway after it and stores no connection, instead of showing Connected again', async () => {
+  await connectAlice(aliceCookie)
+  const key = await virtualKeyOf(alice)
+  const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
+  if (!server) throw new Error('The fake tool server is not on the gateway')
+  let refresh: ReturnType<typeof asMember> | undefined
+  await database.$client.begin(async (disconnect) => {
+    await disconnect`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
+    refresh = asMember(alice, 'POST', connectionPath('refresh'))
+    await waitFor(() => waitingOnLock(database))
+    for (const session of await llmGateway.toolSessions(key.id, server)) await llmGateway.removeToolSession(session.id)
+    await disconnect`
+      delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`
+  })
+  expect(await refresh).toEqual({ status: 200, body: JSON.stringify({ status: null }) })
   expect(await connectionRows()).toEqual([])
 })
 
