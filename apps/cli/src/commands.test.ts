@@ -395,3 +395,46 @@ test('setup without the secrets of a deployment whose data this machine still ho
   expect(indexOfCall('volume ls')).toBe(-1)
   expect(environment()).toMatchObject(secrets)
 })
+
+test('a setup changing the version that fails after it registered the Microsoft app keeps the new secret next to the old version, so setting up again still backs up before the change', async () => {
+  writeFileSync(join(fakeBin, 'az'), '#!/bin/sh\n', { mode: 0o755 })
+  const registeredApps: string[] = []
+  const az = (azArguments: string[]) => {
+    const command = azArguments.slice(0, 3).join(' ')
+    if (command === 'ad app list') return { exitCode: 0, output: registeredApps.join('\n') }
+    if (command === 'ad app create') {
+      registeredApps.push('00000000-0000-4000-8000-000000000000')
+      return { exitCode: 0, output: '00000000-0000-4000-8000-000000000000' }
+    }
+    if (command === 'ad app credential') return { exitCode: 0, output: 'secret-1' }
+    return { exitCode: 0, output: 'tenant-1' }
+  }
+  const setUp = (extra: string[]) =>
+    setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0'],
+        ...['--microsoft-client-id', 'create', ...extra],
+      ]),
+      { processEnvironment: { SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' }, az, workspaceExistsIn: () => false },
+    )
+  try {
+    const failure = await setUp(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
+      (error: Error) => error.message,
+    )
+    expect(failure).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+    expect(environment()).toEqual({
+      ...installed,
+      SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
+      SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
+    })
+    expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
+
+    rmSync(join(fakeDocker, 'calls'), { force: true })
+    await setUp([])
+    expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(2)
+    expect(environment()).toMatchObject({ SPYRIA_VERSION: '1.3.0', SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1' })
+    expect(registeredApps).toHaveLength(1)
+  } finally {
+    rmSync(join(fakeBin, 'az'), { force: true })
+  }
+})
