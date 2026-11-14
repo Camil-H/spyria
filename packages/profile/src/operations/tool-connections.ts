@@ -10,7 +10,7 @@ import {
 } from '@spyria/kernel'
 import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
-import { ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
+import { ToolConnectionsNotChecked, ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
 import { checkedConnectionStatusOf, connectionStatuses, connectionStatusOf } from '../domain/tool-connection.ts'
 import {
   canSignIn,
@@ -118,9 +118,9 @@ export const syncToolConnections = async ({ transactor, gateway }: Dependencies)
       }),
     ),
   )
-  await transactor.run(async (unitOfWork) => {
+  const isActive = await transactor.run(async (unitOfWork) => {
     const { members, toolConnections } = unitOfWork
-    if (!(await members.lockIfActive())) return
+    if (!(await members.lockIfActive())) return false
     const signInIds = new Set((await signInConnectionsOf(unitOfWork, member)).map(({ id }) => id))
     const storedNow = await toolConnections.connectionIds()
     for (const connectionId of new Set([...stored, ...storedNow, ...checkedById.keys()])) {
@@ -132,7 +132,12 @@ export const syncToolConnections = async ({ transactor, gateway }: Dependencies)
       if (status === storedStatus) continue
       await (status ? toolConnections.connect({ connectionId, status }) : toolConnections.disconnect(connectionId))
     }
+    return true
   })
+  const uncheckedNames = connections
+    .filter(({ id }) => checkedById.has(id) && !checkedById.get(id))
+    .map(({ name }) => name)
+  if (isActive && uncheckedNames.length > 0) throw new ToolConnectionsNotChecked(uncheckedNames.join(', '))
 }
 
 export const disconnectTool = async (dependencies: Dependencies, { tool }: Input) => {
