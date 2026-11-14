@@ -3,14 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, type Page } from '@playwright/test'
-import { machineTest as base, chipOf, mainOf, newRuntimeChat } from '../fixtures.ts'
+import { machineTest as base, chipOf, machineToolOf, newRuntimeChat } from '../fixtures.ts'
 import { viteUrl } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
 
-export const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
-export const machineToolOf = (page: Page, toolName: string) =>
-  machineSectionOf(page).getByRole('listitem', { name: toolName, exact: true })
 export const setUpButtonOf = (page: Page, toolName: string) =>
   machineToolOf(page, toolName).getByRole('button', { name: `Set up ${toolName}` })
 export const newMachineSession = async (page: Page, name: string, option = 'Local · Claude Code') => {

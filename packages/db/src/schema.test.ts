@@ -41,7 +41,7 @@ test('each snapshot gets its own participant index, so a changed snapshot answer
     ...snapshot,
     chatMembers: [
       ...snapshot.chatMembers,
-      { workspaceId: acme, chatId: chatId('chat-research'), memberId: bob, roleId: 'reader' },
+      { workspaceId: acme, chatId: chatId('chat-research'), memberId: bob, roleId: 'reader', sidebarPosition: null },
     ],
   }
   expect(permissionsOn('chat-research', bob, withBob)).toEqual(rolePermissions('reader') ?? [])

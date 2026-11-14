@@ -1,4 +1,4 @@
-import type { Transaction } from '@rocicorp/zero'
+import type { Query, Transaction } from '@rocicorp/zero'
 import {
   activeAgentTurns,
   aiProviderAllowListOf,
@@ -37,10 +37,12 @@ import {
   stopRunningDelegations,
   storedAttachmentBytesOf,
 } from '@spyria/db/server-writes'
-import type { Message as MessageRow } from '@spyria/db/zero'
+import type { Message as MessageRow, Schema } from '@spyria/db/zero'
 import {
+  caseVariantsOf,
   chatPermissionsOf,
   isOwnerRemoved,
+  likeEscaped,
   type Transact,
   transactingTransactor,
   transactorOver,
@@ -82,6 +84,7 @@ import {
   type PostedPayload,
   type StepChangedPayload,
 } from '../domain/message-events.ts'
+import type { PublicChatMessage } from '../domain/public-chats.ts'
 
 const dateOrNull = (time: number | null) => (time === null ? null : new Date(time))
 const timeOrNull = (date: Date | null) => date?.getTime() ?? null
@@ -111,6 +114,21 @@ const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message
 }
 
 const withoutStatus = ({ status, ...message }: Message) => message
+
+const conversationMessages = (messages: Query<'messages', Schema>) =>
+  messages.where('kind', 'IN', ['member', 'agent']).where('deletedAt', 'IS', null)
+
+const toPublicChatMessage = (row: MessageRow, threadReplies: number): PublicChatMessage => ({
+  id: messageId(row.id),
+  chatId: chatId(row.chatId),
+  kind: row.kind === 'agent' ? 'agent' : 'member',
+  authorId: row.authorId === null ? null : memberId(row.authorId),
+  step: row.step as StoredStep | null,
+  body: row.body,
+  createdAt: new Date(row.createdAt),
+  threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
+  threadReplies,
+})
 
 const advanceReadMarker = async (
   newest: { seq: number } | undefined,
@@ -197,6 +215,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     )
     return (id: MemberId) => nameByMemberId.get(id) ?? 'a member'
   }
+  const publicChatsQuery = () =>
+    zql.chats.where('workspaceId', contextWorkspaceId).where('visibility', 'public').where('archived', false)
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
   const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
     enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
@@ -452,6 +472,55 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           ...page,
           openedAt: openedAt.getTime(),
         }),
+    },
+    publicChats: {
+      chats: async () => {
+        const [rows, projects] = await Promise.all([
+          tx.run(
+            publicChatsQuery().related('messages', (messages) =>
+              conversationMessages(messages).orderBy('seq', 'desc').limit(1),
+            ),
+          ),
+          tx.run(zql.projects.where('workspaceId', contextWorkspaceId)),
+        ])
+        return rows.map((row) => ({
+          id: chatId(row.id),
+          name: row.name,
+          type: row.type,
+          projectName: projects.find(({ id }) => id === row.projectId)?.name ?? null,
+          lastMessageAt: dateOrNull(row.messages[0]?.createdAt ?? null),
+        }))
+      },
+      search: async ({ needle, chatId: searchedChatId }, limit) => {
+        const matching = conversationMessages(zql.messages.where('workspaceId', contextWorkspaceId))
+          .where(({ or, cmp }) =>
+            or(...caseVariantsOf(needle).map((variant) => cmp('body', 'ILIKE', `%${likeEscaped(variant)}%`))),
+          )
+          .whereExists('chat', (chat) => chat.where('visibility', 'public').where('archived', false))
+        const rows = await tx.run(
+          (searchedChatId ? matching.where('chatId', searchedChatId) : matching)
+            .orderBy('createdAt', 'desc')
+            .limit(limit),
+        )
+        return rows.map((row) => toPublicChatMessage(row, 0))
+      },
+      messages: async ({ chatId: readChatId, beforeId, threadRootId }, limit) => {
+        const inChat = conversationMessages(
+          zql.messages.where('workspaceId', contextWorkspaceId).where('chatId', readChatId),
+        )
+        const before = beforeId ? await tx.run(inChat.where('id', beforeId).one()) : undefined
+        if (beforeId && !before) return undefined
+        const inPart = threadRootId
+          ? inChat.where(({ or, cmp }) => or(cmp('id', threadRootId), cmp('threadRootId', threadRootId)))
+          : inChat.where('threadRootId', 'IS', null)
+        const rows = await tx.run(
+          (before ? inPart.where('seq', '<', before.seq) : inPart)
+            .orderBy('seq', 'desc')
+            .limit(limit)
+            .related('threadReplies', conversationMessages),
+        )
+        return rows.toReversed().map((row) => toPublicChatMessage(row, threadRootId ? 0 : row.threadReplies.length))
+      },
     },
     routing: {
       chatRouting: async (id) => {

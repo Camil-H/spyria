@@ -217,6 +217,7 @@ type ChatMemberRow = {
   chatId: ChatId
   memberId: MemberId
   roleId: string
+  sidebarPosition: number | null
 }
 type ChatRoleRow = {
   workspaceId: WorkspaceId

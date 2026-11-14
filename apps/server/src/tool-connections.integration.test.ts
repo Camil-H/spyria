@@ -142,7 +142,13 @@ test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only 
   expect(listedNames).toContain('fake-whoami')
   expect(listedNames).not.toContain('open_page')
   const spyriaListed = await mcpCall(host, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')
-  expect(spyriaListed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(['open_page', 'take_screenshot'])
+  expect(spyriaListed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+    'open_page',
+    'take_screenshot',
+    'list_public_chats',
+    'search_public_chats',
+    'read_public_chat',
+  ])
   const spyriaInitialized = await mcpCall(
     host,
     token,

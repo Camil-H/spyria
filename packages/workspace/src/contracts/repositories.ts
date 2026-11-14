@@ -34,6 +34,7 @@ export type ChatRepository = {
   participatedBy(memberId: MemberId): Promise<Chat[]>
   removeParticipant(change: { chatId: ChatId; memberId: MemberId; actorId: MemberId }): Promise<void>
   transfer(change: { chat: Chat; ownerId: MemberId; actorId: MemberId }): Promise<void>
+  placeInSidebar(placement: { memberId: MemberId; chatIds: readonly ChatId[] }): Promise<void>
 }
 
 export type ChatRoleRepository = {

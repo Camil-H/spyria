@@ -1,5 +1,14 @@
 import { expect, type Page } from '@playwright/test'
-import { machineTest, mainOf, messageContaining, newRuntimeChat, newSession, workingIndicatorOf } from '../fixtures.ts'
+import {
+  machineTest,
+  machineToolOf,
+  mainOf,
+  messageContaining,
+  newRuntimeChat,
+  newSession,
+  openProfile,
+  workingIndicatorOf,
+} from '../fixtures.ts'
 import type { WorkerStack } from '../stack.ts'
 
 export * from '../fixtures.ts'
@@ -28,33 +37,20 @@ export const forEachHarness = (declare: (harness: Harness) => void) => {
     })
 }
 
-export const newOnlineSession = async (
-  page: Page,
-  tool: 'Claude Code' | 'Codex',
-  workerStack: WorkerStack,
-  name = `${tool} questions`,
-) => {
-  await expect
-    .poll(
-      async () =>
-        (
-          await workerStack.database.$client`
-            select 1 from runtime_hosts where owner_id = 'member-alice' and status = 'online'
-              and capacity->'signedIn' ? ${tool === 'Codex' ? 'codex' : 'claude-code'}`
-        ).length,
-    )
-    .toBe(1)
+const newOnlineSession = async (page: Page, tool: 'Claude Code' | 'Codex', name: string) => {
+  await openProfile(page, 'My machine')
+  await expect(machineToolOf(page, tool)).toHaveText(`${tool}Signed in`)
   return newSession(page, tool, name)
 }
 export const newHarnessChat = async (
   page: Page,
   harness: Harness,
   name: string,
-  { machine, workerStack }: { machine: (query?: object) => Promise<unknown>; workerStack: WorkerStack },
+  { machine }: { machine: (query?: object) => Promise<unknown> },
 ) => {
   if (harness.name === 'Pi') return newRuntimeChat(page, name)
   await machine(harness.machine)
-  return newOnlineSession(page, harness.name, workerStack, name)
+  return newOnlineSession(page, harness.name, name)
 }
 
 export const questionOf = (page: Page) => mainOf(page).getByRole('form', { name: 'Question' })
