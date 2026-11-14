@@ -127,6 +127,9 @@ export const lockMembership = (tx: Transaction, workspaceId: string, userId: str
 export const lockWorkspaceRole = (tx: Transaction, workspaceId: string, id: string) =>
   onServer(tx, 'select 1 from workspace_roles where workspace_id = $1 and id = $2 for update', [workspaceId, id])
 
+export const lockMemberToolConnections = (tx: Transaction, workspaceId: string, userId: string) =>
+  onServer(tx, "select pg_advisory_xact_lock(hashtext('tool_connections/' || $1 || '/' || $2))", [workspaceId, userId])
+
 export const lockInvitation = (tx: Transaction, workspaceId: string, id: string) =>
   onServer(tx, 'select 1 from invitations where workspace_id = $1 and id = $2 for update', [workspaceId, id])
 

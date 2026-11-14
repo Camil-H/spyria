@@ -20,6 +20,7 @@ import {
   createFakeHosts,
   everyStoredText,
   type FakeHost,
+  isBlockedBy,
   lookup,
   mcpCall,
   openSharedTestApp,
@@ -31,7 +32,6 @@ import {
   textOf,
   virtualKeyOf,
   waitFor,
-  waitingOnLock,
   whoami,
 } from './testing/testing.ts'
 
@@ -84,9 +84,10 @@ test('a refresh waiting on a Disconnect in progress reads the gateway after it a
   if (!server) throw new Error('The fake tool server is not on the gateway')
   let refresh: ReturnType<typeof asMember> | undefined
   await database.$client.begin(async (disconnect) => {
-    await disconnect`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
+    const [blocking] = await disconnect<{ pid: number }[]>`select pg_backend_pid() as pid`
+    await disconnect`select pg_advisory_xact_lock(hashtext('tool_connections/' || ${acme} || '/' || ${alice}))`
     refresh = asMember(alice, 'POST', connectionPath('refresh'))
-    await waitFor(() => waitingOnLock(database))
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
     for (const session of await llmGateway.toolSessions(key.id, server)) await llmGateway.removeToolSession(session.id)
     await disconnect`
       delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`

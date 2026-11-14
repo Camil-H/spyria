@@ -441,6 +441,13 @@ export const waitingOnLock = async (database: Database) =>
       select 1 from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database() limit 1`
   ).length > 0
 
+export const isBlockedBy = async (database: Database, blockingPid: number | undefined) =>
+  (
+    await database.$client`
+      select 1 from pg_stat_activity
+      where datname = current_database() and ${blockingPid ?? 0}::int = any(pg_blocking_pids(pid)) limit 1`
+  ).length > 0
+
 export const newChat = async ({
   ownerId = alice,
   type = 'runtime',
