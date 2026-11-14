@@ -13,6 +13,7 @@ import {
   insertRoutingDecision,
   insertToolCall,
   isChatEventStored,
+  isJobPending,
   isSessionStartPending,
   keepDeletedMessageText,
   lastAgentEvent,
@@ -366,6 +367,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
       startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      isInterruptRequested: (id, promptId) =>
+        isJobPending(tx, contextWorkspaceId, agentJobTypes.interrupt, { chatId: id, promptId }),
       restartSession: (restart) => enqueue(agentJobTypes.restartSession, restart),
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
