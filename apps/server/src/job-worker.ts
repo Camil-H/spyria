@@ -57,6 +57,8 @@ export const retryDelayOf = (
       )
     : attempt * retryDelayMilliseconds
 
+const isOneQueuedJobType = (type: string) => type.endsWith('.sweep') || type === 'usage.sync'
+const abandonedJobError = 'The server stopped while running this job'
 const queuedJobsChannel = 'jobs_queued'
 const claimedJob = `workspace_id = $1 and id = $2 and state = 'running' and claimed_at = $3::timestamptz`
 
@@ -186,6 +188,27 @@ export const startJobWorker = (
         [jobTypes, leaseMilliseconds, jobTypesOfDeletedWorkspaces],
       )
     )[0]
+  const failAbandonedJobs = async () => {
+    const abandoned = await database.$client.unsafe<{ workspace_id: string; id: string; type: string }[]>(
+      `update jobs set state = 'failed', attempts = attempts + 1, finished_at = now(), last_error = $3
+       where state = 'running' and run_at <= now() and attempts + 1 >= $2 and type = any($1::text[])
+       returning workspace_id, id, type`,
+      [jobTypes, maximumJobAttempts, abandonedJobError],
+    )
+    for (const job of abandoned)
+      log.error({
+        event: 'job.run',
+        body: jobLogs.failed.body,
+        attributes: {
+          'job.id': job.id,
+          'job.type': job.type,
+          'job.attempt': maximumJobAttempts,
+          'job.outcome': 'failed',
+          'workspace.id': job.workspace_id,
+        },
+        error: new Error(abandonedJobError),
+      })
+  }
   const runJob = ({ payload: { traceparent, tracestate, ...payload }, ...claimed }: ClaimedJob) => {
     const job = { ...claimed, payload }
     const startedAt = performance.now()
@@ -272,15 +295,25 @@ export const startJobWorker = (
         if (outcome?.retryInMilliseconds !== undefined) return { outcome: 'rescheduled' }
       }
     } catch (error) {
-      const state = isLastAttempt ? 'failed' : 'queued'
-      await database.$client.unsafe(
-        `update jobs set state = $4, last_error = $5, attempts = attempts + 1,
-           run_at = now() + make_interval(secs => $6::double precision / 1000),
-           finished_at = case when $4 = 'failed' then now() end
-         where ${claimedJob}`,
-        [...jobKey, state, errorSummaryOf(error), isLastAttempt ? 0 : retryDelayOf(job.type, job.attempt, retryDelays)],
+      const [recorded] = await database.$client.unsafe<{ isFailed: boolean }[]>(
+        `with outcome as (
+           select $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
+             where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued')) as is_failed)
+         update jobs set state = case when is_failed then 'failed' else 'queued' end, last_error = $5,
+           attempts = attempts + 1, run_at = now() + make_interval(secs => $6::double precision / 1000),
+           finished_at = case when is_failed then now() end
+         from outcome where ${claimedJob}
+         returning is_failed as "isFailed"`,
+        [
+          ...jobKey,
+          isLastAttempt,
+          errorSummaryOf(error),
+          isLastAttempt ? 0 : retryDelayOf(job.type, job.attempt, retryDelays),
+          isOneQueuedJobType(job.type),
+          job.type,
+        ],
       )
-      return { outcome: isLastAttempt ? 'failed' : 'retried', error }
+      return { outcome: (recorded?.isFailed ?? isLastAttempt) ? 'failed' : 'retried', error }
     }
     return { outcome: 'done' }
   }
@@ -291,18 +324,20 @@ export const startJobWorker = (
         continue
       }
       isJobQueuedSinceClaim = false
-      const job = await claimNextJob().then(
-        (claimed) => {
-          hasLoggedPollFailure = false
-          return claimed
-        },
-        (error) => {
-          if (!hasLoggedPollFailure)
-            log.error({ event: 'job.poll_failed', body: 'The job worker could not poll its queue', error })
-          hasLoggedPollFailure = true
-          return undefined
-        },
-      )
+      const job = await failAbandonedJobs()
+        .then(claimNextJob)
+        .then(
+          (claimed) => {
+            hasLoggedPollFailure = false
+            return claimed
+          },
+          (error) => {
+            if (!hasLoggedPollFailure)
+              log.error({ event: 'job.poll_failed', body: 'The job worker could not poll its queue', error })
+            hasLoggedPollFailure = true
+            return undefined
+          },
+        )
       if (!job) {
         await waitForQueuedJob()
         continue
