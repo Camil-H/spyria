@@ -879,7 +879,8 @@ export const toolConnectionSyncsSettled = async () => {
     async () =>
       (
         await database.$client`
-          select 1 from jobs where type = 'profile.tool-connections-sync' and state in ('queued', 'running') limit 1`
+          select 1 from jobs where workspace_id = ${acme} and type = 'profile.tool-connections-sync'
+            and state in ('queued', 'running') limit 1`
       ).length === 0,
   )
 }

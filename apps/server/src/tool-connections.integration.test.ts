@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { createProfileJobs } from '@spyria/profile/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp } from './app.ts'
@@ -54,6 +57,11 @@ beforeEach(async () => {
   await toolConnectionSyncsSettled()
 })
 const checkAlice = () => asMember(alice, 'POST', '/api/tool-connections/check')
+const syncsRunFor = async (userId: string) =>
+  (
+    await database.$client`
+      select 1 from jobs where type = 'profile.tool-connections-sync' and payload->>'memberId' = ${userId}`
+  ).length
 const refreshAlice = () => asMember(alice, 'POST', connectionPath('refresh'))
 const disconnectAlice = () => asMember(alice, 'POST', connectionPath('disconnect'))
 const fakeClientId = async () => (await llmGateway.toolServers()).find((server) => server.name === 'fake')?.id
@@ -88,7 +96,7 @@ test('Connect grants the server on the member key, runs the consent through Spyr
   expect(await connectionRows()).toEqual([])
 })
 
-test('a Disconnect while a sync is about to store Connected leaves no connection, since the sync it queues runs only after that one', async () => {
+test('a Disconnect while a sync is about to store Connected leaves no connection once the syncs have run', async () => {
   await connectAlice(aliceCookie)
   const key = await virtualKeyOf(alice)
   await database.$client.begin(async (held) => {
@@ -119,6 +127,50 @@ test('every refresh, check and Disconnect only queues the member’s sync, and a
     expect((await syncsOf(alice)).toSorted()).toEqual(['queued', 'running'])
   })
   await toolConnectionSyncsSettled()
+})
+
+const runSync = (toolGateway: typeof llmGateway, memberId: string = alice) =>
+  createProfileJobs(toolGateway)['profile.tool-connections-sync']({
+    workspaceId: acme,
+    payload: { memberId },
+    isLastAttempt: false,
+    transact: (work) => zeroDrizzle(schema, database).transaction(work),
+  })
+
+test('a sync whose check of one server fails keeps that server’s status and still settles the others', async () => {
+  await connectAlice(aliceCookie)
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${alice}, 'connection-Slack', 'Connected')`
+  await runSync({
+    ...llmGateway,
+    isToolSessionAuthorized: async () => {
+      throw new Error('The tool server did not answer')
+    },
+  })
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+  expect(
+    await database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`,
+  ).toHaveLength(0)
+})
+
+test('a sync for a member who is no longer active writes nothing', async () => {
+  const leaver = `member-leaver-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${leaver}, ${`${leaver}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name, removed_at)
+    values (${acme}, ${leaver}, 'member', 'Leaver', now())`
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${leaver}, 'connection-fake', 'Connected')`
+  try {
+    await runSync(llmGateway, leaver)
+    expect([...(await database.$client`select status from tool_connections where user_id = ${leaver}`)]).toEqual([
+      { status: 'Connected' },
+    ])
+  } finally {
+    await database.$client`delete from tool_connections where user_id = ${leaver}`
+  }
 })
 
 test('a refused consent shows the failure page and creates no connection', async () => {
@@ -286,10 +338,12 @@ test('a server the prompter has not connected, or whose token was revoked, answe
 
   await connectAlice(aliceCookie)
   await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${aliceAccount}`, { method: 'POST' }))
+  const syncsBefore = await syncsRunFor(alice)
   const revoked = await mcpCall(host, token, whoami)
   expect(revoked).toMatchObject({ status: 200, result: { isError: true } })
   expect(textOf(revoked.result)).toBe('Alice needs to reconnect fake')
   await toolConnectionSyncsSettled()
+  expect(await syncsRunFor(alice)).toBeGreaterThan(syncsBefore)
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
   for (const answer of [unconnected, revoked]) {
     expect(answer.body).not.toContain('flow=')
