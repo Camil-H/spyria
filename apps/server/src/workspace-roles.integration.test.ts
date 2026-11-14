@@ -8,13 +8,13 @@ import {
   bob,
   bobInAcme,
   failedWith,
+  isBlockedBy,
   lee,
   openSharedTestApp,
   openZeroStore,
   removeFromAcme,
   succeeded,
   waitFor,
-  waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
@@ -216,11 +216,12 @@ test('an invite waiting on the deletion of its role is refused once the deletion
   expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
   let invite: ReturnType<typeof resultOf> | undefined
   await database.$client.begin(async (deletion) => {
+    const [blocking] = await deletion<{ pid: number }[]>`select pg_backend_pid() as pid`
     await deletion`select 1 from workspace_roles where workspace_id = ${acme} and id = ${financeId} for update`
     await deletion`delete from workspace_role_permissions where workspace_id = ${acme} and role_id = ${financeId}`
     await deletion`delete from workspace_roles where workspace_id = ${acme} and id = ${financeId}`
     invite = resultOf(aliceInAcme, 'workspace.inviteMember', inviteArgs('nina@example.com', financeId))
-    await waitFor(() => waitingOnLock(database))
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
   })
   expect(await invite).toEqual(failedWith(`${financeId} is not a role of this workspace`))
   expect(await database.$client`select 1 from invitations where email = 'nina@example.com'`).toHaveLength(0)
@@ -230,12 +231,13 @@ test('a role deletion waiting on an invite to that role is refused once the invi
   expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
   let deletion: ReturnType<typeof resultOf> | undefined
   await database.$client.begin(async (invite) => {
+    const [blocking] = await invite<{ pid: number }[]>`select pg_backend_pid() as pid`
     await invite`select 1 from workspace_roles where workspace_id = ${acme} and id = ${financeId} for update`
     await invite`
       insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
       values (${acme}, ${crypto.randomUUID()}, 'nina@example.com', ${financeId}, ${alice}, now(), now() + interval '7 days')`
     deletion = deleteRole(financeId)
-    await waitFor(() => waitingOnLock(database))
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
   })
   expect(await deletion).toEqual(failedWith('Finance is held by 1 pending invite; change their role first'))
   expect(await customRolesOf()).toEqual([{ id: financeId, name: 'Finance', permissions: ['costs.view'] }])
