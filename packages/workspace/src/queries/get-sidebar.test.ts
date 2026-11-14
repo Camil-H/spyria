@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { acme, alice, bob, createMockSnapshot, lee } from '@spyria/db'
-import type { MemberId } from '@spyria/kernel'
+import { chatId, type MemberId } from '@spyria/kernel'
 import { withChat } from '../domain/testing.ts'
 import { getSidebar } from './get-sidebar.ts'
 
@@ -47,4 +47,21 @@ test('a public channel joins the sidebar when the member becomes a participant, 
     })
   expect(sidebarChatsOf(lee, lounge([])).map(({ name }) => name)).toEqual(['Invoice bug'])
   expect(sidebarChatsOf(lee, lounge([lee])).map(({ name }) => name)).toEqual(['Invoice bug', 'Lounge', 'Backroom'])
+})
+
+test("the sidebar follows the viewer's own order, with the chats they never placed after it in creation order", () => {
+  const withLounges = ['Lounge', 'Backroom', 'Annex'].reduce(
+    (snapshot, name) => withChat(snapshot, { name, visibility: 'private', participantIds: [lee] }),
+    createMockSnapshot(),
+  )
+  const placedByLee = {
+    ...withLounges,
+    chatMembers: withLounges.chatMembers.map((row) =>
+      row.memberId === lee && row.chatId === chatId('chat-annex') ? { ...row, sidebarPosition: 0 } : row,
+    ),
+  }
+  const looseChatNamesOf = (viewerId: MemberId) =>
+    getSidebar(acme, viewerId)(placedByLee).looseChats.map(({ name }) => name)
+  expect(looseChatNamesOf(lee)).toEqual(['Annex', 'Lounge', 'Backroom'])
+  expect(looseChatNamesOf(bob)).toEqual(['Standup', 'Lounge', 'Backroom', 'Annex'])
 })

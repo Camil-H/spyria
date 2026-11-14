@@ -370,3 +370,35 @@ test('the owner makes an AI chat public, which turns its Readers into Prompters,
   expect(await changeTo('private')).toEqual(succeeded)
   expect(await chatRow(chat)).toMatchObject({ visibility: 'private' })
 })
+
+const sidebarPositionsOf = (chatIds: string[]) =>
+  database.$client`select chat_id as "chatId", user_id as "userId", sidebar_position as "sidebarPosition" from chat_participants where chat_id in ${database.$client(chatIds)} order by user_id, chat_id`.then(
+    (rows) => [...rows],
+  )
+
+test("reorderChats sets the caller's own sidebar order and leaves the other participants' order alone", async () => {
+  const sharedWithAlice = [{ memberId: alice, roleId: 'reader' }]
+  const first = await newChat({ id: 'chat-sidebar-a', ownerId: bob, participants: sharedWithAlice })
+  const second = await newChat({ id: 'chat-sidebar-b', ownerId: bob, participants: sharedWithAlice })
+  expect(await resultOf(bobInAcme, 'workspace.reorderChats', { workspaceId: acme, chatIds: [second, first] })).toEqual(
+    succeeded,
+  )
+  expect(await sidebarPositionsOf([first, second])).toEqual([
+    { chatId: first, userId: alice, sidebarPosition: null },
+    { chatId: second, userId: alice, sidebarPosition: null },
+    { chatId: first, userId: bob, sidebarPosition: 1 },
+    { chatId: second, userId: bob, sidebarPosition: 0 },
+  ])
+})
+
+test('reorderChats naming a chat the caller is not a participant of is refused and places nothing', async () => {
+  const bobsChat = await newChat({ id: 'chat-sidebar-own', ownerId: bob })
+  const alicesChat = await newChat({ id: 'chat-sidebar-foreign', ownerId: alice })
+  expect(
+    await resultOf(bobInAcme, 'workspace.reorderChats', { workspaceId: acme, chatIds: [bobsChat, alicesChat] }),
+  ).toEqual(failedWith(`Chat ${alicesChat} was not found`))
+  expect(await sidebarPositionsOf([bobsChat, alicesChat])).toEqual([
+    { chatId: alicesChat, userId: alice, sidebarPosition: null },
+    { chatId: bobsChat, userId: bob, sidebarPosition: null },
+  ])
+})

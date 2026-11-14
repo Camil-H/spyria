@@ -8,20 +8,26 @@ type ChatSummaryRow = Readonly<{
   visibility: ChatRow['visibility']
   canAdmin: boolean
   canLeave: boolean
+  sidebarPosition: number | null
 }>
 export type Sidebar = Readonly<{
   projects: readonly Readonly<{ id: ProjectId; name: string; chats: readonly ChatSummaryRow[] }>[]
   looseChats: readonly ChatSummaryRow[]
 }>
 
+const sidebarPositionOf = (chat: ChatSummaryRow) => chat.sidebarPosition ?? Number.MAX_SAFE_INTEGER
+const inSidebarOrder = (chats: ChatSummaryRow[] = []) =>
+  chats.toSorted((first, second) => sidebarPositionOf(first) - sidebarPositionOf(second))
+
 export const getSidebar =
   (workspaceId: WorkspaceId, viewerId: MemberId) =>
   (snapshot: Snapshot): Sidebar => {
     const permissionsOf = chatPermissionsIn(snapshot, workspaceId, viewerId)
-    const isParticipant = participantIn(snapshot, workspaceId, viewerId)
+    const participantOf = participantIn(snapshot, workspaceId, viewerId)
     const chatsByProjectId = new Map<ProjectId | null, ChatSummaryRow[]>()
     for (const chat of snapshot.chats) {
-      if (chat.workspaceId !== workspaceId || chat.archived || !isParticipant(chat)) continue
+      const participant = participantOf(chat)
+      if (chat.workspaceId !== workspaceId || chat.archived || !participant) continue
       const projectChats = chatsByProjectId.get(chat.projectId) ?? []
       projectChats.push({
         id: chat.id,
@@ -30,13 +36,14 @@ export const getSidebar =
         visibility: chat.visibility,
         canAdmin: can(permissionsOf(chat), 'chat.admin'),
         canLeave: chat.ownerId !== viewerId,
+        sidebarPosition: participant.sidebarPosition,
       })
       chatsByProjectId.set(chat.projectId, projectChats)
     }
     return {
       projects: snapshot.projects
         .filter((project) => project.workspaceId === workspaceId && !project.archived)
-        .map(({ id, name }) => ({ id, name, chats: chatsByProjectId.get(id) ?? [] })),
-      looseChats: chatsByProjectId.get(null) ?? [],
+        .map(({ id, name }) => ({ id, name, chats: inSidebarOrder(chatsByProjectId.get(id)) })),
+      looseChats: inSidebarOrder(chatsByProjectId.get(null)),
     }
   }
