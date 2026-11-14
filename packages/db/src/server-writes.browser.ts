@@ -74,6 +74,7 @@ export const insertToolCall = skippedOnClient
 export const modelCallCostSince = async () => 0
 export const runningDelegationOfTokenHash = skippedOnClient
 export const stopRunningDelegations = async () => []
+export const runningDelegationsIn = async () => []
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))
 export const isSessionStartPending = async () => false
 export const scheduleWorkspaceDeletion = skippedOnClient

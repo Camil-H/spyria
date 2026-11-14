@@ -9,6 +9,19 @@ import {
   turnEndNoticeOf,
 } from '../domain/agent-events.ts'
 import { type AgentDependencies, closeAgentTurn } from './agent-turn.ts'
+import { runningDelegations } from './running-delegations.ts'
+
+const failUntrackedDelegations = async (
+  { transactor, runtimes, agentClient }: AgentDependencies,
+  workspaceId: WorkspaceId,
+) => {
+  const running = await transactor.run(({ delegations }) => delegations.running())
+  for (const { id, chatId, conversationId } of running.filter(({ id }) => !runningDelegations.has(id))) {
+    await transactor.run(({ delegations }) => delegations.update(id, { status: 'failed' }))
+    const endpoint = conversationId ? await runtimes.endpointOf({ workspaceId, chatId }) : undefined
+    if (endpoint && conversationId) await agentClient.interrupt({ ...endpoint, conversationId }).catch(() => undefined)
+  }
+}
 
 const closeWithNotice = (transactor: ConversationTransactor, chat: AgentChat, promptId: MessageId, notice: string) =>
   transactor.run((unitOfWork) => closeAgentTurn(unitOfWork, chat.chatId, promptId, () => notice))
@@ -31,6 +44,7 @@ export const sweepAgentTurns = async (
       await closeWithNotice(transactor, chat, promptId, endpoint ? agentNotices.noResponse : agentNotices.stoppedEarly)
     }
   }
+  await failUntrackedDelegations({ transactor, runtimes, agentClient, eventSockets }, workspaceId)
   await transactor.run(({ agentJobs }) => agentJobs.sweepLater())
 }
 

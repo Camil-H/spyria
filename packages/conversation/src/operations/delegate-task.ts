@@ -227,6 +227,12 @@ export const delegateTask = async (dependencies: AgentDependencies, input: Input
   const fallback = 'fallback' in choice ? choice.fallback : undefined
   const delegation = { id, model, modelName: modelNameOf(model), task, ...(fallback && { fallback }) }
   const tokenHash = await digestOf(token)
+  const running: RunningDelegation = {
+    chatId: chat.chatId,
+    promptId: turn.promptId,
+    result: Promise.resolve(cannotStart),
+  }
+  runningDelegations.set(id, running)
   await transactor.run(({ delegations }) =>
     delegations.start({
       chatId: chat.chatId,
@@ -241,12 +247,6 @@ export const delegateTask = async (dependencies: AgentDependencies, input: Input
       tokenHash,
     }),
   )
-  const running: RunningDelegation = {
-    chatId: chat.chatId,
-    promptId: turn.promptId,
-    result: Promise.resolve(cannotStart),
-  }
-  runningDelegations.set(id, running)
   running.result = runDelegation(
     dependencies,
     input,
