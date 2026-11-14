@@ -42,3 +42,24 @@ test('a definition written inside a quote or a list item over several lines is s
     { type: 'definition', identifier: 'listed', url: 'https://example.com/list', title: null },
   ])
 })
+
+test('a shared definition keeps escapes and entities of its label, address and title, so its references still resolve', () => {
+  const tail = withDefinitionsShared(
+    [{ text: '[a\\]b]: /x\n[x&amp;y]: /y\n[p\\\\q]: /z\n[Ab  C]: /a&amp;copy;b "t &amp; \\" q"' }],
+    { text: '[a\\]b] [x&amp;y] [p\\\\q] [ab c]' },
+  ).at(-1)
+  const parsed = fromMarkdown(tail?.text ?? '')
+  expect(parsed.children.map(({ type }) => type)).toEqual([
+    'definition',
+    'definition',
+    'definition',
+    'definition',
+    'paragraph',
+  ])
+  expect(parsed.children.slice(0, 4)).toMatchObject([
+    { identifier: 'a\\]b', url: '/x' },
+    { identifier: 'x&amp;y', url: '/y' },
+    { identifier: 'p\\\\q', url: '/z' },
+    { identifier: 'ab c', url: '/a&copy;b', title: 't & " q' },
+  ])
+})
