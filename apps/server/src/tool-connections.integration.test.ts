@@ -77,23 +77,43 @@ test('Connect grants the server on the member key, runs the consent through Spyr
   expect(await connectionRows()).toEqual([])
 })
 
-test('a refresh waiting on a Disconnect in progress reads the gateway after it and stores no connection, instead of showing Connected again', async () => {
+test.each([
+  ['a refresh', () => asMember(alice, 'POST', connectionPath('refresh')), { status: 200, body: '{"status":null}' }],
+  ['a check', () => asMember(alice, 'POST', '/api/tool-connections/check'), { status: 204, body: '' }],
+])(
+  '%s that read the gateway before a Disconnect stores nothing once the Disconnect commits, instead of showing Connected again',
+  async (_, readThenStore, answer) => {
+    await connectAlice(aliceCookie)
+    const key = await virtualKeyOf(alice)
+    const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
+    if (!server) throw new Error('The fake tool server is not on the gateway')
+    let stored: ReturnType<typeof asMember> | undefined
+    await database.$client.begin(async (disconnect) => {
+      const [blocking] = await disconnect<{ pid: number }[]>`select pg_backend_pid() as pid`
+      await disconnect`select pg_advisory_xact_lock(hashtext('tool_connections/' || ${acme} || '/' || ${alice}))`
+      stored = readThenStore()
+      await waitFor(() => isBlockedBy(database, blocking?.pid))
+      for (const session of await llmGateway.toolSessions(key.id, server))
+        await llmGateway.removeToolSession(session.id)
+      await disconnect`
+        insert into tool_disconnects (workspace_id, user_id, count) values (${acme}, ${alice}, 1)
+        on conflict (workspace_id, user_id) do update set count = tool_disconnects.count + 1`
+      await disconnect`
+        delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`
+    })
+    expect(await stored).toEqual(answer)
+    expect(await connectionRows()).toEqual([])
+  },
+)
+
+test('Disconnect counts itself for the member, so a refresh or check that read the gateway before it knows to store nothing', async () => {
+  const disconnectsOf = async () =>
+    (await database.$client`select count from tool_disconnects where workspace_id = ${acme} and user_id = ${alice}`)[0]
+      ?.count ?? 0
   await connectAlice(aliceCookie)
-  const key = await virtualKeyOf(alice)
-  const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
-  if (!server) throw new Error('The fake tool server is not on the gateway')
-  let refresh: ReturnType<typeof asMember> | undefined
-  await database.$client.begin(async (disconnect) => {
-    const [blocking] = await disconnect<{ pid: number }[]>`select pg_backend_pid() as pid`
-    await disconnect`select pg_advisory_xact_lock(hashtext('tool_connections/' || ${acme} || '/' || ${alice}))`
-    refresh = asMember(alice, 'POST', connectionPath('refresh'))
-    await waitFor(() => isBlockedBy(database, blocking?.pid))
-    for (const session of await llmGateway.toolSessions(key.id, server)) await llmGateway.removeToolSession(session.id)
-    await disconnect`
-      delete from tool_connections where workspace_id = ${acme} and user_id = ${alice} and connection_id = 'connection-fake'`
-  })
-  expect(await refresh).toEqual({ status: 200, body: JSON.stringify({ status: null }) })
-  expect(await connectionRows()).toEqual([])
+  const before = await disconnectsOf()
+  expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
+  expect(await disconnectsOf()).toBe(before + 1)
 })
 
 test('a refused consent shows the failure page and creates no connection', async () => {
