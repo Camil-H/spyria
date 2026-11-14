@@ -9,6 +9,7 @@ The gateway scopes tool calls by a member's virtual key: the workspace connectio
 - An active member gets a virtual key the first time they need tools (their agent connects to Spyria's tool server, or they connect a personal tool), with no provider bound to it.
 - Removing a member's last provider key unbinds it and keeps the virtual key, its workspace grants and their personal connections.
 - The virtual key is deleted only when the member leaves the workspace or the workspace is purged.
+- Spyria stores the name of a member's virtual key before creating it, so a creation it never recorded, such as one cut short by a server stop, is found again by that name and bound instead of created a second time.
 - Model calls still need a provider key: Spyria refuses a prompter without one before the gateway, whatever the gateway does with a key that binds no provider.
 
 ## Consequences

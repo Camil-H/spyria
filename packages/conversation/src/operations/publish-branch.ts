@@ -59,6 +59,18 @@ export const recordPullRequest = (
     })
   })
 
+export const applyPullRequestEvent = (
+  { transactor }: { transactor: ConversationTransactor },
+  { actor, cardId, update }: { actor: Actor; cardId: MessageId; update: (step: PullRequestStep) => PullRequestStep },
+) =>
+  transactor.run(async ({ messages }) => {
+    const card = await messages.lock(cardId)
+    if (card.step?.type !== 'pull_request') return
+    const step = update(card.step)
+    if (JSON.stringify(step) !== JSON.stringify(card.step))
+      await messages.record({ type: 'message.step_changed', actor, message: { ...card, step } })
+  })
+
 const pushAndRecord = async (
   { runtimes, agentClient, checkouts, transactor }: Required<Dependencies>,
   {

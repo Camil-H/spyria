@@ -7,9 +7,11 @@ import {
   gatewayKeyRefsOf,
   insertLlmCredential,
   lockMembership,
+  reserveVirtualKeyName,
   setVirtualKeyId,
   virtualKeyIdOf,
   virtualKeyIdsIn,
+  virtualKeyNameOf,
 } from '@spyria/db/server-writes'
 import {
   isActiveMember,
@@ -116,6 +118,8 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
     },
     memberGatewayKeys: {
       virtualKey: () => virtualKeyIdOf(tx, workspaceId, userId),
+      virtualKeyName: () => virtualKeyNameOf(tx, workspaceId, userId),
+      reserveVirtualKeyName: async () => String(await reserveVirtualKeyName(tx, workspaceId, userId)),
       setVirtualKey: async (virtualKeyId) => {
         await setVirtualKeyId(tx, workspaceId, userId, virtualKeyId)
       },

@@ -58,6 +58,7 @@ export type DevLoopPromptStep = {
 type FailureVerdict = { rounds: number[]; kind: 'fix' | 'reconsider' | 'stop'; name: string; limit: number }
 
 export type DevLoopJobType = (typeof devLoopJobTypes)[keyof typeof devLoopJobTypes]
+export type DevLoopJobPayload = { loopId: MessageId; promptId?: MessageId; checksRunId?: string }
 export const devLoopJobTypes = {
   afterTurn: 'dev_loop.after_turn',
   run: 'dev_loop.run',

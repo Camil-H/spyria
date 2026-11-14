@@ -2,6 +2,7 @@ import { type ChatId, type MemberId, type MessageId, requireChatPermission, type
 import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { stoppedByNoticeOf } from '../domain/agent-events.ts'
 import { type AgentDependencies, closeAgentTurn } from './agent-turn.ts'
+import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { stopDevLoopBy } from './stop-dev-loop.ts'
 
 type Input = { workspaceId: WorkspaceId; chatId: ChatId; promptId: MessageId; memberId: MemberId }
@@ -24,6 +25,7 @@ export const interruptAgent = async (
 ) => {
   const chat = { workspaceId, chatId }
   if ((await transactor.run(({ agentTurns }) => agentTurns.lock(chatId))) !== promptId) return
+  cancelToolApprovalsOf(promptId)
   const subConversationIds = await transactor.run(({ delegations }) => delegations.stopRunning(chatId, promptId))
   const endpoint = await runtimes.endpointOf(chat)
   if (endpoint?.conversationId)

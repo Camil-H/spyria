@@ -659,10 +659,11 @@ export const prepareSeededGatewayKeys = async (
       weight: 1,
     },
   })
+  const virtualKeyName = `vk_${crypto.randomUUID()}`
   const { virtual_key } = await gateway.call<{ virtual_key: { id: string } }>('/api/governance/virtual-keys', {
     method: 'POST',
     body: {
-      name: `vk_${crypto.randomUUID()}`,
+      name: virtualKeyName,
       is_active: true,
       provider_configs: [{ provider: 'mistral', weight: 1, allowed_models: ['*'], key_ids: [keyId] }],
     },
@@ -673,7 +674,7 @@ export const prepareSeededGatewayKeys = async (
       sql`update llm_credentials set secret_ref = ${gatewayKeyRefOf({ provider: 'mistral', id: keyId })} where workspace_id = ${workspaceId} and id = ${id}`,
     )
     await writer.execute(
-      sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id) values (${workspaceId}, ${userId}, ${virtual_key.id})`,
+      sql`insert into member_gateway_keys (workspace_id, user_id, virtual_key_id, virtual_key_name) values (${workspaceId}, ${userId}, ${virtual_key.id}, ${virtualKeyName})`,
     )
   }
   return Object.assign(write, { keyId, virtualKeyId: virtual_key.id })

@@ -745,14 +745,14 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
   }
 }
 
-type PullRequestCard = { workspaceId: string; chatId: string; id: string; step: PullRequestStep }
+type PullRequestCard = { workspaceId: string; id: string }
 type WebhookDelivery = { appId?: string; event?: string; deliveryId?: string; signature?: string; body: string }
 
 export const receiveGitHubWebhook = async (
   database: Database,
   { secretBox }: GitHubDependencies,
   { appId, event = '', deliveryId = '', signature, body }: WebhookDelivery,
-  record: (card: PullRequestCard, step: PullRequestStep) => Promise<unknown>,
+  update: (card: PullRequestCard, change: (step: PullRequestStep) => PullRequestStep) => Promise<unknown>,
 ) => {
   const apps = await database.$client<{ workspaceId: string; encryptedWebhookSecret: string }[]>`
     select workspace_id as "workspaceId", encrypted_webhook_secret as "encryptedWebhookSecret" from github_apps
@@ -763,19 +763,18 @@ export const receiveGitHubWebhook = async (
   )
   const workspaceId = apps.find((_, index) => signedBy[index])?.workspaceId
   if (!workspaceId || !deliveryId) return 'refused'
-  const [delivered] = await database.$client`
-    insert into github_webhook_deliveries (workspace_id, delivery_id, received_at)
-    values (${workspaceId}, ${deliveryId}, now()) on conflict do nothing returning 1`
-  if (!delivered) return 'duplicate'
+  const [seen] = await database.$client`
+    select 1 from github_webhook_deliveries where workspace_id = ${workspaceId} and delivery_id = ${deliveryId}`
+  if (seen) return 'duplicate'
   const payload = JSON.parse(body) as WebhookPayload
   const numbers = pullRequestNumbersOf(event, payload).map(String)
   const cards = await database.$client<PullRequestCard[]>`
-    select workspace_id as "workspaceId", chat_id as "chatId", id, step from messages
+    select workspace_id as "workspaceId", id from messages
     where workspace_id = ${workspaceId} and step->>'type' = 'pull_request'
       and step->>'repository' = ${payload.repository?.full_name ?? ''} and step->>'number' = any(${numbers})`
-  for (const card of cards) {
-    const step = updatedPullRequest(card.step, event, payload)
-    if (JSON.stringify(step) !== JSON.stringify(card.step)) await record(card, step)
-  }
+  for (const card of cards) await update(card, (step) => updatedPullRequest(step, event, payload))
+  await database.$client`
+    insert into github_webhook_deliveries (workspace_id, delivery_id, received_at)
+    values (${workspaceId}, ${deliveryId}, now()) on conflict do nothing`
   return cards.length > 0 ? 'applied' : 'ignored'
 }
