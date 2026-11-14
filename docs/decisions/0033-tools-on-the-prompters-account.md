@@ -1,5 +1,7 @@
 # 0033. The agent calls tools with the prompter's own account, and GitHub's tools are granted like the catalogue's
 
+Amended by [decision 0036](0036-tool-access-per-role-only.md): GitHub access, like every server's, is set per role only, with no member named with their own and no level control in the grid; Spyria's own tools show in the same grid.
+
 ## Context
 
 [Decision 0009](0009-agent-acts-as-the-owner.md) made the agent act as the chat owner: its tool calls used the owner's connections, and on a guest's prompt it could use only the shared-login servers both could use, never a server the owner signed in to with their own account. A guest who had connected that server themselves still got a refusal, and the owner answered every approval, even for a call on a guest's prompt. Model calls already ran on the prompter's key ([0004](0004-members-keys-through-a-gateway.md)), so a shared chat mixed two rules.

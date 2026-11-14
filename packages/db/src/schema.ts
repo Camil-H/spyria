@@ -210,7 +210,7 @@ type WorkspaceConnectionRow = {
   tools: readonly ConnectionTool[]
   isReviewed: boolean
 }
-type ConnectionAccessRow = ToolServerAccess & { workspaceId: WorkspaceId; id: string }
+type ConnectionAccessRow = ToolServerAccess & { workspaceId: WorkspaceId }
 type ToolApprovalRow = ToolApprovalPreference & { workspaceId: WorkspaceId; memberId: MemberId }
 type ChatMemberRow = {
   workspaceId: WorkspaceId

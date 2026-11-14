@@ -1,7 +1,6 @@
 import {
   accessLevels,
   type ConnectionTool,
-  holderAccessOf,
   type ToolApprovalPreference,
   type ToolHolder,
   type ToolServerAccess,
@@ -11,45 +10,49 @@ import {
 
 export const builtInFeatures = { browser: 'browser', qualityGates: 'quality_gates' } as const
 export type BuiltInFeature = (typeof builtInFeatures)[keyof typeof builtInFeatures]
-export type BuiltInTool = Readonly<{ name: string; summary: string; feature: BuiltInFeature | null }>
+export type BuiltInTool = ConnectionTool & Readonly<{ summary: string; feature: BuiltInFeature | null }>
 export type GitHubTool = ConnectionTool & Readonly<{ summary: string }>
 
+const builtInTool = (name: string, readOnly: boolean, summary: string, feature: BuiltInFeature | null = null) => ({
+  name,
+  readOnly,
+  destructive: false,
+  summary,
+  feature,
+})
+
 export const builtInTools: readonly BuiltInTool[] = [
-  {
-    name: 'open_page',
-    summary: "Opens a web page or a file of the project in the chat's Browser tab",
-    feature: builtInFeatures.browser,
-  },
-  {
-    name: 'take_screenshot',
-    summary: 'Takes a screenshot of a web page, such as the app running in the runtime',
-    feature: builtInFeatures.browser,
-  },
-  {
-    name: 'web_search',
-    summary: 'Searches the web with a model of the member who prompted, on their key and budget',
-    feature: null,
-  },
-  { name: 'list_public_chats', summary: "Lists the workspace's public channels and AI chats", feature: null },
-  {
-    name: 'search_public_chats',
-    summary: "Searches the messages of the workspace's public channels and AI chats",
-    feature: null,
-  },
-  { name: 'read_public_chat', summary: 'Reads the messages of a public channel or AI chat', feature: null },
-  { name: 'delegate', summary: "Hands a task to a subagent that shares the runtime's files", feature: null },
-  { name: 'await_task', summary: 'Waits for a task handed to a subagent', feature: null },
-  { name: 'check_task', summary: 'Reads the steps of a task handed to a subagent, or stops it', feature: null },
-  {
-    name: 'finish_work',
-    summary: 'Hands the finished work of a dev chat to the quality gates',
-    feature: builtInFeatures.qualityGates,
-  },
-  {
-    name: 'report_review',
-    summary: "Reports the findings of the quality gates' code review",
-    feature: builtInFeatures.qualityGates,
-  },
+  builtInTool(
+    'open_page',
+    true,
+    "Opens a web page or a file of the project in the chat's Browser tab",
+    builtInFeatures.browser,
+  ),
+  builtInTool(
+    'take_screenshot',
+    true,
+    'Takes a screenshot of a web page, such as the app running in the runtime',
+    builtInFeatures.browser,
+  ),
+  builtInTool('web_search', true, 'Searches the web with a model of the member who prompted, on their key and budget'),
+  builtInTool('list_public_chats', true, "Lists the workspace's public channels and AI chats"),
+  builtInTool('search_public_chats', true, "Searches the messages of the workspace's public channels and AI chats"),
+  builtInTool('read_public_chat', true, 'Reads the messages of a public channel or AI chat'),
+  builtInTool('delegate', false, "Hands a task to a subagent that shares the runtime's files"),
+  builtInTool('await_task', true, 'Waits for a task handed to a subagent'),
+  builtInTool('check_task', false, 'Reads the steps of a task handed to a subagent, or stops it'),
+  builtInTool(
+    'finish_work',
+    false,
+    'Hands the finished work of a dev chat to the quality gates',
+    builtInFeatures.qualityGates,
+  ),
+  builtInTool(
+    'report_review',
+    false,
+    "Reports the findings of the quality gates' code review",
+    builtInFeatures.qualityGates,
+  ),
 ]
 
 export const githubConnectionId = 'github'
@@ -85,13 +88,12 @@ export const githubRoleAccessOf = (roleId: string, accessRows: readonly ToolServ
   accessRows.find((access) => access.connectionId === githubConnectionId && access.roleId === roleId) ?? {
     connectionId: githubConnectionId,
     roleId,
-    memberId: null,
     level: accessLevels.write,
     toolChanges: {},
   }
 
 export const githubAccessOf = (accessRows: readonly ToolServerAccess[], holder: ToolHolder): ToolServerAccess =>
-  holderAccessOf(githubConnectionId, accessRows, holder) ?? githubRoleAccessOf(holder.roleId, accessRows)
+  githubRoleAccessOf(holder.roleId, accessRows)
 
 export const githubToolsOf = (accessRows: readonly ToolServerAccess[], holder: ToolHolder) =>
   toolsAllowedBy(githubTools, githubAccessOf(accessRows, holder)).map(({ name }) => name)

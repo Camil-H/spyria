@@ -22,7 +22,7 @@ export type SpendLedger = {
   ): Promise<SpendDimensionRow[]>
   counts(filter: SpendFilter, prompterId: MemberId | null): Promise<{ current: SpendCounts; previous: SpendCounts }>
   bucketCounts(filter: SpendFilter, prompterId: MemberId | null): Promise<SpendBucketCounts[]>
-  mergedPulls(range: SpendRange): Promise<MergedPull[]>
+  mergedPulls(range: SpendRange, prompterId: MemberId | null): Promise<MergedPull[]>
 }
 
 export type SpendTransactor = Transactor<SpendLedger>

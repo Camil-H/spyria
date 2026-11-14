@@ -1,8 +1,10 @@
 import { openPageAs } from '../stack'
 import {
+  composerOf,
   configureGitHubApp,
   connectGitHub,
   expect,
+  type Locator,
   mainOf,
   messageContaining,
   messageItemsOf,
@@ -13,6 +15,11 @@ import {
   test,
 } from './fixtures'
 
+const topOf = async (locator: Locator) => {
+  const box = await locator.boundingBox()
+  if (!box) throw new Error('The element has no box')
+  return box.y
+}
 const sectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Quality gates' })
 const gatesOf = (page: Page) => sectionOf(page).getByRole('list', { name: 'Gates' }).locator(':scope > li')
 const tabOf = (page: Page, name: string) =>
@@ -91,7 +98,7 @@ test.describe('Quality gates card', () => {
     await page.goto('/')
   })
 
-  test('As the owner, I see the Quality gates card under the latest messages when the gates start again, with "Starting again from Lint", after a prompt the gates send in their own name', {
+  test('As the owner, I see the Quality gates card above the message box while the gates run, with "Starting again from Lint" after a prompt the gates send in their own name, and under the latest messages once they end', {
     tag: ['@spec-57'],
   }, async ({ page, agentScript, heldCommand, release, workerStack }) => {
     const lint = {
@@ -127,14 +134,22 @@ test.describe('Quality gates card', () => {
     })
     await sendMessage(page, 'Fix the totals')
 
-    const card = messageItemsOf(page).getByRole('region', { name: 'Quality gates' })
-    await expect(card).toContainText('Starting again from Lint (round 2)')
-    await expect(card.getByRole('img', { name: 'running' })).toHaveCount(1)
-    await expect(messageContaining(page, 'Quality gates: round 2, see below')).toHaveCount(1)
+    const cardsOnPage = mainOf(page).getByRole('region', { name: 'Quality gates' })
+    const cardInChat = messageItemsOf(page).getByRole('region', { name: 'Quality gates' })
+    await expect(cardsOnPage).toContainText('Starting again from Lint (round 2)')
+    await expect(cardsOnPage.getByRole('img', { name: 'running' })).toHaveCount(1)
+    await expect(cardInChat).toHaveCount(0)
+    expect(await topOf(cardsOnPage)).toBeLessThan(await topOf(composerOf(page)))
     await expect(messageContaining(page, 'Fixed lint.')).toHaveCount(1)
     const loopPrompt = messageContaining(page, "Quality gates ran the repository's checks")
     await expect(loopPrompt.getByText('Quality gates', { exact: true })).toBeVisible()
     await expect(loopPrompt).not.toContainText('Alice')
+
+    await release('lint')
+    await expect(cardInChat).toContainText('Ready for your review: Lint passed')
+    await expect(cardInChat).not.toContainText('Starting again')
+    await expect(cardsOnPage).toHaveCount(1)
+    await expect(messageContaining(page, 'Quality gates: round 2, see below')).toHaveCount(1)
     const order = () =>
       messageItemsOf(page).evaluateAll((items) =>
         items
@@ -149,11 +164,6 @@ test.describe('Quality gates card', () => {
           )
           .filter(Boolean),
       )
-    await expect.poll(order).toEqual(['marker', 'fix', 'card'])
-
-    await release('lint')
-    await expect(card).toContainText('Ready for your review: Lint passed')
-    await expect(card).not.toContainText('Starting again')
     await expect.poll(order).toEqual(['marker', 'fix', 'card'])
   })
 })

@@ -209,17 +209,17 @@ test('a member signs in only to a finished, reviewed server of their workspace t
     status: 400,
   })
   expect(await asMember(alice, 'POST', '/api/tool-connections/CRM/connect')).toMatchObject({ status: 400 })
-  const setBobLevel = (level: string | null) =>
+  const setMemberLevel = (level: string) =>
     asMember(alice, 'POST', '/api/workspace-connections/connection-fake/access', {
-      memberId: bob,
+      roleId: 'member',
       level,
       toolChanges: {},
     })
-  expect((await setBobLevel('none')).status).toBe(200)
+  expect((await setMemberLevel('none')).status).toBe(200)
   try {
     expect(await asMember(bob, 'POST', connectionPath('connect'))).toMatchObject({ status: 400 })
   } finally {
-    await setBobLevel(null)
+    await setMemberLevel('write')
   }
   await database.$client`update workspace_connections set is_reviewed = false where id = 'connection-fake'`
   try {

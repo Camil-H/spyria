@@ -13,7 +13,7 @@ import {
   useShortcut,
 } from '@spyria/ui'
 import { Folder, GitBranch, TextSearch } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { ChatFrozen } from '../domain/errors.ts'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
@@ -41,6 +41,8 @@ import {
 import { RunsOnChip, SessionChip } from './SessionChip.tsx'
 import { type FindRequest, findRequestKey, useFindInChat } from './useFindInChat.ts'
 import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
+
+const DevLoopCard = lazy(() => import('./DevLoopCard.tsx'))
 
 const frozenNotice = new ChatFrozen().message
 type FindState = Readonly<{ chatId: ChatId; text: string; messageId: MessageId | null; openings: number }>
@@ -277,6 +279,13 @@ export const ChatView = ({
           </ChatMediaContext>
         </ToolsAwaitingApprovalContext>
       </QuestionAnswererContext>
+      {conversation.activeDevLoop && (
+        <div className="max-h-64 shrink-0 overflow-y-auto">
+          <Suspense>
+            <DevLoopCard step={conversation.activeDevLoop} />
+          </Suspense>
+        </div>
+      )}
       {isRunsOnOpen && runsOnChoices && runsOnChoices.length > 1 && (
         <fieldset aria-label="Runs on">
           <SegmentedChoice

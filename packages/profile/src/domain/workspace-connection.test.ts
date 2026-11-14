@@ -33,7 +33,6 @@ const bobAsMember = { memberId: bob, roleId: 'member' }
 const memberRoleReads = {
   connectionId: crm.id,
   roleId: 'member',
-  memberId: null,
   level: 'read',
   toolChanges: {},
 } as const
@@ -93,11 +92,12 @@ test('access keeps only the single changes that differ from its level, on tools 
   expect(
     accessOf(crm, { roleId: 'member', level: 'read', toolChanges: { lookup: true, update: true, delete: false } }),
   ).toEqual({ ...memberRoleReads, toolChanges: { update: true } })
-  expect(accessOf(crm, { memberId: bob, level: 'none', toolChanges: {} })).toMatchObject({
-    roleId: null,
-    memberId: bob,
+  const previous = { ...memberRoleReads, level: 'none' as const, toolChanges: { lookup: true } }
+  expect(accessOf(crm, { roleId: 'member', level: 'none', toolChanges: { update: true } }, previous)).toEqual({
+    ...previous,
+    toolChanges: { lookup: true, update: true },
   })
-  expect(accessOf(crm, { memberId: bob, level: null, toolChanges: {} })).toBeNull()
+  expect(accessOf(crm, { roleId: 'member', level: null, toolChanges: {} })).toBeNull()
   expect(() => accessOf(crm, { roleId: 'member', level: 'read', toolChanges: { drop: true } })).toThrow(
     'CRM has no tool drop',
   )

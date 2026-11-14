@@ -14,6 +14,7 @@ import {
   openSettings,
   type Page,
   sendMessage,
+  sidebarOf,
   syncUsage,
   tabPanelOf,
   test,
@@ -28,6 +29,17 @@ test.describe('Spend', () => {
       table.getByRole('row', { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`) })
     const cellTextsOf = (row: Locator) => row.getByRole('cell').allTextContents()
     const legendOf = (section: Locator) => section.getByRole('list', { name: 'Legend' }).getByRole('listitem')
+    const narrowTo = async (page: Page, filters: Locator, dimension: string, names: readonly string[]) => {
+      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: dimension })
+      await filters.getByRole('button', { name: dimension }).click()
+      const itemOf = (name: string) => page.getByRole('menuitemcheckbox', { name, exact: true })
+      for (const name of names)
+        if ((await itemOf(name).getAttribute('aria-checked')) !== 'true') await itemOf(name).click()
+      for (const name of await page.getByRole('menuitemcheckbox', { checked: true }).allTextContents())
+        if (!names.includes(name)) await itemOf(name).click()
+      await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(names.length)
+      await page.keyboard.press('Escape')
+    }
 
     test.beforeEach(async ({ page, workerStack }) => {
       await workerStack.database.transaction((transaction) => seedSpend(transaction))
@@ -115,8 +127,7 @@ test.describe('Spend', () => {
       await openSettings(page, 'Costs')
       const section = usageSectionOf(page, 'Usage')
       const filters = section.getByRole('group', { name: 'Filters' })
-      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Model' })
-      await filters.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      await narrowTo(page, filters, 'Model', ['anthropic/claude-sonnet'])
       const decomposition = tableOf(section, 'Spend decomposition')
       await expect(rowOf(decomposition, 'Users').getByRole('cell').first()).toHaveText('1')
       expect(await cellTextsOf(rowOf(decomposition, 'Users'))).toEqual(['1', '1', '0%'])
@@ -133,8 +144,7 @@ test.describe('Spend', () => {
       await expect(rowOf(tableOf(section, 'Usage by member'), 'Bob')).toHaveCount(0)
       await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Whole workspace' })
       await expect(section).toContainText('$0.08 · 8 requests')
-      await filters.getByRole('combobox', { name: 'Narrow to' }).selectOption({ label: 'Model' })
-      await filters.getByRole('combobox', { name: 'Model' }).selectOption({ label: 'anthropic/claude-sonnet' })
+      await narrowTo(page, filters, 'Model', ['anthropic/claude-sonnet'])
       await expect(section).toContainText('$0.03 · 3 requests')
 
       const now = new Date()
@@ -160,6 +170,22 @@ test.describe('Spend', () => {
       await expect(rowOf(totalChart, dayOf(3))).toBeVisible()
       expect(await cellTextsOf(rowOf(totalChart, dayOf(2)))).toEqual(['$0.01'])
       expect(await cellTextsOf(rowOf(totalChart, dayOf(3)))).toEqual(['$0.02'])
+    })
+
+    test('As a member who can view costs, I narrow the usage to two members at once and see their spend together', {
+      tag: ['@spec-45'],
+    }, async ({ page }) => {
+      await openSettings(page, 'Costs')
+      const section = usageSectionOf(page, 'Usage')
+      const filters = section.getByRole('group', { name: 'Filters' })
+      await narrowTo(page, filters, 'Member', ['Alice', 'Bob'])
+      await expect(filters.getByRole('button', { name: 'Member' })).toHaveText('2 members')
+      await expect(section).toContainText('$0.06 · 6 requests')
+      const members = tableOf(section, 'Usage by member')
+      expect(await cellTextsOf(rowOf(members, 'Alice'))).toEqual(['4,000', '$0.04', '4', '67%'])
+      expect(await cellTextsOf(rowOf(members, 'Bob'))).toEqual(['2,000', '$0.02', '2', '33%'])
+      await expect(rowOf(members, 'Lee')).toHaveCount(0)
+      await expect(rowOf(tableOf(section, 'Spend decomposition'), 'Users').getByRole('cell').first()).toHaveText('2')
     })
 
     test('As a member who can view costs, I see the cost per merged PR as its average over time and its distribution, and export each merged PR with its chat’s cost', {
@@ -212,8 +238,21 @@ test.describe('Spend', () => {
           'Model',
         ])
         await expect(section.getByRole('table', { name: 'Usage by member' })).toHaveCount(0)
+        await expect(usageSectionOf(page, 'Cost per merged PR')).toContainText('No pull request merged in this period')
         await expect(section).not.toContainText(/Alice|Lee|Invoice bug|claude/)
       })
+    })
+
+    test('As a member, I see my spend this month on the Usage card of my Profile, and in it the cost per merged PR of the chats I prompted in', {
+      tag: ['@spec-45'],
+    }, async ({ page }) => {
+      await sidebarOf(page).getByRole('link', { name: 'Profile' }).click()
+      await expect(mainOf(page).getByRole('link', { name: 'Usage', exact: true })).toContainText('$0.18 this month')
+      await openProfile(page, 'Usage')
+      const mergedPulls = usageSectionOf(page, 'Cost per merged PR')
+      await expect(mergedPulls).toContainText('The pull requests merged from chats you prompted in')
+      await expect(mergedPulls).toContainText('$0.06 per merged PR · 1 merged · $0.06 you spent in their chats')
+      await expect(mergedPulls.getByRole('img', { name: 'Average cost per merged PR over time' })).toBeVisible()
     })
   })
 
