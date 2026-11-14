@@ -7,7 +7,7 @@ import {
   toolApprovalOf,
   toolNamePartsOf,
 } from '@spyria/kernel'
-import type { LlmGateway, ToolConnectionRepository, ToolGateway, ToolServer } from '../contracts/repositories.ts'
+import type { LlmGateway, ToolGateway, ToolServer } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { ToolNotInCatalog, ToolStillConnected } from '../domain/errors.ts'
 import {
@@ -82,29 +82,40 @@ const sessionStatusOf = async (
     ? connectionStatusOf((await gateway.toolSessions(virtualKeyId, server)).map(({ status }) => status))
     : undefined
 
-const storedUnlessDisconnectedSince = async (
-  toolConnections: ToolConnectionRepository,
-  disconnectsRead: number,
+const maximumStoreAttempts = 3
+
+const storedFromGateway = async <Read>(
+  transactor: ProfileTransactor,
   connectionId: string,
-  statusOf: (storedStatus: string | undefined) => ConnectionStatus | undefined,
+  readGateway: () => Promise<Read>,
+  statusOf: (read: Read, storedStatus: string | undefined) => ConnectionStatus | undefined,
 ) => {
-  await toolConnections.lock()
-  if ((await toolConnections.disconnects()) !== disconnectsRead) return undefined
-  const status = statusOf(await toolConnections.statusOf(connectionId))
-  await (status ? toolConnections.connect({ connectionId, status }) : toolConnections.clear(connectionId))
-  return status
+  for (let attempt = 1; attempt <= maximumStoreAttempts; attempt += 1) {
+    const versionRead = await transactor.run(({ toolConnections }) => toolConnections.version())
+    const read = await readGateway()
+    const stored = await transactor.run(async ({ toolConnections }) => {
+      await toolConnections.lock()
+      if ((await toolConnections.version()) !== versionRead) return undefined
+      const storedStatus = await toolConnections.statusOf(connectionId)
+      const status = statusOf(read, storedStatus)
+      if (status !== storedStatus)
+        await (status ? toolConnections.connect({ connectionId, status }) : toolConnections.disconnect(connectionId))
+      return { status }
+    })
+    if (stored) return stored.status
+  }
+  return transactor.run(({ toolConnections }) => toolConnections.statusOf(connectionId))
 }
 
 export const refreshToolConnection = async ({ transactor, gateway }: Dependencies, { tool }: Input) => {
   const connection = await signInServerOf({ transactor }, { tool })
   const server = await gatewayServerOf(gateway, connection)
-  const { virtualKeyId, disconnects } = await transactor.run(async ({ memberGatewayKeys, toolConnections }) => ({
-    virtualKeyId: await memberGatewayKeys.virtualKey(),
-    disconnects: await toolConnections.disconnects(),
-  }))
-  const sessionStatus = await sessionStatusOf(gateway, virtualKeyId, server)
-  const status = await transactor.run(({ toolConnections }) =>
-    storedUnlessDisconnectedSince(toolConnections, disconnects, connection.id, () => sessionStatus),
+  const virtualKeyId = await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKey())
+  const status = await storedFromGateway(
+    transactor,
+    connection.id,
+    () => sessionStatusOf(gateway, virtualKeyId, server),
+    (sessionStatus) => sessionStatus,
   )
   return { status: status ?? null }
 }
@@ -123,7 +134,7 @@ const checkedStatusOf = async (
 
 export const checkToolConnections = async ({ transactor, gateway }: Dependencies) => {
   const { workspaceId, memberId } = transactor.member
-  const { stored, connections, virtualKeyId, disconnects } = await transactor.run(
+  const { stored, connections, virtualKeyId } = await transactor.run(
     async ({ toolConnections, workspaceConnections, memberGatewayKeys, members }) => {
       const accessRows = await workspaceConnections.accessOf(workspaceId)
       const holder = holderIn(await members.holders(workspaceId), memberId)
@@ -133,7 +144,6 @@ export const checkToolConnections = async ({ transactor, gateway }: Dependencies
           (connection) => holder !== undefined && canSignIn(connection, accessRows, holder),
         ),
         virtualKeyId: await memberGatewayKeys.virtualKey(),
-        disconnects: await toolConnections.disconnects(),
       }
     },
   )
@@ -141,11 +151,11 @@ export const checkToolConnections = async ({ transactor, gateway }: Dependencies
   for (const connectionId of new Set([...stored, ...connections.map(({ id }) => id)])) {
     const gatewayName = connections.find(({ id }) => id === connectionId)?.gatewayName
     const server = servers.find(({ name }) => name === gatewayName)
-    const checked = await checkedStatusOf(gateway, virtualKeyId, server)
-    await transactor.run(({ toolConnections }) =>
-      storedUnlessDisconnectedSince(toolConnections, disconnects, connectionId, (storedStatus) =>
-        checkedConnectionStatusOf({ ...checked, storedStatus }),
-      ),
+    await storedFromGateway(
+      transactor,
+      connectionId,
+      () => checkedStatusOf(gateway, virtualKeyId, server),
+      (checked, storedStatus) => checkedConnectionStatusOf({ ...checked, storedStatus }),
     )
   }
 }

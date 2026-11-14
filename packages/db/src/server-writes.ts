@@ -130,20 +130,20 @@ export const lockWorkspaceRole = (tx: Transaction, workspaceId: string, id: stri
 export const lockMemberToolConnections = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(tx, "select pg_advisory_xact_lock(hashtext('tool_connections/' || $1 || '/' || $2))", [workspaceId, userId])
 
-export const toolDisconnectsOf = async (tx: Transaction, workspaceId: string, userId: string) =>
+export const toolConnectionVersionOf = async (tx: Transaction, workspaceId: string, userId: string) =>
   (
-    await firstOnServer<{ count: number }>(
+    await firstOnServer<{ version: number }>(
       tx,
-      'select count from tool_disconnects where workspace_id = $1 and user_id = $2',
+      'select version from tool_connection_versions where workspace_id = $1 and user_id = $2',
       [workspaceId, userId],
     )
-  )?.count ?? 0
+  )?.version ?? 0
 
-export const countToolDisconnect = (tx: Transaction, workspaceId: string, userId: string) =>
+export const moveToolConnectionVersion = (tx: Transaction, workspaceId: string, userId: string) =>
   onServer(
     tx,
-    `insert into tool_disconnects (workspace_id, user_id, count) values ($1, $2, 1)
-     on conflict (workspace_id, user_id) do update set count = tool_disconnects.count + 1`,
+    `insert into tool_connection_versions (workspace_id, user_id, version) values ($1, $2, 1)
+     on conflict (workspace_id, user_id) do update set version = tool_connection_versions.version + 1`,
     [workspaceId, userId],
   )
 
@@ -1040,7 +1040,7 @@ export const workspaceTablesInPurgeOrder = [
   'connection_access',
   'tool_approvals',
   'tool_connections',
-  'tool_disconnects',
+  'tool_connection_versions',
   'workspace_connections',
   'github_connections',
   'identities',

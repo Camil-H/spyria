@@ -874,6 +874,13 @@ export const connectMember = async (memberId: string, cookie: string) => {
   })
 }
 export const connectAlice = (cookie: string) => connectMember(alice, cookie)
+export const toolConnectionVersionOf = async (userId: string) =>
+  (
+    await (
+      await openedTestApp()
+    ).database.$client<{ version: number }[]>`
+      select version from tool_connection_versions where workspace_id = ${acme} and user_id = ${userId}`
+  )[0]?.version ?? 0
 export const connectionRows = async () => [
   ...(await (
     await openedTestApp()
