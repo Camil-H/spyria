@@ -1,4 +1,4 @@
-import { grantedToolsOf, type MemberId, type WorkspaceId } from '@spyria/kernel'
+import { grantedToolsOf, log, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import { connectionSignIns } from '../domain/workspace-connection.ts'
@@ -20,33 +20,59 @@ export const inMemberOrderOf = () => {
 
 const inGrantOrder = inMemberOrderOf()
 
-export const grantWorkspaceTools = async (
+const virtualKeysOf = ({ transactor }: Pick<Dependencies, 'transactor'>, workspaceId: WorkspaceId) =>
+  transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKeysIn(workspaceId))
+
+const grantToolsOn = (
   { transactor, gateway }: Dependencies,
   workspaceId: WorkspaceId,
-  memberIds?: readonly MemberId[],
+  { memberId, virtualKeyId }: { memberId: MemberId; virtualKeyId: string },
+) =>
+  inGrantOrder({ workspaceId, memberId }, async () => {
+    const { connections, accessRows, holder } = await transactor.run(async ({ workspaceConnections, members }) => ({
+      connections: await workspaceConnections.list(workspaceId),
+      accessRows: await workspaceConnections.accessOf(workspaceId),
+      holder: (await members.holders(workspaceId)).find((candidate) => candidate.memberId === memberId),
+    }))
+    await gateway.setToolGrants(
+      virtualKeyId,
+      Object.fromEntries(
+        connections.map((connection) => [
+          connection.gatewayName,
+          holder ? grantedToolsOf(connection, accessRows, holder) : [],
+        ]),
+      ),
+    )
+  })
+
+const regrantLater = async (
+  { transactor }: Pick<Dependencies, 'transactor'>,
+  { workspaceId, memberId }: Member,
+  error: unknown,
 ) => {
-  const virtualKeys = await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKeysIn(workspaceId))
-  for (const { memberId, virtualKeyId } of virtualKeys.filter((key) => memberIds?.includes(key.memberId) ?? true))
-    await inGrantOrder({ workspaceId, memberId }, async () => {
-      const { connections, accessRows, holder } = await transactor.run(async ({ workspaceConnections, members }) => ({
-        connections: await workspaceConnections.list(workspaceId),
-        accessRows: await workspaceConnections.accessOf(workspaceId),
-        holder: (await members.holders(workspaceId)).find((candidate) => candidate.memberId === memberId),
-      }))
-      await gateway.setToolGrants(
-        virtualKeyId,
-        Object.fromEntries(
-          connections.map((connection) => [
-            connection.gatewayName,
-            holder ? grantedToolsOf(connection, accessRows, holder) : [],
-          ]),
-        ),
-      )
-    })
+  log.error({
+    event: 'member_tools.grant_failed',
+    body: 'Granting the workspace tools of a member failed; a gateway sync retries it',
+    attributes: { 'workspace.id': workspaceId, 'member.id': memberId },
+    error,
+  })
+  await transactor.run(({ gatewayJobs }) => gatewayJobs.regrantLater(memberId))
 }
 
-export const grantMemberTools = (dependencies: Dependencies, { workspaceId, memberId }: Member) =>
-  grantWorkspaceTools(dependencies, workspaceId, [memberId])
+export const grantMemberTools = async (dependencies: Dependencies, { workspaceId, memberId }: Member) => {
+  for (const key of await virtualKeysOf(dependencies, workspaceId))
+    if (key.memberId === memberId) await grantToolsOn(dependencies, workspaceId, key)
+}
+
+export const grantMemberToolsOrRetryLater = (dependencies: Dependencies, member: Member) =>
+  grantMemberTools(dependencies, member).catch((error: unknown) => regrantLater(dependencies, member, error))
+
+export const grantWorkspaceTools = async (dependencies: Dependencies, workspaceId: WorkspaceId) => {
+  for (const key of await virtualKeysOf(dependencies, workspaceId))
+    await grantToolsOn(dependencies, workspaceId, key).catch((error: unknown) =>
+      regrantLater(dependencies, { workspaceId, memberId: key.memberId }, error),
+    )
+}
 
 export const releaseLostSignIns = async (
   { transactor, gateway }: Dependencies,

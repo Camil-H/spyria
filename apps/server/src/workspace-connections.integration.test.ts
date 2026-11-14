@@ -4,6 +4,7 @@ import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
 import { createToolCallAccess } from '@spyria/profile/server'
+import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -18,6 +19,7 @@ import {
   everyStoredText,
   globex,
   lee,
+  llmGatewayAt,
   mcpCall,
   memberMcpUrl,
   openSharedTestApp,
@@ -25,8 +27,10 @@ import {
   promptedBy,
   rpcOf,
   runtimeTurn,
+  sessionTokenOf,
   sharedMcpUrl,
   succeeded,
+  testAuthSettings,
   textOf,
   virtualKeyOf,
   waitFor,
@@ -670,4 +674,40 @@ test('the agent lists the tools of the member who prompted, so a guest’s turn 
   } finally {
     await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)
   }
+})
+
+test("taking a role's access away while the gateway refuses grants succeeds, and a queued gateway sync removes the tools from each member's key once it answers", async () => {
+  expect(await setCrmAccess('member', 'write')).toBe(200)
+  await addLlmKey(bob, 'Mistral')
+  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+  const grantRefusingGateway = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PUT' && url.pathname.startsWith('/api/governance/virtual-keys'))
+        return new Response('down', { status: 503 })
+      return fetch(`${gateway.url}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: request.headers,
+        body: request.method === 'GET' || request.method === 'DELETE' ? undefined : await request.text(),
+      })
+    },
+  })
+  try {
+    const appWithRefusedGrants = createApp({
+      database,
+      ...testAuthSettings,
+      llmGateway: llmGatewayAt(grantRefusingGateway.url.origin),
+    })
+    const revoked = await appWithRefusedGrants.request(accessPath('connection-crm'), {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
+      body: JSON.stringify({ roleId: 'member', level: 'none', toolChanges: {} }),
+    })
+    expect(revoked.status).toBe(200)
+  } finally {
+    void grantRefusingGateway.stop(true)
+  }
+  await waitFor(async () => (await grantsOf(bob))[sharedToolServer] === undefined)
+  await setCrmAccess('member', null)
 })

@@ -1,8 +1,8 @@
-import { type GatewayKey, log, MemberNotFound } from '@spyria/kernel'
+import { type GatewayKey, MemberNotFound } from '@spyria/kernel'
 import type { GatewaySyncJob, LlmGateway, ToolGateway } from '../contracts/repositories.ts'
 import type { ProfileTransactor } from '../contracts/transactor.ts'
 import type { LlmCredential } from '../domain/llm-credential.ts'
-import { grantMemberTools, inMemberOrderOf, releaseLostSignIns } from './grant-tools.ts'
+import { grantMemberTools, grantMemberToolsOrRetryLater, inMemberOrderOf, releaseLostSignIns } from './grant-tools.ts'
 
 type Dependencies = { transactor: ProfileTransactor; gateway: LlmGateway & ToolGateway }
 
@@ -14,15 +14,6 @@ export const syncMemberGatewayKey = (
 ) =>
   inMemberOrder(transactor.member, async () => {
     const { member } = transactor
-    const grantTools = () =>
-      grantMemberTools({ transactor, gateway }, member).catch((error) =>
-        log.error({
-          event: 'member_tools.grant_failed',
-          body: 'Granting the workspace tools of a member failed',
-          attributes: { 'workspace.id': member.workspaceId, 'member.id': member.memberId },
-          error,
-        }),
-      )
     const { keys, virtualKeyId, virtualKeyName, isActive } = await transactor.run(
       async ({ llmCredentials, memberGatewayKeys, members }) => ({
         keys: await llmCredentials.gatewayKeys(),
@@ -45,10 +36,7 @@ export const syncMemberGatewayKey = (
     const name =
       virtualKeyName ?? (await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.reserveVirtualKeyName()))
     const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, name, keys: syncedKeys })
-    if (savedId === virtualKeyId && !added) {
-      await grantTools()
-      return savedId
-    }
+    if (savedId === virtualKeyId && !added) return savedId
     try {
       await transactor.run(async ({ llmCredentials, memberGatewayKeys, members }) => {
         if (added) {
@@ -64,13 +52,16 @@ export const syncMemberGatewayKey = (
         await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(null))
       throw error
     }
-    await grantTools()
     return savedId
   })
 
-export const ensureMemberGatewayKey = async (dependencies: Dependencies) =>
-  (await dependencies.transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKey())) ??
-  syncMemberGatewayKey(dependencies)
+export const ensureMemberGatewayKey = async (dependencies: Dependencies) => {
+  const virtualKeyId = await dependencies.transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.virtualKey())
+  if (virtualKeyId) return virtualKeyId
+  const createdId = await syncMemberGatewayKey(dependencies)
+  if (createdId) await grantMemberToolsOrRetryLater(dependencies, dependencies.transactor.member)
+  return createdId
+}
 
 export const toolKeyValueOf = async (dependencies: Dependencies) => {
   const virtualKeyId = await ensureMemberGatewayKey(dependencies)
@@ -81,8 +72,9 @@ export const runGatewaySync = async (
   dependencies: Dependencies,
   { key, isLeaving }: Pick<GatewaySyncJob, 'key' | 'isLeaving'>,
 ) => {
-  await syncMemberGatewayKey(dependencies, { isLeaving })
+  const syncedId = await syncMemberGatewayKey(dependencies, { isLeaving })
   const { workspaceId, memberId } = dependencies.transactor.member
+  if (syncedId) await grantMemberTools(dependencies, { workspaceId, memberId })
   if (!isLeaving) await releaseLostSignIns(dependencies, workspaceId, { memberIds: [memberId] })
   if (key) await dependencies.gateway.removeProviderKey(key)
 }
