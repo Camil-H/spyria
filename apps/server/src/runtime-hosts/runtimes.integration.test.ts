@@ -9,6 +9,7 @@ import {
   ensureRuntimeRunning,
   expireSignIn,
   retryRuntime,
+  stopChatRuntime,
   touchRuntime,
 } from '@spyria/runtime/server'
 import { websocket } from 'hono/bun'
@@ -392,7 +393,7 @@ test('a start or retry waiting on an archive in progress is refused once it comm
   expect(host.commands.filter(({ op }) => op === 'create')).toEqual([])
 })
 
-test('commands to an offline host retry until it returns, rows stay untouched meanwhile, and hello reconciles drift', async () => {
+test('commands to an offline host retry until it returns, rows stay untouched meanwhile, the idle sweep stops nothing there, and hello reconciles drift', async () => {
   const host = await fakeHost('Flaky host')
   const [stoppingChat, vanishedChat, revivedChat] = [
     await newRuntimeChat(),
@@ -407,6 +408,14 @@ test('commands to an offline host retry until it returns, rows stay untouched me
 
   await idleFor(stoppingChat, '2 hours')
   await sweep()
+  expect((await runtimeOf(stoppingChat)).state).toBe('running')
+  expect(await jobsOf('runtime.stop', stopping.id)).toEqual([])
+  await zeroDatabase.transaction((tx) =>
+    stopChatRuntime(
+      { transactor: createRuntimeTransactor(tx) },
+      { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
+    ),
+  )
   await waitFor(async () =>
     (await jobsOf('runtime.stop', stopping.id)).some((job) => job.last_error !== null && job.attempts >= 2),
   )

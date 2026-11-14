@@ -119,11 +119,12 @@ test('placement picks the least-loaded online host below its cap', () => {
   expect(placementOf([host('full', 2, 2), host('last-slot', 13, 14)])).toEqual({ hostId: runtimeHostId('last-slot') })
 })
 
-test('a runtime idle for more than an hour stops, a stopped or failed one idle for more than 7 days is removed', () => {
-  const idleFor = (state: RuntimeState, milliseconds: number) =>
-    idleStepOf(runtime({ state, lastActiveAt: now - milliseconds }), now)
+test('a runtime idle for more than an hour stops unless its host is offline, a stopped or failed one idle for more than 7 days is removed', () => {
+  const idleFor = (state: RuntimeState, milliseconds: number, hostOnline = true) =>
+    idleStepOf(runtime({ state, hostOnline, lastActiveAt: now - milliseconds }), now)
   expect(idleFor('running', 60 * minute)).toBeUndefined()
   expect(idleFor('running', 60 * minute + 1)).toBe('stopping')
+  expect(idleFor('running', 365 * 24 * 60 * minute, false)).toBeUndefined()
   expect(idleFor('stopped', 7 * 24 * 60 * minute)).toBeUndefined()
   expect(idleFor('stopped', 7 * 24 * 60 * minute + 1)).toBe('removing')
   expect(idleFor('failed', 7 * 24 * 60 * minute)).toBeUndefined()
@@ -134,8 +135,10 @@ test('a runtime idle for more than an hour stops, a stopped or failed one idle f
 
 test('the idle cutoffs the sweep locks by are the last activity times past which a runtime stops or is removed', () => {
   const { stopBefore, removeBefore } = idleCutoffsAt(now)
-  expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore }), now)).toBeUndefined()
-  expect(idleStepOf(runtime({ state: 'running', lastActiveAt: stopBefore - 1 }), now)).toBe('stopping')
+  expect(idleStepOf(runtime({ state: 'running', hostOnline: true, lastActiveAt: stopBefore }), now)).toBeUndefined()
+  expect(idleStepOf(runtime({ state: 'running', hostOnline: true, lastActiveAt: stopBefore - 1 }), now)).toBe(
+    'stopping',
+  )
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore }), now)).toBeUndefined()
   expect(idleStepOf(runtime({ state: 'stopped', lastActiveAt: removeBefore - 1 }), now)).toBe('removing')
 })

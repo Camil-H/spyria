@@ -124,7 +124,7 @@ export const idleCutoffsAt = (now: number): IdleCutoffs => ({
 
 export const idleStepOf = (runtime: Runtime, now: number) => {
   const idleMilliseconds = now - runtime.lastActiveAt
-  if (runtime.state === 'running' && idleMilliseconds > idleStopMilliseconds) return 'stopping'
+  if (runtime.state === 'running' && runtime.hostOnline && idleMilliseconds > idleStopMilliseconds) return 'stopping'
   if ((runtime.state === 'stopped' || runtime.state === 'failed') && idleMilliseconds > idleRemovalMilliseconds)
     return 'removing'
   return undefined
