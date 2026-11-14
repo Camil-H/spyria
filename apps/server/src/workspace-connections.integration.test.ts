@@ -33,6 +33,7 @@ import {
   succeeded,
   testAuthSettings,
   textOf,
+  toolConnectionVersionOf,
   virtualKeyOf,
   waitFor,
   workspaceEventsOf,
@@ -371,11 +372,13 @@ test('a member moved to a role without access to a server they signed in to lose
     ).toContain('"connected":true')
     expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(200)
     expect(await signInsOf('connection-fake')).toEqual([{ user_id: bob, status: 'Connected' }])
+    const versionBefore = await toolConnectionVersionOf(bob)
 
     expect(
       await resultOf(aliceInAcme, 'workspace.changeMemberRole', { workspaceId: acme, memberId: bob, role: 'admin' }),
     ).toEqual(succeeded)
     await waitFor(async () => (await signInsOf('connection-fake')).length === 0)
+    expect(await toolConnectionVersionOf(bob)).toBeGreaterThan(versionBefore)
     expect(await sessionsOf(bob, 'fake')).toEqual([])
   } finally {
     await resultOf(aliceInAcme, 'workspace.changeMemberRole', { workspaceId: acme, memberId: bob, role: 'member' })
@@ -737,4 +740,19 @@ test('a gateway sync whose tool grant the gateway refuses fails, so the job work
     void refusingGateway.stop(true)
     await setCrmAccess('member', null)
   }
+})
+
+test('a member who leaves loses their tool connections and moves their tool connection version, so a refresh or check that read the gateway before cannot store one again', async () => {
+  const leaver = `member-leaver-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${leaver}, ${`${leaver}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${leaver}, 'member', 'Leaver')`
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${leaver}, 'connection-fake', 'Connected')`
+  expect(await resultOf(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: leaver })).toEqual(
+    succeeded,
+  )
+  expect(await signInsOf('connection-fake')).not.toContainEqual(expect.objectContaining({ user_id: leaver }))
+  expect(await toolConnectionVersionOf(leaver)).toBeGreaterThan(0)
 })
