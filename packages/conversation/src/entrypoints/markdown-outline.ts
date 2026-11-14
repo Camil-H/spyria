@@ -3,8 +3,10 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 type OutlinedNode = {
   type: string
   identifier?: string
+  label?: string | null
+  url?: string
+  title?: string | null
   children?: OutlinedNode[]
-  position?: { start: { offset?: number }; end?: { offset?: number } }
 }
 
 const maximumCachedBlocks = 500
@@ -25,11 +27,14 @@ const nodesOf = (node: OutlinedNode): OutlinedNode[] => [node, ...(node.children
 
 export const isShownImage = (node: OutlinedNode) => node.type === 'image' || node.type === 'imageReference'
 
+const escaped = (text: string, characters: RegExp) => text.replace(characters, (character) => `\\${character}`)
+
+const definitionSourceOf = ({ label, identifier = '', url = '', title }: OutlinedNode) =>
+  `[${label ?? identifier}]: <${escaped(url, /[\\<>]/g)}>${title ? ` "${escaped(title, /[\\"]/g)}"` : ''}`
+
 const definitionSourcesOf = (text: string) =>
-  nodesOf(fromMarkdown(text)).flatMap(({ type, identifier, position }) =>
-    type === 'definition' && !identifier?.startsWith('^')
-      ? [text.slice(position?.start.offset, position?.end?.offset)]
-      : [],
+  nodesOf(fromMarkdown(text)).flatMap((node) =>
+    node.type === 'definition' && !node.identifier?.startsWith('^') ? [definitionSourceOf(node)] : [],
   )
 
 const shownImageCountOf = (text: string) => nodesOf(fromMarkdown(text)).filter(isShownImage).length
