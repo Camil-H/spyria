@@ -38,10 +38,7 @@ const completedDefinitionSourcesOf = cachedBy(definitionSourcesOf)
 const completedShownImageCountOf = cachedBy(shownImageCountOf)
 
 export const withDefinitionsShared = <Block extends { text: string }>(completed: readonly Block[], tail: Block) => {
-  const definitionSources = [
-    ...completed.flatMap((block) => completedDefinitionSourcesOf(block.text)),
-    ...definitionSourcesOf(tail.text),
-  ]
+  const definitionSources = completed.flatMap((block) => completedDefinitionSourcesOf(block.text))
   const definitionsBefore = definitionSources.length > 0 ? `${definitionSources.join('\n')}\n\n` : ''
   return [
     ...completed.map((block) => ({

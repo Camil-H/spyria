@@ -154,8 +154,9 @@ const renderInRuntimeChat = (markdown: ReactElement) => {
 const autoLoadedShotsOf = (html: string) =>
   [...html.matchAll(/aria-label="Loading (Shot \d)"/g)].map(([, shot]) => shot)
 
-test('a streamed answer links a reference whose definition comes in a later block, as the stored answer does', () => {
-  const text = 'See [the pricing][pricing] first.\n\nThen decide.\n\n[pricing]: https://docs.example.com/pricing'
+test('a streamed answer links a reference once the block defining it is complete, as the stored answer does', () => {
+  const text =
+    'See [the pricing][pricing] first.\n\nThen decide.\n\n[pricing]: https://docs.example.com/pricing\n\nThat is all.'
   const html = renderToStaticMarkup(<StreamedMarkdown text={text} />)
   expect(html).toContain('href="https://docs.example.com/pricing"')
   expect(html).not.toContain('[the pricing]')
@@ -189,6 +190,7 @@ test('a streamed answer counts images by reference across its blocks, with their
     ...[1, 2, 3].map((shot) => `Shot ${shot}:\n\n![Shot ${shot}][shot-${shot}]`),
     '![Shot 4](out/4.png) and ![Shot 5][shot-5]',
     ...[1, 2, 3, 5].map((shot) => `[shot-${shot}]: out/${shot}.png`),
+    'That is all.',
   ].join('\n\n')
   const streamed = autoLoadedShotsOf(renderInRuntimeChat(<StreamedMarkdown text={text} />))
   expect(streamed).toEqual(['Shot 1', 'Shot 2', 'Shot 3', 'Shot 4'])
