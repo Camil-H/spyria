@@ -1,6 +1,7 @@
 import type { Transaction } from '@rocicorp/zero'
 import {
   appendWorkspaceEvent,
+  countToolDisconnect,
   deleteGitHubConnection,
   enqueueJob,
   gatewayKeyRefOf,
@@ -10,6 +11,7 @@ import {
   lockMemberToolConnections,
   reserveVirtualKeyName,
   setVirtualKeyId,
+  toolDisconnectsOf,
   virtualKeyIdOf,
   virtualKeyIdsIn,
   virtualKeyNameOf,
@@ -164,11 +166,16 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
       lock: async () => {
         await lockMemberToolConnections(tx, workspaceId, userId)
       },
+      disconnects: () => toolDisconnectsOf(tx, workspaceId, userId),
+      clear: (connectionId) => tx.mutate.toolConnections.delete({ ...owner, connectionId }),
       disconnect: async (connectionId) => {
         await lockMemberToolConnections(tx, workspaceId, userId)
+        await countToolDisconnect(tx, workspaceId, userId)
         await tx.mutate.toolConnections.delete({ ...owner, connectionId })
       },
       removeAll: async () => {
+        await lockMemberToolConnections(tx, workspaceId, userId)
+        await countToolDisconnect(tx, workspaceId, userId)
         for (const { connectionId } of await tx.run(ownToolConnections))
           await tx.mutate.toolConnections.delete({ ...owner, connectionId })
         await deleteGitHubConnection(tx, workspaceId, userId)
@@ -218,12 +225,12 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         if (!access) return tx.mutate.connectionAccess.delete(key)
         await tx.mutate.connectionAccess.upsert({ ...key, level: access.level, toolChanges: access.toolChanges })
       },
-      removeSignIn: (workspaceId, connectionId, memberId) =>
-        tx.mutate.toolConnections.delete({
-          workspaceId: inContextWorkspace(workspaceId),
-          userId: memberId,
-          connectionId,
-        }),
+      removeSignIn: async (workspaceId, connectionId, memberId) => {
+        const workspace = inContextWorkspace(workspaceId)
+        await lockMemberToolConnections(tx, workspace, memberId)
+        await countToolDisconnect(tx, workspace, memberId)
+        await tx.mutate.toolConnections.delete({ workspaceId: workspace, userId: memberId, connectionId })
+      },
     },
     toolApprovals: {
       get: async (connectionId) => {
