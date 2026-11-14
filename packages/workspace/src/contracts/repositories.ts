@@ -48,6 +48,7 @@ export type ChatRoleRepository = {
 
 export type WorkspaceRoleRepository = {
   get(roleId: string): Promise<StoredWorkspaceRole | undefined>
+  lock(roleId: string): Promise<StoredWorkspaceRole | undefined>
   list(): Promise<WorkspaceRole[]>
   holders(roleId: string): Promise<WorkspaceRoleHolders>
   add(role: WorkspaceRole): Promise<void>

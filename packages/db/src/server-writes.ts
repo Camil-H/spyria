@@ -124,6 +124,9 @@ export const lockMembership = (tx: Transaction, workspaceId: string, userId: str
     userId,
   ])
 
+export const lockWorkspaceRole = (tx: Transaction, workspaceId: string, id: string) =>
+  onServer(tx, 'select 1 from workspace_roles where workspace_id = $1 and id = $2 for update', [workspaceId, id])
+
 export const lockInvitation = (tx: Transaction, workspaceId: string, id: string) =>
   onServer(tx, 'select 1 from invitations where workspace_id = $1 and id = $2 for update', [workspaceId, id])
 
