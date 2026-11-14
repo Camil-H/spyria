@@ -233,20 +233,25 @@ export const delegateTask = async (dependencies: AgentDependencies, input: Input
     result: Promise.resolve(cannotStart),
   }
   runningDelegations.set(id, running)
-  await transactor.run(({ delegations }) =>
-    delegations.start({
-      chatId: chat.chatId,
-      id,
-      promptId: turn.promptId,
-      task,
-      effortHint,
-      policy: choice.policy,
-      classifierOutput: choice.answers ?? null,
-      model,
-      reason: choice.reason,
-      tokenHash,
-    }),
-  )
+  await transactor
+    .run(({ delegations }) =>
+      delegations.start({
+        chatId: chat.chatId,
+        id,
+        promptId: turn.promptId,
+        task,
+        effortHint,
+        policy: choice.policy,
+        classifierOutput: choice.answers ?? null,
+        model,
+        reason: choice.reason,
+        tokenHash,
+      }),
+    )
+    .catch((error: unknown) => {
+      runningDelegations.delete(id)
+      throw error
+    })
   running.result = runDelegation(
     dependencies,
     input,
