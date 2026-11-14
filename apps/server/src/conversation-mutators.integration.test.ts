@@ -117,6 +117,20 @@ test('markChatRead moves the marker to the newest seq and never backwards', asyn
   expect(await markerOf('chat-standup')).toBe(99)
 })
 
+test('markChatRead that read the marker before a newer one committed keeps the newer one instead of moving it back', async () => {
+  const chat = await newChat({ type: 'channel' })
+  await sendTo(aliceInAcme, chat, `message-${chat}`, 'Hello')
+  let read: ReturnType<typeof resultOf> | undefined
+  await database.$client.begin(async (newerRead) => {
+    await newerRead`
+      insert into read_markers (workspace_id, user_id, chat_id, last_read_seq) values (${acme}, ${alice}, ${chat}, 99)`
+    read = resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: chat })
+    await waitFor(() => waitingOnLock(database))
+  })
+  expect(await read).toEqual(succeeded)
+  expect((await database.query.readMarkers.findFirst({ where: { chatId: chat, userId: alice } }))?.lastReadSeq).toBe(99)
+})
+
 test('a new runtime chat has no model before its first prompt and the auto policy, stored per chat, with no default model', async () => {
   const routing = (fields: Record<string, unknown>) =>
     resultOf(aliceInAcme, 'conversation.updateChatRouting', { workspaceId: acme, chatId: 'chat-routed', ...fields })

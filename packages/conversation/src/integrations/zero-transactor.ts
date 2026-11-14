@@ -1,6 +1,8 @@
 import type { Query, Transaction } from '@rocicorp/zero'
 import {
   activeAgentTurns,
+  advanceChatReadMarker,
+  advanceThreadReadMarker,
   aiProviderAllowListOf,
   appendChatEvent,
   chatEventsOf,
@@ -607,8 +609,11 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         const stored = await tx.run(
           zql.readMarkers.where('workspaceId', contextWorkspaceId).where('userId', readerId).where('chatId', id).one(),
         )
+        const marker = { workspaceId: contextWorkspaceId, userId: readerId, chatId: id }
         await advanceReadMarker(await newestInChat(id), stored, (lastReadSeq) =>
-          tx.mutate.readMarkers.upsert({ workspaceId: contextWorkspaceId, userId: readerId, chatId: id, lastReadSeq }),
+          tx.location === 'server'
+            ? advanceChatReadMarker(tx, { ...marker, lastReadSeq })
+            : tx.mutate.readMarkers.upsert({ ...marker, lastReadSeq }),
         )
       },
       markThreadRead: async (id, threadRootId, readerId) => {
@@ -629,7 +634,9 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
             .one(),
         )
         await advanceReadMarker(newestReply, stored, (lastReadSeq) =>
-          tx.mutate.threadReadMarkers.upsert({ ...thread, userId: readerId, lastReadSeq }),
+          tx.location === 'server'
+            ? advanceThreadReadMarker(tx, { ...thread, userId: readerId, lastReadSeq })
+            : tx.mutate.threadReadMarkers.upsert({ ...thread, userId: readerId, lastReadSeq }),
         )
       },
     },
