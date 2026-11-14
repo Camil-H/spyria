@@ -279,21 +279,32 @@ export const setup = async (
   )
     forgetEarlierHostPairing(folder, environment)
 
-  const keepInEnvironment = (created: Partial<SetupAnswers>) => {
+  let keptEnvironment: Environment = { SPYRIA_DEPLOYMENT: deployment, ...existing }
+  const keepInEnvironment = (created: Partial<SetupAnswers>, createdNames: string[]) => {
     answers = { ...answers, ...created }
     environment = environmentOf(answers, environment)
-    writeEnvironment(folder, environment)
+    keptEnvironment = {
+      ...keptEnvironment,
+      ...Object.fromEntries(createdNames.map((name) => [name, environment[name] ?? ''])),
+    }
+    writeEnvironment(folder, keptEnvironment)
   }
   if (apiToken)
-    keepInEnvironment({
-      tunnelToken: (
-        await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })
-      ).token,
-    })
+    keepInEnvironment(
+      {
+        tunnelToken: (
+          await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })
+        ).token,
+      },
+      ['CLOUDFLARE_TUNNEL_TOKEN'],
+    )
   if (createsMicrosoftApp)
-    keepInEnvironment({
-      instanceApps: { ...answers.instanceApps, microsoft: registeredMicrosoftAppOf(origin, savedMicrosoftApp, az) },
-    })
+    keepInEnvironment(
+      {
+        instanceApps: { ...answers.instanceApps, microsoft: registeredMicrosoftAppOf(origin, savedMicrosoftApp, az) },
+      },
+      ['SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'],
+    )
   await setUpFirstWorkspaceProvider()
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
