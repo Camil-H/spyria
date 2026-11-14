@@ -3,6 +3,7 @@ import {
   calloutClass,
   cardClass,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   formatCost,
   ghostButtonClass,
@@ -71,7 +72,7 @@ export const BudgetsSection = ({ id, workspaceId }: { id?: string; workspaceId: 
   const [overview, setOverview] = useState<BudgetOverview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
-    commands.readBudgets({ workspaceId }).then(setOverview, (error: Error) => setLoadError(error.message))
+    commands.readBudgets({ workspaceId }).then(setOverview, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId])
   const saveOf = (memberId: MemberId | null) => async (dollars: number | null) =>
     setOverview(await commands.saveBudget({ workspaceId, memberId, dollars }))

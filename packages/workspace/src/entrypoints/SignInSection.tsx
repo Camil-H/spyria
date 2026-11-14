@@ -6,6 +6,7 @@ import {
   Dialog,
   dangerButtonClass,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   focusRing,
   ghostButtonClass,
@@ -160,20 +161,24 @@ const SsoSettingsForm = ({
   const [isConfirming, setIsConfirming] = useState(false)
   const [refusal, setRefusal] = useState<string>()
   const [isStopAsked, setIsStopAsked] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readSsoSettings({ workspaceId }).then((settings) => {
-      setStored(settings)
-      if (settings) {
-        setForm({ ...emptyProvider, ...settings })
-        setUsesInstanceApp(settings.usesInstanceApp)
-      }
-    })
+    commands.readSsoSettings({ workspaceId }).then(
+      (settings) => {
+        setStored(settings)
+        if (settings) {
+          setForm({ ...emptyProvider, ...settings })
+          setUsesInstanceApp(settings.usesInstanceApp)
+        }
+      },
+      (error: unknown) => setLoadError(failureMessageOf(error)),
+    )
   }, [commands, workspaceId])
   if (stored === undefined)
     return (
       <section aria-label="Sign-in">
-        <p className="text-sm text-muted">Loading…</p>
+        {loadError ? <ErrorMessage message={loadError} /> : <p className="text-sm text-muted">Loading…</p>}
       </section>
     )
   const edit = (field: ProviderField) => (event: { target: { value: string } }) =>

@@ -3,6 +3,7 @@ import {
   buttonClass,
   cardClass,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   ghostButtonClass,
   LabelledSection,
@@ -99,6 +100,7 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
   const [isSaved, setIsSaved] = useState(false)
   const [isManual, setIsManual] = useState(false)
   const [isCreatingAgain, setIsCreatingAgain] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   const show = (shown: GitHubSettingsView | null) => {
     setSettings(shown)
@@ -109,12 +111,12 @@ export const GitHubSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => 
       setSettings(read)
       setIds({ appId: read?.appId ?? '', clientId: read?.clientId ?? '' })
     }
-    commands.readGitHubSettings({ workspaceId }).then(shown, () => shown(null))
+    commands.readGitHubSettings({ workspaceId }).then(shown, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId])
   if (settings === undefined)
     return (
       <section aria-label="GitHub">
-        <p className="text-sm text-muted">Loading…</p>
+        {loadError ? <ErrorMessage message={loadError} /> : <p className="text-sm text-muted">Loading…</p>}
       </section>
     )
   const submit = async (event: SubmitEvent) => {
