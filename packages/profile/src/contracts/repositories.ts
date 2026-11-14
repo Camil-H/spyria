@@ -12,7 +12,6 @@ import type { Member } from '../domain/member.ts'
 import type { Secret } from '../domain/secret.ts'
 import type { ToolConnection } from '../domain/tool-connection.ts'
 import type {
-  AccessSubject,
   ConnectionTool,
   SecretHeader,
   ToolHolder,
@@ -83,10 +82,9 @@ export type WorkspaceConnectionRepository = {
   setAccess(
     workspaceId: WorkspaceId,
     connectionId: string,
-    subject: AccessSubject,
+    roleId: string,
     access: ToolServerAccess | null,
   ): Promise<void>
-  removeAccessOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<void>
   removeSignIn(workspaceId: WorkspaceId, connectionId: string, memberId: MemberId): Promise<void>
 }
 

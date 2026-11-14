@@ -25,7 +25,7 @@ test('changing a member’s tool grants keeps their provider key on their virtua
   expect(keyIdsBefore).toHaveLength(1)
 
   const readOnly = await asMember(alice, 'POST', '/api/workspace-connections/connection-crm/access', {
-    memberId: bob,
+    roleId: 'member',
     level: 'read',
     toolChanges: {},
   })

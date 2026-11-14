@@ -7,7 +7,7 @@ export type SpendGranularity = (typeof spendGranularities)[number]
 export const spendDimensions = ['member', 'project', 'chat', 'model'] as const
 export type SpendDimension = (typeof spendDimensions)[number]
 export type SpendRange = { from: Date; to: Date }
-export type SpendScope = { dimension: SpendDimension; key: string }
+export type SpendScope = { dimension: SpendDimension; keys: string[] }
 export type SpendFilter = {
   current: SpendRange
   previous: SpendRange
@@ -71,7 +71,7 @@ export type SpendReport = {
   tables: Partial<Record<SpendDimension, SpendRow[]>>
   scopeChoices: Partial<Record<SpendDimension, SpendScopeChoice[]>>
   decomposition: SpendDecomposition
-  mergedPulls: MergedPullsCost | null
+  mergedPulls: MergedPullsCost
 }
 
 const dayMilliseconds = 24 * 3_600_000
@@ -115,10 +115,15 @@ const rangesOf = (period: SpendPeriod, query: Readonly<Record<string, string | u
   return { current, previous: precedingRangeOf(current) }
 }
 
-const scopeOf = ({ scope, scopeKey }: Readonly<Record<string, string | undefined>>): SpendScope | null => {
-  if (!scope && !scopeKey) return null
-  if (!spendDimensions.includes(scope as SpendDimension) || !scopeKey) throw new InvalidSpendFilter()
-  return { dimension: scope as SpendDimension, key: scopeKey }
+const scopeKeySeparator = ','
+
+export const scopeKeysParameterOf = (keys: readonly string[]) => keys.join(scopeKeySeparator)
+
+const scopeOf = ({ scope, scopeKeys }: Readonly<Record<string, string | undefined>>): SpendScope | null => {
+  if (!scope && !scopeKeys) return null
+  const keys = [...new Set(scopeKeys?.split(scopeKeySeparator).filter(Boolean))]
+  if (!spendDimensions.includes(scope as SpendDimension) || keys.length === 0) throw new InvalidSpendFilter()
+  return { dimension: scope as SpendDimension, keys }
 }
 
 export const spendFilterFrom = (query: Readonly<Record<string, string | undefined>>, now: Date): SpendFilter => {
@@ -268,7 +273,7 @@ export const spendReportOf = ({
   counts: { current: SpendCounts; previous: SpendCounts }
   tableDimensions: readonly SpendDimension[]
   chartDimensions: readonly SpendDimension[]
-  mergedPulls: readonly MergedPull[] | null
+  mergedPulls: readonly MergedPull[]
 }): SpendReport => {
   const buckets = bucketStartsOf(filter.current, filter.granularity)
   return {
@@ -283,7 +288,7 @@ export const spendReportOf = ({
       tableDimensions.map((dimension) => [dimension, scopeChoicesOf(choiceRows, dimension)]),
     ),
     decomposition: decompositionOf(counts.current, counts.previous),
-    mergedPulls: mergedPulls && {
+    mergedPulls: {
       ...mergedPullsCostOf(mergedPulls),
       trend: mergedPullsTrendOf(mergedPulls, filter.current, filter.granularity),
     },

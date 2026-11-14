@@ -209,6 +209,11 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
   })
   return (
     <section aria-label="Audit log" className="flex flex-col gap-4">
+      <LabelledSection title="Retention" titleClass="text-sm font-medium" className="mb-4 flex flex-col gap-3">
+        <div className={`${cardClass} p-4`}>
+          <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
+        </div>
+      </LabelledSection>
       <fieldset aria-label="Filters" className="flex flex-wrap items-end gap-3">
         <label className={labelClass}>
           Person
@@ -262,11 +267,6 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
           Load more
         </button>
       )}
-      <LabelledSection title="Retention" titleClass="text-sm font-medium" className="mt-6 flex flex-col gap-3">
-        <div className={`${cardClass} p-4`}>
-          <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
-        </div>
-      </LabelledSection>
     </section>
   )
 }

@@ -177,8 +177,8 @@ test.describe('Pull requests', () => {
 
     await test.step('once my role reads GitHub only, I have no Push or Open pull request', async () => {
       await workerStack.database.$client`
-        insert into connection_access (workspace_id, connection_id, id, role_id, level, tool_changes)
-        values ('workspace-acme', 'github', 'role:member', 'member', 'read', '{}')`
+        insert into connection_access (workspace_id, connection_id, role_id, level, tool_changes)
+        values ('workspace-acme', 'github', 'member', 'read', '{}')`
       await bobPage.reload()
       await panelTabOf(bobPage, 'Changes').click()
       await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()

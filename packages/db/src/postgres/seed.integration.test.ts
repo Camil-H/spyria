@@ -98,10 +98,7 @@ const readSnapshot = async () => {
       }),
     ),
     workspaceConnections: await database.select().from(tables.workspaceConnections),
-    connectionAccess: (await database.select().from(tables.connectionAccess)).map(({ userId, ...access }) => ({
-      ...access,
-      memberId: userId,
-    })),
+    connectionAccess: await database.select().from(tables.connectionAccess),
     toolApprovals: (await database.select().from(tables.toolApprovals)).map(userAsMember),
     toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
     chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),

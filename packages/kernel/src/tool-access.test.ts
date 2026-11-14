@@ -16,7 +16,6 @@ const crm = {
 const accessOf = (access: Partial<ToolServerAccess>): ToolServerAccess => ({
   connectionId: 'crm',
   roleId: 'member',
-  memberId: null,
   level: 'read',
   toolChanges: {},
   ...access,
@@ -32,10 +31,11 @@ test("a role's level grants its read tools, or all of them, and single changes a
   ).toEqual(['update'])
 })
 
-test("a named member's access replaces their role's, and other roles grant nothing", () => {
-  const rows = [accessOf({ level: 'write' }), accessOf({ roleId: null, memberId: bob, level: 'none' })]
-  expect(grantedToolsOf(crm, rows, bobAsMember)).toEqual([])
+test("every member gets their role's access, and other roles grant nothing", () => {
+  const rows = [accessOf({ level: 'write' }), accessOf({ roleId: 'guest', level: 'none' })]
+  expect(grantedToolsOf(crm, rows, bobAsMember)).toHaveLength(3)
   expect(grantedToolsOf(crm, rows, { memberId: memberId('lee'), roleId: 'member' })).toHaveLength(3)
+  expect(grantedToolsOf(crm, rows, { memberId: memberId('lee'), roleId: 'guest' })).toEqual([])
   expect(grantedToolsOf(crm, rows, { memberId: memberId('lee'), roleId: 'admin' })).toEqual([])
 })
 

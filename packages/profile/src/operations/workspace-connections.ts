@@ -1,10 +1,4 @@
-import {
-  githubConnectionId,
-  githubServerName,
-  MemberNotFound,
-  requirePermissionIn,
-  type WorkspaceId,
-} from '@spyria/kernel'
+import { githubConnectionId, githubServerName, requirePermissionIn, type WorkspaceId } from '@spyria/kernel'
 import type { ToolGateway, WorkspaceConnectionRepository } from '../contracts/repositories.ts'
 import type { ProfileTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
@@ -216,35 +210,30 @@ export const reviewConnectionTools = async (
 }
 
 export const setConnectionAccess = async (dependencies: Dependencies, input: ConnectionTarget & AccessInput) => {
-  const { workspaceId, connectionId } = input
-  const subject = input.roleId === undefined ? { memberId: input.memberId } : { roleId: input.roleId }
+  const { workspaceId, connectionId, roleId } = input
   await asConnectionManager(dependencies, async ({ members, workspaceConnections, workspaceEvents }) => {
-    if (subject.memberId !== undefined && !(await members.isActive(workspaceId, subject.memberId)))
-      throw new MemberNotFound(subject.memberId)
-    if (subject.roleId !== undefined && !(await members.roleIds(workspaceId)).includes(subject.roleId))
-      throw new InvalidConnection(`The workspace has no role ${subject.roleId}`)
+    if (!(await members.roleIds(workspaceId)).includes(roleId))
+      throw new InvalidConnection(`The workspace has no role ${roleId}`)
     const connection = await accessibleConnectionOf(workspaceConnections, workspaceId, connectionId)
     const previous = (await workspaceConnections.accessOf(workspaceId)).find(
-      (row) =>
-        row.connectionId === connectionId &&
-        (subject.roleId === undefined ? row.memberId === subject.memberId : row.roleId === subject.roleId),
+      (row) => row.connectionId === connectionId && row.roleId === roleId,
     )
     const access = accessOf(connection, input, previous)
 
-    await workspaceConnections.setAccess(workspaceId, connectionId, subject, access)
+    await workspaceConnections.setAccess(workspaceId, connectionId, roleId, access)
     await workspaceEvents.record({
       workspaceId,
       type: 'connection.access_changed',
       payload: {
         connectionId,
         ...(connectionId === githubConnectionId && { name: githubServerName }),
-        ...subject,
+        roleId,
         level: access?.level ?? null,
         toolChanges: access?.toolChanges ?? {},
       },
     })
   })
   if (connectionId === githubConnectionId) return
-  await grantWorkspaceTools(dependencies, workspaceId, subject.memberId && [subject.memberId])
+  await grantWorkspaceTools(dependencies, workspaceId)
   await releaseLostSignIns(dependencies, workspaceId, { connectionId })
 }
