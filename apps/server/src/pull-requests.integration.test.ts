@@ -457,6 +457,65 @@ test('signed webhooks update the card’s checks, review, comments and state; a 
   expect(stepChanges[0]?.count).toBe(5)
 })
 
+test('webhooks arriving together all land, one GitHub sends again after a failure is applied, and one older than the card changes nothing', async () => {
+  await stack.agentHost('Racing webhook host', { routesModelCalls: true })
+  const { id, branch } = await newDevChat()
+  await committedWorkspace(id)
+  await connectGitHub(alice)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Racing totals', body: '' })
+  const number = Number(/#(\d+)/.exec(opened.body.text)?.[1])
+  const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
+  const repository = { full_name: 'acme/app' }
+  const stepOf = async () => (await cardOf(id))?.step
+  const run = (runId: number) => ({
+    action: 'completed',
+    repository,
+    check_run: { id: runId, head_sha: headSha, conclusion: 'success', pull_requests: [{ number }] },
+  })
+
+  await Promise.all([1, 2, 3, 4].map((runId) => sendWebhook('check_run', run(runId))))
+  expect((await stepOf()).checks).toEqual({
+    'check_run:1': 'passing',
+    'check_run:2': 'passing',
+    'check_run:3': 'passing',
+    'check_run:4': 'passing',
+  })
+
+  const pullRequest = { number, html_url: (await stepOf()).url, title: 'Racing totals', state: 'open' }
+  const comment = { id: 51, path: 'src/app.ts', line: 1, user: { login: 'rita' }, body: 'Comment 51' }
+  const commented = { action: 'created', repository, pull_request: { ...pullRequest, head: { sha: headSha } } }
+  const failed = await sendWebhook(
+    'pull_request_review_comment',
+    { ...commented, comment: { id: 51 } },
+    {
+      delivery: 'delivery-failing',
+    },
+  ).catch(() => ({ status: 500 }))
+  expect(failed.status).toBe(500)
+  expect(
+    await sendWebhook('pull_request_review_comment', { ...commented, comment }, { delivery: 'delivery-failing' }),
+  ).toEqual({ status: 200, body: { outcome: 'applied' } })
+  expect((await stepOf()).comments).toMatchObject([{ id: 51, body: 'Comment 51' }])
+
+  await sendWebhook('pull_request', {
+    action: 'closed',
+    repository,
+    pull_request: {
+      ...pullRequest,
+      state: 'closed',
+      merged: true,
+      head: { sha: headSha },
+      updated_at: '2026-11-14T10:05:00Z',
+    },
+  })
+  await sendWebhook('pull_request', {
+    action: 'synchronize',
+    repository,
+    pull_request: { ...pullRequest, head: { sha: 'an-older-head' }, updated_at: '2026-11-14T10:00:00Z' },
+  })
+  expect(await stepOf()).toMatchObject({ state: 'merged', headSha, updatedAt: '2026-11-14T10:05:00Z' })
+})
+
 const toolResultsOf = (replies: { step?: unknown }[]) =>
   replies.flatMap(({ step }) => {
     const toolStep = step as { type?: string; name?: string; result?: string } | undefined

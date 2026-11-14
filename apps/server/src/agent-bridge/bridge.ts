@@ -512,7 +512,7 @@ export const createAgentBridge = ({
       githubToolsOf: handlers.githubToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,
       runGitAction: handlers.runGitAction,
-      recordPullRequest: handlers.recordPullRequest,
+      applyPullRequestEvent: handlers.applyPullRequestEvent,
       wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordContextSize: handlers.recordContextSize,
