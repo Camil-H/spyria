@@ -18,10 +18,15 @@ const csrfHeaders = { 'content-type': 'application/json', 'x-spyria-csrf': '1' }
 const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string, string> = {}) =>
   fetch(path, { method: 'POST', headers: { ...csrfHeaders, ...headers }, body: JSON.stringify({ workspaceId }) })
 
+const jsonOf = (response: Response) => {
+  if (!response.ok) throw new Error(`${new URL(response.url).pathname} answered ${response.status}`)
+  return response.json()
+}
+
 export const loadSessions = async (): Promise<
   | { userId?: undefined; sessions: [] }
   | { userId: MemberId; sessions: WorkspaceSession[]; deployment: string; version: string; hostImage?: string }
-> => (await fetch('/auth/sessions')).json()
+> => jsonOf(await fetch('/auth/sessions'))
 
 export const loadAuthMode = async (
   setupToken?: string,
@@ -32,7 +37,7 @@ export const loadAuthMode = async (
   accountProviders: ('google' | 'microsoft' | 'oidc')[]
   callbackOrigin: string
   instanceApps: ('google' | 'microsoft')[]
-}> => (await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')).json()
+}> => jsonOf(await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode'))
 
 let sharedAuthModeLoading: ReturnType<typeof loadAuthMode> | undefined
 export const sharedAuthMode = () => {

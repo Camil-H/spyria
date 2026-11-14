@@ -71,6 +71,36 @@ test.describe('Sign-in screens', () => {
     await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 
+  test('As a visitor opening Spyria while its server cannot answer, I am told it could not be reached and try again', {
+    tag: ['@spec-37'],
+  }, async ({ browser }) => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' })
+    let isServerDown = true
+    await page.route('**/auth/sessions', (route) =>
+      isServerDown
+        ? route.fulfill({ status: 503, body: 'Service unavailable' })
+        : route.fulfill({ json: { sessions: [] } }),
+    )
+    await page.route('**/auth/mode**', (route) =>
+      route.fulfill({
+        json: {
+          authMode: 'sso',
+          isBeingSetUp: false,
+          canCreateWorkspace: false,
+          accountProviders: [],
+          instanceApps: [],
+        },
+      }),
+    )
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Spyria could not be reached' })).toBeVisible()
+    await expect(page.getByText('Check your connection, then try again.')).toBeVisible()
+
+    isServerDown = false
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
+  })
+
   test('As a visitor reaching a fresh install without the setup link, I see that it is being set up and cannot create a workspace', {
     tag: ['@spec-53'],
   }, async ({ browser }) => {
