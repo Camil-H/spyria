@@ -3,7 +3,7 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { createToolCallAccess } from '@spyria/profile/server'
+import { createProfileJobs, createToolCallAccess } from '@spyria/profile/server'
 import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
@@ -25,6 +25,7 @@ import {
   openSharedTestApp,
   openZeroStore,
   promptedBy,
+  rejectionOf,
   rpcOf,
   runtimeTurn,
   sessionTokenOf,
@@ -676,28 +677,31 @@ test('the agent lists the tools of the member who prompted, so a guest’s turn 
   }
 })
 
+const grantRefusingGateway = () =>
+  Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url)
+      const body = request.method === 'GET' || request.method === 'DELETE' ? undefined : await request.text()
+      if (request.method === 'PUT' && body?.includes('"mcp_configs"')) return new Response('down', { status: 503 })
+      return fetch(`${gateway.url}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: request.headers,
+        body,
+      })
+    },
+  })
+
 test("taking a role's access away while the gateway refuses grants succeeds, and a queued gateway sync removes the tools from each member's key once it answers", async () => {
   expect(await setCrmAccess('member', 'write')).toBe(200)
   await addLlmKey(bob, 'Mistral')
   expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
-  const grantRefusingGateway = Bun.serve({
-    port: 0,
-    fetch: async (request) => {
-      const url = new URL(request.url)
-      if (request.method === 'PUT' && url.pathname.startsWith('/api/governance/virtual-keys'))
-        return new Response('down', { status: 503 })
-      return fetch(`${gateway.url}${url.pathname}${url.search}`, {
-        method: request.method,
-        headers: request.headers,
-        body: request.method === 'GET' || request.method === 'DELETE' ? undefined : await request.text(),
-      })
-    },
-  })
+  const refusingGateway = grantRefusingGateway()
   try {
     const appWithRefusedGrants = createApp({
       database,
       ...testAuthSettings,
-      llmGateway: llmGatewayAt(grantRefusingGateway.url.origin),
+      llmGateway: llmGatewayAt(refusingGateway.url.origin),
     })
     const revoked = await appWithRefusedGrants.request(accessPath('connection-crm'), {
       method: 'POST',
@@ -705,9 +709,32 @@ test("taking a role's access away while the gateway refuses grants succeeds, and
       body: JSON.stringify({ roleId: 'member', level: 'none', toolChanges: {} }),
     })
     expect(revoked.status).toBe(200)
+    await waitFor(async () => (await grantsOf(bob))[sharedToolServer] === undefined)
   } finally {
-    void grantRefusingGateway.stop(true)
+    void refusingGateway.stop(true)
+    await setCrmAccess('member', null)
   }
-  await waitFor(async () => (await grantsOf(bob))[sharedToolServer] === undefined)
-  await setCrmAccess('member', null)
+})
+
+test('a gateway sync whose tool grant the gateway refuses fails, so the job worker retries it instead of leaving the grant as it was', async () => {
+  await addLlmKey(bob, 'Mistral')
+  expect(await setCrmAccess('member', 'write')).toBe(200)
+  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+  await database.$client`
+    update connection_access set level = 'none'
+    where workspace_id = ${acme} and connection_id = 'connection-crm' and role_id = 'member'`
+  const refusingGateway = grantRefusingGateway()
+  try {
+    const jobs = createProfileJobs(llmGatewayAt(refusingGateway.url.origin))
+    const sync = jobs['profile.gateway-sync']({
+      workspaceId: acme,
+      payload: { memberId: bob },
+      isLastAttempt: false,
+      transact: (work) => zeroDrizzle(schema, database).transaction(work),
+    })
+    expect(String(await rejectionOf(sync))).toContain('The gateway answered PUT')
+  } finally {
+    void refusingGateway.stop(true)
+    await setCrmAccess('member', null)
+  }
 })

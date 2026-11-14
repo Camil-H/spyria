@@ -74,9 +74,9 @@ export const runGatewaySync = async (
 ) => {
   const syncedId = await syncMemberGatewayKey(dependencies, { isLeaving })
   const { workspaceId, memberId } = dependencies.transactor.member
-  if (syncedId) await grantMemberTools(dependencies, { workspaceId, memberId })
   if (!isLeaving) await releaseLostSignIns(dependencies, workspaceId, { memberIds: [memberId] })
   if (key) await dependencies.gateway.removeProviderKey(key)
+  if (syncedId) await grantMemberTools(dependencies, { workspaceId, memberId })
 }
 
 export const virtualKeyValueOf = async ({
