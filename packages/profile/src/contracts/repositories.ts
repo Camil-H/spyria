@@ -43,6 +43,8 @@ export type AiProviderRepository = {
 
 export type MemberGatewayKeyRepository = {
   virtualKey(): Promise<string | undefined>
+  virtualKeyName(): Promise<string | undefined>
+  reserveVirtualKeyName(): Promise<string>
   setVirtualKey(virtualKeyId: string | null): Promise<void>
   virtualKeysIn(workspaceId: WorkspaceId): Promise<{ memberId: MemberId; virtualKeyId: string }[]>
 }
@@ -57,7 +59,8 @@ export type GatewayJobs = {
 export type LlmGateway = {
   addProviderKey(key: { provider: string; name: string; secret: Secret }): Promise<GatewayKey>
   removeProviderKey(key: GatewayKey): Promise<void>
-  saveVirtualKey(virtualKey: { id: string | undefined; keys: GatewayKey[] }): Promise<string>
+  saveVirtualKey(virtualKey: { id: string | undefined; name: string; keys: GatewayKey[] }): Promise<string>
+  virtualKeyNamed(name: string): Promise<string | undefined>
   removeVirtualKey(id: string): Promise<void>
   virtualKeyValue(id: string): Promise<string | undefined>
 }

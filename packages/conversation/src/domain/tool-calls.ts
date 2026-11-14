@@ -8,6 +8,7 @@ export const toolApprovalWindowMilliseconds = 300_000
 export const spyriaToolTimeoutSeconds = 330
 export const notApprovedOf = (answererName: string) => `${answererName} did not approve this call`
 export const toolGatewayUnreachable = 'The tool gateway is unreachable, try again shortly'
+export const stoppedBeforeCall = 'The turn was stopped before this call ran'
 const connectionNotice = / needs to (re)?connect (\S+)$/
 const guestMethods = ['initialize', 'ping', 'tools/list', 'tools/call']
 

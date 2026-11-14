@@ -191,11 +191,15 @@ test('an admin read answering 503 once is retried; a 400 and a failing creation 
   try {
     expect(await flakyGateway.virtualKeyValue('flaky')).toBe('sk-bf-flaky')
     await expect(flakyGateway.virtualKeyValue('refused')).rejects.toThrow('with 400')
-    await expect(flakyGateway.saveVirtualKey({ id: undefined, keys: [] })).rejects.toThrow('with 503')
+    await expect(
+      flakyGateway.saveVirtualKey({ id: undefined, name: 'vk_member_acme_alice', keys: [] }),
+    ).rejects.toThrow('with 503')
     expect(requests).toEqual([
       'GET /api/governance/virtual-keys/flaky',
       'GET /api/governance/virtual-keys/flaky',
       'GET /api/governance/virtual-keys/refused',
+      'GET /api/governance/virtual-keys',
+      'GET /api/governance/virtual-keys',
       'POST /api/governance/virtual-keys',
     ])
   } finally {
@@ -475,5 +479,43 @@ test('a virtual key value rotated outside Spyria is read again once its cached v
     expect(await rotatingGateway.virtualKeyValue('rotating')).toBe('sk-bf-after')
   } finally {
     rotatingServer.stop(true)
+  }
+})
+
+test('saving a member key the gateway lost binds the key already named for the member instead of creating another, and creates one only when none has that exact name', async () => {
+  const requests: string[] = []
+  const namedKeys = [
+    { id: 'key-other', name: 'vk_member_acme_alice2' },
+    { id: 'key-alice', name: 'vk_member_acme_alice' },
+  ]
+  const keysServer = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const { pathname, search } = new URL(request.url)
+      requests.push(`${request.method} ${pathname}${search}`)
+      if (pathname === '/api/governance/virtual-keys/key-lost') return new Response('', { status: 404 })
+      if (request.method === 'GET') return Response.json({ virtual_keys: namedKeys })
+      if (request.method === 'POST') return Response.json({ virtual_key: { id: 'key-created', value: 'sk-bf-new' } })
+      return Response.json({})
+    },
+  })
+  const keysGateway = createLlmGateway({
+    url: `http://localhost:${keysServer.port}`,
+    adminUser: 'admin',
+    adminPassword: 'secret',
+  })
+  try {
+    const keys = [{ provider: 'openai', id: 'provider-key-1' }]
+    expect(await keysGateway.saveVirtualKey({ id: 'key-lost', name: 'vk_member_acme_alice', keys })).toBe('key-alice')
+    expect(await keysGateway.saveVirtualKey({ id: undefined, name: 'vk_member_acme_bob', keys })).toBe('key-created')
+    expect(requests).toEqual([
+      'PUT /api/governance/virtual-keys/key-lost',
+      'GET /api/governance/virtual-keys?search=vk_member_acme_alice&limit=100',
+      'PUT /api/governance/virtual-keys/key-alice',
+      'GET /api/governance/virtual-keys?search=vk_member_acme_bob&limit=100',
+      'POST /api/governance/virtual-keys',
+    ])
+  } finally {
+    keysServer.stop(true)
   }
 })
