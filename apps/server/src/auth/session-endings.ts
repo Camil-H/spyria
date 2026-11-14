@@ -5,12 +5,14 @@ export const sessionsEndedChannel = 'sessions_ended'
 
 export type WatchedSession = { workspaceId: string; sessionId: string; end: () => void }
 
+const listenRetryMilliseconds = 5000
+
 const keyOf = ({ workspaceId, sessionId }: { workspaceId: string; sessionId: string }) => `${workspaceId}/${sessionId}`
 
 const watchSessionEndingsIn = (database: Database) => {
   const watched = new Set<WatchedSession>()
   let isCheckDue = false
-  let checking: Promise<void> | undefined
+  let isChecking = false
   let hasLoggedListenFailure = false
   let listening: Promise<{ unlisten: () => Promise<void> } | undefined> | undefined
   const endEndedSessions = async () => {
@@ -20,21 +22,25 @@ const watchSessionEndingsIn = (database: Database) => {
       (
         await database.$client<{ workspaceId: string; sessionId: string }[]>`
           select workspace_id as "workspaceId", id as "sessionId" from sessions
-          where id = any(${database.$client.array(sessions.map(({ sessionId }) => sessionId))}::text[])`
+          where (workspace_id, id) in (
+            select * from unnest(${sessions.map(({ workspaceId }) => workspaceId)}::text[],
+              ${sessions.map(({ sessionId }) => sessionId)}::text[]))`
       ).map(keyOf),
     )
     for (const session of sessions) if (!liveKeys.has(keyOf(session)) && watched.delete(session)) session.end()
   }
   const check = () => {
     isCheckDue = true
-    checking ??= (async () => {
+    if (isChecking) return
+    isChecking = true
+    void (async () => {
       while (isCheckDue) {
         isCheckDue = false
         await endEndedSessions().catch((error: unknown) =>
           log.warn({ event: 'session.ending_check_failed', body: 'Ended sessions could not be checked', error }),
         )
       }
-      checking = undefined
+      isChecking = false
     })()
   }
   const listen = () => {
@@ -52,6 +58,7 @@ const watchSessionEndingsIn = (database: Database) => {
           })
         hasLoggedListenFailure = true
         listening = undefined
+        setTimeout(() => watched.size > 0 && listen(), listenRetryMilliseconds).unref()
         return undefined
       },
     )
