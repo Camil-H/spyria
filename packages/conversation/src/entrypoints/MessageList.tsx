@@ -71,6 +71,15 @@ export const MessageList = ({
     isFollowingNewest.current = false
     linked.scrollIntoView({ block: 'center' })
   })
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const observer = new ResizeObserver(() => {
+      if (isFollowingNewest.current) scroller.scrollTop = scroller.scrollHeight
+    })
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [])
   const renderedItems = useDeferredValue(items)
   const shownItems =
     renderedItems === items || renderedItems.length === 0
