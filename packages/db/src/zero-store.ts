@@ -87,6 +87,30 @@ export const scopedStatusOf = (
         rows: uniqueBy([...lastCompleteRows, ...rows], (row) => (row as { id: string }).id),
       }
     : { isComplete: result === 'complete', rows }
+export const createChatWindowCache = (capacity = keptChatWindows) => {
+  const windowByKey = new Map<string, { workspaceId: WorkspaceId; rows: readonly object[] }>()
+  const keep = (key: string, workspaceId: WorkspaceId, rows: readonly object[]) => {
+    windowByKey.delete(key)
+    windowByKey.set(key, { workspaceId, rows })
+    const [oldestKey] = windowByKey.keys()
+    if (windowByKey.size > capacity && oldestKey !== undefined) windowByKey.delete(oldestKey)
+  }
+  return {
+    statusOf: (
+      key: string,
+      { workspaceId, name }: { workspaceId: WorkspaceId; name: ScopedQueryName },
+      rows: readonly object[],
+      result: string,
+    ) => {
+      if (result === 'error') windowByKey.delete(key)
+      if (result === 'complete' && name === 'chatMessages') keep(key, workspaceId, rows)
+      return scopedStatusOf(rows, result, windowByKey.get(key)?.rows)
+    },
+    forgetWorkspace: (workspaceId: WorkspaceId) => {
+      for (const [key, chatWindow] of windowByKey) if (chatWindow.workspaceId === workspaceId) windowByKey.delete(key)
+    },
+  }
+}
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
   `${workspaceId}/${name}/${JSON.stringify(args)}`
 const chatsWithLatestMessage = ['latestMessages', 'latestAgentActivity']
@@ -429,13 +453,7 @@ export const createZeroStore = ({
   const renewalListeners = new Set<(workspaceId: WorkspaceId) => void>()
   const rowsByWorkspace = new Map<WorkspaceId, SourceRows>()
   const scopedWatches = new Map<string, ScopedWatch>()
-  const lastChatWindowByKey = new Map<string, { workspaceId: WorkspaceId; rows: readonly object[] }>()
-  const keepChatWindow = (key: string, workspaceId: WorkspaceId, rows: readonly object[]) => {
-    lastChatWindowByKey.delete(key)
-    lastChatWindowByKey.set(key, { workspaceId, rows })
-    const [oldestKey] = lastChatWindowByKey.keys()
-    if (lastChatWindowByKey.size > keptChatWindows && oldestKey !== undefined) lastChatWindowByKey.delete(oldestKey)
-  }
+  const chatWindows = createChatWindowCache()
   const zeroByWorkspace = new Map<WorkspaceId, Zero>()
   const tokenByWorkspace = new Map<WorkspaceId, string>()
   const loadedByWorkspace = new Map<WorkspaceId, PromiseWithResolvers<void>>()
@@ -479,10 +497,7 @@ export const createZeroStore = ({
     const key = scopedKeyOf(watch.workspaceId, watch.name, watch.args)
     view.addListener((data, result) => {
       if (watch.view !== view) return
-      const rows = data as readonly object[]
-      if (result === 'error') lastChatWindowByKey.delete(key)
-      if (result === 'complete' && watch.name === 'chatMessages') keepChatWindow(key, watch.workspaceId, rows)
-      watch.status = scopedStatusOf(rows, result, lastChatWindowByKey.get(key)?.rows)
+      watch.status = chatWindows.statusOf(key, watch, data as readonly object[], result)
       feedScoped(watch.workspaceId, watch.name)
     })
   }
@@ -580,8 +595,7 @@ export const createZeroStore = ({
         watch.view = undefined
         watch.status = undefined
       }
-    for (const [key, chatWindow] of lastChatWindowByKey)
-      if (chatWindow.workspaceId === workspaceId) lastChatWindowByKey.delete(key)
+    chatWindows.forgetWorkspace(workspaceId)
     zeroByWorkspace.delete(workspaceId)
     loadedByWorkspace.delete(workspaceId)
     readableByWorkspace.get(workspaceId)?.resolve('closed')
