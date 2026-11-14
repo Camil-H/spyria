@@ -152,7 +152,13 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Pro
         await lockMembership(tx, workspaceId, userId)
         await tx.mutate.toolConnections.upsert({ ...owner, connectionId, status })
       },
-      disconnect: (connectionId) => tx.mutate.toolConnections.delete({ ...owner, connectionId }),
+      lock: async () => {
+        await lockMembership(tx, workspaceId, userId)
+      },
+      disconnect: async (connectionId) => {
+        await lockMembership(tx, workspaceId, userId)
+        await tx.mutate.toolConnections.delete({ ...owner, connectionId })
+      },
       removeAll: async () => {
         for (const { connectionId } of await tx.run(ownToolConnections))
           await tx.mutate.toolConnections.delete({ ...owner, connectionId })
