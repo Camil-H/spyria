@@ -664,7 +664,7 @@ export const startAgentStack = async ({
   })
   afterAll(async () => {
     await worker.stop()
-    agentBridge.release(database)
+    await agentBridge.release(database)
     void server.stop(true)
   })
   type Message = Awaited<ReturnType<typeof database.query.messages.findMany>>[number]
