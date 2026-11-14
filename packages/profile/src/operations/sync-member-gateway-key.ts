@@ -23,15 +23,17 @@ export const syncMemberGatewayKey = (
           error,
         }),
       )
-    const { keys, virtualKeyId, isActive } = await transactor.run(
+    const { keys, virtualKeyId, virtualKeyName, isActive } = await transactor.run(
       async ({ llmCredentials, memberGatewayKeys, members }) => ({
         keys: await llmCredentials.gatewayKeys(),
         virtualKeyId: await memberGatewayKeys.virtualKey(),
+        virtualKeyName: await memberGatewayKeys.virtualKeyName(),
         isActive: await members.isActive(member.workspaceId, member.memberId),
       }),
     )
     if (isLeaving || !isActive) {
-      if (virtualKeyId) await gateway.removeVirtualKey(virtualKeyId)
+      const leftKeyId = virtualKeyId ?? (virtualKeyName && (await gateway.virtualKeyNamed(virtualKeyName)))
+      if (leftKeyId) await gateway.removeVirtualKey(leftKeyId)
       await transactor.run(async ({ memberGatewayKeys, toolConnections }) => {
         await memberGatewayKeys.setVirtualKey(null)
         await toolConnections.removeAll()
@@ -40,7 +42,9 @@ export const syncMemberGatewayKey = (
       return undefined
     }
     const syncedKeys = added ? [...keys, added.key] : keys
-    const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, keys: syncedKeys })
+    const name =
+      virtualKeyName ?? (await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.reserveVirtualKeyName()))
+    const savedId = await gateway.saveVirtualKey({ id: virtualKeyId, name, keys: syncedKeys })
     if (savedId === virtualKeyId && !added) {
       await grantTools()
       return savedId
@@ -55,7 +59,9 @@ export const syncMemberGatewayKey = (
       })
     } catch (error) {
       if (savedId !== virtualKeyId || error instanceof MemberNotFound) await gateway.removeVirtualKey(savedId)
-      else await gateway.saveVirtualKey({ id: virtualKeyId, keys })
+      else await gateway.saveVirtualKey({ id: virtualKeyId, name, keys })
+      if (virtualKeyId === undefined)
+        await transactor.run(({ memberGatewayKeys }) => memberGatewayKeys.setVirtualKey(null))
       throw error
     }
     await grantTools()

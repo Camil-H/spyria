@@ -4,6 +4,8 @@ export const insertLlmCredential = skippedOnClient
 export const gatewayKeyRefsOf = async () => []
 export const gatewayKeyRefOf = skippedOnClient
 export const virtualKeyIdOf = skippedOnClient
+export const virtualKeyNameOf = skippedOnClient
+export const reserveVirtualKeyName = skippedOnClient
 export const virtualKeyIdsIn = async () => []
 export const memberModelsOf = skippedOnClient
 export const aiProviderAllowListOf = async () => null
@@ -72,6 +74,8 @@ export const insertToolCall = skippedOnClient
 export const modelCallCostSince = async () => 0
 export const runningDelegationOfTokenHash = skippedOnClient
 export const stopRunningDelegations = async () => []
+export const runningDelegationsIn = async () => []
+export const isJobPending = async () => false
 export const appendChatEvent = () => Promise.reject(new Error('Chat events are appended on the server only'))
 export const isSessionStartPending = async () => false
 export const scheduleWorkspaceDeletion = skippedOnClient

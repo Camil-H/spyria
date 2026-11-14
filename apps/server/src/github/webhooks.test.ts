@@ -63,6 +63,28 @@ test('a pull request from the API or a pull_request webhook sets the state, keep
   ).toBe('merged')
 })
 
+test('a pull_request webhook older than the stored pull request changes nothing, and a merged pull request stays merged', () => {
+  const at = (updatedAt: string, fields: Partial<typeof apiPullRequest> = {}) => ({
+    ...apiPullRequest,
+    ...fields,
+    updated_at: updatedAt,
+  })
+  const merged = pullRequestStepOf(
+    'acme/app',
+    at('2026-11-14T10:05:00Z', { state: 'closed', merged: true, head: { sha: 'bbb' } }),
+  )
+  expect(merged).toMatchObject({ state: 'merged', headSha: 'bbb', updatedAt: '2026-11-14T10:05:00Z' })
+  expect(
+    updatedPullRequest(merged, 'pull_request', { action: 'synchronize', pull_request: at('2026-11-14T10:00:00Z') }),
+  ).toEqual(merged)
+  expect(
+    updatedPullRequest(merged, 'pull_request', {
+      action: 'edited',
+      pull_request: at('2026-11-14T10:06:00Z', { state: 'closed', title: 'Fix every total', head: { sha: 'bbb' } }),
+    }),
+  ).toMatchObject({ state: 'merged', title: 'Fix every total', updatedAt: '2026-11-14T10:06:00Z' })
+})
+
 test('check suites and runs of the current head make the checks pending, passing or failing; other heads are ignored', () => {
   const suite = (action: string, conclusion: string | null, headSha = 'aaa', id = 1) => ({
     action,

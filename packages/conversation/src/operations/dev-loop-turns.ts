@@ -35,5 +35,5 @@ export const afterLoopTurn = async (unitOfWork: UnitOfWork, promptId: MessageId)
       loop,
       stopped(loop.step, memberWroteOutcomeOf(await unitOfWork.members.displayNameOf(waiting.authorId))),
     )
-  await unitOfWork.devLoop.enqueue(devLoopJobTypes.afterTurn, loop.card.id)
+  await unitOfWork.devLoop.enqueue(devLoopJobTypes.afterTurn, { loopId: loop.card.id, promptId })
 }

@@ -829,6 +829,10 @@ const turn = async (id, { sessionId, prompt }) => {
       for (;;) await step()
     }
     if (has('linger')) await lingerAs('linger')
+    if (has('pause')) {
+      await say('Before the pause. ')
+      await lingerAs('pause')
+    }
     if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
     if (has('usage')) update({ sessionUpdate: 'usage_update', used: 53_000, size: 200_000 })
     if (seen.length > 0) await say(`Saw ${seen.join(', ')}. `)

@@ -456,12 +456,11 @@ export const createApp = ({
           signature: context.req.header('x-hub-signature-256'),
           body: await context.req.text(),
         },
-        (card, step) =>
-          agentBridge.forDatabase(webhookDatabase).recordPullRequest({
-            chat: { workspaceId: toWorkspaceId(card.workspaceId), chatId: chatId(card.chatId) },
+        (card, update) =>
+          agentBridge.forDatabase(webhookDatabase).applyPullRequestEvent(toWorkspaceId(card.workspaceId), {
             actor: integrationActor('github'),
-            step,
             cardId: messageId(card.id),
+            update,
           }),
       )
       return context.json({ outcome }, outcome === 'refused' ? 401 : outcome === 'ignored' ? 202 : 200)

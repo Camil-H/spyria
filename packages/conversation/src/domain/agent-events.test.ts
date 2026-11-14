@@ -374,6 +374,12 @@ test('Pi’s read, write and edit calls carry their path in rawInput.path, and a
   })
 })
 
+test('events the agent no longer held when Spyria reconnected are stored as a notice saying steps may be missing', () => {
+  const lost = acpUpdate(7, { sessionUpdate: 'events_lost', count: 3 })
+  expect(isStoredAgentEvent(lost)).toBe(true)
+  expect(agentProjectionOf(lost)).toEqual({ type: 'message', body: agentNotices.eventsLost, kind: 'notice' })
+})
+
 test('a spyria-agent turn ends finished or in error, a cancelled turn end ends nothing, and a failed resume says so', () => {
   const turnEnd = (stopReason: string) => agentProjectionOf(acpUpdate(9, { sessionUpdate: 'turn_end', stopReason }))
   expect(turnEnd('end_turn')).toEqual({ type: 'turn-end', outcome: 'finished' })

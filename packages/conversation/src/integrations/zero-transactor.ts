@@ -13,6 +13,7 @@ import {
   insertRoutingDecision,
   insertToolCall,
   isChatEventStored,
+  isJobPending,
   isSessionStartPending,
   keepDeletedMessageText,
   lastAgentEvent,
@@ -29,6 +30,7 @@ import {
   pendingPrompts,
   redactDeletedMessageEvents,
   runningDelegationOfTokenHash,
+  runningDelegationsIn,
   sentAttachmentOf,
   setChatAgentModel,
   setChatTurnFailure,
@@ -365,6 +367,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
       startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      isInterruptRequested: (id, promptId) =>
+        isJobPending(tx, contextWorkspaceId, agentJobTypes.interrupt, { chatId: id, promptId }),
       restartSession: (restart) => enqueue(agentJobTypes.restartSession, restart),
       sweepLater: () => enqueue(agentJobTypes.sweep, {}, agentSweepIntervalMilliseconds),
     },
@@ -548,7 +552,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       settings: async () =>
         devLoopSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.devLoop),
       costSince: (id, since) => modelCallCostSince(tx, contextWorkspaceId, id, since),
-      enqueue: (job, loopId, delayMilliseconds) => enqueue(job, { loopId }, delayMilliseconds),
+      enqueue: (job, payload, delayMilliseconds) => enqueue(job, payload, delayMilliseconds),
     },
     toolCalls: {
       record: async (call) => {
@@ -591,6 +595,8 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         await setDelegationFields(tx, contextWorkspaceId, id, fields)
       },
       stopRunning: (id, promptId) => stopRunningDelegations(tx, contextWorkspaceId, id, promptId),
+      running: async () =>
+        (await runningDelegationsIn(tx, contextWorkspaceId)).map((row) => ({ ...row, chatId: chatId(row.chatId) })),
       runningOfTokenHash: async (hostId, tokenHash) => {
         const found = await runningDelegationOfTokenHash(tx, contextWorkspaceId, hostId, tokenHash)
         return found && { chatId: chatId(found.chatId), id: found.id, promptId: messageId(found.promptId) }

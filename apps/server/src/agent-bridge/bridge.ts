@@ -122,6 +122,7 @@ export const createAgentBridge = ({
         conversationId: string
         promptId: string | null
         streamedText: string
+        isTextShown: boolean
         segment?: Segment
         isReasoning: boolean
         drainingPromptId: MessageId | null
@@ -282,6 +283,7 @@ export const createAgentBridge = ({
         isReady: Promise.race([ready.promise, Bun.sleep(readyTimeoutMilliseconds)]),
         promptId: promptId as string | null,
         streamedText: '',
+        isTextShown: false,
         segment: undefined as Segment | undefined,
         isReasoning: false,
         drainingPromptId: null as MessageId | null,
@@ -376,6 +378,16 @@ export const createAgentBridge = ({
             broadcast(chat, { promptId: chatSocket.promptId, question: update })
             return
           }
+          if (update?.sessionUpdate === 'events_lost')
+            log.warn({
+              event: 'agent.events_lost',
+              body: 'The agent no longer held events the server had not stored',
+              attributes: {
+                'workspace.id': chat.workspaceId,
+                'chat.id': chat.chatId,
+                'agent.lost_events': Number((update as { count?: unknown }).count),
+              },
+            })
           if (update?.sessionUpdate === 'session_started') broadcast(chat, { sessionStarted: true })
           if (update?.sessionUpdate === 'workspace') {
             chatSocket.workspace = update
@@ -423,7 +435,14 @@ export const createAgentBridge = ({
             const lastStreamed = streamedSeqs.get(keyOf(chat))
             if (seq > (lastStreamed?.conversationId === conversation.conversationId ? lastStreamed.seq : 0)) {
               streamedSeqs.set(keyOf(chat), { conversationId: conversation.conversationId, seq })
-              broadcast(chat, { promptId: chatSocket.promptId, text, ...(isReasoning && { isReasoning }) })
+              const isSnapshot = !chatSocket.isTextShown
+              chatSocket.isTextShown = true
+              broadcast(chat, {
+                promptId: chatSocket.promptId,
+                text: isSnapshot ? chatSocket.streamedText : text,
+                ...(isSnapshot && { isSnapshot }),
+                ...(isReasoning && { isReasoning }),
+              })
             }
           }
           if (streamed) return
@@ -493,7 +512,7 @@ export const createAgentBridge = ({
       githubToolsOf: handlers.githubToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,
       runGitAction: handlers.runGitAction,
-      recordPullRequest: handlers.recordPullRequest,
+      applyPullRequestEvent: handlers.applyPullRequestEvent,
       wakeWorkspace: handlers.wakeWorkspace,
       recordModelCallFailure: handlers.recordModelCallFailure,
       recordContextSize: handlers.recordContextSize,
