@@ -937,16 +937,19 @@ export const startAgent = ({
           duration_ms: Math.round(performance.now() - startedAt),
         },
       })
+    let hasReachedAdapter = false
     const endTurn = (stopReason: unknown) => {
       const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
       if (promptId) conversation.turnEnds.set(promptId, update)
-      announceHeldToolCalls(conversation)
+      if (hasReachedAdapter) {
+        closeQuestions(conversation, 'turn_end')
+        announceHeldToolCalls(conversation)
+      }
       emit(conversation, update)
     }
     const ended = (result: Json) => {
       turnEnded(result.stopReason)
       if (isLastInFlight()) conversation.status = 'finished'
-      closeQuestions(conversation, 'turn_end')
       endTurn(result.stopReason)
       void reportWorkspace(conversation)
     }
@@ -965,7 +968,6 @@ export const startAgent = ({
         if (isLast) conversation.status = 'finished'
         emit(conversation, errorUpdateOf(error))
       }
-      closeQuestions(conversation, 'turn_end')
       endTurn('error')
       void reportWorkspace(conversation)
     }
@@ -1003,6 +1005,7 @@ export const startAgent = ({
             return failed(new AcpError(conversation.failure ?? 'The agent could not start'))
           conversation.status = 'running'
           conversation.running = running
+          hasReachedAdapter = true
           await promptOnce(async (errorOutput, hasStreamed) => {
             const notice = new AcpError(restartedNoticeOf(errorOutput))
             if (hasStreamed) return failed(notice)

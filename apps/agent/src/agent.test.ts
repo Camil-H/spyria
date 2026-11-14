@@ -189,6 +189,31 @@ test('an interrupt naming a prompt queued behind the running one ends only that 
   })
 })
 
+test('stopping a prompt queued behind one waiting on a question leaves that question open, and its answer still reaches the adapter', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  const promptWithId = (text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  await promptWithId('stub:ask', 'prompt-asking')
+  const questionId = await questionAt(socket, 1)
+  await promptWithId('hello', 'prompt-queued')
+
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-queued' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('question_closed'))).toEqual([])
+  const answered = await call('POST', `/api/conversations/${id}/questions/${questionId}`, {
+    answers: { question_0: 'SQLite' },
+  })
+  expect(answered.status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(answerOf(socket.events)).toEqual({ action: 'accept', content: { question_0: 'SQLite' } })
+  expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => [update.promptId, update.stopReason])).toEqual([
+    ['prompt-queued', 'cancelled'],
+    ['prompt-asking', 'end_turn'],
+  ])
+})
+
 test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
   const { call, open, create } = started()
   const id = await create(launchOf())
