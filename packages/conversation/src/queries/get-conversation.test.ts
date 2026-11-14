@@ -768,7 +768,10 @@ test.each([
     messages: snapshot.messages.map((message) =>
       message.id === welcomeRoot ? { ...message, ...rootFields } : message,
     ),
-    chatMembers: [...snapshot.chatMembers, { workspaceId: acme, chatId: welcome, memberId: lee, roleId: 'reader' }],
+    chatMembers: [
+      ...snapshot.chatMembers,
+      { workspaceId: acme, chatId: welcome, memberId: lee, roleId: 'reader', sidebarPosition: null },
+    ],
   })
   const message = conversation?.messages.find((candidate) => candidate.id === id)
   expect({ canReply: message?.canReply, hasThread: message?.thread !== null }).toEqual({ canReply, hasThread })

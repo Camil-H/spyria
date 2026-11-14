@@ -1,0 +1,1 @@
+ALTER TABLE "chat_participants" ADD COLUMN "sidebar_position" integer;

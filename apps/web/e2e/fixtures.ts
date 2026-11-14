@@ -140,6 +140,9 @@ export const openProfile = async (page: Page, card: ProfileCard) => {
   await mainOf(page).getByRole('link', { name: card, exact: true }).click()
   await expect(mainOf(page).getByRole('heading', { level: 1, name: card })).toBeVisible()
 }
+export const machineSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My machine' })
+export const machineToolOf = (page: Page, toolName: string) =>
+  machineSectionOf(page).getByRole('listitem', { name: toolName, exact: true })
 export const llmSectionOf = (page: Page) => mainOf(page).getByRole('region', { name: 'LLM keys' })
 export const addKeyDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Add LLM key' })
 export const addCredential = async (page: Page, credential: { provider: string; secret: string }) => {

@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "bff893f1-983f-4371-bfdc-557c5d52d717",
-  "prevIds": ["3d6a5fac-6b7a-4be2-8b53-982c19f363e4"],
+  "id": "77856ec6-80cd-4008-9963-b37952e5c1d7",
+  "prevIds": ["64f6de7a-8466-4585-86c3-79cdd0d21799"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -611,6 +611,19 @@
       "generated": null,
       "identity": null,
       "name": "role_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "chat_participants"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sidebar_position",
       "entityType": "columns",
       "schema": "public",
       "table": "chat_participants"

@@ -386,6 +386,18 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
           payload: { fromId: chat.ownerId, toId: ownerId },
         })
       },
+      placeInSidebar: async ({ memberId: member, chatIds }) => {
+        const participantsOf = zql.chatParticipants.where('workspaceId', context.workspaceId).where('userId', member)
+        for (const [sidebarPosition, id] of chatIds.entries()) {
+          if (!(await tx.run(participantsOf.where('chatId', id).one()))) throw new ChatNotFound(id)
+          await tx.mutate.chatParticipants.update({
+            workspaceId: context.workspaceId,
+            chatId: id,
+            userId: member,
+            sidebarPosition,
+          })
+        }
+      },
     },
     chatRoles: {
       get: async (id) => {

@@ -408,7 +408,7 @@ export const chatRoles = table(
 
 export const chatParticipants = table(
   'chat_participants',
-  { ...chatScoped, userId: text().notNull(), roleId: text().notNull() },
+  { ...chatScoped, userId: text().notNull(), roleId: text().notNull(), sidebarPosition: integer() },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.chatId, table.userId] }),
     chatReference(table),

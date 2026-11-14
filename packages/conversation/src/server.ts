@@ -69,6 +69,7 @@ export {
 } from './domain/pull-requests.ts'
 export {
   catalogueToolsPath,
+  isReadOnlySpyriaTool,
   isSpyriaTool,
   spyriaCommandInstructions,
   spyriaTools,

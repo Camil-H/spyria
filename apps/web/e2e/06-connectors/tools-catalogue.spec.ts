@@ -398,7 +398,7 @@ test.describe('Tools catalogue', () => {
       await expect(servers).toHaveCount(2)
       await expect(servers.first()).toHaveAttribute('aria-label', 'Spyria')
       const builtIn = serverCardOf(page, 'Spyria')
-      await expect(builtIn).toContainText('8 tools · 4 read · 4 write')
+      await expect(builtIn).toContainText('11 tools · 7 read · 4 write')
       await expect(builtIn).toContainText('Built in · every role has them')
       const builtInAccess = accessTo(page, 'Spyria')
       await expect(builtInAccess).toHaveCount(0)
@@ -408,7 +408,7 @@ test.describe('Tools catalogue', () => {
         /^Write/,
       ])
       const readTools = builtInAccess.getByRole('table', { name: 'Read tools of Spyria' })
-      await expect(readTools.getByRole('rowheader')).toHaveCount(4)
+      await expect(readTools.getByRole('rowheader')).toHaveCount(7)
       await expect(readTools).toContainText(
         "open_pageOpens a web page or a file of the project in the chat's Browser tab",
       )

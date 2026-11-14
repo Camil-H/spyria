@@ -8,6 +8,7 @@ import {
   guestPrompterOf,
   isDevLoopTool,
   isGuestToolMethod,
+  isReadOnlySpyriaTool,
   isSpyriaTool,
   type ModelCallFailure,
   modelNotAllowedNoticeOf,
@@ -424,7 +425,7 @@ export const createModelCallRelay = ({
       if (!isSpyriaTool(toolName)) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
       const calledAt = new Date()
       const { isRefused, text, status } = await handlers
-        .callSpyriaTool({ chat, name: toolName, input: rpc.params?.arguments })
+        .callSpyriaTool({ chat, memberId: prompterId, name: toolName, input: rpc.params?.arguments })
         .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
         .catch((error: unknown) => {
           log.error({
@@ -442,7 +443,7 @@ export const createModelCallRelay = ({
           ownerId,
           server: 'spyria',
           tool: toolName,
-          readOnly: null,
+          readOnly: isReadOnlySpyriaTool(toolName) || null,
           decision: 'not_needed',
           decidedBy: null,
           status,

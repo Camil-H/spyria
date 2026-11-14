@@ -204,6 +204,40 @@ test.describe('Organize', () => {
     })
   })
 
+  test('As a member, I drag my chats to reorder my sidebar or use Move up, and a chat I do not administer stays out of projects', async ({
+    page,
+  }) => {
+    const looseChatNames = looseChatsOf(page).getByRole('link')
+
+    await test.step('drops a chat on the lower half of another to place it after', async () => {
+      await expect(looseChatNames).toHaveText([/Standup/, /Research/])
+      const research = chatRowIn(looseChatsOf(page), 'Research')
+      const researchHeight = (await research.boundingBox())?.height ?? 0
+      await chatRowIn(looseChatsOf(page), 'Standup').dragTo(research, {
+        targetPosition: { x: 8, y: researchHeight - 2 },
+      })
+      await expect(looseChatNames).toHaveText([/Research/, /Standup/])
+    })
+
+    await test.step('keeps the order after a reload', async () => {
+      await page.reload()
+      await expect(looseChatNames).toHaveText([/Research/, /Standup/])
+    })
+
+    await test.step('moves a chat up from its menu', async () => {
+      await chatAction(page, 'Standup', 'Move up')
+      await expect(looseChatNames).toHaveText([/Standup/, /Research/])
+    })
+
+    await test.step('leaves a chat I do not administer in place when dropped on a project', async () => {
+      await chatRowIn(looseChatsOf(page), 'Standup').dragTo(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug'))
+      await page.reload()
+      await expect(looseChatNames).toHaveText([/Standup/, /Research/])
+      await expect(chatRowIn(looseChatsOf(page), 'Standup')).toBeVisible()
+      await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Standup')).toHaveCount(0)
+    })
+  })
+
   test('As a member, I create projects, channels and runtime chats', { tag: ['@smoke'] }, async ({ page }) => {
     await test.step('adds an empty project to the list', async () => {
       await createProjectNamed(page, 'Marketing')
