@@ -160,7 +160,7 @@ export const Decomposition = ({
       </tr>
     )
   return (
-    <LabelledSection title="Spend decomposition" Heading="h3" titleClass="font-medium">
+    <LabelledSection title="Spend decomposition" Heading="h3" titleClass="text-sm font-medium">
       <table aria-label="Spend decomposition" className="w-full text-sm">
         <thead className="text-xs text-muted">
           <tr>
@@ -248,7 +248,7 @@ const MergedPulls = ({
   isScoped: boolean
   isPersonal: boolean
 }) => (
-  <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="font-medium">
+  <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="text-sm font-medium">
     {isPersonal && (
       <p className="text-sm text-muted">
         The pull requests merged from chats you prompted in, against what you spent in those chats
@@ -469,7 +469,7 @@ export const SpendReportView = ({
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-muted">
-                  <span className="text-2xl font-semibold text-ink">{formatCost(report.total.costMicros)}</span> ·{' '}
+                  <span className="text-title text-ink">{formatCost(report.total.costMicros)}</span> ·{' '}
                   {report.total.requests.toLocaleString('en-US')} requests
                 </p>
                 <SegmentedChoice

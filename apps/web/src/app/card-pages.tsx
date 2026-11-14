@@ -73,7 +73,7 @@ export const CardPage = ({
         <Link to={backPath} aria-label={backLabel} className={iconButtonClass}>
           <ArrowLeft aria-hidden className="size-5" />
         </Link>
-        <h1 className="text-2xl font-semibold">{card.title}</h1>
+        <h1 className="text-title">{card.title}</h1>
       </div>
       {children}
     </div>

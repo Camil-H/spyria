@@ -2,7 +2,7 @@ import { Provider } from '@radix-ui/react-tooltip'
 import { useQuery } from '@spyria/db/react'
 import type { WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { ErrorMessage, IconButton, ResizeHandle, useGuardedAction, useShortcut } from '@spyria/ui'
+import { ErrorMessage, IconButton, overlineClass, ResizeHandle, useGuardedAction, useShortcut } from '@spyria/ui'
 import { CircleUser, FolderPlus, Hash, PanelLeftClose, PanelLeftOpen, Search, Settings, SquarePen } from 'lucide-react'
 import { type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
@@ -165,9 +165,7 @@ export const Sidebar = ({
             aria-label="Loose chats"
             className={`m-0 min-w-0 border-0 p-0 ${chatDropTargetClass}`}
           >
-            <strong className="block px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted">
-              Loose chats
-            </strong>
+            <strong className={`block px-2 py-1 ${overlineClass}`}>Loose chats</strong>
             <ul className="flex flex-col">
               {sidebar.looseChats.map((chat) => (
                 <ChatRow

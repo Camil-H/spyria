@@ -14,7 +14,7 @@ const OwnBudget = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; member
     if (threshold >= 0) commands.readOwnBudget({ workspaceId }).then(setBudget, () => setBudget(null))
   }, [commands, workspaceId, threshold])
   return (
-    <LabelledSection title="Monthly AI budget" Heading="h3" titleClass="font-medium">
+    <LabelledSection title="Monthly AI budget" Heading="h3" titleClass="text-sm font-medium">
       <BudgetNotice workspaceId={workspaceId} memberId={memberId} />
       {budget === null ? (
         <p className="text-sm text-muted">Loading…</p>

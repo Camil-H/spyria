@@ -184,7 +184,7 @@ type OpenRoleDialog<Permission extends string> =
 
 const PermissionCell = ({ isAllowed }: { isAllowed: boolean }) =>
   isAllowed ? (
-    <Check role="img" aria-label="Allowed" className="mx-auto size-4 text-agent-done" />
+    <Check role="img" aria-label="Allowed" className="mx-auto size-4 text-success" />
   ) : (
     <span role="img" aria-label="Not allowed" className="block text-center text-muted">
       –

@@ -20,7 +20,7 @@ const autoLoadedImagesPerMessage = 4
 const onDemandProperty = 'data-on-demand'
 
 const tokenColors =
-  '[&_.hljs-keyword]:text-[light-dark(#7c3aed,#c4b5fd)] [&_.hljs-string]:text-[light-dark(#15803d,#86efac)] [&_.hljs-number]:text-[light-dark(#b45309,#fcd34d)] [&_.hljs-comment]:text-muted [&_.hljs-title]:text-[light-dark(#1d4ed8,#93c5fd)] [&_.hljs-built_in]:text-[light-dark(#be123c,#fda4af)]'
+  '[&_.hljs-keyword]:text-code-keyword [&_.hljs-string]:text-code-string [&_.hljs-number]:text-code-number [&_.hljs-comment]:text-muted [&_.hljs-title]:text-code-title [&_.hljs-built_in]:text-code-built-in'
 
 const rawHtmlAsText = () => (tree: MarkdownNode) => {
   const asText = (node: MarkdownNode) => {

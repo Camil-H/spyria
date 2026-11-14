@@ -63,7 +63,7 @@ const TabPanel = ({ tabId, usageTab, ...panelProps }: PanelProps & { tabId: Pane
   return (
     <Content value={tabId} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
-        <h2 className="mr-auto text-sm font-semibold">{label}</h2>
+        <h2 className="mr-auto text-sm font-medium">{label}</h2>
         <div
           ref={setActionsSlot}
           className="flex flex-wrap items-center justify-end gap-2 [&>button]:whitespace-nowrap"

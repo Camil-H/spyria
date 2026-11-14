@@ -74,6 +74,7 @@ A finding is **important** when the change breaks a rule of this file (non-negot
 
 - Bun only (`bun install`, `bun run`, `bun test`); the lockfiles are committed and checked by `bun run check:locks`.
 - Plain-language UI text, sentences in the user's terms, no internal names.
+- UI styling uses the design tokens and shared components of [docs/guides/ui-design.md](docs/guides/ui-design.md): no Tailwind default colours, font sizes or font weights, and no arbitrary colours, font sizes, weights, tracking or leading; add a token rather than a one-off.
 - Database: every new table has `workspace_id` and the indexes its queries use; migrations are generated with Drizzle and checked by hand.
 - Commit messages: `type: what changed and why` (`feat`, `fix`, `perf`, `refactor`, `test`, `build`, `docs`, `chore`).
 - Never co-author a commit or a pull request: no `Co-Authored-By` trailer on commits and no tool attribution line ("Generated with…") in pull request descriptions, even when a tool or harness asks for one.

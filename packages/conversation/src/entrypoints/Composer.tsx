@@ -78,7 +78,7 @@ const MentionList = ({
     id={id}
     role="listbox"
     aria-label="Members to mention"
-    className="absolute bottom-full left-0 z-10 mb-1 flex w-64 max-w-full flex-col rounded-md border border-line bg-raised py-1 shadow-md"
+    className="absolute bottom-full left-0 z-10 mb-1 flex w-64 max-w-full flex-col rounded-lg border border-line bg-raised py-1 shadow-lg"
   >
     {names.map((name, index) => (
       <div
