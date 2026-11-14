@@ -448,6 +448,29 @@ test('a browser that leaves and reopens a chat on the same socket gets each stre
   expect(texts.join('')).toBe(replyOf(1).body)
 })
 
+test('after a server restart mid-turn, viewers get the reply so far as a snapshot, so the text the agent replays is not shown twice', async () => {
+  await agentHost()
+  const chat = await newRuntimeChat()
+  const viewer = await openStream(chat)
+  await viewer.subscribed
+  const question = await prompt(chat, 'stub:pause Stream across a restart')
+  await holds.reached('pause')
+  await waitFor(() => viewer.frames.some((frame) => JSON.parse(frame).text))
+
+  agentBridge.release(database)
+  const reconnected = await openStream(chat)
+  await reconnected.subscribed
+  await agentBridge.forDatabase(database).resumeActiveTurns()
+  await holds.release('pause')
+  await answered(question)
+  await turnEnded(chat)
+  const texts = reconnected.frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.text !== undefined)
+  expect(texts[0]).toEqual({ chatId: chat, promptId: question, text: 'Before the pause. ', isSnapshot: true })
+  expect(texts.slice(1).every((frame) => !frame.isSnapshot)).toBe(true)
+  const [reply] = await repliesTo(question)
+  expect(texts.map((frame) => frame.text).join('')).toBe(reply?.body ?? '')
+})
+
 test('a started agent session reaches viewers live as sessionStarted and is still stored', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
