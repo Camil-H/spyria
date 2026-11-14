@@ -279,6 +279,13 @@ const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => 
     return withLoop(dependencies, job, ['running'], (unitOfWork, current) =>
       moveOn(unitOfWork, current, restarted(current.step), 0),
     )
+  const isStillPublishing = await withLoop(
+    dependencies,
+    job,
+    ['running'],
+    async (_, current) => current.step.position === loop.step.position,
+  )
+  if (!isStillPublishing) return undefined
   const published = await publishBranch(dependencies, {
     chat: chatOf(loop),
     actor: systemActor(devLoopActor, loop.ownerId),
