@@ -207,7 +207,7 @@ const SettingsRoute = () => {
     )
   return (
     <div className={`flex flex-col gap-8 ${pagePaddingClass}`}>
-      <h1 className="text-2xl font-semibold">Workspace settings</h1>
+      <h1 className="text-title">Workspace settings</h1>
       <ChecklistBlock workspaceId={workspaceId} scope="workspace" />
       {allowedSections.length > 0 ? (
         allowedSections.map(({ title, cards }) => (

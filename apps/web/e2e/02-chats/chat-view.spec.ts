@@ -236,7 +236,7 @@ test.describe('Chat view', () => {
       await expect(runsOnOf(page)).toHaveValue('runtime')
       await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Not started')
       await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
-      expect(await dotColourOf()).toBe(await colourOf('--color-grey-500'))
+      expect(await dotColourOf()).toBe(await colourOf('--color-muted'))
       const [runsOnRight, statusLeft] = await Promise.all([
         runsOnOf(page).evaluate((select) => select.getBoundingClientRect().right),
         runtimeStatusOf(page).evaluate((status) => status.getBoundingClientRect().left),
@@ -246,10 +246,10 @@ test.describe('Chat view', () => {
 
       await sendMessage(page, 'Start please')
       await expect(runtimeStatusOf(page)).toHaveText('Starting…')
-      expect(await dotColourOf()).toBe(await colourOf('--color-primary-500'))
+      expect(await dotColourOf()).toBe(await colourOf('--color-accent'))
       await release('boot')
       await expect(runtimeStatusOf(page)).toHaveText('Ready')
-      expect(await dotColourOf()).toBe(await colourOf('--color-green-500'))
+      expect(await dotColourOf()).toBe(await colourOf('--color-success'))
     })
   })
 })

@@ -190,7 +190,7 @@ export const ChatView = ({
           <div className="flex items-center gap-x-3">
             <div className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-2">
               <ChatTypeIcon aria-label={chatTypeLabel} role="img" size={20} className="shrink-0 text-muted" />
-              <h1 className="truncate text-2xl font-semibold">{conversation.title}</h1>
+              <h1 className="truncate text-title">{conversation.title}</h1>
               {conversation.pullRequest && (
                 <a
                   href={conversation.pullRequest.url}

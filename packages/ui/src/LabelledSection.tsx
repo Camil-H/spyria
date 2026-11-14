@@ -5,7 +5,7 @@ export const LabelledSection = ({
   id,
   Heading = 'h2',
   className = 'flex flex-col gap-3',
-  titleClass = 'text-lg font-semibold',
+  titleClass = 'text-heading',
   children,
 }: {
   title: string

@@ -3,9 +3,9 @@ import type { ReactNode } from 'react'
 export type StatusTone = 'ok' | 'off' | 'attention'
 
 const dotClasses: Record<StatusTone, string> = {
-  ok: 'bg-agent-done',
+  ok: 'bg-success',
   off: 'border border-muted',
-  attention: 'bg-agent-waiting',
+  attention: 'bg-warning',
 }
 
 export const StatusBadge = ({ tone, children }: { tone: StatusTone; children: ReactNode }) => (

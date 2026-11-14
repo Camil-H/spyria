@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@spyria/kernel'
-import { ErrorMessage, focusRing, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
+import { ErrorMessage, focusRing, inlineActionClass, smallGhostButtonClass, useGuardedAction } from '@spyria/ui'
 import { ChevronDown, Circle } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
@@ -44,14 +44,13 @@ const TaskRow = ({
   isPending: boolean
 }) => {
   const { title, explanation, page } = taskTextOf(view.task)
-  const linkClass = `font-medium underline-offset-2 hover:underline ${focusRing}`
   return (
     <li className="flex items-start gap-3 py-2">
       <Circle aria-hidden className="mt-0.5 size-4 shrink-0 text-ink" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span>
           <span className="sr-only">To do: </span>
-          <Link to={`/w/${workspaceId}/${page}`} className={linkClass}>
+          <Link to={`/w/${workspaceId}/${page}`} className={inlineActionClass}>
             {title}
           </Link>
         </span>
@@ -94,7 +93,7 @@ export const ChecklistBlock = ({ workspaceId, scope }: { workspaceId: WorkspaceI
           className={`flex w-full items-center gap-2 rounded-md text-left ${focusRing}`}
           onClick={toggleCollapsed}
         >
-          <span className="flex-1 font-semibold">{title}</span>
+          <span className="flex-1 font-medium">{title}</span>
           <span className="text-sm text-muted">
             {shownTasks.filter(isDoneView).length} of {shownTasks.length} done
           </span>

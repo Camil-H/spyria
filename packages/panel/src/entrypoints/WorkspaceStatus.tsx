@@ -1,5 +1,5 @@
 import { useQuery } from '@spyria/db/react'
-import { focusRing, Spinner } from '@spyria/ui'
+import { inlineActionClass, Spinner } from '@spyria/ui'
 import { useState } from 'react'
 import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { usePanelCommands } from './providers.tsx'
@@ -27,7 +27,7 @@ const AsleepStatus = ({ workspaceId, chatId, canWake }: StatusProps & { canWake:
         <Spinner />
       ) : (
         canWake && (
-          <button type="button" onClick={wake} className={`font-medium text-ink hover:underline ${focusRing}`}>
+          <button type="button" onClick={wake} className={inlineActionClass}>
             Wake
           </button>
         )

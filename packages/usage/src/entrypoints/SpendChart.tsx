@@ -4,14 +4,14 @@ import { formatBucket } from './format.ts'
 import { useChartWidth } from './useChartWidth.ts'
 
 const seriesColors = [
-  'light-dark(#2a78d6, #3987e5)',
-  'light-dark(#eb6834, #d95926)',
-  'light-dark(#1baf7a, #199e70)',
-  'light-dark(#eda100, #c98500)',
-  'light-dark(#e87ba4, #d55181)',
-  'light-dark(#008300, #008300)',
+  'var(--color-chart-1)',
+  'var(--color-chart-2)',
+  'var(--color-chart-3)',
+  'var(--color-chart-4)',
+  'var(--color-chart-5)',
+  'var(--color-chart-6)',
 ]
-const otherColor = 'light-dark(#a3a29d, #6f6e69)'
+const otherColor = 'var(--color-chart-other)'
 const height = 200
 const axisWidth = 56
 const labelHeight = 20
@@ -53,7 +53,7 @@ export const SpendChart = ({
               x={axisWidth - 6}
               y={plotHeight - step * plotHeight + (step === 1 ? 10 : 0)}
               textAnchor="end"
-              className="fill-muted text-[11px]"
+              className="fill-muted text-chart-label"
             >
               {formatCost(largestTotal * step)}
             </text>
@@ -89,7 +89,7 @@ export const SpendChart = ({
                   x={bucketIndex === 0 ? x : bucketIndex === chart.buckets.length - 1 ? x + barWidth : x + barWidth / 2}
                   y={height - 4}
                   textAnchor={bucketIndex === 0 ? 'start' : bucketIndex === chart.buckets.length - 1 ? 'end' : 'middle'}
-                  className="fill-muted text-[11px]"
+                  className="fill-muted text-chart-label"
                 >
                   {formatBucket(bucket, granularity)}
                 </text>

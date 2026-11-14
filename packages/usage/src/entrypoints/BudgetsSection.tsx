@@ -94,7 +94,7 @@ export const BudgetsSection = ({ id, workspaceId }: { id?: string; workspaceId: 
             <LabelledSection
               title="Over 80% of their budget"
               Heading="h3"
-              titleClass="font-medium"
+              titleClass="text-sm font-medium"
               className={`${calloutClass} flex flex-col gap-1`}
             >
               <ul className="flex flex-col gap-1">

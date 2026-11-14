@@ -25,11 +25,11 @@ const Zzz = createLucideIcon('zzz', [
 ])
 
 const statusIcons: Record<AgentStatus, { Icon: LucideIcon; color: string }> = {
-  working: { Icon: Hourglass, color: 'text-agent-working' },
-  waiting: { Icon: CircleQuestionMark, color: 'text-agent-waiting' },
-  error: { Icon: CircleX, color: 'text-agent-error' },
+  working: { Icon: Hourglass, color: 'text-info' },
+  waiting: { Icon: CircleQuestionMark, color: 'text-warning' },
+  error: { Icon: CircleX, color: 'text-danger' },
   sleeping: { Icon: Zzz, color: 'text-muted' },
-  done: { Icon: Check, color: 'text-agent-done' },
+  done: { Icon: Check, color: 'text-success' },
 }
 const plainUnreadIcon = { Icon: CircleAlert, color: 'text-ink' }
 

@@ -17,7 +17,7 @@ export const MemberAvatar = ({ name, image, size = 20 }: { name: string; image: 
     <span
       aria-hidden
       style={{ width: size, height: size, fontSize: Math.round(size * 0.45) }}
-      className={`${circleClass} bg-selected font-semibold text-muted`}
+      className={`${circleClass} bg-selected font-medium text-muted`}
     >
       {initialsOf(name)}
     </span>

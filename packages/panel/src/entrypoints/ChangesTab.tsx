@@ -110,7 +110,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           className="flex flex-col gap-2"
         >
           {(sha || title) && (
-            <h3 className="text-xs font-semibold text-muted">
+            <h3 className="text-xs font-medium text-muted">
               {sha && <span className="font-mono font-normal">{sha} </span>}
               {title}
             </h3>
