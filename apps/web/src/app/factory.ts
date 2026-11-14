@@ -215,6 +215,7 @@ export const createApp = async (
     stopRuntime: mutateConfirmed(conversationMutators.conversation.stopRuntime),
   })
   const agentStream = createAgentStream(store)
+  const createdWorkspaceIdByName = new Map<string, string>()
   return {
     store,
     session: {
@@ -236,9 +237,12 @@ export const createApp = async (
     workspaceCommands: commandsOf<WorkspaceCommands>(workspaceMutators.workspace, {
       createWorkspace: async (input) => {
         const bearerToken = store.tokenOf(input.workspaceId)
-        const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
-        await confirmation
+        const id =
+          createdWorkspaceIdByName.get(input.name) ??
+          (await mutateConfirmed(workspaceMutators.workspace.createWorkspace)(input))
+        createdWorkspaceIdByName.set(input.name, id)
         await store.signIn(await openSession(workspaceId(id), bearerToken))
+        createdWorkspaceIdByName.delete(input.name)
         return id
       },
       changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),

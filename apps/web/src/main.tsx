@@ -59,6 +59,18 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithE
   return { status: 'refused', message: sessionEndedNotice } as const
 }
 
+let workspaceCreation: Promise<unknown> | undefined
+const createWorkspaceOnce = async (name: string) => {
+  workspaceCreation ??= createWorkspaceOfAccount(name)
+  try {
+    await workspaceCreation
+  } catch (error) {
+    workspaceCreation = undefined
+    return { status: 'refused', message: (error as Error).message } as const
+  }
+  return openAppWhenSignedIn({ status: 'signed_in' })
+}
+
 const showSignIn = async (notice?: string) => {
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
   const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps } = await loadAuthMode(setupToken)
@@ -74,12 +86,7 @@ const showSignIn = async (notice?: string) => {
       signInWithEmail={async (email) => openAppWhenSignedIn(await signInWithEmail(email))}
       signIn={async (target) => openAppWhenSignedIn(await signInWithPopup(target))}
       createFirstWorkspace={async (form) => openAppWhenSignedIn(await submitInPopup(form, '/auth/first-workspace'))}
-      createWorkspace={(name) =>
-        createWorkspaceOfAccount(name).then(
-          () => openAppWhenSignedIn({ status: 'signed_in' }),
-          (error: Error) => ({ status: 'refused', message: error.message }) as const,
-        )
-      }
+      createWorkspace={createWorkspaceOnce}
     />,
   )
 }
