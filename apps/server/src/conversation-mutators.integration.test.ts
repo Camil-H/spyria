@@ -10,6 +10,7 @@ import {
   countOf,
   failedWith,
   globex,
+  isBlockedBy,
   jobsOf,
   messageRow,
   newChat,
@@ -122,10 +123,11 @@ test('markChatRead that read the marker before a newer one committed keeps the n
   await sendTo(aliceInAcme, chat, `message-${chat}`, 'Hello')
   let read: ReturnType<typeof resultOf> | undefined
   await database.$client.begin(async (newerRead) => {
+    const [blocking] = await newerRead<{ pid: number }[]>`select pg_backend_pid() as pid`
     await newerRead`
       insert into read_markers (workspace_id, user_id, chat_id, last_read_seq) values (${acme}, ${alice}, ${chat}, 99)`
     read = resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: chat })
-    await waitFor(() => waitingOnLock(database))
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
   })
   expect(await read).toEqual(succeeded)
   expect((await database.query.readMarkers.findFirst({ where: { chatId: chat, userId: alice } }))?.lastReadSeq).toBe(99)

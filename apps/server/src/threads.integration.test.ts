@@ -9,6 +9,7 @@ import {
   chatAs,
   countOf,
   failedWith,
+  isBlockedBy,
   messageRow,
   missingPermission,
   newChat,
@@ -19,7 +20,6 @@ import {
   rootIn,
   succeeded,
   waitFor,
-  waitingOnLock,
   writtenMessage,
 } from './testing/testing.ts'
 
@@ -124,11 +124,12 @@ test('markThreadRead that read the marker before a newer one committed keeps the
   await replyTo(aliceInAcme, chat, root)
   let read: ReturnType<typeof markThreadRead> | undefined
   await database.$client.begin(async (newerRead) => {
+    const [blocking] = await newerRead<{ pid: number }[]>`select pg_backend_pid() as pid`
     await newerRead`
       insert into thread_read_markers (workspace_id, user_id, chat_id, thread_root_id, last_read_seq)
       values (${acme}, ${alice}, ${chat}, ${root}, 99)`
     read = markThreadRead(aliceInAcme, chat, root)
-    await waitFor(() => waitingOnLock(database))
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
   })
   expect(await read).toEqual(succeeded)
   expect(await threadMarkerOf(alice, root)).toEqual({ chatId: chat, lastReadSeq: 99 })
