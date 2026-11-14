@@ -1,4 +1,4 @@
-import { buttonClass, fieldClass, ghostButtonClass, labelClass } from '@spyria/ui'
+import { buttonClass, fieldClass, ghostButtonClass, labelClass, unexpectedFailureMessage } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import type { AccountProvider, SsoPreset } from '../domain/sso.ts'
 import { AuthScreen } from './AuthScreen.tsx'
@@ -34,6 +34,15 @@ const creationRefusalOf = (outcome: SignInOutcome) =>
     ? 'Sign-in through your provider did not complete: no workspace was created'
     : refusalOf(outcome)
 
+export const outcomeOrFailureOf = async (attempt: () => Promise<SignInOutcome>): Promise<SignInOutcome> => {
+  try {
+    return await attempt()
+  } catch (error) {
+    console.error(error)
+    return { status: 'refused', message: unexpectedFailureMessage }
+  }
+}
+
 const labelOf = (provider: SignInProvider) =>
   provider.isWorkspaceSso ? workspaceProviderLabels[provider.kind] : accountProviderLabels[provider.kind]
 
@@ -61,7 +70,7 @@ const FirstWorkspaceForm = ({
     if (chosen instanceof HTMLInputElement)
       chosen.value = (event.nativeEvent as globalThis.SubmitEvent).submitter?.getAttribute('value') ?? ''
     setIsCreating(true)
-    const outcome = await createFirstWorkspace(form)
+    const outcome = await outcomeOrFailureOf(() => createFirstWorkspace(form))
     setIsCreating(false)
     setRefusal(creationRefusalOf(outcome))
   }
@@ -125,7 +134,7 @@ const AccountWorkspaceForm = ({ createWorkspace }: { createWorkspace: (name: str
   const create = async (event: SubmitEvent) => {
     event.preventDefault()
     setIsCreating(true)
-    const outcome = await createWorkspace(name)
+    const outcome = await outcomeOrFailureOf(() => createWorkspace(name))
     setIsCreating(false)
     setRefusal(refusalOf(outcome))
   }
@@ -187,7 +196,7 @@ export const SignInScreen = ({
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
     setIsSigningIn(true)
-    settle(await (isEmailFirst ? signInWithEmail(email) : signIn({})))
+    settle(await outcomeOrFailureOf(() => (isEmailFirst ? signInWithEmail(email) : signIn({}))))
   }
   const useAnotherAddress = () => {
     setProviders(undefined)
@@ -195,7 +204,7 @@ export const SignInScreen = ({
   }
   const signInThrough = async (provider: SignInProvider) => {
     setIsSigningIn(true)
-    settle(await signIn({ email, provider: provider.id }))
+    settle(await outcomeOrFailureOf(() => signIn({ email, provider: provider.id })))
   }
   if (isBeingSetUp && !canCreateWorkspace)
     return (
