@@ -177,7 +177,7 @@ describe('a job whose worker stopped while running it', () => {
     logged.restore()
     expect(logged.events.filter(({ event }) => event === 'job.record_failed')).toEqual([])
     expect(await jobRow('job-audit-sweep-taken-over')).toMatchObject({
-      attempts: 1,
+      attempts: 2,
       lastError: expect.stringContaining('22008'),
     })
     expect(await jobRow('job-audit-sweep-next')).toMatchObject({ state: 'queued', attempts: 0 })
