@@ -525,6 +525,7 @@ const turn = async (id, { sessionId, prompt }) => {
       piSend({ type: 'queue_update', steering: [...piSteering], followUp: [] })
       piSend({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: steered }] } })
       await say(`Took in: ${steered}. `)
+      if (steered.includes('stub:linger')) await lingerAs('steered')
     }
   }
   try {

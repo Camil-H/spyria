@@ -175,7 +175,7 @@ test('an attachment the runtime never saves is named to the agent as not readabl
   }
 })
 
-test('prompts to one chat are delivered one turn at a time, in order, each exactly once, even with two workers', async () => {
+test('prompts the prompter sends while their turn runs join that turn in order, each exactly once, even with two workers', async () => {
   const secondWorker = startJobWorker(database, {
     pollIntervalMilliseconds: 5,
     sandboxProvider: runtimeHosts.sandboxProvider,
@@ -194,9 +194,13 @@ test('prompts to one chat are delivered one turn at a time, in order, each exact
   await holds.release('linger')
   await answered(third)
   await turnEnded(chat)
-  expect(relay.prompts).toEqual(['stub:linger First question', 'Second question', 'Third question'])
-  for (const [index, question] of [first, second, third].entries())
-    expect(await repliesTo(question)).toEqual([replyOf(index + 1)])
+  expect(relay.prompts).toEqual(['stub:linger First question'])
+  expect(relay.joins).toEqual(['Second question', 'Third question'])
+  expect(await repliesTo(first)).toEqual([{ kind: 'agent', body: '[t1]' }])
+  expect(await repliesTo(second)).toEqual([{ kind: 'agent', body: 'Took in: Second question.' }])
+  expect(await repliesTo(third)).toEqual([
+    { kind: 'agent', body: `Took in: Third question. ${replyOf(1).body.slice('[t1] '.length)}` },
+  ])
   expect(launches()).toHaveLength(1)
   await secondWorker.stop()
 })
@@ -307,9 +311,11 @@ test('starting a runtime from a runtime chat message is refused and that chat’
   await holds.release('linger')
   await answered(queued)
   await turnEnded(chat)
-  expect(relay.prompts).toEqual(['stub:linger First question', 'Queued question'])
-  for (const [index, question] of [first, queued].entries())
-    expect(await repliesTo(question)).toEqual([replyOf(index + 1)])
+  expect(relay.prompts).toEqual(['stub:linger First question'])
+  expect(await repliesTo(first)).toEqual([{ kind: 'agent', body: '[t1]' }])
+  expect(await repliesTo(queued)).toEqual([
+    { kind: 'agent', body: `Took in: Queued question. ${replyOf(1).body.slice('[t1] '.length)}` },
+  ])
 })
 
 test('each step is stored once and updated by its final call, the full command output stays in its workspace, and a rebuild matches', async () => {
