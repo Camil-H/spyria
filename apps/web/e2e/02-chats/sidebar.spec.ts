@@ -1,5 +1,6 @@
 import { openMenu, signedOutScreenOf } from '../01-access/fixtures'
 import {
+  boundingBoxOf,
   chatAction,
   chatLinkOf,
   composerOf,
@@ -15,7 +16,6 @@ import {
   test,
   unreadIconOf,
 } from '../fixtures'
-import type { WorkerStack } from '../stack'
 import { chatRowIn, draftIconOf, looseChatsOf } from './fixtures'
 
 const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
@@ -77,10 +77,10 @@ test.describe('Sidebar', () => {
       await test.step(`shows ${actionName} as an icon at the top right with a tooltip`, async () => {
         const actionButton = sidebarOf(page).getByRole('button', { name: actionName })
         await expect(actionButton).toHaveText('')
-        const sidebarBox = await sidebarOf(page).boundingBox()
-        const buttonBox = await actionButton.boundingBox()
-        expect(buttonBox!.x).toBeGreaterThan(sidebarBox!.x + sidebarBox!.width / 2)
-        expect(buttonBox!.y).toBeLessThan(sidebarBox!.y + 60)
+        const sidebarBox = await boundingBoxOf(sidebarOf(page))
+        const buttonBox = await boundingBoxOf(actionButton)
+        expect(buttonBox.x).toBeGreaterThan(sidebarBox.x + sidebarBox.width / 2)
+        expect(buttonBox.y).toBeLessThan(sidebarBox.y + 60)
         await actionButton.hover()
         await expect(page.getByRole('tooltip', { name: actionName })).toBeVisible()
         await mainOf(page).hover()
@@ -89,12 +89,12 @@ test.describe('Sidebar', () => {
       })
 
     await test.step('keeps hovered menu triggers inset from the scroll area edge so their highlight is not clipped', async () => {
-      const scrollAreaBox = await looseChatsOf(page).locator('..').boundingBox()
+      const scrollAreaBox = await boundingBoxOf(looseChatsOf(page).locator('..'))
       for (const triggerName of ['Project actions for Billing', 'Chat actions for Invoice bug']) {
         const trigger = sidebarOf(page).getByRole('button', { name: triggerName })
         await trigger.hover()
-        const triggerBox = await trigger.boundingBox()
-        expect(scrollAreaBox!.x + scrollAreaBox!.width - (triggerBox!.x + triggerBox!.width)).toBeGreaterThanOrEqual(4)
+        const triggerBox = await boundingBoxOf(trigger)
+        expect(scrollAreaBox.x + scrollAreaBox.width - (triggerBox.x + triggerBox.width)).toBeGreaterThanOrEqual(4)
       }
     })
   })
@@ -106,24 +106,24 @@ test.describe('Sidebar', () => {
     const expandButton = sidebarOf(page).getByRole('button', { name: 'Expand sidebar' })
 
     await test.step('shows the collapse icon at the top left, before the workspace name', async () => {
-      const sidebarBox = (await sidebarOf(page).boundingBox())!
-      const collapseBox = (await collapseButton.boundingBox())!
-      const switcherBox = (await switcherOf(page).boundingBox())!
+      const sidebarBox = await boundingBoxOf(sidebarOf(page))
+      const collapseBox = await boundingBoxOf(collapseButton)
+      const switcherBox = await boundingBoxOf(switcherOf(page))
       expect(collapseBox.x).toBeLessThan(sidebarBox.x + 24)
       expect(collapseBox.y).toBeLessThan(sidebarBox.y + 24)
       expect(collapseBox.x + collapseBox.width).toBeLessThanOrEqual(switcherBox.x)
     })
 
     await test.step('hides the tree and widens the chat when collapsed, keeping the expand icon in place', async () => {
-      const collapseBox = (await collapseButton.boundingBox())!
-      const mainWidthBefore = (await mainOf(page).boundingBox())!.width
+      const collapseBox = await boundingBoxOf(collapseButton)
+      const mainWidthBefore = (await boundingBoxOf(mainOf(page))).width
       await collapseButton.click()
       await expect(switcherOf(page)).toHaveCount(0)
       await expect(looseChatsOf(page)).toHaveCount(0)
-      const expandBox = (await expandButton.boundingBox())!
+      const expandBox = await boundingBoxOf(expandButton)
       expect(expandBox.x).toBeCloseTo(collapseBox.x, 0)
       expect(expandBox.y).toBeCloseTo(collapseBox.y, 0)
-      expect((await mainOf(page).boundingBox())!.width).toBeGreaterThan(mainWidthBefore + 150)
+      expect((await boundingBoxOf(mainOf(page))).width).toBeGreaterThan(mainWidthBefore + 150)
     })
 
     await test.step('stays collapsed after a reload and expands again', async () => {
@@ -139,9 +139,9 @@ test.describe('Sidebar', () => {
     page,
   }) => {
     const separator = sidebarOf(page).getByRole('separator', { name: 'Resize sidebar' })
-    const sidebarWidth = async () => (await sidebarOf(page).boundingBox())!.width
+    const sidebarWidth = async () => (await boundingBoxOf(sidebarOf(page))).width
     const dragSeparatorBy = async (horizontalOffset: number) => {
-      const handleBox = (await separator.boundingBox())!
+      const handleBox = await boundingBoxOf(separator)
       const handleCenterX = handleBox.x + handleBox.width / 2
       const handleCenterY = handleBox.y + handleBox.height / 2
       await page.mouse.move(handleCenterX, handleCenterY)
@@ -154,8 +154,8 @@ test.describe('Sidebar', () => {
       await expect(separator).toHaveAttribute('aria-valuemin', '240')
       await expect(separator).toHaveAttribute('aria-valuemax', '400')
       await expect(separator).toHaveAttribute('aria-valuenow', '256')
-      const sidebarBox = (await sidebarOf(page).boundingBox())!
-      const separatorBox = (await separator.boundingBox())!
+      const sidebarBox = await boundingBoxOf(sidebarOf(page))
+      const separatorBox = await boundingBoxOf(separator)
       const borderWidth = await sidebarOf(page).evaluate((element) =>
         Number.parseFloat(getComputedStyle(element).borderRightWidth),
       )
@@ -182,8 +182,8 @@ test.describe('Sidebar', () => {
       await dragSeparatorBy(-400)
       expect(await sidebarWidth()).toBeCloseTo(240, 0)
       await expect(switcherOf(page)).toBeVisible()
-      const sidebarBox = (await sidebarOf(page).boundingBox())!
-      const newChatBox = (await sidebarOf(page).getByRole('button', { name: 'New chat' }).boundingBox())!
+      const sidebarBox = await boundingBoxOf(sidebarOf(page))
+      const newChatBox = await boundingBoxOf(sidebarOf(page).getByRole('button', { name: 'New chat' }))
       expect(newChatBox.x + newChatBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width - 12)
     })
 
@@ -231,10 +231,10 @@ test.describe('Sidebar', () => {
     })
     await test.step('offers Team channel and AI chat as one row of options', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
-      const channelOptionBox = await page.getByRole('radio', { name: 'Team channel' }).locator('..').boundingBox()
-      const runtimeOptionBox = await page.getByRole('radio', { name: 'AI chat' }).locator('..').boundingBox()
-      expect(Math.abs(channelOptionBox!.y - runtimeOptionBox!.y)).toBeLessThan(2)
-      expect(runtimeOptionBox!.x).toBeGreaterThan(channelOptionBox!.x + channelOptionBox!.width - 1)
+      const channelOptionBox = await boundingBoxOf(page.getByRole('radio', { name: 'Team channel' }).locator('..'))
+      const runtimeOptionBox = await boundingBoxOf(page.getByRole('radio', { name: 'AI chat' }).locator('..'))
+      expect(Math.abs(channelOptionBox.y - runtimeOptionBox.y)).toBeLessThan(2)
+      expect(runtimeOptionBox.x).toBeGreaterThan(channelOptionBox.x + channelOptionBox.width - 1)
     })
   })
 
@@ -285,9 +285,9 @@ test.describe('Sidebar', () => {
     await makeAliceAdminOf(workerStack, 'chat-standup')
     await expect(unreadIconOf(page, 'Standup')).toBeVisible()
     await test.step('places the icon at the right end of the row, before the menu button', async () => {
-      const iconBox = (await unreadIconOf(page, 'Standup').boundingBox())!
-      const nameBox = (await chatLinkOf(page, 'Standup').getByText('Standup', { exact: true }).boundingBox())!
-      const menuButtonBox = (await menuButtonOf(page, 'Standup').boundingBox())!
+      const iconBox = await boundingBoxOf(unreadIconOf(page, 'Standup'))
+      const nameBox = await boundingBoxOf(chatLinkOf(page, 'Standup').getByText('Standup', { exact: true }))
+      const menuButtonBox = await boundingBoxOf(menuButtonOf(page, 'Standup'))
       expect(iconBox.x).toBeGreaterThan(nameBox.x + nameBox.width)
       expect(iconBox.x + iconBox.width).toBeLessThanOrEqual(menuButtonBox.x)
     })
@@ -313,11 +313,11 @@ test.describe('Sidebar', () => {
     await openChat(page, 'Welcome')
     await test.step('places the pencil at the right end of the row, before the menu button', async () => {
       await composerOf(page).fill('Draft')
-      const chatNameBox = await chatLinkOf(page, 'Welcome').getByText('Welcome', { exact: true }).boundingBox()
-      const pencilBox = await draftIconOf(page, 'Welcome').boundingBox()
-      const menuButtonBox = await page.getByRole('button', { name: 'Chat actions for Welcome' }).boundingBox()
-      expect(pencilBox!.x).toBeGreaterThan(chatNameBox!.x + chatNameBox!.width)
-      expect(pencilBox!.x + pencilBox!.width).toBeLessThanOrEqual(menuButtonBox!.x)
+      const chatNameBox = await boundingBoxOf(chatLinkOf(page, 'Welcome').getByText('Welcome', { exact: true }))
+      const pencilBox = await boundingBoxOf(draftIconOf(page, 'Welcome'))
+      const menuButtonBox = await boundingBoxOf(page.getByRole('button', { name: 'Chat actions for Welcome' }))
+      expect(pencilBox.x).toBeGreaterThan(chatNameBox.x + chatNameBox.width)
+      expect(pencilBox.x + pencilBox.width).toBeLessThanOrEqual(menuButtonBox.x)
     })
   })
 
@@ -339,9 +339,9 @@ test.describe('Sidebar', () => {
       await expect(draftIconOf(page, 'Setup helper')).toBeVisible()
 
       await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
-        const unreadBox = (await unreadIconOf(page, 'Setup helper').boundingBox())!
-        const draftBox = (await draftIconOf(page, 'Setup helper').boundingBox())!
-        const menuButtonBox = (await menuButtonOf(page, 'Setup helper').boundingBox())!
+        const unreadBox = await boundingBoxOf(unreadIconOf(page, 'Setup helper'))
+        const draftBox = await boundingBoxOf(draftIconOf(page, 'Setup helper'))
+        const menuButtonBox = await boundingBoxOf(menuButtonOf(page, 'Setup helper'))
         expect(unreadBox.x + unreadBox.width).toBeLessThanOrEqual(draftBox.x)
         expect(draftBox.x + draftBox.width).toBeLessThanOrEqual(menuButtonBox.x)
       })
