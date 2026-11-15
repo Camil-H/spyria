@@ -31,6 +31,9 @@ export type SandboxTransport = {
   gatewayUrl: string
   fetch(request: SandboxRequest): Promise<SandboxResponse>
   openSocket(path: string, listener: SandboxSocketListener): SandboxSocket
+  startBrowser(owner: string, options: { signInHours?: number }): Promise<void>
+  stopBrowser(owner: string): Promise<void>
+  openBrowser(owner: string, listener: SandboxSocketListener): SandboxSocket
 }
 
 export type SandboxProvider = {

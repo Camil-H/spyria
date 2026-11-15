@@ -27,6 +27,7 @@ export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHost
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
 export type SessionRestart = Readonly<{ chatId: ChatId; memberId: MemberId; promptId: MessageId | null }>
 type AgentSocket = { send(data: string): void; close(): void }
+type AgentSocketListener = { onOpen(): void; onMessage(data: string): void; onClose(): void }
 export type AgentTransport = {
   gatewayUrl: string
   fetch(request: {
@@ -36,7 +37,10 @@ export type AgentTransport = {
     body?: string
     timeoutMilliseconds?: number
   }): Promise<{ status: number; body: string }>
-  openSocket(path: string, listener: { onOpen(): void; onMessage(data: string): void; onClose(): void }): AgentSocket
+  openSocket(path: string, listener: AgentSocketListener): AgentSocket
+  startBrowser(owner: MemberId, options: { signInHours?: number }): Promise<void>
+  stopBrowser(owner: MemberId): Promise<void>
+  openBrowser(owner: MemberId, listener: AgentSocketListener): AgentSocket
 }
 export type AgentEndpoint = Readonly<{
   transport: AgentTransport

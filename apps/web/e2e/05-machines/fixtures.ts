@@ -19,7 +19,7 @@ export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([
 
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 export const gibibyte = 1024 ** 3
-export const fakeHostVersions = { hostVersion: 'e2e', protocolVersion: 4 }
+export const fakeHostVersions = { hostVersion: 'e2e', protocolVersion: 5 }
 
 type HostSystem = { cpus: number; memoryBytes: number; rootless: boolean; limitsEnforced: boolean }
 type HostProcess = { output: () => string; exited: Promise<number | null>; stop: () => Promise<void> }

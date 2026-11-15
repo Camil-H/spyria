@@ -461,6 +461,31 @@ export const createRuntimeHostGateway = ({
         ...(setupSnapshot && { snapshotKey: snapshotKeyOf(sandbox.workspaceId, setupSnapshot) }),
       })
     }
+  const browserKeyOf = ({ workspaceId, runtimeId }: SandboxLocation, owner: string) =>
+    volumeKeyOf(JSON.stringify(['browser', workspaceId, runtimeId, owner]))
+  const openStream = (
+    sandbox: SandboxLocation,
+    target: { path: string } | { browserKey: string },
+    listener: SandboxSocketListener,
+  ) => {
+    const connection = connectionOf(sandbox)
+    const sid = nextRequestId++
+    connection.streams.set(sid, listener)
+    sendTo(connection, {
+      type: 'ws_connect',
+      sid,
+      runtimeId: sandbox.runtimeId,
+      ...target,
+      creditBytes: streamCreditBytes,
+    })
+    return {
+      send: (data: string) => sendTo(connection, { type: 'ws_msg', sid, data }),
+      close: () => {
+        connection.receivedStreamBytes.delete(sid)
+        if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
+      },
+    }
+  }
   const sandboxProvider: SandboxProvider = {
     create: createWith('create'),
     recreate: createWith('recreate'),
@@ -506,25 +531,21 @@ export const createRuntimeHostGateway = ({
         )
         return { status, headers, body } as SandboxResponse
       },
-      openSocket: (path, listener) => {
-        const connection = connectionOf(sandbox)
-        const sid = nextRequestId++
-        connection.streams.set(sid, listener)
-        sendTo(connection, {
-          type: 'ws_connect',
-          sid,
+      openSocket: (path, listener) => openStream(sandbox, { path }, listener),
+      startBrowser: async (owner, { signInHours }) => {
+        await command(sandbox, 'browser_start', {
           runtimeId: sandbox.runtimeId,
-          path,
-          creditBytes: streamCreditBytes,
+          browserKey: browserKeyOf(sandbox, owner),
+          ...(signInHours !== undefined && { signInHours }),
         })
-        return {
-          send: (data) => sendTo(connection, { type: 'ws_msg', sid, data }),
-          close: () => {
-            connection.receivedStreamBytes.delete(sid)
-            if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
-          },
-        }
       },
+      stopBrowser: async (owner) => {
+        await command(sandbox, 'browser_stop', {
+          runtimeId: sandbox.runtimeId,
+          browserKey: browserKeyOf(sandbox, owner),
+        })
+      },
+      openBrowser: (owner, listener) => openStream(sandbox, { browserKey: browserKeyOf(sandbox, owner) }, listener),
     }),
   }
 
