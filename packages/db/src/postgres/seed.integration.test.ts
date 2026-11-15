@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { workspacePermissions } from '@spyria/kernel'
+import { browserSettingsFrom, workspacePermissions } from '@spyria/kernel'
 import { createMockSnapshot } from '../mock-data.ts'
 import { resetDatabase } from './seed.ts'
 import * as tables from './tables.ts'
@@ -31,13 +31,14 @@ const readSnapshot = async () => {
   const answeredIds = new Set(messages.map((message) => message.replyToId))
   return {
     workspaces: (await database.select().from(tables.workspaces)).map(
-      ({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands }) => ({
+      ({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands, browser }) => ({
         id: workspaceId,
         name,
         localSessions,
         aiProviderAllowList,
         devLoop,
         setupCommands: setupCommands ?? [],
+        browser: browserSettingsFrom(browser),
       }),
     ),
     memberships: memberships.map((membership) => ({

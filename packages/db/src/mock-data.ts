@@ -3,6 +3,7 @@ import {
   builtInWorkspaceRoles,
   chatId,
   credentialId,
+  defaultBrowserSettings,
   type MemberId,
   type MessageId,
   memberId,
@@ -159,6 +160,7 @@ export const createMockSnapshot = (): Snapshot => {
         aiProviderAllowList: null,
         devLoop: null,
         setupCommands: [],
+        browser: defaultBrowserSettings,
       },
       {
         id: globex,
@@ -167,6 +169,7 @@ export const createMockSnapshot = (): Snapshot => {
         aiProviderAllowList: null,
         devLoop: null,
         setupCommands: [],
+        browser: defaultBrowserSettings,
       },
     ],
     memberships: [
