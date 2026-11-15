@@ -1,6 +1,6 @@
 import type { Transaction } from '@rocicorp/zero'
 import type { Transact, ZeroContext } from '@spyria/db/zero-queries'
-import { type MemberId, type RuntimeHostId, requirePermissionIn, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
+import { type MemberId, type RuntimeHostId, runtimeHostId, type WorkspaceId } from '@spyria/kernel'
 import { z } from 'zod/mini'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { HostDeclaration, HostSystem, RuntimeHost } from '../domain/runtime-host.ts'
