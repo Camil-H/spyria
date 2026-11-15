@@ -25,6 +25,7 @@ const messages = createInterface({ input: process.stdin, crlfDelay: Number.POSIT
 const pending = []
 let receive = (message) => pending.push(message)
 let current
+let isReady = false
 const firstSettings = new Promise((resolve) => {
   messages.on('line', (line) => {
     let message
@@ -35,6 +36,7 @@ const firstSettings = new Promise((resolve) => {
     }
     if (message?.type === 'settings') {
       current = message.settings
+      if (isReady) send({ type: 'ready' })
       return resolve()
     }
     receive(message)
@@ -95,4 +97,5 @@ const session = createBrowserSession({ context, send, settings: () => current, b
 await session.start().catch(fail)
 receive = (message) => void session.receive(message)
 for (const message of pending.splice(0)) receive(message)
+isReady = true
 send({ type: 'ready' })
