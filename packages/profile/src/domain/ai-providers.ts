@@ -5,7 +5,8 @@ export const checkedAllowList = (allowList: AiProviderAllowList | null): AiProvi
   if (allowList === null) return null
   const unknown = allowList.find((provider) => !aiProviders.some(({ id }) => id === provider))
   if (unknown !== undefined) throw new UnsupportedProvider(unknown)
-  return aiProviders.flatMap(({ id }) => (allowList.includes(id) ? id : []))
+  const allowed = aiProviders.flatMap(({ id }) => (allowList.includes(id) ? id : []))
+  return allowed.length === aiProviders.length ? null : allowed
 }
 
 export const allowListSummaryOf = (allowList: AiProviderAllowList | null) =>

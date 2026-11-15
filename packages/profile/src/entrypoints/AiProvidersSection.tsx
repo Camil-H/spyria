@@ -26,7 +26,7 @@ export const AiProvidersSection = ({ workspaceId }: { workspaceId: WorkspaceId }
     run(() => commands.setAiProviders({ workspaceId, allowList: changed }))
   return (
     <section aria-label="AI providers" className="flex flex-col gap-6">
-      <div className="flex max-w-xl flex-col items-start gap-2">
+      <div className="flex flex-col items-start gap-2">
         <p className="text-sm text-muted">
           Members can add keys for, and use the models of, the providers turned on here. Sessions on a member's own
           machine use their own subscription and are not covered.
