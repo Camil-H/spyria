@@ -60,21 +60,20 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithE
   return { status: 'refused', message: sessionEndedNotice } as const
 }
 
-const workspaceCreationByName = new Map<string, Promise<unknown>>()
+let workspaceCreation: Promise<unknown> | undefined
 const createWorkspaceOnce = async (name: string) => {
-  const creation = workspaceCreationByName.get(name) ?? createWorkspaceOfAccount(name)
-  workspaceCreationByName.set(name, creation)
+  workspaceCreation ??= createWorkspaceOfAccount(name)
   try {
-    await creation
+    await workspaceCreation
   } catch (error) {
-    workspaceCreationByName.delete(name)
+    workspaceCreation = undefined
     return { status: 'refused', message: (error as Error).message } as const
   }
   return openAppWhenSignedIn({ status: 'signed_in' })
 }
 
 const showSignIn = async (notice?: string) => {
-  workspaceCreationByName.clear()
+  workspaceCreation = undefined
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
   const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps } = await loadAuthMode(setupToken)
   root.render(
