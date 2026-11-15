@@ -39,4 +39,20 @@ test.describe('AI providers', () => {
       'Every provider allowed',
     )
   })
+
+  test('As a member who can manage AI providers, I turn a provider off and back on, and every provider is allowed again without the button', {
+    tag: ['@spec-42'],
+  }, async ({ page }) => {
+    await openSettings(page, 'AI providers')
+    const everyProvider = providersOf(page).getByRole('button', { name: 'Turn every provider on' })
+    await providerSwitchOf(page, 'Mistral').click()
+    await expect(everyProvider).toBeVisible()
+    await providerSwitchOf(page, 'Mistral').click()
+    await expect(providerSwitchOf(page, 'Mistral')).toHaveAttribute('aria-checked', 'true')
+    await expect(everyProvider).toHaveCount(0)
+    await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
+    await expect(mainOf(page).getByRole('link', { name: 'AI providers', exact: true })).toContainText(
+      'Every provider allowed',
+    )
+  })
 })
