@@ -251,7 +251,7 @@ test('Stop mid-command cancels the turn without deleting the conversation, and t
   expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
-test('the pages the agent opens with Spyria’s open_page tool are kept for the chat’s Browser, newest first, and an address of another scheme or on the member’s own network is refused with a reason the agent sees', async () => {
+test('a project file the agent opens with Spyria’s open_page tool is kept for the chat’s Browser, a web address opens in the prompter’s own browser, localhost included, and an address of another scheme is refused with a reason the agent sees', async () => {
   await stack.agentHost('Browser host', { routesModelCalls: true })
   const chat = await newRuntimeChat()
   const openPage = (address: string, title?: string) => ({
@@ -274,19 +274,16 @@ test('the pages the agent opens with Spyria’s open_page tool are kept for the 
   expect([
     ...(await database.$client`
       select url, title from browser_pages where workspace_id = ${acme} and chat_id = ${chat} order by opened_at desc`),
-  ]).toEqual([
-    { url: 'https://example.com/docs', title: 'https://example.com/docs' },
-    { url: 'reports/totals.html', title: 'Invoice totals' },
-  ])
+  ]).toEqual([{ url: 'reports/totals.html', title: 'Invoice totals' }])
   const results = (await stack.repliesTo(promptId, ['step'])).flatMap(({ step }) =>
     (step as { name?: string })?.name === 'open_page' ? [(step as { result?: string }).result] : [],
   )
   expect(results).toEqual([
-    "The page is open in the member's Browser panel.",
+    "The file is open in the chat's Browser tab.",
     'Only http and https addresses and project files are opened',
-    "http://localhost:3000/admin is on the member's own machine or network, so it is not opened",
-    "http://192.168.1.1 is on the member's own machine or network, so it is not opened",
-    "The page is open in the member's Browser panel.",
+    'Opened Example (http://localhost:3000/admin)',
+    'Opened Example (http://192.168.1.1)',
+    'Opened Example (https://example.com/docs)',
   ])
   expect(
     await database.$client`
@@ -294,8 +291,8 @@ test('the pages the agent opens with Spyria’s open_page tool are kept for the 
   ).toMatchObject([
     { server: 'spyria', tool: 'open_page', status: 'succeeded' },
     { server: 'spyria', tool: 'open_page', status: 'refused' },
-    { server: 'spyria', tool: 'open_page', status: 'refused' },
-    { server: 'spyria', tool: 'open_page', status: 'refused' },
+    { server: 'spyria', tool: 'open_page', status: 'succeeded' },
+    { server: 'spyria', tool: 'open_page', status: 'succeeded' },
     { server: 'spyria', tool: 'open_page', status: 'succeeded' },
   ])
 })

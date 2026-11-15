@@ -5,6 +5,7 @@ import {
   advanceThreadReadMarker,
   aiProviderAllowListOf,
   appendChatEvent,
+  appendWorkspaceEvent,
   chatEventsOf,
   chatRoutingOf,
   chatTurnOf,
@@ -54,6 +55,7 @@ import {
 } from '@spyria/db/zero-queries'
 import {
   agentActor,
+  browserSettingsFrom,
   type ChatId,
   ChatNotFound,
   type ChatPermission,
@@ -478,6 +480,18 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
           ...page,
           openedAt: openedAt.getTime(),
         }),
+    },
+    browser: {
+      settings: async () =>
+        browserSettingsFrom((await tx.run(zql.workspaces.where('workspaceId', contextWorkspaceId).one()))?.browser),
+      recordVisit: async ({ chatId: visitedChatId, memberId: visitorId, url }) => {
+        await appendWorkspaceEvent(tx, {
+          workspaceId: contextWorkspaceId,
+          type: 'browser.visited',
+          actor: memberActor(visitorId),
+          payload: { chatId: visitedChatId, memberId: visitorId, url },
+        })
+      },
     },
     publicChats: {
       chats: async () => {

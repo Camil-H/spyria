@@ -136,3 +136,4 @@ export const TooManyToolServersOff = errorKind(
   () => 'A chat turns off at most 100 tool servers',
   ConversationError,
 )
+export const BrowserUnavailable = errorKind('browser_unavailable', (reason: string) => reason, ConversationError)

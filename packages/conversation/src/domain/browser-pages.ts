@@ -7,20 +7,19 @@ const maximumAddressLength = 2048
 const maximumTitleLength = 200
 const webAddress = /^https?:\/\//i
 const anyScheme = /^[a-z][\w+.-]*:/i
-const ipv4Address = /^\d+\.\d+\.\d+\.\d+$/
-const localName = /(^|\.)(localhost|local)$/
 
 export const openPageTool = {
   name: 'open_page',
   description:
-    "Open a page in the member's Browser panel: a public http or https address, or the path of a file in the project such as an HTML report you wrote. When you build something the member should look at, such as a report or a page, open it with open_page. Addresses on the member's own machine or network, such as localhost or 192.168.x.x, are not opened.",
+    'Open a web address in the browser of the member who prompted you, with their own sign-ins, where they watch it live in the Browser tab; http://localhost:<port> reaches the app you run in this runtime. Or open the path of a file in the project, such as an HTML report you wrote, for everyone in the chat. Then read and act on a web page with the browser_ tools.',
   inputSchema: {
     type: 'object',
     required: ['address'],
     properties: { address: { type: 'string' }, title: { type: 'string' } },
   },
 }
-export const pageOpenedText = "The page is open in the member's Browser panel."
+export const pageOpenedText = "The file is open in the chat's Browser tab."
+export const isWebPage = (page: OpenedPage) => webAddress.test(page.url)
 export const webPagePath = '/api/web-page'
 export const maximumWebPageBytes = 5 * 1024 * 1024
 export type WebPage = Readonly<{ url: string; html?: string }>
@@ -66,13 +65,6 @@ const isPrivateIpv6 = (address: string) => {
 export const isPrivateNetworkAddress = (address: string) =>
   address.includes(':') ? isPrivateIpv6(address) : isPrivateIpv4(address.split('.').map(Number))
 
-const isOnMembersNetwork = (url: string) => {
-  const host = new URL(url).hostname.replace(/\.$/, '')
-  if (host.startsWith('[')) return isPrivateIpv6(host.slice(1, -1))
-  if (ipv4Address.test(host)) return isPrivateNetworkAddress(host)
-  return !host.includes('.') || localName.test(host)
-}
-
 const addressOf = (address: unknown): string | Refusal => {
   const text = typeof address === 'string' ? address.trim() : ''
   if (text === '') return { refusal: 'Give the address of the page to open' }
@@ -80,9 +72,7 @@ const addressOf = (address: unknown): string | Refusal => {
     return { refusal: `The address is longer than ${maximumAddressLength} characters` }
   if (webAddress.test(text)) {
     if (!URL.canParse(text)) return { refusal: `${text} is not a valid web address` }
-    return isOnMembersNetwork(text)
-      ? { refusal: `${text} is on the member's own machine or network, so it is not opened` }
-      : text
+    return text
   }
   if (anyScheme.test(text)) return { refusal: 'Only http and https addresses and project files are opened' }
   const path = pathOf(text).replace(/^(\.?\/)+/, '')

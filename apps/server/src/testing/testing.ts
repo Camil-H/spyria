@@ -824,6 +824,8 @@ type HostCommand = {
   apiKey?: string
   packageCacheKey?: string
   snapshotKey?: string
+  browserKey?: string
+  signInHours?: number
   keep?: string[]
 }
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
@@ -926,9 +928,48 @@ const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export const fakeHostVersion = 'test'
-export const fakeHostProtocolVersion = 4
+export const fakeHostProtocolVersion = 5
 const fakeHostHeartbeatMilliseconds = 60 * 60_000
 export const fakeAgentProtocolVersion = 2
+
+type FakeBrowserMessage = Record<string, unknown> & { type?: string; command?: string; id?: number }
+export const fakeBrowserSnapshot = '- button "Place order" [ref=e1]\n- button "Menu" [ref=e2]'
+const fakeBrowserAnswerOf = (message: FakeBrowserMessage) => {
+  if (message.command === 'snapshot') return fakeBrowserSnapshot
+  if (message.command === 'would_submit') return message.ref === 'e1'
+  if (message.command === 'open') return `Opened Example (${message.url})`
+  if (message.command === 'screenshot') return { text: 'Screenshot of Example', image: 'aW1hZ2U=' }
+  return `${message.command} done`
+}
+const createFakeBrowsers = () => {
+  const received = new Map<string, FakeBrowserMessage[]>()
+  const outputs = new Map<string, (message: object) => void>()
+  return {
+    received: (browserKey: string) => received.get(browserKey) ?? [],
+    keys: () => [...received.keys()],
+    emit: (browserKey: string, message: object) => outputs.get(browserKey)?.(message),
+    connect: ({ browserKey, send }: { browserKey: string; send(data: string): void }) => {
+      const messages = received.get(browserKey) ?? []
+      received.set(browserKey, messages)
+      const emit = (message: object) => send(JSON.stringify(message))
+      outputs.set(browserKey, emit)
+      return {
+        onMessage: (data: string) => {
+          const message = JSON.parse(data) as FakeBrowserMessage
+          messages.push(message)
+          if (message.type === 'settings') return emit({ type: 'ready' })
+          if (message.type === 'watch') {
+            emit({ type: 'page', url: 'https://example.com/', title: 'Example' })
+            return emit({ type: 'frame', data: 'ZnJhbWU=', width: 800, height: 600 })
+          }
+          if (message.command === 'open') emit({ type: 'visited', url: message.url })
+          if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })
+        },
+        onClose: () => outputs.delete(browserKey),
+      }
+    },
+  }
+}
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
@@ -973,6 +1014,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void; onHead?: (status?: number) => void }
     >()
     const receivedFrames: string[] = []
+    const browsers = createFakeBrowsers()
     let nextModelCallId = 1
     const run = (op: string, { runtimeId = '', apiKey = '', harness = '' }: Record<string, string>) => {
       if (failingOps.has(op)) throw new Error(`${op} failed`)
@@ -1013,6 +1055,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         return resolve
       },
       receivedFrames,
+      browsers,
       modelCall: (async ({
         method = 'POST',
         path = '/v1/chat/completions',
@@ -1132,7 +1175,14 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             receivedFrames.push(JSON.stringify(request))
             answerHttp(request)
           }
-          if (frame.type === 'ws_connect' && containerAgent && container?.running) {
+          const { browserKey } = frame as HostFrame & { browserKey?: string }
+          if (frame.type === 'ws_connect' && browserKey !== undefined) {
+            send({ type: 'ws_open', sid })
+            streams.set(
+              sid,
+              browsers.connect({ browserKey, send: (data) => streams.has(sid) && send({ type: 'ws_msg', sid, data }) }),
+            )
+          } else if (frame.type === 'ws_connect' && containerAgent && container?.running) {
             send({ type: 'ws_open', sid })
             streams.set(
               sid,

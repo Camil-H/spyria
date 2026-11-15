@@ -318,7 +318,14 @@ export const createModelCallRelay = ({
                   attributes: { 'workspace.id': host.workspaceId, 'chat.id': chat.chatId, 'tool.name': toolName },
                   error,
                 })
-                return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
+                return {
+                  isRefused: true,
+                  text: `${toolName} failed`,
+                  image: undefined,
+                  decision: undefined,
+                  decidedBy: undefined,
+                  status: 'failed',
+                } as const
               })
         await handlers
           .recordToolCall(host.workspaceId, {
@@ -419,13 +426,13 @@ export const createModelCallRelay = ({
       if (Array.isArray(rpc)) return answerRpc(null, methodNotFound)
       if (rpc?.method !== 'tools/call' || rpc.id === undefined)
         return answerSpyriaServer(rpc, 'spyria', spyriaTools, spyriaCommandInstructions)
-      const { chat, prompterId, ownerId } = turn
+      const { chat, prompterId, ownerId, promptId } = turn
       if (!prompterId) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
       const toolName = String(rpc.params?.name ?? '')
       if (!isSpyriaTool(toolName)) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
       const calledAt = new Date()
-      const { isRefused, text, status } = await handlers
-        .callSpyriaTool({ chat, memberId: prompterId, name: toolName, input: rpc.params?.arguments })
+      const { isRefused, text, image, status, decision, decidedBy } = await handlers
+        .callSpyriaTool({ chat, memberId: prompterId, promptId, name: toolName, input: rpc.params?.arguments })
         .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
         .catch((error: unknown) => {
           log.error({
@@ -434,7 +441,14 @@ export const createModelCallRelay = ({
             attributes: { 'workspace.id': host.workspaceId, 'chat.id': chat.chatId, 'tool.name': toolName },
             error,
           })
-          return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
+          return {
+            isRefused: true,
+            text: `${toolName} failed`,
+            image: undefined,
+            decision: undefined,
+            decidedBy: undefined,
+            status: 'failed' as const,
+          }
         })
       await handlers
         .recordToolCall(host.workspaceId, {
@@ -444,13 +458,17 @@ export const createModelCallRelay = ({
           server: 'spyria',
           tool: toolName,
           readOnly: isReadOnlySpyriaTool(toolName) || null,
-          decision: 'not_needed',
-          decidedBy: null,
+          decision: decision ?? 'not_needed',
+          decidedBy: decidedBy ?? null,
           status,
           calledAt,
         })
         .catch((error) => logToolCallFailure(chat.chatId, error))
-      return answerRpc(rpc.id, { result: { content: [{ type: 'text', text }], isError: isRefused } })
+      const content = [
+        { type: 'text', text },
+        ...(image ? [{ type: 'image', data: image, mimeType: 'image/jpeg' }] : []),
+      ]
+      return answerRpc(rpc.id, { result: { content, isError: isRefused } })
     }
     const isAnthropicPath = path.startsWith(anthropicPathPrefix)
     const isTokenCount = path.startsWith(`${anthropicPathPrefix}/count_tokens`)

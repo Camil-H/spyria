@@ -430,6 +430,7 @@ export const createApp = ({
     )
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
+    .get('/api/browser', agentBridge.browserStream(authenticate, databaseOf))
     .get(toolConsentCallbackPath, async (context) =>
       context.html(await toolConsentPageFromRequest(gatewayOf(), new URL(context.req.url).search)),
     )

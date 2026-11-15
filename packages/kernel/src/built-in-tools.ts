@@ -25,7 +25,31 @@ export const builtInTools: readonly BuiltInTool[] = [
   builtInTool(
     'open_page',
     true,
-    "Opens a web page or a file of the project in the chat's Browser tab",
+    "Opens a web page in the prompting member's browser, or a file of the project in the chat's Browser tab",
+    builtInFeatures.browser,
+  ),
+  builtInTool(
+    'browser_snapshot',
+    true,
+    "Reads the page open in the prompting member's browser",
+    builtInFeatures.browser,
+  ),
+  builtInTool('browser_click', false, "Clicks an element in the prompting member's browser", builtInFeatures.browser),
+  builtInTool('browser_type', false, "Types into a field in the prompting member's browser", builtInFeatures.browser),
+  builtInTool('browser_fill', false, "Fills a field in the prompting member's browser", builtInFeatures.browser),
+  builtInTool('browser_press', false, "Presses a key in the prompting member's browser", builtInFeatures.browser),
+  builtInTool(
+    'browser_run_javascript',
+    false,
+    "Runs JavaScript in the page of the prompting member's browser",
+    builtInFeatures.browser,
+  ),
+  builtInTool('browser_wait', true, 'Waits for a text or a few seconds in a browser', builtInFeatures.browser),
+  builtInTool('browser_navigate', true, 'Goes back, forward or reloads in a browser', builtInFeatures.browser),
+  builtInTool(
+    'browser_screenshot',
+    true,
+    "Sees the page in the prompting member's browser as an image",
     builtInFeatures.browser,
   ),
   builtInTool(

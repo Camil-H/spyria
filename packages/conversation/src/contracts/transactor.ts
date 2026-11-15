@@ -5,6 +5,7 @@ import type {
   AgentTurnRepository,
   AttachmentRepository,
   BrowserPageRepository,
+  BrowserRepository,
   ChatRepository,
   DelegationRepository,
   DevLoopRepository,
@@ -26,6 +27,7 @@ export type UnitOfWork = {
   agentTurns: AgentTurnRepository
   agentEvents: AgentEventRepository
   browserPages: BrowserPageRepository
+  browser: BrowserRepository
   publicChats: PublicChatDirectory
   routing: RoutingRepository
   delegations: DelegationRepository

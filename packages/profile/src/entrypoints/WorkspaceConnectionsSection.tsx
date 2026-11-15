@@ -374,7 +374,14 @@ const featureSettingOf = (workspaceId: WorkspaceId, feature: string | null, mayM
         </SettingsCardLink>
       </span>
     )
-  if (feature === builtInFeatures.browser) return <span className="text-xs text-muted">Shown in the Browser tab</span>
+  if (feature === builtInFeatures.browser)
+    return (
+      <span className="text-xs">
+        <SettingsCardLink to={`/w/${workspaceId}/settings/browser`} isAllowed>
+          Set in Browser
+        </SettingsCardLink>
+      </span>
+    )
   return null
 }
 
