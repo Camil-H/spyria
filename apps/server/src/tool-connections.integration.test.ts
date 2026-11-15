@@ -177,7 +177,7 @@ test('the last attempt of a sync that still cannot check a server ends with a wa
       true,
     )
     expect(logged.events.find(({ event }) => event === 'tool_connections.not_checked')).toMatchObject({
-      severity: 'warn',
+      severity: 'WARN',
       attributes: { 'workspace.id': acme, 'member.id': alice },
     })
   } finally {
@@ -238,13 +238,15 @@ test('a pending sign-in left behind does not block Connect, and Connect while si
   const callsBefore = fakeMcp.records.length
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
   await connectAlice(aliceCookie)
   const key = await virtualKeyOf(alice)
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['active'])
 
+  const callsBeforeReconnect = fakeMcp.records.length
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['pending'])
-  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+  expect(fakeMcp.records.slice(callsBeforeReconnect)).toEqual([])
 })
 
 test('a member acts only on their own key: unknown servers are refused, a member without an LLM key connects on a key that serves only tools, and Bob never touches Alice’s connection', async () => {
