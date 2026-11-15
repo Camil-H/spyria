@@ -109,7 +109,7 @@ test.describe('Workspaces', () => {
       ).toHaveLength(1)
     })
 
-    test('As a person signed in without a workspace, when my new workspace fails to open and I correct its name, trying again creates the workspace I named', {
+    test('As a person signed in without a workspace, when my new workspace fails to open and I change its name, trying again opens the workspace already created instead of creating another', {
       tag: ['@spec-05'],
     }, async ({ page, workerStack }) => {
       await signInThroughProvider(page, 'olive@example.com')
@@ -127,12 +127,12 @@ test.describe('Workspaces', () => {
       await form.getByRole('textbox', { name: 'Workspace name' }).fill('Olive studio')
       await form.getByRole('button', { name: 'Create workspace' }).click()
 
-      await expect(switcherOf(page)).toBeVisible()
-      expect(
-        await workerStack.database.$client`
+      await expect(switcherOf(page)).toContainText('Olive stuido')
+      expect([
+        ...(await workerStack.database.$client`
           select workspaces.name from workspaces join users on users.id = workspaces.created_by
-          where users.email = 'olive@example.com' order by workspaces.name`,
-      ).toEqual([{ name: 'Olive stuido' }, { name: 'Olive studio' }])
+          where users.email = 'olive@example.com'`),
+      ]).toEqual([{ name: 'Olive stuido' }])
     })
   })
 
