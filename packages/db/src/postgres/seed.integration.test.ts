@@ -65,11 +65,12 @@ const readSnapshot = async () => {
         ownerId: ownerUserId,
       }),
     ),
-    messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, ...message }) => ({
+    messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, pickedUpAt, ...message }) => ({
       ...message,
       createdAt: createdAt.toISOString(),
       editedAt: isoOrNull(editedAt),
       deletedAt: isoOrNull(deletedAt),
+      pickedUpAt: isoOrNull(pickedUpAt),
       needsReply:
         chatType.get(message.chatId) === 'runtime' && message.kind === 'member' && !answeredIds.has(message.id),
     })),

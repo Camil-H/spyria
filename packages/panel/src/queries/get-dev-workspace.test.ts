@@ -20,6 +20,7 @@ const stepAt = (seq: number, step: MessageRow['step']): MessageRow => ({
   createdAt: '2026-10-16T10:00:00.000Z',
   editedAt: null,
   deletedAt: null,
+  pickedUpAt: null,
   needsReply: false,
 })
 const refreshKeyWith = (steps: readonly MessageRow[]) => {

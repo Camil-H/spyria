@@ -139,6 +139,7 @@ export type MessageRow = {
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
+  pickedUpAt: string | null
   needsReply: boolean
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }

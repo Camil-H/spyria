@@ -95,6 +95,7 @@ const message = (
   createdAt: `2026-09-30T${time}:00.000Z`,
   editedAt: null,
   deletedAt: null,
+  pickedUpAt: null,
   needsReply: false,
 })
 const member = (id: string, chat: string, workspace: WorkspaceId, author: MemberId, body: string, time: string) =>
