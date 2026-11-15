@@ -89,7 +89,7 @@ sequenceDiagram
 4. **Tokens stream live; only completed items are stored.** `spyria-agent` numbers its events and keeps a bounded buffer so a reconnecting server misses nothing. The server forwards token chunks to every browser watching the chat over the `/api/stream` WebSocket, and writes only completed items (a finished text segment, a finished tool step, a question, the turn end) to Postgres. Zero then syncs those rows to every viewer.
 5. **Usage is metered after the fact.** A job reads the gateway's logs every 10 seconds and records each model call against its prompter, chat owner, chat, turn and session. Budgets and spend read those records.
 
-When a turn delegates work, `spyria-agent` runs sub-conversations in the same runtime, and the same path applies to each. When the member presses **Stop**, an `agent.interrupt` job cancels the turn in the runtime.
+When the turn's prompter sends another message while a Pi turn runs, its `agent.prompt` job finds the turn held and hands the message to the running turn instead (`/joins`, Pi's steer); the message is marked picked up (`message.picked_up`) and, once the agent reads it (a `prompt_joined` event), the active turn moves to it, so later output and model calls are recorded on it. A hand-off the runtime refuses puts the message back in the queue (`message.requeued`). When a turn delegates work, `spyria-agent` runs sub-conversations in the same runtime, and the same path applies to each. When the member presses **Stop**, an `agent.interrupt` job cancels the turn in the runtime.
 
 ## Where state lives
 
