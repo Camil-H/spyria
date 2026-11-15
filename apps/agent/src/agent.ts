@@ -99,8 +99,9 @@ type Conversation = {
   isSettingUp: boolean
   startWaiters: Map<string, () => void>
   lastTurn: Promise<void>
-  running?: { promptId?: string }
+  running?: RunningTurn
 }
+type RunningTurn = { promptId?: string; joinedPromptIds: string[]; steeredPromptIds: Set<string> }
 type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
 type TerminalMeta = {
   terminal_output?: { data?: unknown }
@@ -142,7 +143,7 @@ const subAnswerText = 'No member is available; decide yourself and state your as
 const terminalToolStatuses = ['completed', 'failed']
 const keptCommandOutputCharacters = 1_000_000
 const conversationRoute =
-  /^\/api\/conversations\/([\w-]+)(?:\/(events|attachments|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
+  /^\/api\/conversations\/([\w-]+)(?:\/(events|joins|attachments|interrupt|restart|switch_acp_model)|\/questions\/([\w-]+))?$/
 const socketRoute = /^\/sockets\/events\/([\w-]+)$/
 const workspaceRoute = /^\/api\/workspace\/(tree|file|media|changes|commits|status|checks)$/
 const branchReads = { changes: changesOf, commits: commitLogOf, status: statusOf }
@@ -482,8 +483,18 @@ export const startAgent = ({
     )
   }
 
+  const takeJoinedPrompt = (conversation: Conversation, promptId: string) => {
+    const { running } = conversation
+    if (!running?.steeredPromptIds.delete(promptId)) return
+    rememberPrompt(conversation, promptId)
+    running.joinedPromptIds.push(promptId)
+    running.promptId = promptId
+    emit(conversation, { sessionUpdate: 'prompt_joined', promptId })
+  }
+
   const onUpdate = (conversation: Conversation, update: Json) => {
     if (conversation.isReloading) return
+    if (update.sessionUpdate === 'steer_taken') return takeJoinedPrompt(conversation, String(update.steerId))
     if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions))
       conversation.configOptions = update.configOptions
     const toolCallId = String(update.toolCallId)
@@ -938,9 +949,12 @@ export const startAgent = ({
         },
       })
     let hasReachedAdapter = false
+    const running: RunningTurn = { promptId, joinedPromptIds: [], steeredPromptIds: new Set() }
     const endTurn = (stopReason: unknown) => {
-      const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
-      if (promptId) conversation.turnEnds.set(promptId, update)
+      const endedPromptId = running.promptId
+      const update = { sessionUpdate: 'turn_end', stopReason, ...(endedPromptId && { promptId: endedPromptId }) }
+      for (const turnPromptId of [promptId, ...running.joinedPromptIds])
+        if (turnPromptId) conversation.turnEnds.set(turnPromptId, update)
       if (hasReachedAdapter) {
         closeQuestions(conversation, 'turn_end')
         announceHeldToolCalls(conversation)
@@ -997,7 +1011,6 @@ export const startAgent = ({
       'agent.turn',
       { 'conversation.id': conversation.id },
       async () => {
-        const running = { promptId }
         try {
           if (await isStoppedBeforeItsTurn(conversation, promptId ?? crypto.randomUUID(), previousTurn))
             return ended({ stopReason: 'cancelled' })
@@ -1020,6 +1033,30 @@ export const startAgent = ({
       contextOf(traceHeaders),
     )
     return Response.json({})
+  }
+
+  const join = async (conversation: Conversation, body: { content?: PromptBlock[]; prompt_id?: unknown }) => {
+    const promptId = typeof body.prompt_id === 'string' ? body.prompt_id : undefined
+    if (!promptId) return Response.json({ error: 'prompt_id must be a string' }, { status: 400 })
+    const { running, sessionId } = conversation
+    if (conversation.turnEnds.has(promptId) || running?.steeredPromptIds.has(promptId)) return Response.json({})
+    if (conversation.launch.agent?.adapter !== 'pi-rpc')
+      return Response.json({ error: 'This agent takes messages only between turns' }, { status: 409 })
+    if (!running || !sessionId) return Response.json({ error: 'The agent has no turn running' }, { status: 409 })
+    running.steeredPromptIds.add(promptId)
+    try {
+      await conversation.connection.request('session/steer', {
+        sessionId,
+        prompt: await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities),
+        steerId: promptId,
+      })
+    } catch (error) {
+      running.steeredPromptIds.delete(promptId)
+      return Response.json({ error: errorUpdateOf(error).message }, { status: 409 })
+    }
+    return conversation.running === running || conversation.turnEnds.has(promptId)
+      ? Response.json({})
+      : Response.json({ error: 'The turn ended before the agent took the message' }, { status: 409 })
   }
 
   const remove = (conversation: Conversation) => {
@@ -1110,6 +1147,7 @@ export const startAgent = ({
         traceparent: request.headers.get('traceparent'),
         tracestate: request.headers.get('tracestate'),
       })
+    if (action === 'joins') return join(conversation, await request.json())
     if (action === 'interrupt') return interrupt(conversation, await request.json().catch(() => ({})))
     const choice = action === 'switch_acp_model' ? ((await request.json()) as ModelChoice) : undefined
     if (conversation.isSettingUp) return actedWhileSettingUp(conversation, action, choice)

@@ -508,8 +508,10 @@ const turn = async (id, { sessionId, prompt }) => {
     isPi
       ? piSend({ id, type: 'response', command: 'prompt', success: false, error: message })
       : send({ id, error: { code: -32000, message } })
-  if (isPi && !has('fail'))
+  if (isPi && !has('fail')) {
     piSend({ id, type: 'response', command: 'prompt', success: true, data: { disposition: 'started' } })
+    piSend({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text }] } })
+  }
   const step = async () => {
     await sleep(gapMilliseconds)
     if (state.cancelled) throw new Cancelled()
@@ -517,6 +519,13 @@ const turn = async (id, { sessionId, prompt }) => {
   const say = async (chunk) => {
     await step()
     update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: chunk } })
+  }
+  const takeSteering = async () => {
+    for (let steered = piSteering.shift(); steered !== undefined; steered = piSteering.shift()) {
+      piSend({ type: 'queue_update', steering: [...piSteering], followUp: [] })
+      piSend({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: steered }] } })
+      await say(`Took in: ${steered}. `)
+    }
   }
   try {
     if (gatewayUrl && isPi && !text.includes('stub:')) {
@@ -836,6 +845,7 @@ const turn = async (id, { sessionId, prompt }) => {
     if (has('effort')) await say(`Effort ${session[effortOption.id]}. `)
     if (has('usage')) update({ sessionUpdate: 'usage_update', used: 53_000, size: 200_000 })
     if (seen.length > 0) await say(`Saw ${seen.join(', ')}. `)
+    await takeSteering()
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     finish('end_turn')
   } catch (error) {
@@ -914,6 +924,7 @@ const handlers = {
 }
 const queue = (sessionId, run) => queues.set(sessionId, (queues.get(sessionId) ?? Promise.resolve()).then(run))
 let isPiRunning = false
+const piSteering = []
 const cancel = (session) => {
   if (session?.current) session.current.cancelled = true
   session?.current?.abort.abort()
@@ -945,6 +956,17 @@ const piCommands = {
     piSessionId = basename(sessionPath, '.json')
     opened(piSessionId, existsSync(sessionPath) ? savedOf(sessionPath) : fresh())
     return { cancelled: false }
+  },
+  steer: ({ message }) => {
+    if (!isPiRunning) throw new Error('stub: no run to steer')
+    piSteering.push(message)
+    piSend({ type: 'queue_update', steering: [...piSteering], followUp: [] })
+    return { disposition: 'queued' }
+  },
+  clear_queue: () => {
+    const steering = piSteering.splice(0)
+    piSend({ type: 'queue_update', steering: [], followUp: [] })
+    return { steering, followUp: [] }
   },
   abort: async () => {
     cancel(piSession())
