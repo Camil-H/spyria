@@ -15,9 +15,10 @@ test('a prompt is queued until the agent picks it up: while it waits behind a tu
   expect(isQueuedPrompt({ ...prompt, kind: 'agent' }, null, [])).toBe(false)
 })
 
-test("only the turn's own prompter joins a running turn, so the turn stays on one member's key, and never a quality gates turn", () => {
+test("only the turn's own prompter joins a running turn, so the turn stays on one member's key, and quality gates prompts never join or are joined", () => {
   expect(joinsRunningTurn({ authorId: 'alice' }, { authorId: 'alice' })).toBe(true)
   expect(joinsRunningTurn({ authorId: 'alice' }, { authorId: 'bob' })).toBe(false)
   expect(joinsRunningTurn({ authorId: null }, { authorId: null })).toBe(false)
   expect(joinsRunningTurn({ authorId: 'alice', step: { type: 'dev_loop_prompt' } }, { authorId: 'alice' })).toBe(false)
+  expect(joinsRunningTurn({ authorId: 'alice' }, { authorId: 'alice', step: { type: 'dev_loop_prompt' } })).toBe(false)
 })

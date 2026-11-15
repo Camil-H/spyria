@@ -14,5 +14,8 @@ export const isQueuedPrompt = (prompt: Prompt, turnPromptId: string | null, repl
   prompt.id !== turnPromptId &&
   replies.every(isWaitingNotice)
 
-export const joinsRunningTurn = (turnPrompt: TurnPrompt, queued: Readonly<{ authorId: string | null }>) =>
-  queued.authorId !== null && queued.authorId === turnPrompt.authorId && !isDevLoopPrompt(turnPrompt)
+export const joinsRunningTurn = (turnPrompt: TurnPrompt, queued: TurnPrompt) =>
+  queued.authorId !== null &&
+  queued.authorId === turnPrompt.authorId &&
+  !isDevLoopPrompt(turnPrompt) &&
+  !isDevLoopPrompt(queued)
