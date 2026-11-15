@@ -7,6 +7,7 @@ import { hostStatusOf, MemberLocalRuntimesSection, RuntimeHostsSection } from '@
 import { formatCost, LabelledSection } from '@spyria/ui'
 import { AuditLogSection, countBudgetAlerts, UsageSection } from '@spyria/usage'
 import {
+  BrowserSection,
   DeleteWorkspaceSection,
   DevLoopSection,
   GitHubSection,
@@ -92,6 +93,13 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
         Page: WorkspaceConnectionsSection,
       },
       {
+        path: 'browser',
+        title: 'Browser',
+        description: 'What the browsers of members and agents may reach and do',
+        permissions: ['tools.manage'],
+        Page: BrowserSection,
+      },
+      {
         path: 'quality-gates',
         title: 'Quality gates',
         description: "The gates an agent's work goes through before it reaches you",
@@ -165,6 +173,10 @@ const cardStatusesOf =
       runtime: runtimeStatusOf(inWorkspace(snapshot.runtimeHosts).filter((host) => host.ownerId === null)),
       tools: countLabelOf(inWorkspace(snapshot.workspaceConnections).length, 'server'),
       'ai-providers': aiProvidersStatusOf(workspace),
+      browser:
+        workspace?.browser.forAgents || workspace?.browser.forMembers
+          ? { label: 'On', tone: 'ok' }
+          : { label: 'Off', tone: 'off' },
       'quality-gates': isAnyRuleOn(workspace?.devLoop ?? null)
         ? { label: 'On', tone: 'ok' }
         : { label: 'Off', tone: 'off' },

@@ -39,6 +39,7 @@ export const auditKindsByGroup = {
     'message.deleted',
   ],
   'Tool calls': ['tool.called'],
+  Browser: ['browser.changed', 'browser.visited'],
   Publishing: [
     'branch.pushed',
     'pull_request.opened',
@@ -109,6 +110,8 @@ const actionByKind: Record<string, string> = {
   'ai_providers.changed': 'Changed the allowed AI providers',
   'dev_loop.changed': 'Changed the quality gates',
   'setup_commands.changed': 'Changed the setup commands',
+  'browser.changed': 'Changed the browser settings',
+  'browser.visited': 'Visited a page in a browser',
 }
 
 export type AuditRecord = {

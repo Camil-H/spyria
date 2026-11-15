@@ -1,3 +1,4 @@
+export { BrowserSection } from './entrypoints/BrowserSection.tsx'
 export { DeleteWorkspaceSection } from './entrypoints/DeleteWorkspaceSection.tsx'
 export { DevLoopSection } from './entrypoints/DevLoopSection.tsx'
 export { GitHubSection, useIsGitHubConfigured } from './entrypoints/GitHubSection.tsx'

@@ -258,6 +258,7 @@ export const createApp = async (
       transferChat: mutateConfirmed(workspaceMutators.workspace.transferChat),
       setDevLoop: mutateConfirmed(workspaceMutators.workspace.setDevLoop),
       setSetupCommands: mutateConfirmed(workspaceMutators.workspace.setSetupCommands),
+      setBrowserSettings: mutateConfirmed(workspaceMutators.workspace.setBrowserSettings),
       createChatRole: mutateConfirmed(workspaceMutators.workspace.createChatRole),
       updateChatRole: mutateConfirmed(workspaceMutators.workspace.updateChatRole),
       deleteChatRole: mutateConfirmed(workspaceMutators.workspace.deleteChatRole),
