@@ -303,9 +303,11 @@ export const startJobWorker = (
       const recordFailure = (isSuperseded: boolean) =>
         database.$client.unsafe<{ isFailed: boolean; isSuperseded: boolean }[]>(
           `with outcome as (
-           select $9::boolean or exists(select 1 from jobs as this_run join jobs as next_run
+           select exists(select 1 from jobs as this_run left join jobs as next_run
                on next_run.workspace_id = this_run.workspace_id and next_run.serial_key = this_run.serial_key
-               where this_run.workspace_id = $1 and this_run.id = $2 and next_run.state = 'queued') as is_superseded,
+                 and next_run.state = 'queued'
+               where this_run.workspace_id = $1 and this_run.id = $2 and this_run.serial_key is not null
+                 and ($9::boolean or next_run.id is not null)) as is_superseded,
              $4::boolean or ($7::boolean and exists(select 1 from jobs as next_run
                where next_run.workspace_id = $1 and next_run.type = $8 and next_run.state = 'queued')) as is_failed)
          update jobs set state = case when is_superseded then 'done' when is_failed then 'failed' else 'queued' end,
