@@ -218,7 +218,7 @@ test('a job waits while another job with its serial key runs, and is claimed onc
       (${acme}, 'job-serial-running', 'runtime.discard', '{"runtimeId": "runtime-serial", "hostId": "host-serial"}',
         now() + interval '1 hour', 1, 'running', 'serial-one', now()),
       (${acme}, 'job-serial-queued', 'runtime.discard', '{"runtimeId": "runtime-serial", "hostId": "host-serial"}',
-        now(), 0, 'queued', 'serial-one')`
+        now(), 0, 'queued', 'serial-one', null)`
   const worker = startWorker({ sandboxProvider })
   await sleep(200)
   expect(await jobRow('job-serial-queued')).toMatchObject({ state: 'queued', attempts: 0 })
@@ -262,7 +262,7 @@ test('a second job queued under the serial key of a queued job is dropped, and a
     })
     await waitFor(() => logged.events.some(({ attributes }) => attributes?.['job.id'] === 'job-serial-failing'))
     expect(logged.events.find(({ attributes }) => attributes?.['job.id'] === 'job-serial-failing')).toMatchObject({
-      severity: 'warn',
+      severity: 'WARN',
       attributes: { 'job.outcome': 'superseded' },
     })
   } finally {
