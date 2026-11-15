@@ -1,7 +1,11 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
+import { schema } from '@spyria/db/zero'
+import { createProfileJobs } from '@spyria/profile/server'
 import { websocket } from 'hono/bun'
 import { createAgentBridge } from './agent-bridge/bridge.ts'
 import { createApp } from './app.ts'
+import { startJobWorker } from './job-worker.ts'
 import { createModelCallRelay } from './llm-relay.ts'
 import { createRuntimeHostGateway } from './runtime-hosts/gateway.ts'
 import { fakeAgentLlm } from './testing/fake-llm.ts'
@@ -13,6 +17,7 @@ import {
   asMember,
   bob,
   captureConsole,
+  captureLogs,
   connectAlice,
   connectionPath,
   connectionRows,
@@ -20,15 +25,19 @@ import {
   createFakeHosts,
   everyStoredText,
   type FakeHost,
+  isBlockedBy,
   lookup,
   mcpCall,
   openSharedTestApp,
   promptedBy,
+  rejectionOf,
   rpcOf,
   runtimeTurn,
+  sessionTokenOf,
   testAuthSettings,
   testSecretsKeyring,
   textOf,
+  toolConnectionSyncsSettled,
   virtualKeyOf,
   waitFor,
   whoami,
@@ -37,12 +46,29 @@ import {
 setDefaultTimeout(30_000)
 const { database, app, port, gateway, llmGateway, fakeMcp } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
+const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, llmGateway })
 afterEach(() => disconnectFakeHosts())
-afterAll(() => disconnectFakeHosts())
+afterAll(async () => {
+  await disconnectFakeHosts()
+  await worker.stop()
+})
 
 const aliceAccount = `alice-${crypto.randomUUID().slice(0, 8)}`
 const aliceCookie = `fake_mcp_user=${aliceAccount}`
-beforeEach(() => asMember(alice, 'POST', connectionPath('disconnect')))
+beforeEach(async () => {
+  await asMember(alice, 'POST', connectionPath('disconnect'))
+  await toolConnectionSyncsSettled()
+})
+const checkAlice = () => asMember(alice, 'POST', '/api/tool-connections/check')
+const postWithToken = async (token: string, path: string) => {
+  const response = await app.request(path, { method: 'POST', headers: { authorization: `Bearer ${token}` } })
+  return { status: response.status, body: await response.text() }
+}
+const syncsRunFor = async (userId: string) =>
+  (
+    await database.$client`
+      select 1 from jobs where type = 'profile.tool-connections-sync' and payload->>'memberId' = ${userId}`
+  ).length
 const fakeClientId = async () => (await llmGateway.toolServers()).find((server) => server.name === 'fake')?.id
 const sessionsOf = async (virtualKeyId: string) =>
   (
@@ -64,16 +90,137 @@ test('Connect grants the server on the member key, runs the consent through Spyr
   const consent = await consentThroughSpyria(authorizeUrl, aliceCookie)
   expect(consent).toMatchObject({ callbackPath: '/gateway-oauth/api/oauth/callback', status: 200 })
   expect(consent.page).toContain('"connected":true')
-  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: 'Connected' }),
-  })
+  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({ status: 204, body: '' })
+  await toolConnectionSyncsSettled()
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['active'])
 
   expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
   expect(await sessionsOf(key.id)).toEqual([])
+  await toolConnectionSyncsSettled()
   expect(await connectionRows()).toEqual([])
+})
+
+test('a Disconnect while a sync is about to store Connected leaves no connection once the syncs have run', async () => {
+  await connectAlice(aliceCookie)
+  const key = await virtualKeyOf(alice)
+  const token = await sessionTokenOf(database, acme, alice)
+  await database.$client.begin(async (held) => {
+    const [blocking] = await held<{ pid: number }[]>`select pg_backend_pid() as pid`
+    await held`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
+    expect((await postWithToken(token, '/api/tool-connections/check')).status).toBe(204)
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
+    expect((await postWithToken(token, connectionPath('disconnect'))).status).toBe(204)
+  })
+  await toolConnectionSyncsSettled()
+  expect(await sessionsOf(key.id)).toEqual([])
+  expect(await connectionRows()).toEqual([])
+})
+
+test('every refresh, check and Disconnect only queues the member’s sync, and a member has at most one sync waiting', async () => {
+  const syncsOf = async (userId: string) =>
+    (
+      await database.$client<{ state: string }[]>`
+        select state from jobs where type = 'profile.tool-connections-sync' and payload->>'memberId' = ${userId}
+          and state in ('queued', 'running')`
+    ).map(({ state }) => state)
+  const token = await sessionTokenOf(database, acme, alice)
+  await database.$client.begin(async (held) => {
+    await held`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
+    expect((await postWithToken(token, '/api/tool-connections/check')).status).toBe(204)
+    await waitFor(async () => (await syncsOf(alice)).join() === 'running')
+    for (const path of ['/api/tool-connections/check', connectionPath('refresh'), connectionPath('disconnect')])
+      expect((await postWithToken(token, path)).status).toBe(204)
+    expect((await syncsOf(alice)).toSorted()).toEqual(['queued', 'running'])
+  })
+  await toolConnectionSyncsSettled()
+})
+
+const runSync = (toolGateway: typeof llmGateway, memberId: string = alice, isLastAttempt = false) =>
+  createProfileJobs(toolGateway)['profile.tool-connections-sync']({
+    workspaceId: acme,
+    payload: { memberId },
+    isLastAttempt,
+    transact: (work) => zeroDrizzle(schema, database).transaction(work),
+  })
+
+test('a sync whose check of one server fails keeps that server’s status, settles the others, then fails so the worker retries it', async () => {
+  await connectAlice(aliceCookie)
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${alice}, 'connection-Slack', 'Connected')`
+  const sync = runSync({
+    ...llmGateway,
+    isToolSessionAuthorized: async () => {
+      throw new Error('The tool server did not answer')
+    },
+  })
+  expect(String(await rejectionOf(sync))).toContain('The sign-ins to fake could not be checked with the gateway')
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+  expect(
+    await database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`,
+  ).toHaveLength(0)
+})
+
+test('the last attempt of a sync that still cannot check a server ends with a warning instead of a failed job, keeping the stored status', async () => {
+  await connectAlice(aliceCookie)
+  const logged = captureLogs()
+  try {
+    await runSync(
+      {
+        ...llmGateway,
+        toolSessions: async () => {
+          throw new Error('The gateway answered GET /api/mcp/sessions with 503')
+        },
+      },
+      alice,
+      true,
+    )
+    expect(logged.events.find(({ event }) => event === 'tool_connections.not_checked')).toMatchObject({
+      severity: 'WARN',
+      attributes: { 'workspace.id': acme, 'member.id': alice },
+    })
+  } finally {
+    logged.restore()
+  }
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+})
+
+test('a Disconnect whose sync cannot read the gateway leaves the connection for the retry to clear, instead of finishing with it Connected', async () => {
+  await connectAlice(aliceCookie)
+  const key = await virtualKeyOf(alice)
+  const server = (await llmGateway.toolServers()).find(({ name }) => name === 'fake')
+  if (!server) throw new Error('The fake tool server is not on the gateway')
+  for (const session of await llmGateway.toolSessions(key.id, server)) await llmGateway.removeToolSession(session.id)
+  const failedSync = runSync({
+    ...llmGateway,
+    toolSessions: async () => {
+      throw new Error('The gateway answered GET /api/mcp/sessions with 503')
+    },
+  })
+  expect(String(await rejectionOf(failedSync))).toContain('could not be checked with the gateway')
+  expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
+  await runSync(llmGateway)
+  expect(await connectionRows()).toEqual([])
+})
+
+test('a sync for a member who is no longer active writes nothing', async () => {
+  const leaver = `member-leaver-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${leaver}, ${`${leaver}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name, removed_at)
+    values (${acme}, ${leaver}, 'member', 'Leaver', now())`
+  await database.$client`
+    insert into tool_connections (workspace_id, user_id, connection_id, status)
+    values (${acme}, ${leaver}, 'connection-fake', 'Connected')`
+  try {
+    await runSync(llmGateway, leaver)
+    expect([...(await database.$client`select status from tool_connections where user_id = ${leaver}`)]).toEqual([
+      { status: 'Connected' },
+    ])
+  } finally {
+    await database.$client`delete from tool_connections where user_id = ${leaver}`
+  }
 })
 
 test('a refused consent shows the failure page and creates no connection', async () => {
@@ -82,10 +229,8 @@ test('a refused consent shows the failure page and creates no connection', async
   const page = await app.request('/gateway-oauth/api/oauth/callback?code=forged&state=forged')
   expect(page.status).toBe(200)
   expect(await page.text()).toContain('"connected":false')
-  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: null }),
-  })
+  expect(await asMember(alice, 'POST', connectionPath('refresh'))).toEqual({ status: 204, body: '' })
+  await toolConnectionSyncsSettled()
   expect(await connectionRows()).toEqual([])
 })
 
@@ -93,13 +238,15 @@ test('a pending sign-in left behind does not block Connect, and Connect while si
   const callsBefore = fakeMcp.records.length
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
+  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
   await connectAlice(aliceCookie)
   const key = await virtualKeyOf(alice)
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['active'])
 
+  const callsBeforeReconnect = fakeMcp.records.length
   expect((await asMember(alice, 'POST', connectionPath('connect'))).status).toBe(200)
   expect((await sessionsOf(key.id)).map((session) => session.status)).toEqual(['pending'])
-  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+  expect(fakeMcp.records.slice(callsBeforeReconnect)).toEqual([])
 })
 
 test('a member acts only on their own key: unknown servers are refused, a member without an LLM key connects on a key that serves only tools, and Bob never touches Alice’s connection', async () => {
@@ -116,10 +263,8 @@ test('a member acts only on their own key: unknown servers are refused, a member
   await connectAlice(aliceCookie)
   expect((await virtualKeyOf(alice)).id).not.toBe(bobKey.id)
   expect((await asMember(bob, 'POST', connectionPath('disconnect'))).status).toBe(204)
-  expect(await asMember(bob, 'POST', connectionPath('refresh'))).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: null }),
-  })
+  expect(await asMember(bob, 'POST', connectionPath('refresh'))).toEqual({ status: 204, body: '' })
+  await toolConnectionSyncsSettled()
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Connected' }])
   expect((await sessionsOf((await virtualKeyOf(alice)).id)).map((session) => session.status)).toEqual(['active'])
 })
@@ -245,9 +390,12 @@ test('a server the prompter has not connected, or whose token was revoked, answe
 
   await connectAlice(aliceCookie)
   await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${aliceAccount}`, { method: 'POST' }))
+  const syncsBefore = await syncsRunFor(alice)
   const revoked = await mcpCall(host, token, whoami)
   expect(revoked).toMatchObject({ status: 200, result: { isError: true } })
   expect(textOf(revoked.result)).toBe('Alice needs to reconnect fake')
+  await toolConnectionSyncsSettled()
+  expect(await syncsRunFor(alice)).toBeGreaterThan(syncsBefore)
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
   for (const answer of [unconnected, revoked]) {
     expect(answer.body).not.toContain('flow=')
@@ -256,7 +404,11 @@ test('a server the prompter has not connected, or whose token was revoked, answe
 })
 
 test('checking the connections, as the profile does when it opens, follows the gateway: a row without a session goes, an active session gets its row, and a token revoked at the provider reads Needs reconnection without any chat call', async () => {
-  const check = () => asMember(alice, 'POST', '/api/tool-connections/check')
+  const check = async () => {
+    const answer = await checkAlice()
+    await toolConnectionSyncsSettled()
+    return answer
+  }
   const slackRows = () =>
     database.$client`select 1 from tool_connections where user_id = ${alice} and connection_id = 'connection-Slack'`
   await connectAlice(aliceCookie)
@@ -275,6 +427,7 @@ test('checking the connections, as the profile does when it opens, follows the g
   expect((await check()).status).toBe(204)
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
   expect(await asMember(bob, 'POST', '/api/tool-connections/check')).toMatchObject({ status: 204 })
+  await toolConnectionSyncsSettled()
   expect(await connectionRows()).toEqual([{ user_id: alice, tool: 'fake', status: 'Needs reconnection' }])
 })
 

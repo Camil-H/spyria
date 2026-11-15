@@ -39,6 +39,9 @@ case "$*" in
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
+  "volume ls "*)
+    [ -f "$FAKE_DOCKER/daemon-down" ] && exit 1
+    cat "$FAKE_DOCKER/volumes" 2>/dev/null ;;
   "volume rm "*) [ -f "$FAKE_DOCKER/volume-in-use" ] && { echo "Error response from daemon: volume is in use" >&2; exit 1; } ;;
   "ps -q --filter label=spyria.managed=1 --filter name=^spyria-rt-") cat "$FAKE_DOCKER/runtimes" 2>/dev/null ;;
 esac
@@ -91,6 +94,8 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'host-container'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
   rmSync(join(fakeDocker, 'volume-in-use'), { force: true })
+  rmSync(join(fakeDocker, 'volumes'), { force: true })
+  rmSync(join(fakeDocker, 'daemon-down'), { force: true })
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
   writeFileSync(join(fakeDocker, 'database-exists'), '1\n')
 })
@@ -347,4 +352,89 @@ test("turning this machine's host on once a workspace exists takes the command o
   writeFileSync(join(fakeDocker, 'has-workspace'), 'no\n')
   await hostTurnedOn({})
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBe(`http://server:3000/h/${environment().SPYRIA_INSTALL_HOST_TOKEN}`)
+})
+
+test('setup without the secrets of a deployment whose data this machine still holds refuses before writing anything, also when Docker does not answer, and does not ask Docker once the secrets are back', async () => {
+  const secrets = withSecrets({})
+  rmSync(join(install, '.env'))
+  writeFileSync(
+    join(fakeDocker, 'volumes'),
+    'spyria-postgres-data\nspyria-gateway-data\nspyria-postgres-data-old\nother-spyria-zero-data\n',
+  )
+  const setUp = (extra: string[] = []) =>
+    setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+        ...['--hostname', 'spyria.example.com', ...extra],
+      ]),
+      {
+        cloudflareApiUrl: 'http://127.0.0.1:9',
+        processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' },
+        workspaceExistsIn: () => false,
+      },
+    ).catch((error: Error) => error.message)
+
+  expect(await setUp()).toBe(
+    `This machine holds the data of an earlier deployment named spyria (spyria-postgres-data, spyria-gateway-data), but ${install} has no .env with its secrets: put back the .env you copied off the machine with your backups and run setup again, choose another deployment name with --name, or, to start over without that data, remove it with docker volume rm spyria-postgres-data spyria-gateway-data`,
+  )
+  expect(existsSync(join(install, '.env'))).toBe(false)
+  expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
+
+  writeFileSync(join(fakeDocker, 'daemon-down'), '')
+  expect(await setUp(['--name', 'other'])).toBe(
+    'Docker does not answer, so setup cannot tell whether this machine holds the data of an earlier deployment: start Docker and run setup again',
+  )
+  rmSync(join(fakeDocker, 'daemon-down'))
+
+  writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, ...secrets }), { mode: 0o600 })
+  rmSync(join(fakeDocker, 'calls'), { force: true })
+  await setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0']), {
+    processEnvironment: {},
+    workspaceExistsIn: () => false,
+  })
+  expect(indexOfCall('volume ls')).toBe(-1)
+  expect(environment()).toMatchObject(secrets)
+})
+
+test('a setup changing the version that fails after it registered the Microsoft app keeps the new secret next to the old version, so setting up again still backs up before the change', async () => {
+  writeFileSync(join(fakeBin, 'az'), '#!/bin/sh\n', { mode: 0o755 })
+  const registeredApps: string[] = []
+  const az = (azArguments: string[]) => {
+    const command = azArguments.slice(0, 3).join(' ')
+    if (command === 'ad app list') return { exitCode: 0, output: registeredApps.join('\n') }
+    if (command === 'ad app create') {
+      registeredApps.push('00000000-0000-4000-8000-000000000000')
+      return { exitCode: 0, output: '00000000-0000-4000-8000-000000000000' }
+    }
+    if (command === 'ad app credential') return { exitCode: 0, output: 'secret-1' }
+    return { exitCode: 0, output: 'tenant-1' }
+  }
+  const setUp = (extra: string[]) =>
+    setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0'],
+        ...['--microsoft-client-id', 'create', ...extra],
+      ]),
+      { processEnvironment: { SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' }, az, workspaceExistsIn: () => false },
+    )
+  try {
+    const failure = await setUp(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
+      (error: Error) => error.message,
+    )
+    expect(failure).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+    expect(environment()).toEqual({
+      ...installed,
+      SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
+      SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
+    })
+    expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
+
+    rmSync(join(fakeDocker, 'calls'), { force: true })
+    await setUp([])
+    expect(calls().filter((call) => call.includes('pg_dump'))).toHaveLength(2)
+    expect(environment()).toMatchObject({ SPYRIA_VERSION: '1.3.0', SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1' })
+    expect(registeredApps).toHaveLength(1)
+  } finally {
+    rmSync(join(fakeBin, 'az'), { force: true })
+  }
 })

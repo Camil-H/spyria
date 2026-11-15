@@ -608,6 +608,31 @@ test('a member bound to an identity of a workspace provider is never signed in t
   expect(await identitiesOf('mallory-hooli')).toEqual([])
 })
 
+test('a removed member invited again signs in through a new identity of the workspace provider, which their old binding no longer refuses', async () => {
+  await database.$client`insert into users (id, email) values ('member-rae', 'rae@example.com')`
+  await addMember('hooli', 'member-rae')
+  await database.$client`
+    insert into identities (workspace_id, issuer, subject, user_id)
+    values ('hooli', ${hooliIdp.issuer}, 'rae-old-account', 'member-rae')`
+  await database.$client`update memberships set removed_at = now() where workspace_id = 'hooli' and user_id = 'member-rae'`
+  const uninvited = await signInThrough(hooliIdp, 'workspace=hooli', {
+    sub: 'rae-new-account',
+    email: 'rae@example.com',
+  })
+  expect(uninvited.page).toContain('"status":"not_invited","email":"rae@example.com"')
+  await invite('hooli', 'rae@example.com')
+  const reinvited = await signInThrough(hooliIdp, 'workspace=hooli', {
+    sub: 'rae-new-account',
+    email: 'rae@example.com',
+  })
+  expect(reinvited.page).toContain('"status":"signed_in"')
+  expect(reinvited.userId).toBe('member-rae')
+  expect(workspaceIdsOf(reinvited)).toEqual(['hooli'])
+  expect(await identitiesOf('rae-new-account')).toEqual([
+    { workspace_id: 'hooli', issuer: hooliIdp.issuer, user_id: 'member-rae' },
+  ])
+})
+
 test("a workspace provider asserting someone else's address gets at most a session in its own workspace", async () => {
   await database.$client`insert into users (id, email) values ('member-mallory', 'mallory@evil.test')`
   await addWorkspace('evil', 'member-mallory')

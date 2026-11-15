@@ -35,6 +35,7 @@ const runSetup = (extra: string[], processEnvironment = {}) =>
     cloudflareApiUrl: cloudflare.url.origin,
     processEnvironment,
     workspaceExistsIn: () => false,
+    dataVolumesOf: () => [],
   })
 const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'utf8'))
 
@@ -157,7 +158,12 @@ test("setup refuses a folder holding another project's compose.yml or .env and l
   try {
     const refusal = await setup(
       parseFlags(['setup', '--unattended', '--no-start', '--folder', project, '--hostname', 'spyria.example.com']),
-      { cloudflareApiUrl: cloudflare.url.origin, processEnvironment: {}, workspaceExistsIn: () => false },
+      {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment: {},
+        workspaceExistsIn: () => false,
+        dataVolumesOf: () => [],
+      },
     ).catch((error: Error) => error.message)
     expect(refusal).toBe(`The .env and compose.yml in ${project} are not Spyria's: choose another folder with --folder`)
     expect(readdirSync(project).sort()).toEqual(['.env', 'compose.yml'])
@@ -239,6 +245,7 @@ test('setup refuses an answer .env cannot hold before it rewrites compose.yml an
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment,
         workspaceExistsIn: () => false,
+        dataVolumesOf: () => [],
       })
     await setupIn(['--hostname', 'spyria.example.com'], { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' })
     writeFileSync(join(install, 'compose.yml'), keptCompose)
@@ -280,7 +287,13 @@ test('setting up again with a Microsoft app to create keeps the app and secret t
           ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
           ...['--hostname', 'spyria.example.com', '--microsoft-client-id', 'create'],
         ]),
-        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment, az, workspaceExistsIn: () => false },
+        {
+          cloudflareApiUrl: cloudflare.url.origin,
+          processEnvironment,
+          az,
+          workspaceExistsIn: () => false,
+          dataVolumesOf: () => [],
+        },
       )
     const microsoftApp = () => {
       const { SPYRIA_MICROSOFT_CLIENT_ID, SPYRIA_MICROSOFT_CLIENT_SECRET } = readEnvironment(install)
@@ -306,5 +319,111 @@ test('setting up again with a Microsoft app to create keeps the app and secret t
     process.env.PATH = originalPath
     rmSync(install, { recursive: true, force: true })
     rmSync(azFolder, { recursive: true, force: true })
+  }
+})
+
+test('setup refuses an answer .env cannot hold before it creates the tunnel', async () => {
+  const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const tunnelsBefore = tunnelNames.length
+  try {
+    const refusal = await setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0'],
+        ...['--hostname', 'spyria.example.com', '--oidc-issuer', 'https://login.example.com'],
+        ...['--oidc-client-id', "o'brien"],
+      ]),
+      {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't', SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'oidc-secret' },
+        workspaceExistsIn: () => false,
+        dataVolumesOf: () => [],
+      },
+    ).catch((error: Error) => error.message)
+    expect(refusal).toBe('SPYRIA_OIDC_CLIENT_ID cannot hold a quote or span lines')
+    expect(tunnelNames).toHaveLength(tunnelsBefore)
+    expect(readdirSync(empty)).toEqual(['backups'])
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test('a setup failing after it registered the Microsoft app keeps the app and its secret in .env, so setting up again reuses them', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const azFolder = mkdtempSync(join(tmpdir(), 'spyria-az-'))
+  writeFileSync(join(azFolder, 'az'), '#!/bin/sh\n', { mode: 0o755 })
+  const originalPath = process.env.PATH
+  process.env.PATH = `${azFolder}:${originalPath}`
+  const registeredApps: string[] = []
+  const az: AzRunner = (azArguments) => {
+    const command = azArguments.slice(0, 3).join(' ')
+    if (command === 'ad app list') return { exitCode: 0, output: registeredApps.join('\n') }
+    if (command === 'ad app create') {
+      registeredApps.push('00000000-0000-4000-8000-000000000000')
+      return { exitCode: 0, output: registeredApps.at(-1) ?? '' }
+    }
+    if (command === 'ad app credential') return { exitCode: 0, output: 'secret-1' }
+    return { exitCode: 0, output: 'tenant-1' }
+  }
+  try {
+    const setupIn = (extra: string[]) =>
+      setup(
+        parseFlags([
+          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+          ...['--hostname', 'spyria.example.com', '--microsoft-client-id', 'create', ...extra],
+        ]),
+        {
+          cloudflareApiUrl: cloudflare.url.origin,
+          processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't', SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' },
+          az,
+          workspaceExistsIn: () => false,
+          dataVolumesOf: () => [],
+        },
+      )
+    const failure = await setupIn(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
+      (error: Error) => error.message,
+    )
+    expect(failure).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+    const kept = {
+      SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
+      SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
+      CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
+    }
+    expect(readEnvironment(install)).toMatchObject(kept)
+    await setupIn([])
+    expect(readEnvironment(install)).toMatchObject(kept)
+    expect(registeredApps).toHaveLength(1)
+  } finally {
+    process.env.PATH = originalPath
+    rmSync(install, { recursive: true, force: true })
+    rmSync(azFolder, { recursive: true, force: true })
+  }
+})
+
+test('setup without saved secrets refuses data this machine holds for the deployment before it creates the tunnel', async () => {
+  const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const tunnelsBefore = tunnelNames.length
+  const askedDeployments: string[] = []
+  try {
+    const refusal = await setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0'],
+        ...['--name', 'acme', '--hostname', 'spyria.example.com'],
+      ]),
+      {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' },
+        workspaceExistsIn: () => false,
+        dataVolumesOf: (deployment) => {
+          askedDeployments.push(deployment)
+          return [`${deployment}-postgres-data`]
+        },
+      },
+    ).catch((error: Error) => error.message)
+    expect(refusal).toStartWith('This machine holds the data of an earlier deployment named acme (acme-postgres-data)')
+    expect(askedDeployments).toEqual(['acme'])
+    expect(tunnelNames).toHaveLength(tunnelsBefore)
+    expect(readdirSync(empty)).toEqual(['backups'])
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
   }
 })

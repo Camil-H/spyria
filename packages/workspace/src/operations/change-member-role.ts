@@ -13,7 +13,7 @@ export const changeMemberRole = ({ transactor }: Dependencies, { memberId, role,
     const member = requireActiveMember(await memberships.lock(memberId), memberId)
     requireGrantableRole(actorPermissions, await workspaceRoles.get(member.role), member.role)
     if (member.role === role) return
-    requireGrantableRole(actorPermissions, await workspaceRoles.get(role), role)
+    requireGrantableRole(actorPermissions, await workspaceRoles.lock(role), role)
     requireAnotherAdmin(member, await memberships.activeAdminIds())
     await memberships.save({ ...member, role })
     await memberAccess.regrantToolsLater(memberId)

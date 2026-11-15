@@ -704,10 +704,17 @@ export const jobs = table(
     lastError: text(),
     claimedAt: instant(),
     finishedAt: instant(),
+    serialKey: text(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
     index().on(table.state, table.runAt),
+    uniqueIndex('jobs_one_queued_per_serial_key')
+      .on(table.workspaceId, table.serialKey)
+      .where(sql`${table.serialKey} is not null and ${table.state} = 'queued'`),
+    index('jobs_running_serial_key')
+      .on(table.workspaceId, table.serialKey)
+      .where(sql`${table.serialKey} is not null and ${table.state} = 'running'`),
     uniqueIndex('jobs_one_queued_sweep')
       .on(table.workspaceId, table.type)
       .where(sql`(${table.type} like '%.sweep' or ${table.type} = 'usage.sync') and ${table.state} = 'queued'`),

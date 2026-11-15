@@ -8,6 +8,7 @@ import {
   lockInvitation,
   lockMembership,
   lockOpenInvitation,
+  lockWorkspaceRole,
   scheduleWorkspaceDeletion,
   signOutMemberEverywhere,
   verifiedDomainClaimsOn,
@@ -419,6 +420,11 @@ export const createZeroTransactor = (tx: Transaction, context: ZeroContext): Wor
     },
     workspaceRoles: {
       get: async (id) => {
+        const row = await tx.run(workspaceRolesInContext.where('id', id).related('permissions').one())
+        return row && workspaceRoleOf(row)
+      },
+      lock: async (id) => {
+        await lockWorkspaceRole(tx, context.workspaceId, id)
         const row = await tx.run(workspaceRolesInContext.where('id', id).related('permissions').one())
         return row && workspaceRoleOf(row)
       },

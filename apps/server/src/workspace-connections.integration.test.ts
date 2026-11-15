@@ -3,7 +3,8 @@ import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { testCrmConnection } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { createToolCallAccess } from '@spyria/profile/server'
+import { createProfileJobs, createToolCallAccess } from '@spyria/profile/server'
+import { createApp } from './app.ts'
 import { startJobWorker } from './job-worker.ts'
 import { sharedSecretHeader, sharedToolServer } from './testing/fake-mcp.ts'
 import {
@@ -18,16 +19,21 @@ import {
   everyStoredText,
   globex,
   lee,
+  llmGatewayAt,
   mcpCall,
   memberMcpUrl,
   openSharedTestApp,
   openZeroStore,
   promptedBy,
+  rejectionOf,
   rpcOf,
   runtimeTurn,
+  sessionTokenOf,
   sharedMcpUrl,
   succeeded,
+  testAuthSettings,
   textOf,
+  toolConnectionSyncsSettled,
   virtualKeyOf,
   waitFor,
   workspaceEventsOf,
@@ -202,10 +208,9 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   expect(
     (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=${bobAccount}`)).page,
   ).toContain('"connected":true')
-  expect(await asMember(bob, 'POST', '/api/tool-connections/Docs/refresh')).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: 'Connected' }),
-  })
+  expect(await asMember(bob, 'POST', '/api/tool-connections/Docs/refresh')).toEqual({ status: 204, body: '' })
+  await toolConnectionSyncsSettled()
+  expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Connected' }])
   expect((await grantsOf(bob))[gatewayName]).toEqual(['whoami'])
   await addLlmKey(bob, 'Mistral')
   const host = await fakeHost('Member sign-in host')
@@ -215,8 +220,10 @@ test('an admin adds a server each member signs in to: their own sign-in lists it
   await fakeMcp.fetch(new Request(`http://fake-mcp/_admin/expire?user=${bobAccount}`, { method: 'POST' }))
   expect(textOf((await mcpCall(host, token, callOf(gatewayName, 'whoami'))).result)).toBe('Bob needs to reconnect Docs')
   expect((await asMember(bob, 'POST', '/api/tool-connections/check')).status).toBe(204)
+  await toolConnectionSyncsSettled()
   expect(await signInsOf(connectionId)).toEqual([{ user_id: bob, status: 'Needs reconnection' }])
   expect(await setAccess(connectionId, { roleId: 'member' }, 'none')).toBe(200)
+  await toolConnectionSyncsSettled()
   expect(await signInsOf(connectionId)).toEqual([])
   expect(await sessionsOf(bob, gatewayName)).toEqual([])
   await removeKeysOf(bob)
@@ -364,7 +371,8 @@ test('a member moved to a role without access to a server they signed in to lose
       (await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, `fake_mcp_user=bob-${crypto.randomUUID()}`))
         .page,
     ).toContain('"connected":true')
-    expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(200)
+    expect((await asMember(bob, 'POST', '/api/tool-connections/fake/refresh')).status).toBe(204)
+    await toolConnectionSyncsSettled()
     expect(await signInsOf('connection-fake')).toEqual([{ user_id: bob, status: 'Connected' }])
 
     expect(
@@ -669,5 +677,67 @@ test('the agent lists the tools of the member who prompted, so a guest’s turn 
     await waitFor(async () => (await ticketTools()).length === 0)
   } finally {
     await asMember(alice, 'POST', `${connectionsPath}/${connectionId}/remove`)
+  }
+})
+
+const grantRefusingGateway = () =>
+  Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url)
+      const body = request.method === 'GET' || request.method === 'DELETE' ? undefined : await request.text()
+      if (request.method === 'PUT' && body?.includes('"mcp_configs"')) return new Response('down', { status: 503 })
+      return fetch(`${gateway.url}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: request.headers,
+        body,
+      })
+    },
+  })
+
+test("taking a role's access away while the gateway refuses grants succeeds, and a queued gateway sync removes the tools from each member's key once it answers", async () => {
+  expect(await setCrmAccess('member', 'write')).toBe(200)
+  await addLlmKey(bob, 'Mistral')
+  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+  const refusingGateway = grantRefusingGateway()
+  try {
+    const appWithRefusedGrants = createApp({
+      database,
+      ...testAuthSettings,
+      llmGateway: llmGatewayAt(refusingGateway.url.origin),
+    })
+    const revoked = await appWithRefusedGrants.request(accessPath('connection-crm'), {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await sessionTokenOf(database, acme, alice)}` },
+      body: JSON.stringify({ roleId: 'member', level: 'none', toolChanges: {} }),
+    })
+    expect(revoked.status).toBe(200)
+    await waitFor(async () => (await grantsOf(bob))[sharedToolServer] === undefined)
+  } finally {
+    void refusingGateway.stop(true)
+    await setCrmAccess('member', null)
+  }
+})
+
+test('a gateway sync whose tool grant the gateway refuses fails, so the job worker retries it instead of leaving the grant as it was', async () => {
+  await addLlmKey(bob, 'Mistral')
+  expect(await setCrmAccess('member', 'write')).toBe(200)
+  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+  await database.$client`
+    update connection_access set level = 'none'
+    where workspace_id = ${acme} and connection_id = 'connection-crm' and role_id = 'member'`
+  const refusingGateway = grantRefusingGateway()
+  try {
+    const jobs = createProfileJobs(llmGatewayAt(refusingGateway.url.origin))
+    const sync = jobs['profile.gateway-sync']({
+      workspaceId: acme,
+      payload: { memberId: bob },
+      isLastAttempt: false,
+      transact: (work) => zeroDrizzle(schema, database).transaction(work),
+    })
+    expect(String(await rejectionOf(sync))).toContain('The gateway answered PUT')
+  } finally {
+    void refusingGateway.stop(true)
+    await setCrmAccess('member', null)
   }
 })

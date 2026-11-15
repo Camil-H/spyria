@@ -1,9 +1,10 @@
-import { SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
+import { ServerUnreachableScreen, SignInScreen, WorkspaceLoadingScreen } from '@spyria/workspace'
 import { createRoot } from 'react-dom/client'
 import {
   createWorkspaceOfAccount,
   loadAuthMode,
   loadSessions,
+  ServerUnreachable,
   signInWithEmail,
   signInWithPopup,
   submitInPopup,
@@ -59,7 +60,20 @@ const openAppWhenSignedIn = async (result: Awaited<ReturnType<typeof signInWithE
   return { status: 'refused', message: sessionEndedNotice } as const
 }
 
+let workspaceCreation: Promise<unknown> | undefined
+const createWorkspaceOnce = async (name: string) => {
+  workspaceCreation ??= createWorkspaceOfAccount(name)
+  try {
+    await workspaceCreation
+  } catch (error) {
+    workspaceCreation = undefined
+    return { status: 'refused', message: (error as Error).message } as const
+  }
+  return openAppWhenSignedIn({ status: 'signed_in' })
+}
+
 const showSignIn = async (notice?: string) => {
+  workspaceCreation = undefined
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
   const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps } = await loadAuthMode(setupToken)
   root.render(
@@ -74,15 +88,18 @@ const showSignIn = async (notice?: string) => {
       signInWithEmail={async (email) => openAppWhenSignedIn(await signInWithEmail(email))}
       signIn={async (target) => openAppWhenSignedIn(await signInWithPopup(target))}
       createFirstWorkspace={async (form) => openAppWhenSignedIn(await submitInPopup(form, '/auth/first-workspace'))}
-      createWorkspace={(name) =>
-        createWorkspaceOfAccount(name).then(
-          () => openAppWhenSignedIn({ status: 'signed_in' }),
-          (error: Error) => ({ status: 'refused', message: error.message }) as const,
-        )
-      }
+      createWorkspace={createWorkspaceOnce}
     />,
   )
 }
 
-const opened = await openApp()
-if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)
+const boot = async () => {
+  const opened = await openApp()
+  if (opened !== 'opened') await showSignIn(opened === 'session_ended' ? sessionEndedNotice : undefined)
+}
+
+await boot().catch((error: unknown) => {
+  if (!(error instanceof ServerUnreachable)) throw error
+  console.error(error)
+  root.render(<ServerUnreachableScreen />)
+})

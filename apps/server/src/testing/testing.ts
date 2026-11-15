@@ -441,6 +441,13 @@ export const waitingOnLock = async (database: Database) =>
       select 1 from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database() limit 1`
   ).length > 0
 
+export const isBlockedBy = async (database: Database, blockingPid: number | undefined) =>
+  (
+    await database.$client`
+      select 1 from pg_stat_activity
+      where datname = current_database() and ${blockingPid ?? 0}::int = any(pg_blocking_pids(pid)) limit 1`
+  ).length > 0
+
 export const newChat = async ({
   ownerId = alice,
   type = 'runtime',
@@ -664,7 +671,7 @@ export const startAgentStack = async ({
   })
   afterAll(async () => {
     await worker.stop()
-    agentBridge.release(database)
+    await agentBridge.release(database)
     void server.stop(true)
   })
   type Message = Awaited<ReturnType<typeof database.query.messages.findMany>>[number]
@@ -861,10 +868,21 @@ export const connectMember = async (memberId: string, cookie: string) => {
   expect(started.status).toBe(200)
   const consent = await consentThroughSpyria(JSON.parse(started.body).authorizeUrl, cookie)
   expect(consent.page).toContain('"connected":true')
-  expect(await asMember(memberId, 'POST', connectionPath('refresh'))).toEqual({
-    status: 200,
-    body: JSON.stringify({ status: 'Connected' }),
-  })
+  expect(await asMember(memberId, 'POST', connectionPath('refresh'))).toEqual({ status: 204, body: '' })
+  await waitFor(async () =>
+    (await connectionRows()).some((row) => row.user_id === memberId && row.status === 'Connected'),
+  )
+}
+export const toolConnectionSyncsSettled = async () => {
+  const { database } = await openedTestApp()
+  await waitFor(
+    async () =>
+      (
+        await database.$client`
+          select 1 from jobs where workspace_id = ${acme} and type = 'profile.tool-connections-sync'
+            and state in ('queued', 'running') limit 1`
+      ).length === 0,
+  )
 }
 export const connectAlice = (cookie: string) => connectMember(alice, cookie)
 export const connectionRows = async () => [

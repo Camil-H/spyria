@@ -777,6 +777,17 @@ test('signing out closes the stream of that session at once and leaves the other
   await otherViewer.resubscribe()
 })
 
+test('a stream closes once its session ends by any path, such as an SSO change or an operator command deleting it, and other sessions stream on', async () => {
+  const chat = await newRuntimeChat()
+  const ending = await issueTestSession(database, acme, alice)
+  const endingViewer = await openStream(chat, { token: ending.token })
+  const otherViewer = await openStream(chat)
+  await Promise.all([endingViewer.subscribed, otherViewer.subscribed])
+  await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId}`
+  expect(await endingViewer.closed).toBe(4001)
+  await otherViewer.resubscribe()
+})
+
 test.each<[string, (bobToken: string) => Promise<unknown>, unknown]>([
   [
     'signs out everywhere',

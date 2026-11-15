@@ -281,7 +281,7 @@ const runServer = async (options: ReturnType<typeof optionsOf>) => {
       'Forgetting every closed viewer',
     )
     const closeMilliseconds = performance.now() - closeStartedAt
-    agentBridge.release(database)
+    await agentBridge.release(database)
     const afterClose = await sample()
 
     const heldHeapGrowth = held.heapUsed - baseline.heapUsed

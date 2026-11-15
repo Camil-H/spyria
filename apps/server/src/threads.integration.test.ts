@@ -9,6 +9,7 @@ import {
   chatAs,
   countOf,
   failedWith,
+  isBlockedBy,
   messageRow,
   missingPermission,
   newChat,
@@ -18,6 +19,7 @@ import {
   replyTo,
   rootIn,
   succeeded,
+  waitFor,
   writtenMessage,
 } from './testing/testing.ts'
 
@@ -114,4 +116,21 @@ test('markThreadRead never moves backwards and writes nothing for a thread witho
   expect(await markThreadRead(bobInAcme, 'chat-standup', root)).toEqual(succeeded)
   expect(await threadMarkerOf(bob, rootWithoutReplies)).toBeUndefined()
   expect(await database.query.threadReadMarkers.findMany({ where: { chatId: 'chat-standup' } })).toEqual([])
+})
+
+test('markThreadRead that read the marker before a newer one committed keeps the newer one instead of moving it back', async () => {
+  const chat = await newChat({ type: 'channel' })
+  const root = await rootIn(chat)
+  await replyTo(aliceInAcme, chat, root)
+  let read: ReturnType<typeof markThreadRead> | undefined
+  await database.$client.begin(async (newerRead) => {
+    const [blocking] = await newerRead<{ pid: number }[]>`select pg_backend_pid() as pid`
+    await newerRead`
+      insert into thread_read_markers (workspace_id, user_id, chat_id, thread_root_id, last_read_seq)
+      values (${acme}, ${alice}, ${chat}, ${root}, 99)`
+    read = markThreadRead(aliceInAcme, chat, root)
+    await waitFor(() => isBlockedBy(database, blocking?.pid))
+  })
+  expect(await read).toEqual(succeeded)
+  expect(await threadMarkerOf(alice, root)).toEqual({ chatId: chat, lastReadSeq: 99 })
 })

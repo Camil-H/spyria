@@ -4,6 +4,7 @@ import {
   buttonClass,
   cardClass,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   focusRing,
   ghostButtonClass,
@@ -38,13 +39,17 @@ const RetentionForm = ({ workspaceId, onSaved }: { workspaceId: WorkspaceId; onS
   const [savedDays, setSavedDays] = useState<number | null | undefined>(undefined)
   const [isForever, setIsForever] = useState(true)
   const [days, setDays] = useState('30')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readAuditRetention({ workspaceId }).then((retentionDays) => {
-      setSavedDays(retentionDays)
-      setIsForever(retentionDays === null)
-      if (retentionDays !== null) setDays(String(retentionDays))
-    })
+    commands.readAuditRetention({ workspaceId }).then(
+      (retentionDays) => {
+        setSavedDays(retentionDays)
+        setIsForever(retentionDays === null)
+        if (retentionDays !== null) setDays(String(retentionDays))
+      },
+      (error: unknown) => setLoadError(failureMessageOf(error)),
+    )
   }, [commands, workspaceId])
   const save = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -57,7 +62,8 @@ const RetentionForm = ({ workspaceId, onSaved }: { workspaceId: WorkspaceId; onS
     )
       onSaved()
   }
-  if (savedDays === undefined) return <p className="text-sm text-muted">Loading…</p>
+  if (savedDays === undefined)
+    return loadError ? <ErrorMessage message={loadError} /> : <p className="text-sm text-muted">Loading…</p>
   return (
     <form aria-label="Retention" onSubmit={save} className="flex flex-wrap items-end gap-2">
       <label className={labelClass}>
@@ -182,7 +188,7 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
         setNextCursor(page.nextCursor)
         setLoadError(null)
       },
-      (error: Error) => isCurrent && setLoadError(error.message),
+      (error: unknown) => isCurrent && setLoadError(failureMessageOf(error)),
     )
     return () => {
       isCurrent = false
@@ -251,7 +257,7 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
       </fieldset>
       <ErrorMessage message={errorMessage ?? loadError} />
       {entries === null ? (
-        <p className="text-sm text-muted">Loading…</p>
+        !loadError && <p className="text-sm text-muted">Loading…</p>
       ) : entries.length === 0 ? (
         <p className={`${cardClass} px-4 py-6 text-center text-sm text-muted`}>No audit records</p>
       ) : (

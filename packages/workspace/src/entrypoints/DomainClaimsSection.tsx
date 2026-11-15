@@ -3,6 +3,7 @@ import {
   buttonClass,
   CopyButton,
   ErrorMessage,
+  failureMessageOf,
   fieldClass,
   ghostButtonClass,
   LabelledSection,
@@ -58,9 +59,12 @@ export const DomainClaimsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
   const commands = useWorkspaceCommands()
   const [claims, setClaims] = useState<DomainClaimView[]>()
   const [domain, setDomain] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { errorMessage, isPending, run } = useGuardedAction()
   useEffect(() => {
-    commands.readDomainClaims({ workspaceId }).then(setClaims, () => setClaims([]))
+    commands
+      .readDomainClaims({ workspaceId })
+      .then(setClaims, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId])
   const change = (action: () => Promise<DomainClaimView[]>) => run(async () => setClaims(await action()))
   const claim = async (event: SubmitEvent<HTMLFormElement>) => {
@@ -74,7 +78,11 @@ export const DomainClaimsSection = ({ workspaceId }: { workspaceId: WorkspaceId 
         addresses at other domains lose access to this workspace.
       </p>
       {claims === undefined ? (
-        <p className="text-sm text-muted">Loading…</p>
+        loadError ? (
+          <ErrorMessage message={loadError} />
+        ) : (
+          <p className="text-sm text-muted">Loading…</p>
+        )
       ) : (
         claims.length > 0 && (
           <ul aria-label="Claimed domains" className="flex flex-col gap-2">

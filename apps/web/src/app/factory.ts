@@ -21,6 +21,7 @@ import {
 } from '@spyria/profile/server'
 import { createHttpRuntimeHostCommands, type RuntimeCommands, runtimeMutators } from '@spyria/runtime/server'
 import type { Session } from '@spyria/session'
+import { reconnectDelayOf } from '@spyria/ui'
 import {
   createHttpAuditLogCommands,
   createHttpBudgetCommands,
@@ -60,13 +61,13 @@ export type Application = {
   onboardingCommands: OnboardingCommands
 }
 
-const streamReconnectMilliseconds = 1000
 const notSignedInCloseCode = 4001
 
 const createAgentStream = (store: Store): AgentStream => {
   type Listener = Parameters<AgentStream['subscribe']>[2]
   const listenersByWorkspace = new Map<WorkspaceId, Map<ChatId, Set<Listener>>>()
   const socketByWorkspace = new Map<WorkspaceId, WebSocket>()
+  const failedConnectionsByWorkspace = new Map<WorkspaceId, number>()
   const sendTo = (workspaceId: WorkspaceId, frame: object) => {
     const socket = socketByWorkspace.get(workspaceId)
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame))
@@ -80,6 +81,7 @@ const createAgentStream = (store: Store): AgentStream => {
         sendTo(workspaceId, { type: 'subscribe', chatId })
     }
     socket.onmessage = (message) => {
+      failedConnectionsByWorkspace.delete(workspaceId)
       const frame = JSON.parse(String(message.data))
       if (frame.subscribed) return
       for (const listener of listenersByWorkspace.get(workspaceId)?.get(frame.chatId) ?? []) listener(frame)
@@ -87,9 +89,11 @@ const createAgentStream = (store: Store): AgentStream => {
     socket.onclose = async (event) => {
       if (socketByWorkspace.get(workspaceId) !== socket) return
       socketByWorkspace.delete(workspaceId)
-      if (event.code === notSignedInCloseCode) await store.renewSession(workspaceId)
-      if (listenersByWorkspace.get(workspaceId)?.size && store.signedInWorkspaceIds().has(workspaceId))
-        setTimeout(reconnect, streamReconnectMilliseconds, workspaceId)
+      if (event.code === notSignedInCloseCode) await store.renewSession(workspaceId).catch(console.error)
+      if (!listenersByWorkspace.get(workspaceId)?.size || !store.signedInWorkspaceIds().has(workspaceId)) return
+      const failedConnections = failedConnectionsByWorkspace.get(workspaceId) ?? 0
+      failedConnectionsByWorkspace.set(workspaceId, failedConnections + 1)
+      setTimeout(reconnect, reconnectDelayOf(failedConnections), workspaceId)
     }
   }
   const reconnect = (workspaceId: WorkspaceId) => {
@@ -215,6 +219,7 @@ export const createApp = async (
     stopRuntime: mutateConfirmed(conversationMutators.conversation.stopRuntime),
   })
   const agentStream = createAgentStream(store)
+  const createdWorkspaceIdByName = new Map<string, string>()
   return {
     store,
     session: {
@@ -236,9 +241,12 @@ export const createApp = async (
     workspaceCommands: commandsOf<WorkspaceCommands>(workspaceMutators.workspace, {
       createWorkspace: async (input) => {
         const bearerToken = store.tokenOf(input.workspaceId)
-        const { id, confirmation } = await mutate(workspaceMutators.workspace.createWorkspace, input)
-        await confirmation
+        const id =
+          createdWorkspaceIdByName.get(input.name) ??
+          (await mutateConfirmed(workspaceMutators.workspace.createWorkspace)(input))
+        createdWorkspaceIdByName.set(input.name, id)
         await store.signIn(await openSession(workspaceId(id), bearerToken))
+        createdWorkspaceIdByName.delete(input.name)
         return id
       },
       changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),

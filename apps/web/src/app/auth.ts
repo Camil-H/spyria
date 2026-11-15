@@ -18,10 +18,22 @@ const csrfHeaders = { 'content-type': 'application/json', 'x-spyria-csrf': '1' }
 const postAuth = (path: string, workspaceId: WorkspaceId, headers: Record<string, string> = {}) =>
   fetch(path, { method: 'POST', headers: { ...csrfHeaders, ...headers }, body: JSON.stringify({ workspaceId }) })
 
+export class ServerUnreachable extends Error {}
+
+const authJsonOf = async (path: string) => {
+  try {
+    const response = await fetch(path)
+    if (!response.ok) throw new Error(`answered ${response.status}`)
+    return await response.json()
+  } catch (error) {
+    throw new ServerUnreachable(`${new URL(path, location.origin).pathname} could not be read`, { cause: error })
+  }
+}
+
 export const loadSessions = async (): Promise<
   | { userId?: undefined; sessions: [] }
   | { userId: MemberId; sessions: WorkspaceSession[]; deployment: string; version: string; hostImage?: string }
-> => (await fetch('/auth/sessions')).json()
+> => authJsonOf('/auth/sessions')
 
 export const loadAuthMode = async (
   setupToken?: string,
@@ -32,7 +44,7 @@ export const loadAuthMode = async (
   accountProviders: ('google' | 'microsoft' | 'oidc')[]
   callbackOrigin: string
   instanceApps: ('google' | 'microsoft')[]
-}> => (await fetch(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')).json()
+}> => authJsonOf(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')
 
 let sharedAuthModeLoading: ReturnType<typeof loadAuthMode> | undefined
 export const sharedAuthMode = () => {

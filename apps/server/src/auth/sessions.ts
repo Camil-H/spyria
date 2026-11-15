@@ -207,8 +207,9 @@ const bindMemberByEmail = async (
     select users.id,
       exists(select 1 from memberships where memberships.workspace_id = ${workspaceId}
         and memberships.user_id = users.id and memberships.removed_at is null) as "isMember",
-      exists(select 1 from identities where identities.workspace_id = ${workspaceId}
-        and identities.issuer = ${issuer} and identities.user_id = users.id
+      exists(select 1 from identities join memberships on memberships.workspace_id = identities.workspace_id
+          and memberships.user_id = identities.user_id and memberships.removed_at is null
+        where identities.workspace_id = ${workspaceId} and identities.issuer = ${issuer} and identities.user_id = users.id
         and (${currentSubjectPattern ?? null}::text is null or identities.subject ~ ${currentSubjectPattern ?? null})) as "isBound"
     from users where email = ${email}`
   const [invitation] = await sql`

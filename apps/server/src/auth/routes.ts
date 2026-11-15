@@ -69,8 +69,6 @@ type AuthRouteSettings = {
   database: Database
   authenticate: (authorization: string | undefined) => Promise<Authentication>
   testDatabaseByName?: (databaseName: string) => Database
-  closeSessionStreams: (database: Database, workspaceId: string, sessionId: string) => void
-  closeMemberStreams: (database: Database, workspaceId: string, memberId: string) => void
   rateLimited: (name: RateLimitName) => MiddlewareHandler
 }
 type TestSettings = { db?: string; user?: string; tokenSeconds?: number }
@@ -142,8 +140,6 @@ export const createAuthRoutes = ({
   database,
   authenticate,
   testDatabaseByName,
-  closeSessionStreams,
-  closeMemberStreams,
   rateLimited,
 }: AuthRouteSettings) => {
   const isSetupToken = (given: unknown) => isSameSecret(setupToken, given)
@@ -518,7 +514,6 @@ export const createAuthRoutes = ({
       const { database } = scopeOf(context)
       const sessionId = sessionIdOf(context, workspaceId)
       await deleteSession(database, workspaceId, sessionId)
-      closeSessionStreams(database, workspaceId, sessionId)
       deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
       return context.body(null, 204)
     })
@@ -558,7 +553,6 @@ export const createAuthRoutes = ({
     .post('/sign-out-everywhere', (context) =>
       asMember(context, async ({ context: { workspaceId, userId }, scope }) => {
         await signOutMemberEverywhere(scope.database, workspaceId, userId)
-        closeMemberStreams(scope.database, workspaceId, userId)
         deleteCookie(context, `${sessionCookiePrefix}${workspaceId}`, { path: '/auth' })
         return context.body(null, 204)
       }),

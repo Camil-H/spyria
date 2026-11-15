@@ -72,4 +72,24 @@ test.describe('Settings', () => {
     await mainOf(page).getByRole('link', { name: 'Back to Workspace settings' }).click()
     await expect(cardOf(page, 'Members and roles')).toContainText('3 members · 1 pending invite')
   })
+
+  test('As a member who can manage the workspace, I am told when a settings page cannot be read instead of seeing it load forever', {
+    tag: ['@spec-42'],
+  }, async ({ page }) => {
+    await page.route(/\/api\/(github-settings|audit-log\/retention)$/, (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({ status: 503, body: 'Service unavailable' })
+        : route.continue(),
+    )
+
+    await page.goto('/w/workspace-acme/settings/github')
+    const githubSection = mainOf(page).getByRole('region', { name: 'GitHub' })
+    await expect(githubSection.getByRole('alert')).toHaveText('The server could not be reached (503)')
+    await expect(githubSection).not.toContainText('Loading…')
+
+    await page.goto('/w/workspace-acme/settings/audit')
+    await expect(mainOf(page).getByRole('alert')).toHaveText('The request was refused with 503')
+    await expect(mainOf(page).getByRole('form', { name: 'Retention' })).toHaveCount(0)
+    await expect(mainOf(page)).not.toContainText('Loading…')
+  })
 })

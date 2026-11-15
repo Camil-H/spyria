@@ -141,7 +141,7 @@ const releaseDatabase = async (databaseName: string) => {
   servedDatabaseByName.delete(databaseName)
   clearInterval(served?.usageTimer)
   await served?.jobWorker.stop()
-  if (served) agentBridge.release(served.database)
+  if (served) await agentBridge.release(served.database)
   await served?.database.$client.end({ timeout: 5 })
 }
 
