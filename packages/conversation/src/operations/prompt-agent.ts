@@ -13,6 +13,7 @@ import {
   type MemberId,
   type MessageId,
   signInNoticeOf,
+  systemActor,
   type WorkspaceId,
   withPricesOf,
 } from '@spyria/kernel'
@@ -30,6 +31,7 @@ import { devLoopAuthorName, isDevLoopPrompt } from '../domain/dev-loop.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { modelNotAllowedNoticeOf, noLlmKeyNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
+import { joinsRunningTurn } from '../domain/queued-prompts.ts'
 import { agentPromptTextOf, type QuotedMessage } from '../domain/seed-message.ts'
 import {
   piModelOf,
@@ -41,6 +43,7 @@ import {
 } from '../domain/session-routing.ts'
 import {
   type AgentDependencies,
+  agentTurnJob,
   beginAgentTurn,
   closeAgentTurn,
   noticeWaitingPrompts,
@@ -97,6 +100,71 @@ const savedAttachmentsOf = async (
     if (path) savedPaths.set(id, path)
   }
   return savedPaths
+}
+
+const savedAttachmentListOf = (prompt: Message, savedPaths: ReadonlyMap<string, string>) =>
+  prompt.attachments.flatMap(({ id, mediaType }) => {
+    const path = savedPaths.get(id)
+    return path ? [{ path, mediaType }] : []
+  })
+
+const pickUpQueuedPrompt = async (unitOfWork: UnitOfWork, chatId: ChatId) => {
+  const { agentTurns, messages, chats } = unitOfWork
+  const turnPromptId = await agentTurns.lock(chatId)
+  if (turnPromptId === null) return undefined
+  const [queued] = (await agentTurns.waitingPrompts(chatId)).filter((prompt) => prompt.pickedUpAt === null)
+  if (!queued?.authorId || !joinsRunningTurn(await messages.get(turnPromptId), queued)) return undefined
+  if (!can(await chats.permissions(chatId, queued.authorId), 'chat.post')) return undefined
+  const pickedUp = { ...queued, pickedUpAt: new Date() }
+  await messages.record({
+    type: 'message.picked_up',
+    actor: systemActor(agentTurnJob, queued.authorId),
+    message: pickedUp,
+  })
+  return pickedUp
+}
+
+const requeue = async ({ messages }: UnitOfWork, prompt: Message) => {
+  const current = await messages.lock(prompt.id)
+  if (current.pickedUpAt === null) return
+  await messages.record({
+    type: 'message.requeued',
+    actor: systemActor(agentTurnJob, prompt.authorId),
+    message: { ...current, pickedUpAt: null },
+  })
+}
+
+const handedToRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat, prompt: Message) => {
+  const { transactor, runtimes, agentClient } = dependencies
+  const endpoint = await runtimes.endpointOf(chat)
+  if (!endpoint?.conversationId) return false
+  const conversation = { ...endpoint, conversationId: endpoint.conversationId }
+  const quoted = await transactor.run((unitOfWork) => quotedByPrompt(unitOfWork, prompt))
+  const savedPaths = await savedAttachmentsOf(dependencies, { chat, conversation, prompt, isLastAttempt: true })
+  return agentClient.joinTurn(
+    conversation,
+    agentPromptTextOf(prompt, undefined, quoted, savedPaths),
+    prompt.id,
+    savedAttachmentListOf(prompt, savedPaths),
+  )
+}
+
+const joinRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat) => {
+  const { transactor } = dependencies
+  for (;;) {
+    const prompt = await transactor.run((unitOfWork) => pickUpQueuedPrompt(unitOfWork, chat.chatId))
+    if (!prompt) return undefined
+    const isHanded = await handedToRunningTurn(dependencies, chat, prompt).catch((error) => {
+      log.warn({
+        event: 'agent.join_failed',
+        body: 'Handing a message to the running turn failed; it waits for the next turn',
+        attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+        error,
+      })
+      return false
+    })
+    if (!isHanded) return transactor.run((unitOfWork) => requeue(unitOfWork, prompt))
+  }
 }
 
 const reachableChatModelsOf = async (
@@ -467,7 +535,7 @@ export const promptAgent = async (
   const prompt = await transactor.run((unitOfWork) =>
     beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
   )
-  if (!prompt) return undefined
+  if (!prompt) return localSession ? undefined : joinRunningTurn(dependencies, chat)
   if (prompt.authorId) dependencies.onTurnPrompter?.(chat, prompt.authorId)
   let conversation: AgentConversation
   try {
@@ -491,10 +559,7 @@ export const promptAgent = async (
       conversation,
       agentPromptTextOf(prompt, seed, quoted, savedPaths),
       prompt.id,
-      prompt.attachments.flatMap(({ id, mediaType }) => {
-        const path = savedPaths.get(id)
-        return path ? [{ path, mediaType }] : []
-      }),
+      savedAttachmentListOf(prompt, savedPaths),
     )
   } catch (error) {
     if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)

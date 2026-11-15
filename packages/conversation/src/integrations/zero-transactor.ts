@@ -103,6 +103,7 @@ const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message
     attachments: attachments ?? [],
     createdAt: new Date(row.createdAt),
     editedAt: dateOrNull(row.editedAt),
+    pickedUpAt: dateOrNull(row.pickedUpAt ?? null),
     replyToId: row.replyToId === null ? null : messageId(row.replyToId),
     threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
     quotedMessageId: row.quotedMessageId === null ? null : messageId(row.quotedMessageId),
@@ -177,11 +178,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       actor: change.actor,
       payload: payloadOf(change),
       createdAt:
-        change.type === 'message.step_changed'
+        change.type === 'message.step_changed' || change.type === 'message.requeued'
           ? new Date()
-          : message.status === 'deleted'
-            ? message.deletedAt
-            : (message.editedAt ?? message.createdAt),
+          : change.type === 'message.picked_up'
+            ? (change.message.pickedUpAt ?? new Date())
+            : message.status === 'deleted'
+              ? message.deletedAt
+              : (message.editedAt ?? message.createdAt),
       ...(isPosted(change.type) && { id: message.id }),
     })
   }
@@ -248,6 +251,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     body: message.status === 'deleted' ? '' : message.body,
     createdAt: message.createdAt.getTime(),
     editedAt: timeOrNull(message.editedAt),
+    pickedUpAt: timeOrNull(message.pickedUpAt),
     deletedAt: message.status === 'deleted' ? message.deletedAt.getTime() : null,
   })
   const unitOfWork: UnitOfWork = {
@@ -302,12 +306,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       history: async (id) =>
         messagesFromEvents(await chatEventsOf(tx, contextWorkspaceId, id))
           .filter((message) => message.kind === 'member' || message.kind === 'agent')
-          .map(({ createdAt, editedAt, deletedAt, ...message }) =>
+          .map(({ createdAt, editedAt, deletedAt, pickedUpAt, ...message }) =>
             toMessage({
               ...message,
               createdAt: createdAt.getTime(),
               editedAt: timeOrNull(editedAt),
               deletedAt: timeOrNull(deletedAt),
+              pickedUpAt: timeOrNull(pickedUpAt),
             }),
           ),
       pullRequestCard: (id) => ownedStepCard(id, 'pull_request'),

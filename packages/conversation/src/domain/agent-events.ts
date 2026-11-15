@@ -223,6 +223,7 @@ const storedAcpUpdates = [
   'question_answered',
   'question_closed',
   'events_lost',
+  'prompt_joined',
 ]
 
 export const isApprovalQuestion = (event: AgentEvent) => {
@@ -254,6 +255,11 @@ export const contextUsageOf = (event: AgentEvent) => {
 export const turnEndPromptIdOf = (event: AgentEvent) => {
   const update = event.update as Fields
   return update?.sessionUpdate === 'turn_end' && typeof update.promptId === 'string' ? update.promptId : undefined
+}
+
+export const promptJoinedIdOf = (event: AgentEvent) => {
+  const update = event.update as Fields
+  return update?.sessionUpdate === 'prompt_joined' && typeof update.promptId === 'string' ? update.promptId : undefined
 }
 
 export const streamedTextOf = (event: AgentEvent) => {

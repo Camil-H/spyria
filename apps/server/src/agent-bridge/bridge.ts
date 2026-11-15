@@ -12,6 +12,7 @@ import {
   isApprovalQuestion,
   isAuthRequiredError,
   isStoredAgentEvent,
+  promptJoinedIdOf,
   type QuestionFrame,
   type RepositoryCheckouts,
   type SessionClassifier,
@@ -74,6 +75,12 @@ export const createAgentBridge = ({
   const turnContextOf = (workspace: string, promptId: string) => {
     const turn = turnSpans.get(turnKeyOf(workspace, promptId))
     return turn ? trace.setSpan(ROOT_CONTEXT, turn.span) : ROOT_CONTEXT
+  }
+  const moveTurnSpan = (workspace: string, fromPromptId: string, toPromptId: string) => {
+    const turn = turnSpans.get(turnKeyOf(workspace, fromPromptId))
+    if (!turn || turnSpans.has(turnKeyOf(workspace, toPromptId))) return
+    turnSpans.delete(turnKeyOf(workspace, fromPromptId))
+    turnSpans.set(turnKeyOf(workspace, toPromptId), turn)
   }
   const inTurn = async <Result>(
     workspace: string,
@@ -406,6 +413,12 @@ export const createAgentBridge = ({
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
             chatSocket.questions.delete(String(update.questionId))
+          const joinedPromptId = promptJoinedIdOf(event)
+          if (joinedPromptId && chatSocket.promptId && !chatSocket.drainingPromptId) {
+            flushSegment(event)
+            moveTurnSpan(chat.workspaceId, chatSocket.promptId, joinedPromptId)
+            Object.assign(chatSocket, { promptId: joinedPromptId, streamedText: '' })
+          }
           const endedPromptId = turnEndPromptIdOf(event)
           if (endedPromptId && endedPromptId !== chatSocket.promptId && endedPromptId !== chatSocket.drainingPromptId)
             return record(event, messageId(endedPromptId))

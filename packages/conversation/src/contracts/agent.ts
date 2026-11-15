@@ -135,6 +135,12 @@ export type AgentClient = {
     promptId?: MessageId,
     attachments?: readonly SavedAttachment[],
   ): Promise<void>
+  joinTurn(
+    conversation: AgentConversation,
+    text: string,
+    promptId: MessageId,
+    attachments?: readonly SavedAttachment[],
+  ): Promise<boolean>
   saveAttachment(conversation: AgentConversation, attachment: AgentAttachment): Promise<string>
   answerQuestion(conversation: AgentConversation, questionId: string, answer: object): Promise<number>
   statusOf(conversation: AgentConversation): Promise<string | undefined>

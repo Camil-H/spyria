@@ -6,6 +6,7 @@ import {
   delegatedProjectionOf,
   isAuthRequiredError,
   observedProjectionStep,
+  promptJoinedIdOf,
   subagentDelegationOf,
   toolCallIdOf,
   turnEndNoticeOf,
@@ -102,5 +103,24 @@ const recordIn = async (
   }
 }
 
+const turnPromptIdAfterJoin = async (
+  { agentTurns, messages }: UnitOfWork,
+  activePromptId: MessageId | null,
+  { chatId, event, delegation, turnPromptId }: Input,
+) => {
+  const joinedPromptId = promptJoinedIdOf(event)
+  if (!joinedPromptId || delegation || turnPromptId || activePromptId === null) return activePromptId
+  const joined = await messages.find(messageId(joinedPromptId))
+  if (joined?.chatId !== chatId) return activePromptId
+  await agentTurns.set(chatId, joined)
+  return joined.id
+}
+
 export const recordAgentEvent = ({ transactor }: Dependencies, input: Input) =>
-  transactor.run(async (unitOfWork) => recordIn(unitOfWork, await unitOfWork.agentTurns.lock(input.chatId), input))
+  transactor.run(async (unitOfWork) =>
+    recordIn(
+      unitOfWork,
+      await turnPromptIdAfterJoin(unitOfWork, await unitOfWork.agentTurns.lock(input.chatId), input),
+      input,
+    ),
+  )

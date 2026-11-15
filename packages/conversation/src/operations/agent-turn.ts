@@ -24,7 +24,7 @@ import { afterLoopTurn } from './dev-loop-turns.ts'
 import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
 
-const agentTurnJob = 'agent.turn'
+export const agentTurnJob = 'agent.turn'
 type NoticeOf = (hasReply: boolean) => string | undefined
 export type AgentDependencies = {
   transactor: ConversationTransactor

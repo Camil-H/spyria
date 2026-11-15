@@ -34,6 +34,7 @@ const snapshotWith = ({ turn, waiting }: { turn: boolean; waiting: boolean }): S
         createdAt: '2026-10-01T09:00:00.000Z',
         editedAt: null,
         deletedAt: null,
+        pickedUpAt: null,
         needsReply: waiting,
       },
     ],
@@ -121,6 +122,7 @@ const replyRow = (
   createdAt: new Date(turnStart + (fields.at ?? seq) * 1000).toISOString(),
   editedAt: null,
   deletedAt: null,
+  pickedUpAt: null,
   needsReply: false,
 })
 const thought = { type: 'thought', text: 'Check the toolchain.', durationMilliseconds: 4000 } as const
