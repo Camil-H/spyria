@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
+import type { BrowserStreamListener } from './browsers.ts'
 import { bodyFramesOf, createRelay, frameTextOf, relayChunkBytes } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
@@ -349,4 +350,62 @@ test('a stream with credit holds what the server has not acknowledged, whatever 
   await relay.handle({ type: 'ws_msg', sid: 5, data: '1 10' })
   await waitFor(() => relayedOf(5).length === 5)
   expect(relayedOf(5).at(-1)).toBe('0')
+})
+
+const browserKey = 'f'.repeat(32)
+const browserRelay = () => {
+  const sent: Record<string, unknown>[] = []
+  const written: string[] = []
+  const opened: string[] = []
+  let listener: BrowserStreamListener | undefined
+  const attached = Promise.withResolvers<void>()
+  const relay = createRelay({
+    addressOf: async () => {
+      throw new Error('a browser stream never reaches the runtime')
+    },
+    send: (frame) => sent.push(frame),
+    openBrowser: async (runtimeId, key, browserListener) => {
+      opened.push(`${runtimeId}/${key}`)
+      listener = browserListener
+      browserListener.onLine('{"type":"ready"}')
+      await attached.promise
+      return { send: (line) => written.push(line), close: () => browserListener.onClose() }
+    },
+  })
+  return {
+    relay,
+    sent,
+    written,
+    opened,
+    attach: attached.resolve,
+    output: (line: string) => listener?.onLine(line),
+    nextOf: (type: string) => nextFrameOf(sent, type),
+  }
+}
+
+test("a browser stream reaches the browser's controller, not the runtime, keeping order both ways", async () => {
+  const { relay, written, opened, attach, output, nextOf } = browserRelay()
+  const connecting = relay.handle({ type: 'ws_connect', sid: 20, runtimeId: 'runtime-1', browserKey })
+  await relay.handle({ type: 'ws_msg', sid: 20, data: '{"type":"settings"}' })
+  attach()
+  await connecting
+  expect(opened).toEqual([`runtime-1/${browserKey}`])
+  expect(await nextOf('ws_open')).toEqual({ type: 'ws_open', sid: 20 })
+  expect(await nextOf('ws_msg')).toEqual({ type: 'ws_msg', sid: 20, data: '{"type":"ready"}' })
+  expect(written).toEqual(['{"type":"settings"}'])
+  output('{"type":"page"}')
+  expect(await nextOf('ws_msg')).toEqual({ type: 'ws_msg', sid: 20, data: '{"type":"page"}' })
+  await relay.handle({ type: 'ws_close', sid: 20 })
+  expect(await nextOf('ws_close')).toEqual({ type: 'ws_close', sid: 20 })
+})
+
+test('a browser stream with an invalid key, or on a host without browsers, closes at once', async () => {
+  const { relay, opened, nextOf } = browserRelay()
+  await relay.handle({ type: 'ws_connect', sid: 21, runtimeId: 'runtime-1', browserKey: '../x' })
+  expect(await nextOf('ws_close')).toEqual({ type: 'ws_close', sid: 21, error: 'refused: invalid browser key' })
+  expect(opened).toEqual([])
+  const sent: Record<string, unknown>[] = []
+  const withoutBrowsers = createRelay({ addressOf: async () => '', send: (frame) => sent.push(frame) })
+  await withoutBrowsers.handle({ type: 'ws_connect', sid: 22, runtimeId: 'runtime-1', browserKey })
+  expect(await nextFrameOf(sent, 'ws_close')).toMatchObject({ sid: 22, error: 'refused: invalid browser key' })
 })

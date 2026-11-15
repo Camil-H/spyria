@@ -1,6 +1,7 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
+import { attachToBrowser } from './browsers.ts'
 import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
 import { createDocker } from './docker.ts'
 import { harnessNames } from './harnesses.ts'
@@ -85,6 +86,7 @@ const runner = createCommandRunner({
   prefix,
   selfContainerId: isInContainer ? hostname() : undefined,
   personal: isPersonal,
+  freeMemoryBytes: () => freeMemoryBytes(memorySource),
 })
 class SignInsNeverRead extends Error {
   constructor() {
@@ -179,6 +181,8 @@ const connect = () => {
     send,
     isBackedUp: () => socket.bufferedAmount > maximumBufferedBytes,
     personal: isPersonal ? { secrets } : undefined,
+    openBrowser: async (runtimeId, browserKey, listener) =>
+      attachToBrowser(dockerSocket, await runner.browserNameOf(runtimeId, browserKey), listener),
   })
   const failHello = (error: unknown) => {
     logHelloFailure(error)
