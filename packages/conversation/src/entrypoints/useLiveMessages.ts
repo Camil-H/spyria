@@ -67,6 +67,7 @@ const liveMessageOf = (
   createdAt: messages.find((message) => message.id === promptId)?.createdAt ?? new Date(0),
   replyToId: messageId(promptId),
   canEdit: false,
+  isQueued: false,
   isDeleted: false,
   isEdited: false,
   isRunning: true,

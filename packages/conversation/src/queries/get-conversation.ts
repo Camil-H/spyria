@@ -35,6 +35,7 @@ import {
 } from '../domain/dev-loop.ts'
 import { isAgentActivity, isChangeableBy, isFrozen, quotableKinds } from '../domain/message.ts'
 import type { PullRequestStep } from '../domain/pull-requests.ts'
+import { isQueuedPrompt } from '../domain/queued-prompts.ts'
 import { type RunsOn, runsOnOf } from '../domain/session-routing.ts'
 import { conversationChatIn } from './conversation-chat.ts'
 
@@ -50,6 +51,7 @@ export type ConversationMessage = Readonly<{
   replyToId: MessageId | null
   isOnViewersPrompt: boolean
   canEdit: boolean
+  isQueued: boolean
   isDeleted: boolean
   isEdited: boolean
   isRunning: boolean
@@ -342,6 +344,14 @@ export const getConversation =
       new Map(workspaceConnectionsIn(snapshot, workspaceId).map(({ gatewayName, name }) => [gatewayName, name])),
     )
     const chatMessageById = new Map(chatMessages.map((message) => [message.id, message]))
+    const repliesByPromptId = Map.groupBy(
+      chatMessages.filter((message) => message.replyToId !== null),
+      (message) => message.replyToId,
+    )
+    const isQueued = (message: MessageRow) =>
+      !isChannel &&
+      message.deletedAt === null &&
+      isQueuedPrompt(message, chat.agentTurnMessageId, repliesByPromptId.get(message.id) ?? [])
     const authorNameOf = (message: MessageRow) =>
       isDevLoopPrompt(message) ? devLoopAuthorName : memberName(message.authorId)
     const quoteOf = (quotedMessageId: MessageId | null): ConversationMessage['quote'] => {
@@ -373,7 +383,8 @@ export const getConversation =
         step,
         replyToId: message.replyToId,
         isOnViewersPrompt: message.replyToId !== null && chatMessageById.get(message.replyToId)?.authorId === viewerId,
-        canEdit: canPost && isChangeableBy(message, viewerId),
+        canEdit: canPost && isChangeableBy(message, viewerId) && (isChannel || isQueued(message)),
+        isQueued: isQueued(message),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
         isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,

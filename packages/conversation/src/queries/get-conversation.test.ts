@@ -52,6 +52,23 @@ test('the agent works while the chat has an active turn or a prompt waiting for 
   expect(activityOf({ turn: true, waiting: true })).toEqual({ isAgentWorking: true, hasActiveTurn: true })
 })
 
+test('a prompt shows as queued, and only its author can edit or delete it, until the agent picks it up', () => {
+  const promptSeenBy = (viewerId: typeof alice, state: { turn: boolean }, pickedUpAt: string | null = null) => {
+    const snapshot = snapshotWith({ ...state, waiting: true })
+    const messages = snapshot.messages.map((message) => (message.id === prompt ? { ...message, pickedUpAt } : message))
+    const shown = getConversation(
+      acme,
+      research,
+      viewerId,
+    )({ ...snapshot, messages })?.items.find((item) => item.type === 'message' && item.message.id === prompt)
+    return shown?.type === 'message' && { isQueued: shown.message.isQueued, canEdit: shown.message.canEdit }
+  }
+  expect(promptSeenBy(alice, { turn: false })).toEqual({ isQueued: true, canEdit: true })
+  expect(promptSeenBy(bob, { turn: false })).toEqual({ isQueued: true, canEdit: false })
+  expect(promptSeenBy(alice, { turn: true })).toEqual({ isQueued: false, canEdit: false })
+  expect(promptSeenBy(alice, { turn: false }, '2026-10-01T09:01:00.000Z')).toEqual({ isQueued: false, canEdit: false })
+})
+
 test('the chat is setting up while the setup command of the active turn runs, and no longer once it ended', () => {
   const isSettingUpWith = ({
     turn,
@@ -454,7 +471,13 @@ test.each([
     const invoiceBug = chatId('chat-invoice-bug')
     const snapshot = createMockSnapshot()
     const othersMessage = { ...replyRow(2, 'agent'), chatId: invoiceBug, id: messageId('others'), authorId: null }
-    const ownMessage = { ...othersMessage, kind: 'member' as const, id: messageId('own'), authorId: viewer }
+    const ownMessage = {
+      ...othersMessage,
+      kind: 'member' as const,
+      id: messageId('own'),
+      authorId: viewer,
+      replyToId: null,
+    }
     const ownStepCard = { ...othersMessage, kind: 'step' as const, id: messageId('own-step-card'), authorId: viewer }
     const conversation = getConversation(
       acme,
@@ -530,7 +553,8 @@ test('a message carries the picture of its member author, an agent message none,
     messages: [...snapshot.messages, replyRow(2, 'agent'), loopPrompt, quotingLoopPrompt],
   })
   const messageWith = (id: string) => conversation?.messages.find((message) => message.id === id)
-  expect(messageWith(prompt)).toMatchObject({ authorName: 'Alice', authorAvatar: picture, canEdit: true })
+  expect(messageWith(prompt)).toMatchObject({ authorName: 'Alice', authorAvatar: picture, canEdit: false })
+  expect(messageWith(quotingLoopPrompt.id)).toMatchObject({ authorName: 'Alice', canEdit: true })
   expect(messageWith(replyRow(2, 'agent').id)).toMatchObject({ authorName: 'Agent', authorAvatar: null })
   expect(messageWith(loopPrompt.id)).toMatchObject({ authorName: 'Quality gates', authorAvatar: null, canEdit: false })
   expect(messageWith(quotingLoopPrompt.id)?.quote?.original?.authorName).toBe('Quality gates')
