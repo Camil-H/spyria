@@ -33,6 +33,7 @@ import {
   rejectionOf,
   rpcOf,
   runtimeTurn,
+  sessionTokenOf,
   testAuthSettings,
   testSecretsKeyring,
   textOf,
@@ -59,13 +60,15 @@ beforeEach(async () => {
   await toolConnectionSyncsSettled()
 })
 const checkAlice = () => asMember(alice, 'POST', '/api/tool-connections/check')
+const postWithToken = async (token: string, path: string) => {
+  const response = await app.request(path, { method: 'POST', headers: { authorization: `Bearer ${token}` } })
+  return { status: response.status, body: await response.text() }
+}
 const syncsRunFor = async (userId: string) =>
   (
     await database.$client`
       select 1 from jobs where type = 'profile.tool-connections-sync' and payload->>'memberId' = ${userId}`
   ).length
-const refreshAlice = () => asMember(alice, 'POST', connectionPath('refresh'))
-const disconnectAlice = () => asMember(alice, 'POST', connectionPath('disconnect'))
 const fakeClientId = async () => (await llmGateway.toolServers()).find((server) => server.name === 'fake')?.id
 const sessionsOf = async (virtualKeyId: string) =>
   (
@@ -101,12 +104,13 @@ test('Connect grants the server on the member key, runs the consent through Spyr
 test('a Disconnect while a sync is about to store Connected leaves no connection once the syncs have run', async () => {
   await connectAlice(aliceCookie)
   const key = await virtualKeyOf(alice)
+  const token = await sessionTokenOf(database, acme, alice)
   await database.$client.begin(async (held) => {
     const [blocking] = await held<{ pid: number }[]>`select pg_backend_pid() as pid`
     await held`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
-    expect((await checkAlice()).status).toBe(204)
+    expect((await postWithToken(token, '/api/tool-connections/check')).status).toBe(204)
     await waitFor(() => isBlockedBy(database, blocking?.pid))
-    expect((await asMember(alice, 'POST', connectionPath('disconnect'))).status).toBe(204)
+    expect((await postWithToken(token, connectionPath('disconnect'))).status).toBe(204)
   })
   await toolConnectionSyncsSettled()
   expect(await sessionsOf(key.id)).toEqual([])
@@ -120,12 +124,13 @@ test('every refresh, check and Disconnect only queues the member’s sync, and a
         select state from jobs where type = 'profile.tool-connections-sync' and payload->>'memberId' = ${userId}
           and state in ('queued', 'running')`
     ).map(({ state }) => state)
+  const token = await sessionTokenOf(database, acme, alice)
   await database.$client.begin(async (held) => {
     await held`select 1 from memberships where workspace_id = ${acme} and user_id = ${alice} for update`
-    expect((await checkAlice()).status).toBe(204)
+    expect((await postWithToken(token, '/api/tool-connections/check')).status).toBe(204)
     await waitFor(async () => (await syncsOf(alice)).join() === 'running')
-    for (const answer of [await checkAlice(), await refreshAlice(), await disconnectAlice()])
-      expect(answer.status).toBe(204)
+    for (const path of ['/api/tool-connections/check', connectionPath('refresh'), connectionPath('disconnect')])
+      expect((await postWithToken(token, path)).status).toBe(204)
     expect((await syncsOf(alice)).toSorted()).toEqual(['queued', 'running'])
   })
   await toolConnectionSyncsSettled()
