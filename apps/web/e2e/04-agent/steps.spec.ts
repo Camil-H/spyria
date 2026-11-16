@@ -17,6 +17,7 @@ import {
   research,
   sendMessage,
   machineTest as test,
+  workingFoldOf,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -62,6 +63,7 @@ test.describe('Steps', () => {
         const command = messageContaining(page, 'python3 --version')
         await expect(command.getByRole('img', { name: 'Running' })).toBeVisible()
         await release('command')
+        await workingFoldOf(page, 3).click()
         await expect(command.getByRole('img', { name: 'Succeeded' })).toBeVisible()
         await expect(command).toContainText('exit 0')
         await expect(messageContaining(page, 'Edited totals.ts +2 −1')).toHaveCount(1)
@@ -69,6 +71,7 @@ test.describe('Steps', () => {
         await expect(messageContaining(page, fixedText)).toHaveCount(0)
         await release('answer')
         await expect(messageContaining(page, fixedText)).toHaveCount(1)
+        await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
         return
       }
       await newHarnessChat(page, harness, `${harness.name} steps`, { machine })
@@ -104,14 +107,13 @@ test.describe('Steps', () => {
         return
       }
       await sendMessage(page, 'stub:read stub:tools stub:linger')
+      await workingFoldOf(page, 3).click()
       await expect(messageContaining(page, '$ npm test').getByRole('img', { name: 'Failed' })).toBeVisible()
       await expect(messageContaining(page, 'Read notes.md')).toBeVisible()
       await expect(page.getByRole('status', { name: 'Agent is working' })).toBeVisible()
       await release('linger')
       await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
-      await messageItemsOf(page)
-        .getByRole('button', { name: /^Worked for .+ · 3 steps$/ })
-        .click()
+      await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
       await expect(messageContaining(page, 'Read notes.md')).toBeVisible()
       const command = messageContaining(page, '$ npm test')
       await expect(command.getByRole('img', { name: 'Failed' })).toBeVisible()
@@ -126,7 +128,7 @@ test.describe('Steps', () => {
       await openChat(page, 'Research')
     })
 
-    test('As a prompter, I see the steps fold into one line above the answer, expand in order, and stay folded after a reload', {
+    test('As a prompter, I see the steps fold into one line above the answer, expand in order, and stay open after a reload', {
       tag: ['@spec-10'],
     }, async ({ page, agentScript }) => {
       await agentScript(research, { steps: fixSteps(), text: fixedText })
@@ -146,9 +148,82 @@ test.describe('Steps', () => {
       await expect(messageItemsOf(page).nth(5)).toContainText(fixedText)
 
       await page.reload()
-      await expect(foldOf(page, 3)).toBeVisible()
-      await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'false')
+      await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
+      await expect(messageItemsOf(page)).toHaveCount(6)
+    })
+
+    test('As a member, I see a turn that ended without a closing reply folded under "Worked for … · N steps", with the agent’s last note visible', {
+      tag: ['@spec-10'],
+    }, async ({ page, agentScript }) => {
+      const note = 'Host side pushed. Now the server…'
+      await agentScript(research, {
+        steps: [{ command: 'echo host' }, { command: 'echo pushed', say: note }],
+        text: '',
+      })
+      await sendMessage(page, 'Push both sides')
+
+      await expect(foldOf(page, 2)).toHaveAttribute('aria-expanded', 'false')
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(3)
+      await expect(messageItemsOf(page).nth(2)).toContainText(note)
+      await expect(mainOf(page)).not.toContainText('$ echo host')
+    })
+
+    test('As a member, I watch a running turn fold its finished steps under "Working · N steps", the running step showing below the fold', {
+      tag: ['@spec-10'],
+    }, async ({ page, agentScript, heldCommand, release }) => {
+      const running = `${heldCommand('tests')} && echo tested`
+      await agentScript(research, { steps: [...fixSteps(), { command: running }], text: fixedText })
+      await sendMessage(page, 'Fix the totals and test them')
+
+      await expect(workingFoldOf(page, 3)).toHaveAttribute('aria-expanded', 'false')
+      const runningStep = messageContaining(page, `$ ${running}`)
+      await expect(runningStep.getByRole('img', { name: 'Running' })).toBeVisible()
+      await expect(messageItemsOf(page).nth(1)).toContainText('Working · 3 steps')
+      await expect(messageItemsOf(page).nth(2)).toContainText(running)
+      await expect(mainOf(page)).not.toContainText('Edited totals.ts')
+      await release('tests')
+      await expect(foldOf(page, 4)).toBeVisible()
+      await expect(messageItemsOf(page)).toHaveCount(3)
+      await expect(messageItemsOf(page).nth(2)).toContainText(fixedText)
+    })
+
+    test('As a member, I open a running turn’s fold, and it stays open as new steps arrive and when the turn ends', {
+      tag: ['@spec-10'],
+    }, async ({ page, agentScript, heldCommand, release }) => {
+      await agentScript(research, {
+        steps: [
+          { command: 'echo one' },
+          { command: 'echo two' },
+          { command: heldCommand('three') },
+          { command: 'echo four' },
+        ],
+        text: fixedText,
+      })
+      await sendMessage(page, 'Count to four')
+
+      await workingFoldOf(page, 2).click()
+      await expect(workingFoldOf(page, 2)).toHaveAttribute('aria-expanded', 'true')
+      await expect(messageContaining(page, '$ echo two')).toHaveCount(1)
+      await release('three')
+      await expect(foldOf(page, 4)).toHaveAttribute('aria-expanded', 'true')
+      await expect(messageContaining(page, '$ echo four')).toHaveCount(1)
+      await expect(messageContaining(page, fixedText)).toHaveCount(1)
+      await page.reload()
+      await expect(foldOf(page, 4)).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    test('As a member, I see a step that failed outside the fold, with the other steps folded', {
+      tag: ['@spec-10'],
+    }, async ({ page, agentScript }) => {
+      await agentScript(research, {
+        steps: [{ command: 'echo one' }, { command: 'echo two' }, { fail: 'The model is overloaded' }],
+      })
+      await sendMessage(page, 'Try it')
+
+      await expect(foldOf(page, 2)).toHaveAttribute('aria-expanded', 'false')
+      await expect(messageItemsOf(page).getByRole('alert')).toBeVisible()
+      await expect(mainOf(page)).not.toContainText('$ echo one')
     })
 
     test('As a prompter, I expand a reasoning step to the reasoning text the agent produced', {

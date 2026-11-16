@@ -4,6 +4,7 @@ import { type Ref, use, useDeferredValue, useEffect, useRef, useState } from 're
 import { useLocation } from 'react-router'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
 import { MessageItem } from './MessageItem.tsx'
+import { isFoldOpened, rememberFoldOpening } from './opened-folds.ts'
 import { LinkedMessageContext } from './providers.tsx'
 
 const scrollIntoView = (element: HTMLElement | null) => element?.scrollIntoView({ block: 'end' })
@@ -18,14 +19,18 @@ const FoldedSteps = ({
   fold: Extract<ConversationItem, { type: 'fold' }>
   ref?: Ref<HTMLLIElement>
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(() => isFoldOpened(fold.id))
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded)
+    rememberFoldOpening(fold.id, !isExpanded)
+  }
   return (
     <>
       <li ref={ref} className="rounded-md px-3 py-1 hover:bg-hover">
         <button
           type="button"
           aria-expanded={isExpanded}
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={toggleExpanded}
           className={`flex items-center gap-1.5 rounded-md text-sm text-muted hover:text-ink ${focusRing} aria-expanded:[&>svg]:rotate-90`}
         >
           <ChevronRight aria-hidden className="size-4 transition-transform" />
@@ -122,7 +127,7 @@ export const MessageList = ({
               const ref =
                 index !== shownItems.length - 1 ? undefined : isSentByViewer(item) ? scrollIntoView : followNewest
               return item.type === 'fold' ? (
-                <FoldedSteps key={`fold-${item.promptId}`} fold={item} ref={ref} />
+                <FoldedSteps key={`fold-${item.id}`} fold={item} ref={ref} />
               ) : (
                 <MessageItem
                   key={item.message.id}

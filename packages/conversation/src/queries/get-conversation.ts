@@ -81,7 +81,7 @@ type RuntimeLink = Readonly<{ chatId: ChatId; startedByName: string; name: strin
 
 export type ConversationItem =
   | Readonly<{ type: 'message'; message: ConversationMessage }>
-  | Readonly<{ type: 'fold'; promptId: MessageId; label: string; steps: readonly ConversationMessage[] }>
+  | Readonly<{ type: 'fold'; id: string; promptId: MessageId; label: string; steps: readonly ConversationMessage[] }>
 
 export type Conversation = Readonly<{
   title: string
@@ -210,46 +210,74 @@ const withDelegationsGrouped = (replies: readonly ConversationMessage[], isStopp
   })
 }
 
+const isStepInProgress = (message: ConversationMessage) =>
+  message.isRunning &&
+  (message.delegation
+    ? message.delegation.status === 'running'
+    : (message.step?.type === 'command' && message.step.exitCode === null) ||
+      (message.step?.type === 'tool' && message.step.result === null))
+
+const isFoldBoundary = (reply: ConversationMessage) =>
+  (reply.kind !== 'step' && reply.kind !== 'agent') || reply.step?.type === 'question' || reply.step?.type === 'error'
+
+type Segment = { replies: ConversationMessage[]; endsAt: Date | null }
+
+const segmentsOf = (replies: readonly ConversationMessage[], turnEndsAt: Date | null) => {
+  const segments: Segment[] = [{ replies: [], endsAt: turnEndsAt }]
+  for (const reply of replies) {
+    const current = segments.at(-1) as Segment
+    if (!isFoldBoundary(reply)) current.replies.push(reply)
+    else {
+      current.endsAt = reply.createdAt
+      segments.push({ replies: [], endsAt: turnEndsAt })
+    }
+  }
+  return segments
+}
+
+const foldOf = (id: string, promptId: MessageId, { replies, endsAt }: Segment, latestText?: ConversationMessage) => {
+  const thoughtsOfRunningSteps = new Set(replies.filter(isStepInProgress).map((reply) => `${reply.id}-thought`))
+  const finishedSteps = replies.filter(
+    (reply) => reply.kind === 'step' && !isStepInProgress(reply) && !thoughtsOfRunningSteps.has(reply.id),
+  )
+  const firstStep = finishedSteps[0]
+  if (!firstStep || finishedSteps.length < 2) return undefined
+  const firstStepIndex = replies.indexOf(firstStep)
+  const narration = replies.filter(
+    (reply, index) => reply.kind === 'agent' && reply !== latestText && index > firstStepIndex,
+  )
+  const foldedIds = new Set([...finishedSteps, ...narration].map((reply) => reply.id))
+  const stepCount = `${finishedSteps.length} steps`
+  const label = endsAt
+    ? `Worked for ${durationLabelOf(endsAt.getTime() - firstStep.createdAt.getTime())} · ${stepCount}`
+    : `Working · ${stepCount}`
+  const steps = replies.filter((reply) => foldedIds.has(reply.id))
+  return { type: 'fold', id, promptId, label, steps } as const
+}
+
 const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem[] => {
   const repliesByPrompt = Map.groupBy(
     messages.filter((message) => message.replyToId !== null),
     (message) => message.replyToId as MessageId,
   )
-  const itemsByStepId = new Map<MessageId, ConversationItem[]>()
+  const itemsById = new Map<MessageId, ConversationItem[]>()
   for (const [promptId, turnReplies] of repliesByPrompt) {
     const isStopped = turnReplies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
-    const replies = withDelegationsGrouped(turnReplies, isStopped)
-    const steps = replies.filter(
-      (reply) =>
-        reply.kind === 'step' && reply.step?.type !== 'question' && !(isStopped && reply.step?.type === 'error'),
-    )
-    const answer = replies.findLast((reply) => reply.kind === 'agent')
-    const firstStep = steps[0]
-    const firstStepIndex = replies.findIndex((reply) => reply.id === firstStep?.id)
-    for (const reply of turnReplies) if (reply.kind === 'step') itemsByStepId.set(reply.id, [])
-    for (const reply of replies)
-      if (reply.step?.type === 'question') itemsByStepId.set(reply.id, [{ type: 'message', message: reply }])
-    if (
-      answer &&
-      firstStep &&
-      replies.indexOf(answer) > firstStepIndex &&
-      steps.length > 1 &&
-      !firstStep.isRunning &&
-      !isStopped &&
-      !steps.some((step) => step.step?.type === 'error')
-    ) {
-      const workedFor = durationLabelOf(answer.createdAt.getTime() - firstStep.createdAt.getTime())
-      const label = `Worked for ${workedFor} · ${steps.length} steps`
-      const narration = replies.filter(
-        (reply, index) => reply.kind === 'agent' && reply !== answer && index > firstStepIndex,
-      )
-      for (const reply of narration) itemsByStepId.set(reply.id, [])
-      const foldedIds = new Set([...steps, ...narration].map((reply) => reply.id))
-      const folded = replies.filter((reply) => foldedIds.has(reply.id))
-      itemsByStepId.set(firstStep.id, [{ type: 'fold', promptId, label, steps: folded }])
-    } else for (const step of steps) itemsByStepId.set(step.id, [{ type: 'message', message: step }])
+    const groupedReplies = withDelegationsGrouped(turnReplies, isStopped)
+    const replies = groupedReplies.filter((reply) => !(isStopped && reply.step?.type === 'error'))
+    for (const reply of turnReplies) if (reply.kind === 'step') itemsById.set(reply.id, [])
+    for (const reply of replies) itemsById.set(reply.id, [{ type: 'message', message: reply }])
+    const latestText = replies.findLast((reply) => reply.kind === 'agent')
+    const isWorking = turnReplies.some((reply) => reply.isRunning)
+    const turnEndsAt = isWorking ? null : (replies.at(-1)?.createdAt ?? null)
+    segmentsOf(groupedReplies, turnEndsAt).forEach((segment, index) => {
+      const fold = foldOf(`${promptId}:${index}`, promptId, segment, latestText)
+      if (!fold) return
+      for (const step of fold.steps) itemsById.set(step.id, [])
+      itemsById.set(fold.steps[0]?.id as MessageId, [fold])
+    })
   }
-  return messages.flatMap((message) => itemsByStepId.get(message.id) ?? [{ type: 'message', message }])
+  return messages.flatMap((message) => itemsById.get(message.id) ?? [{ type: 'message', message }])
 }
 
 const isWorkOfTurn = (promptId: MessageId) => (item: ConversationItem) =>
