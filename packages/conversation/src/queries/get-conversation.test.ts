@@ -164,6 +164,9 @@ const itemSummaryOf = (conversation: ReturnType<typeof conversationWith>) =>
       : `${item.message.kind}${item.message.step ? ` ${item.message.step.type}` : ''}`,
   )
 
+const foldIdsOf = (conversation: ReturnType<typeof conversationWith>) =>
+  conversation?.items.flatMap((item) => (item.type === 'fold' ? [item.id] : []))
+
 test('an ended turn folds its steps into one line above the answer, with the thought before its command', () => {
   const conversation = conversationWith([
     replyRow(2, 'step', { step: command(0), at: 5 }),
@@ -196,27 +199,61 @@ test('text the agent wrote between steps folds with them in order, and text befo
   ])
   const fold = conversation?.items[2]
   expect(fold?.type === 'fold' && fold.steps.map((step) => step.body)).toEqual(['step', 'Now the edit.', 'step'])
-  const endedOnStep = conversationWith([
-    replyRow(2, 'agent', { body: 'Looking.' }),
-    replyRow(3, 'step', { step: { ...command(0), thought: undefined } }),
-    replyRow(4, 'step', { step: edit }),
-  ])
-  expect(itemSummaryOf(endedOnStep)).toEqual(['member', 'agent', 'step command', 'step file'])
 })
 
-test('an active turn shows its steps live and unfolded, its pending command running', () => {
+test('a turn ended without a reply folds its steps and keeps the agent’s latest note visible below the fold', () => {
+  const conversation = conversationWith([
+    replyRow(2, 'agent', { body: 'Looking.' }),
+    replyRow(3, 'step', { step: { ...command(0), thought: undefined } }),
+    replyRow(4, 'agent', { body: 'Host side pushed. Now the server…' }),
+    replyRow(5, 'step', { step: edit, at: 65 }),
+  ])
+  expect(itemSummaryOf(conversation)).toEqual([
+    'member',
+    'agent',
+    'fold Worked for 1m 2s · 2 steps: command, file',
+    'agent',
+  ])
+  const note = conversation?.items[3]
+  expect(note?.type === 'message' && note.message.body).toBe('Host side pushed. Now the server…')
+})
+
+test('a running turn folds its finished steps under Working, its running step and latest note below the fold', () => {
   const conversation = conversationWith([replyRow(2, 'step', { step: command(null) })], true)
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step thought', 'step command'])
   const running = conversation?.items[2]
   expect(running?.type === 'message' && running.message.isRunning).toBe(true)
-  const narrating = conversationWith(
-    [replyRow(2, 'step', { step: command(0) }), replyRow(3, 'step', { step: edit }), replyRow(4, 'agent')],
+  const finishedSteps = [
+    replyRow(2, 'step', { step: command(0) }),
+    replyRow(3, 'agent', { body: 'Checked.' }),
+    replyRow(4, 'step', { step: edit }),
+    replyRow(5, 'agent', { body: 'Now the tests.' }),
+  ]
+  const working = conversationWith(
+    [...finishedSteps, replyRow(6, 'step', { step: { ...command(null), thought: undefined } })],
     true,
   )
-  expect(itemSummaryOf(narrating)).toEqual(['member', 'step thought', 'step command', 'step file', 'agent'])
+  expect(itemSummaryOf(working)).toEqual([
+    'member',
+    'fold Working · 3 steps: thought, command, , file',
+    'agent',
+    'step command',
+  ])
+  const ended = conversationWith([
+    ...finishedSteps,
+    replyRow(6, 'step', { step: { ...command(0), thought: undefined } }),
+    replyRow(7, 'agent', { body: 'Done.' }),
+  ])
+  expect(itemSummaryOf(ended)).toEqual([
+    'member',
+    'fold Worked for 5s · 4 steps: thought, command, , file, , command',
+    'agent',
+  ])
+  expect(foldIdsOf(working)).toEqual([`${prompt}:0`])
+  expect(foldIdsOf(ended)).toEqual([`${prompt}:0`])
 })
 
-test('a turn with a single step, without an answer, stopped or failed stays unfolded', () => {
+test('a single step stays a row, and a failed step and the stop notice stay out of the fold of the steps around them', () => {
   const single = conversationWith([
     replyRow(2, 'step', { step: { ...command(0), thought: undefined } }),
     replyRow(3, 'agent', { body: 'Done.' }),
@@ -225,18 +262,30 @@ test('a turn with a single step, without an answer, stopped or failed stays unfo
   const failed = conversationWith([
     replyRow(2, 'step', { step: command(0) }),
     replyRow(3, 'step', { step: { type: 'error', message: 'boom' } }),
-    replyRow(4, 'notice', { body: 'The agent stopped with an error' }),
+    replyRow(4, 'step', { step: edit }),
+    replyRow(5, 'step', { step: { ...command(1), thought: undefined } }),
+    replyRow(6, 'agent', { body: 'Worked around it.' }),
   ])
-  expect(itemSummaryOf(failed)).toEqual(['member', 'step thought', 'step command', 'step error', 'notice'])
-  const finishedRunning = failed?.items[2]
-  expect(finishedRunning?.type === 'message' && finishedRunning.message.isRunning).toBe(false)
+  expect(itemSummaryOf(failed)).toEqual([
+    'member',
+    'fold Worked for 1s · 2 steps: thought, command',
+    'step error',
+    'fold Worked for 2s · 2 steps: file, command',
+    'agent',
+  ])
+  expect(foldIdsOf(failed)).toEqual([`${prompt}:0`, `${prompt}:1`])
   const stopped = conversationWith([
     replyRow(2, 'step', { step: command(0) }),
     replyRow(3, 'step', { step: edit }),
     replyRow(4, 'agent', { body: 'Partly done.' }),
     replyRow(5, 'notice', { body: 'Stopped by Alice' }),
   ])
-  expect(itemSummaryOf(stopped)).toEqual(['member', 'step thought', 'step command', 'step file', 'agent', 'notice'])
+  expect(itemSummaryOf(stopped)).toEqual([
+    'member',
+    'fold Worked for 3s · 3 steps: thought, command, file',
+    'agent',
+    'notice',
+  ])
 })
 
 test('the error the interrupt causes is hidden in a stopped turn', () => {
@@ -248,7 +297,7 @@ test('the error the interrupt causes is hidden in a stopped turn', () => {
   expect(itemSummaryOf(stopped)).toEqual(['member', 'step file', 'notice'])
 })
 
-test('a question stays out of the fold where it was asked and its answerer is named', () => {
+test('a question stays out of the folds, answerable where it was asked, its answerer named', () => {
   const question = { type: 'question', questionId: 'q1', kind: 'question', answers: {}, answeredBy: alice } as const
   const conversation = conversationWith([
     replyRow(2, 'step', { step: command(0) }),
@@ -259,8 +308,9 @@ test('a question stays out of the fold where it was asked and its answerer is na
   ])
   expect(itemSummaryOf(conversation)).toEqual([
     'member',
-    'fold Worked for 5s · 3 steps: thought, command, file',
+    'fold Worked for 1s · 2 steps: thought, command',
     'step question',
+    'step file',
     'step question',
     'agent',
   ])
@@ -384,18 +434,13 @@ test('a Claude Code subagent gathers the steps that carry its tool call id into 
 })
 
 const delegationStatesOf = (conversation: ReturnType<typeof conversationWith>) =>
-  conversation?.items.flatMap((item) =>
-    item.type === 'message' && item.message.delegation
-      ? [
-          {
-            id: String(item.message.id),
-            status: item.message.delegation.status,
-            result: item.message.delegation.result,
-            steps: item.message.delegation.steps.length,
-          },
-        ]
-      : [],
-  )
+  conversation?.items
+    .flatMap((item) => (item.type === 'fold' ? item.steps : [item.message]))
+    .flatMap(({ id, delegation }) =>
+      delegation
+        ? [{ id: String(id), status: delegation.status, result: delegation.result, steps: delegation.steps.length }]
+        : [],
+    )
 const awaitAction = (id: string, result: string | null) => ({
   type: 'tool' as const,
   name: 'await_task',
