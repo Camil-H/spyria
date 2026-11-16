@@ -62,10 +62,11 @@ test.describe('Browser', () => {
     tag: ['@spec-10'],
   }, async ({ page, agentScript }) => {
     const browserSockets: { send(message: string): void }[] = []
-    await page.routeWebSocket(/\/api\/browser$/, (pageSocket) => {
+    await page.routeWebSocket(/.*/, (pageSocket) => {
       pageSocket.connectToServer()
-      browserSockets.push(pageSocket)
+      if (new URL(pageSocket.url()).pathname === '/api/browser') browserSockets.push(pageSocket)
     })
+    await page.reload()
     const chatId = await newRuntimeChat(page, 'Expired download')
     await agentScript(chatId, { steps: [], text: 'Ready.' })
     await sendMessage(page, 'Get ready')
