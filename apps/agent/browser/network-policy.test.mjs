@@ -1,6 +1,12 @@
 import { afterAll, expect, test } from 'bun:test'
 import { connect } from 'node:net'
-import { createPolicyProxy, isInternalAddress, networkVerdictOf, siteVerdictOf } from './network-policy.mjs'
+import {
+  connectTargetOf,
+  createPolicyProxy,
+  isInternalAddress,
+  networkVerdictOf,
+  siteVerdictOf,
+} from './network-policy.mjs'
 
 const settings = {
   blockInternalNetworks: true,
@@ -52,6 +58,21 @@ test('internal networks are blocked unless the admin turned the block off or nam
   expect(
     networkVerdictOf({ ...settings, allowedInternalAddresses: ['10.0.0.5'] }, 'staging.internal', ['10.0.0.5']),
   ).toBe('allowed')
+})
+
+test('a host is reachable only when every address it resolves to is public or named by the admin', () => {
+  const allowed = { ...settings, allowedInternalAddresses: ['10.0.0.5'] }
+  expect(networkVerdictOf(allowed, 'rebound.example.com', ['169.254.169.254', '10.0.0.5'])).toBe('internal')
+  expect(networkVerdictOf(allowed, 'rebound.example.com', ['10.0.0.5', '10.0.0.6'])).toBe('internal')
+  expect(networkVerdictOf(allowed, 'staging.example.com', ['10.0.0.5', '93.184.216.34'])).toBe('allowed')
+})
+
+test('a CONNECT target keeps the port it names, the default ports included, and an IPv6 address in brackets', () => {
+  expect(connectTargetOf('example.com:80')).toEqual({ hostname: 'example.com', port: 80 })
+  expect(connectTargetOf('example.com:443')).toEqual({ hostname: 'example.com', port: 443 })
+  expect(connectTargetOf('[::1]:3000')).toEqual({ hostname: '[::1]', port: 3000 })
+  for (const target of ['example.com', 'example.com:0', 'example.com:70000', 'a:b:80'])
+    expect(() => connectTargetOf(target)).toThrow()
 })
 
 test('blocked sites win over allowed ones and include their subdomains, before any address lookup', () => {

@@ -79,12 +79,16 @@ export const siteVerdictOf = (settings, host) => {
 }
 
 export const networkVerdictOf = (settings, host, addresses) => {
-  const name = hostOf(host)
-  const isAllowedInternal = settings.allowedInternalAddresses.some(
-    (allowed) => allowed === name || addresses.includes(allowed),
-  )
-  const isInternal = addresses.some(isInternalAddress)
-  return settings.blockInternalNetworks && isInternal && !isAllowedInternal ? 'internal' : 'allowed'
+  if (!settings.blockInternalNetworks || settings.allowedInternalAddresses.includes(hostOf(host))) return 'allowed'
+  const isReachable = (address) => !isInternalAddress(address) || settings.allowedInternalAddresses.includes(address)
+  return addresses.every(isReachable) ? 'allowed' : 'internal'
+}
+
+export const connectTargetOf = (target) => {
+  const match = /^(\[[^\]]+\]|[^:]+):(\d{1,5})$/.exec(target)
+  const port = Number(match?.[2])
+  if (!match || port < 1 || port > 65_535) throw new Error('Invalid CONNECT target')
+  return { hostname: match[1], port }
 }
 
 export const blockReasons = {
@@ -142,10 +146,10 @@ export const createPolicyProxy = ({ settings, onBlocked = () => {} }) => {
   server.on('connect', async (incoming, client, head) => {
     client.on('error', () => client.destroy())
     try {
-      const { hostname, port } = new URL(`http://${incoming.url}`)
+      const { hostname, port } = connectTargetOf(incoming.url ?? '')
       const { verdict, address } = await decide(hostname)
       if (verdict !== 'allowed') return client.end('HTTP/1.1 403 Forbidden\r\n\r\n')
-      const upstream = openSocket(Number(port || 443), address, () => {
+      const upstream = openSocket(port, address, () => {
         client.write('HTTP/1.1 200 Connection Established\r\n\r\n')
         if (head.length > 0) upstream.write(head)
         upstream.pipe(client)
