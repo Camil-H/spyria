@@ -36,7 +36,14 @@ type Dependencies = Pick<
   AgentDependencies,
   'transactor' | 'runtimes' | 'agentClient' | 'eventSockets' | 'approvalWindowMilliseconds'
 >
-type Input = { chat: AgentChat; memberId: MemberId; promptId: MessageId | null; name: string; input: unknown }
+type Input = {
+  chat: AgentChat
+  memberId: MemberId
+  promptId: MessageId | null
+  name: string
+  input: unknown
+  signal?: AbortSignal
+}
 type Decision = { decision: ToolCallDecision; decidedBy: MemberId | null }
 type ToolAnswer = { isRefused: boolean; text: string; image?: string } & Partial<Decision>
 
@@ -77,6 +84,7 @@ const submitApproval = async (dependencies: Dependencies, input: Input, command:
     chat: input.chat,
     promptId: input.promptId,
     answererId: input.memberId,
+    signal: input.signal,
     approval: {
       server: 'Spyria',
       tool: input.name,

@@ -212,6 +212,27 @@ test('a click that submits, or a script, waits for the prompting member’s appr
     { tool: 'browser_run_javascript', decision: 'denied', decided_by: bob, status: 'refused' },
   ])
 
+  const stopped = new AbortController()
+  const stoppedCall = mcpCall(
+    host,
+    token,
+    browserCall('browser_type', { ref: 'e3', text: 'hi', submit: true }),
+    {},
+    stopped.signal,
+    '/mcp/spyria',
+  )
+  await approvalOf(frames, 3)
+  stopped.abort()
+  await stoppedCall
+  const closedApprovals = async () => [
+    ...(await database.$client`
+      select step->>'closed' as closed from messages where chat_id = ${chatId} and step->>'kind' = 'approval'
+      and step->>'closed' is not null`),
+  ]
+  await waitFor(async () => (await closedApprovals()).length === 1)
+  expect(await closedApprovals()).toEqual([{ closed: 'stopped' }])
+  expect(host.browsers.received(bobsKey).some(({ command }) => command === 'type')).toBe(false)
+
   await setBrowserSettings({ approveSubmits: false })
   expect(await callTool(host, token, 'browser_run_javascript', { expression: '1' })).toMatchObject({ isError: false })
   await setBrowserSettings({})

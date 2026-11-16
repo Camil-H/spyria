@@ -318,14 +318,7 @@ export const createModelCallRelay = ({
                   attributes: { 'workspace.id': host.workspaceId, 'chat.id': chat.chatId, 'tool.name': toolName },
                   error,
                 })
-                return {
-                  isRefused: true,
-                  text: `${toolName} failed`,
-                  image: undefined,
-                  decision: undefined,
-                  decidedBy: undefined,
-                  status: 'failed',
-                } as const
+                return { isRefused: true, text: `${toolName} failed`, status: 'failed' } as const
               })
         await handlers
           .recordToolCall(host.workspaceId, {
@@ -432,7 +425,7 @@ export const createModelCallRelay = ({
       if (!isSpyriaTool(toolName)) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
       const calledAt = new Date()
       const { isRefused, text, image, status, decision, decidedBy } = await handlers
-        .callSpyriaTool({ chat, memberId: prompterId, promptId, name: toolName, input: rpc.params?.arguments })
+        .callSpyriaTool({ chat, memberId: prompterId, promptId, name: toolName, input: rpc.params?.arguments, signal })
         .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
         .catch((error: unknown) => {
           log.error({
