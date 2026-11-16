@@ -203,4 +203,7 @@ test('a downloaded file keeps its name in the save dialog, any character include
     `attachment; filename="_t_ _final_.mp4"; filename*=UTF-8''%C3%A9t%C3%A9%20%22final%22.mp4`,
   )
   expect(contentDispositionOf('a\r\nSet-Cookie: x')).not.toContain('\n')
+  expect(contentDispositionOf("it's (final)*.zip")).toBe(
+    `attachment; filename="it's (final)*.zip"; filename*=UTF-8''it%27s%20%28final%29%2A.zip`,
+  )
 })

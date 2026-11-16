@@ -18,19 +18,40 @@ const storedRetryMilliseconds = 100
 
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: BodyInit) => Promise<Response>
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
+type SessionTokenOf = (workspaceId: WorkspaceId) => string
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 
-export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
-  saveBrowserDownload: ({ token }: { token: string }) => {
+const downloadFrameName = 'spyria-browser-downloads'
+const hiddenFieldOf = (name: string, value: string) => {
+  const field = document.createElement('input')
+  field.type = 'hidden'
+  field.name = name
+  field.value = value
+  return field
+}
+const downloadFrame = () => {
+  const existing = document.querySelector<HTMLIFrameElement>(`iframe[name="${downloadFrameName}"]`)
+  if (existing) return existing
+  const frame = document.createElement('iframe')
+  frame.name = downloadFrameName
+  frame.title = 'Browser downloads'
+  frame.hidden = true
+  document.body.append(frame)
+  return frame
+}
+
+export const createHttpChatCommands = (
+  postAsMember: PostAsMember,
+  getAsMember: GetAsMember,
+  sessionTokenOf: SessionTokenOf,
+) => ({
+  saveBrowserDownload: ({ workspaceId, token }: { workspaceId: WorkspaceId; token: string }) => {
     const form = document.createElement('form')
     form.method = 'post'
     form.action = browserDownloadsPath
+    form.target = downloadFrame().name
     form.hidden = true
-    const field = document.createElement('input')
-    field.type = 'hidden'
-    field.name = 'token'
-    field.value = token
-    form.append(field)
+    form.append(hiddenFieldOf('token', token), hiddenFieldOf('session', sessionTokenOf(workspaceId)))
     document.body.append(form)
     form.submit()
     form.remove()

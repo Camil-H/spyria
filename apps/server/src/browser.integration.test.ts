@@ -290,7 +290,7 @@ test('a member watches and drives only their own browser; the actions they send 
   for (const watcher of [bobs, alices, lees]) watcher.close()
 })
 
-test("a file the member's browser downloads reaches only that member, once, through a token that never shows in an address", async () => {
+test("a file the member's browser downloads reaches only that member, signed in, once, through a token that never shows in an address", async () => {
   await setBrowserSettings({})
   const host = await fakeHost('Browser download host')
   const { chatId } = await runtimeTurn(host, bob)
@@ -317,9 +317,17 @@ test("a file the member's browser downloads reaches only that member, once, thro
   })
   expect(alices.frames.some(({ type }) => type === 'download')).toBe(false)
 
-  const fetchDownload = (token: unknown) =>
-    app.request('/api/browser-downloads', { method: 'POST', body: new URLSearchParams({ token: String(token) }) })
-  const downloaded = await fetchDownload(offered?.token)
+  const fetchDownload = async (token: unknown, memberId?: string) =>
+    app.request('/api/browser-downloads', {
+      method: 'POST',
+      body: new URLSearchParams({
+        token: String(token),
+        ...(memberId && { session: await sessionTokenOf(database, acme, memberId) }),
+      }),
+    })
+  expect((await fetchDownload(offered?.token)).status).toBe(404)
+  expect((await fetchDownload(offered?.token, alice)).status).toBe(404)
+  const downloaded = await fetchDownload(offered?.token, bob)
   expect(downloaded.status).toBe(200)
   expect(downloaded.headers.get('content-disposition')).toBe(
     `attachment; filename="clip _t_.mp4"; filename*=UTF-8''clip%20%C3%A9t%C3%A9.mp4`,
@@ -330,8 +338,8 @@ test("a file the member's browser downloads reaches only that member, once, thro
   expect(host.browsers.received(bobsKey).filter(({ type }) => type === 'file_read')).toEqual([
     { type: 'file_read', file },
   ])
-  expect((await fetchDownload(offered?.token)).status).toBe(404)
-  expect((await fetchDownload('0'.repeat(64))).status).toBe(404)
+  expect((await fetchDownload(offered?.token, bob)).status).toBe(404)
+  expect((await fetchDownload('0'.repeat(64), bob)).status).toBe(404)
   bobs.close()
   alices.close()
 })

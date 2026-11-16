@@ -286,5 +286,9 @@ export const browserDownloadsPath = '/api/browser-downloads'
 
 export const contentDispositionOf = (name: string) => {
   const plainName = name.replace(/[^\x20-\x7e]|["\\]/g, '_')
-  return `attachment; filename="${plainName}"; filename*=UTF-8''${encodeURIComponent(name)}`
+  const encodedName = encodeURIComponent(name).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
+  return `attachment; filename="${plainName}"; filename*=UTF-8''${encodedName}`
 }

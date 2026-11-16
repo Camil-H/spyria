@@ -12,7 +12,14 @@ const commandsAnswering = (...statuses: number[]) => {
       ? new Response('image bytes')
       : Response.json({ message: status === 404 ? 'Not found' : 'Not allowed' }, { status })
   }
-  return { reads, commands: createHttpChatCommands(async () => new Response(), getAsMember) }
+  return {
+    reads,
+    commands: createHttpChatCommands(
+      async () => new Response(),
+      getAsMember,
+      () => 'session-token',
+    ),
+  }
 }
 
 test('an attachment of a message the server has not stored yet is read again until it is', async () => {

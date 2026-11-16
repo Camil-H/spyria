@@ -238,7 +238,7 @@ export const createApp = async (
     })
   const conversationCommands = commandsOf<ConversationCommands>(conversationMutators.conversation, {
     saveDraft: (input) => saveDraft({ drafts }, { ...input, memberId }),
-    ...createHttpChatCommands(postAsMember, fetchAsMember),
+    ...createHttpChatCommands(postAsMember, fetchAsMember, store.tokenOf),
     connectTool: (input) =>
       input.tool === githubServerName ? githubConnection.connectGitHub(input) : toolConnections.connectTool(input),
     startRuntimeFromMessage: mutateIntoNewChat(conversationMutators.conversation.startRuntimeFromMessage),
