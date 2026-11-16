@@ -9,6 +9,7 @@ import {
   isBrowserTool,
   openCommandOf,
   submitCheckOf,
+  uncheckedSubmitOf,
 } from '../domain/browser-tools.ts'
 import { BrowserUnavailable } from '../domain/errors.ts'
 import { asleepRefusal } from '../domain/git-actions.ts'
@@ -75,9 +76,10 @@ const submitApproval = async (dependencies: Dependencies, input: Input, command:
   const isSubmitting =
     check === 'always' ||
     (await checkBrowserCommand(dependencies, { ...input, command: check }).catch((error) => {
-      if (error instanceof BrowserUnavailable) return false
+      if (error instanceof BrowserUnavailable) return error
       throw error
     }))
+  if (isSubmitting instanceof BrowserUnavailable) return { uncheckedReason: isSubmitting.message }
   if (!isSubmitting) return undefined
   const memberName = await dependencies.transactor.run(({ members }) => members.displayNameOf(input.memberId))
   const decided = await requestToolApproval(dependencies, {
@@ -102,6 +104,7 @@ const driveBrowser = async (dependencies: Dependencies, input: Input) => {
   if ('refusal' in parsed) return refused(parsed.refusal)
   const command = parsed.browserCommand
   const approval = await submitApproval(dependencies, input, command)
+  if (approval && 'uncheckedReason' in approval) return refused(uncheckedSubmitOf(approval.uncheckedReason ?? ''))
   if (approval && approval.decision !== 'approved')
     return refused(notApprovedText(approval.memberName), {
       decision: approval.decision,

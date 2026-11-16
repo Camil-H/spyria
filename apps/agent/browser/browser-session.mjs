@@ -272,9 +272,11 @@ export const createBrowserSession = ({
       return { text: `Screenshot of ${await describe(page)}`, imageFile }
     },
     would_submit: async ({ action, ref, key }) =>
-      (await elementOf(ref))
-        .evaluate(wouldSubmitInPage, { action, key, submitPattern: submitWords.source })
-        .catch(() => false),
+      (await elementOf(ref)).evaluate(
+        wouldSubmitInPage,
+        { action, key, submitPattern: submitWords.source },
+        { timeout: commandTimeoutMilliseconds },
+      ),
   }
   const dispatchMouse = async (page, { action, x, y, button, clickCount, deltaX, deltaY, ...modifiers }) => {
     const session = screencast?.page === page ? screencast.session : await context.newCDPSession(page)
