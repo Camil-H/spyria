@@ -6,7 +6,8 @@ import {
   type ToolMarking,
 } from '../domain/workspace-connection.ts'
 import { throwOnRefusal } from './http-refusal.ts'
-import { signInThroughPopup } from './http-tool-connections.ts'
+import { toolConsentChannel } from './http-tool-connections.ts'
+import { signInThroughWindow } from './sign-in-window.ts'
 
 export const workspaceConnectionsPath = '/api/workspace-connections'
 
@@ -22,7 +23,10 @@ export const createHttpWorkspaceConnections = (postAsMember: PostAsMember) => {
     return response.status === 201 ? ((await response.json()) as Added) : undefined
   }
   const addWithMemberSignIn = async (workspaceId: WorkspaceId, connection: ConnectionInput) => {
-    const { connectionId } = await signInThroughPopup(async () => (await post(workspaceId, '', connection)) as Started)
+    const { connectionId } = await signInThroughWindow(
+      toolConsentChannel,
+      async () => (await post(workspaceId, '', connection)) as Started,
+    )
     await post(workspaceId, `/${connectionId}/finish`)
   }
   return {

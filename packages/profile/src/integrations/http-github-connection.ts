@@ -1,6 +1,7 @@
 import type { WorkspaceId } from '@spyria/kernel'
 import type { GitHubConnection } from '../domain/github-connection.ts'
 import { throwOnRefusal } from './http-refusal.ts'
+import { signInThroughWindow } from './sign-in-window.ts'
 
 export const githubConnectionPath = '/api/github/connection'
 export const githubConnectionChannel = 'spyria-github-connection'
@@ -20,20 +21,10 @@ export const createHttpGitHubConnection = (requestAsMember: RequestAsMember) => 
   return {
     readGitHubConnection,
     connectGitHub: async ({ workspaceId }: Input) => {
-      const popup = open('about:blank', githubConnectionChannel, 'popup,width=520,height=720')
-      const channel = new BroadcastChannel(githubConnectionChannel)
-      const finished = new Promise((resolve) => channel.addEventListener('message', resolve, { once: true }))
-      try {
-        const { authorizeUrl } = (await call(workspaceId, '/connect')) as { authorizeUrl: string }
-        if (popup) popup.location.href = authorizeUrl
-        else location.assign(authorizeUrl)
-        await finished
-      } catch (error) {
-        popup?.close()
-        throw error
-      } finally {
-        channel.close()
-      }
+      await signInThroughWindow(
+        githubConnectionChannel,
+        async () => (await call(workspaceId, '/connect')) as { authorizeUrl: string },
+      )
       return readGitHubConnection({ workspaceId })
     },
     disconnectGitHub: async ({ workspaceId }: Input) => {
