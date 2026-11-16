@@ -485,7 +485,8 @@ export const startAgent = ({
     )
   }
 
-  const takeJoinedPrompt = (conversation: Conversation, promptId: string, running = conversation.running) => {
+  const takeJoinedPrompt = (conversation: Conversation, promptId: string) => {
+    const { running } = conversation
     if (!running?.steeredPromptIds.delete(promptId)) return
     rememberPrompt(conversation, promptId)
     running.joinedPromptIds.push(promptId)
@@ -1036,16 +1037,22 @@ export const startAgent = ({
     return Response.json({})
   }
 
-  const steerOverAcp = async (conversation: Conversation, running: RunningTurn, promptId: string, prompt: Json[]) => {
+  const steerOverAcp = async (conversation: Conversation, promptId: string, prompt: Json[]) => {
     const { sessionId } = conversation
     const { outcome } = await conversation.connection.request('_session/steering', {
       sessionId,
       prompt,
       _meta: { steering: { idleBehavior: 'promptRequired' } },
     })
-    if (outcome === 'injected') return takeJoinedPrompt(conversation, promptId, running)
+    if (outcome === 'injected') return takeJoinedPrompt(conversation, promptId)
     if (outcome === 'startedNewTurn') conversation.connection.notify('session/cancel', { sessionId })
     throw new AcpError(`The agent did not take the message: ${String(outcome)}`)
+  }
+
+  const handedOverAcp = (conversation: Conversation, promptId: string, prompt: Json[]) => {
+    const handOff = steerOverAcp(conversation, promptId, prompt)
+    conversation.lastTurn = Promise.all([conversation.lastTurn, handOff.catch(() => {})]).then(() => {})
+    return handOff
   }
 
   const join = async (conversation: Conversation, body: { content?: PromptBlock[]; prompt_id?: unknown }) => {
@@ -1061,7 +1068,7 @@ export const startAgent = ({
     try {
       const prompt = await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities)
       if (isPi) await conversation.connection.request('session/steer', { sessionId, prompt, steerId: promptId })
-      else await steerOverAcp(conversation, running, promptId, prompt)
+      else await handedOverAcp(conversation, promptId, prompt)
     } catch (error) {
       running.steeredPromptIds.delete(promptId)
       return Response.json({ error: errorUpdateOf(error).message }, { status: 409 })

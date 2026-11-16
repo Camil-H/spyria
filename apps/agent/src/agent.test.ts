@@ -86,7 +86,7 @@ const joinedBy = (call: ReturnType<typeof started>['call'], id: string) => ({
   send: (action: 'events' | 'joins', text: string, promptId: string) =>
     call('POST', `/api/conversations/${id}/${action}`, { content: [{ type: 'text', text }], prompt_id: promptId }),
 })
-const commandWith = (variable: string) => [stubCommand[0] ?? 'env', variable, ...stubCommand.slice(1)]
+const commandWith = (...variables: string[]) => [stubCommand[0] ?? 'env', ...variables, ...stubCommand.slice(1)]
 
 test('a harness over ACP that advertises steering takes a joined message into its running turn at once, and the turn still ends as its first prompt', async () => {
   const { call, open, create } = started()
@@ -176,6 +176,50 @@ test.each([
     expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(2)
   },
 )
+
+test('a message the harness injects only after its turn was stopped is refused, so it runs as its own turn rather than being counted as joined', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:long', 'prompt-1')
+  await socket.until((event) => event.update.status === 'in_progress')
+  const joined = send('joins', 'use tabs', 'joined-1')
+  await Bun.sleep(50)
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-1' })).status).toBe(200)
+  expect(await joined).toEqual({ status: 409, body: { error: 'The turn ended before the agent took the message' } })
+  expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+
+  expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'joined-1',
+  })
+})
+
+test('on Codex, the next prompt waits for a refused hand-off, so cancelling the turn Codex started for the message never cancels the prompt that follows', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_FLAVOUR=codex', 'STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:outro', 'prompt-1')
+  await socket.until((event) => textOf([event]) === 'Wrapping up. ')
+  const joined = send('joins', 'use tabs', 'joined-1')
+  await socket.until(kindOf('turn_end'))
+  expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+  expect(await joined).toEqual({ status: 409, body: { error: 'The agent did not take the message: startedNewTurn' } })
+
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'joined-1',
+  })
+  expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model gpt-stub, mode bypassPermissions).')
+  expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(2)
+})
 
 test('a conversation stays running while a later prompt runs after an earlier one was stopped, and finishes with the last', async () => {
   const { call, open, create, prompt } = started()
