@@ -96,9 +96,11 @@ test('a harness over ACP that advertises steering takes a joined message into it
   await send('events', 'stub:pause', 'prompt-1')
   await socket.until((event) => textOf([event]) === 'Before the pause. ')
   expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('prompt_joined'))
   expect(socket.events.filter(kindOf('prompt_joined')).map(({ update }) => update)).toEqual([
     { sessionUpdate: 'prompt_joined', promptId: 'joined-1' },
   ])
+  expect(socket.events.filter(kindOf('turn_end'))).toEqual([])
   expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
   await socket.until(kindOf('turn_end'))
   expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
