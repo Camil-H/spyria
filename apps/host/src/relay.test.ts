@@ -409,3 +409,62 @@ test('a browser stream with an invalid key, or on a host without browsers, close
   await withoutBrowsers.handle({ type: 'ws_connect', sid: 22, runtimeId: 'runtime-1', browserKey })
   expect(await nextFrameOf(sent, 'ws_close')).toMatchObject({ sid: 22, error: 'refused: invalid browser key' })
 })
+
+const fileId = 'c'.repeat(32)
+const fileRelay = (content: Buffer) => {
+  const sent: Record<string, unknown>[] = []
+  const reads: string[] = []
+  let isAborted = false
+  const relay = createRelay({
+    addressOf: async () => '',
+    send: (frame) => sent.push(frame),
+    readBrowserFile: async (runtimeId, key, file, signal) => {
+      reads.push(`${runtimeId}/${key}/${file}`)
+      signal.addEventListener('abort', () => {
+        isAborted = true
+      })
+      return (async function* () {
+        for (let offset = 0; offset < content.length; offset += 100_000)
+          yield content.subarray(offset, offset + 100_000)
+      })()
+    },
+  })
+  const received = () =>
+    Buffer.concat(sent.filter(({ type }) => type === 'ws_msg').map(({ data }) => Buffer.from(String(data), 'base64')))
+  return { relay, sent, reads, received, isAborted: () => isAborted }
+}
+
+test("a browser's file streams to Spyria only as fast as Spyria acknowledges it, whole and in order", async () => {
+  const content = Buffer.from(Array.from({ length: 2_000_000 }, (_, index) => index % 253))
+  const { relay, sent, reads, received } = fileRelay(content)
+  void relay.handle({ type: 'ws_connect', sid: 30, runtimeId: 'runtime-1', browserKey, fileId, creditBytes: 600_000 })
+  await waitFor(() => sent.filter(({ type }) => type === 'ws_msg').length > 0)
+  await Bun.sleep(50)
+  expect(reads).toEqual([`runtime-1/${browserKey}/${fileId}`])
+  const unacknowledged = () =>
+    sent.filter(({ type }) => type === 'ws_msg').reduce((total, { data }) => total + String(data).length, 0)
+  expect(unacknowledged()).toBeLessThanOrEqual(600_000)
+  expect(sent.some(({ type }) => type === 'ws_close')).toBe(false)
+  let acknowledged = 0
+  while (!sent.some(({ type }) => type === 'ws_close')) {
+    const bytes = unacknowledged() - acknowledged
+    acknowledged += bytes
+    await relay.handle({ type: 'ws_ack', sid: 30, bytes })
+    await Bun.sleep(5)
+  }
+  expect(received()).toEqual(content)
+  expect(sent.at(-1)).toEqual({ type: 'ws_close', sid: 30 })
+})
+
+test("closing a browser's file stream stops reading the file, and an invalid key never reads it", async () => {
+  const { relay, sent, isAborted } = fileRelay(Buffer.alloc(3_000_000))
+  void relay.handle({ type: 'ws_connect', sid: 31, runtimeId: 'runtime-1', browserKey, fileId, creditBytes: 300_000 })
+  await waitFor(() => sent.some(({ type }) => type === 'ws_msg'))
+  await relay.handle({ type: 'ws_close', sid: 31 })
+  await waitFor(isAborted)
+  expect(isAborted()).toBe(true)
+  const refused = fileRelay(Buffer.alloc(10))
+  await refused.relay.handle({ type: 'ws_connect', sid: 32, runtimeId: 'runtime-1', browserKey: '../x', fileId })
+  expect(refused.reads).toEqual([])
+  expect(refused.sent).toEqual([{ type: 'ws_close', sid: 32, error: 'refused: invalid browser key' }])
+})

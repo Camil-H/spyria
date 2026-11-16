@@ -1,6 +1,8 @@
 import {
   browserBodyOf,
   browserContainerOf,
+  browserFileIdPattern,
+  browserFilesDirectory,
   browserKeyPattern,
   browserLabel,
   isProfileExpired,
@@ -624,6 +626,12 @@ export const createCommandRunner = ({
     },
     runningCount: async () => (await runtimeIdsOf(false)).length,
     stopUnattachedBrowsers,
+    browserFilePathOf: async (runtimeId: string, browserKey: string, fileId: string) => {
+      if (!browserFileIdPattern.test(fileId)) throw new Refused('invalid file id')
+      const { name, container } = await browserOf(runtimeId, browserKey)
+      if (!container) throw new Refused('browser is not running')
+      return `/containers/${name}/archive?path=${encodeURIComponent(`${browserFilesDirectory}/${fileId}`)}`
+    },
     browserNameOf: async (runtimeId: string, browserKey: string) => {
       const { name, container } = await browserOf(runtimeId, browserKey)
       if (!container?.State?.Running) throw new Refused('browser is not running')

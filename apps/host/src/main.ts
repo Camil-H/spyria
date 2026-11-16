@@ -1,9 +1,9 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { attachToBrowser, type BrowserStreamListener } from './browsers.ts'
+import { attachToBrowser, type BrowserStreamListener, tarFileContentOf } from './browsers.ts'
 import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
-import { createDocker } from './docker.ts'
+import { createDocker, createDockerReader } from './docker.ts'
 import { harnessNames } from './harnesses.ts'
 import { createModelRelay } from './model-relay.ts'
 import {
@@ -30,6 +30,7 @@ const deployment = process.env.SPYRIA_DEPLOYMENT || 'spyria'
 const prefix = `${deployment}-`
 const publishedImages = process.env.SPYRIA_IMAGES || undefined
 const docker = createDocker(dockerSocket)
+const readDocker = createDockerReader(dockerSocket)
 const signInsChangedSignal = 'SIGUSR2'
 const containerHostPid = 1
 const tellRunningHostSignInsChanged = () => {
@@ -209,6 +210,8 @@ const connect = () => {
     isBackedUp: () => socket.bufferedAmount > maximumBufferedBytes,
     personal: isPersonal ? { secrets } : undefined,
     openBrowser,
+    readBrowserFile: async (runtimeId, browserKey, fileId, signal) =>
+      tarFileContentOf(await readDocker(await runner.browserFilePathOf(runtimeId, browserKey, fileId), signal)),
   })
   const failHello = (error: unknown) => {
     logHelloFailure(error)

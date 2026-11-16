@@ -19,6 +19,15 @@ export type Docker = <Result = unknown>(
   timeoutMilliseconds?: number,
 ) => Promise<Result>
 
+export const createDockerReader =
+  (socketPath: string) =>
+  async (path: string, signal: AbortSignal): Promise<AsyncIterable<Uint8Array>> => {
+    const response = await fetch(`http://docker${path}`, { unix: socketPath, signal })
+    if (!response.ok || !response.body)
+      throw new DockerError(response.status, `Docker GET ${path.split('?')[0]} failed with ${response.status}`)
+    return response.body
+  }
+
 export const createDocker =
   (socketPath: string, defaultTimeoutMilliseconds = 30_000): Docker =>
   async <Result>(method: string, path: string, body?: unknown, timeoutMilliseconds = defaultTimeoutMilliseconds) => {

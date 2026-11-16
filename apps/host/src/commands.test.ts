@@ -920,3 +920,15 @@ test('a browser nobody has been attached to for the idle time is stopped, an att
   await runner.stopUnattachedBrowsers(isAttached, 600_000)
   expect(stopped).toEqual([`/containers/${browserName}/stop?t=5`])
 })
+
+test("a browser's file is read by its id from the browser's files, never by a path, and only for a managed browser", async () => {
+  const { runner } = browserDocker({ browser: { networkMode: 'container:runtime-container-id', isRunning: true } })
+  expect(await runner.browserFilePathOf('runtime-1', browserKey, 'a'.repeat(32))).toBe(
+    `/containers/${browserName}/archive?path=${encodeURIComponent(`/var/lib/spyria/browser/files/${'a'.repeat(32)}`)}`,
+  )
+  for (const fileId of ['../profile/Cookies', 'A'.repeat(32), 'a'.repeat(31)])
+    await expect(runner.browserFilePathOf('runtime-1', browserKey, fileId)).rejects.toThrow('invalid file id')
+  await expect(browserDocker().runner.browserFilePathOf('runtime-1', browserKey, 'a'.repeat(32))).rejects.toThrow(
+    'browser is not running',
+  )
+})

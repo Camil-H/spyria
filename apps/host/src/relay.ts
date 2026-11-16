@@ -7,6 +7,7 @@ export type Frame = { type: string; sid?: unknown; [field: string]: unknown }
 type StreamTarget = { send(data: string): void; close(): void }
 type Stream = {
   socket: StreamTarget
+  onCredit?: () => void
   queue: string[] | null
   creditBytes?: number
   unacknowledgedBytes: number
@@ -27,6 +28,7 @@ export const messageOf = (error: unknown) => (error instanceof Error ? error.mes
 export const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const maximumHeldStreamBytes = 8 * 1024 * 1024
+const fileChunkBytes = 192 * 1024
 export const maximumFrameBytes = 64 * 1024 * 1024
 const tooLarge = 'The response is too large to relay'
 export const frameTextOf = (frame: Frame, maximumBytes = maximumFrameBytes) => {
@@ -55,9 +57,16 @@ export const createRelay = ({
   maximumHeldBytes = maximumHeldStreamBytes,
   personal,
   openBrowser,
+  readBrowserFile,
 }: {
   addressOf: (runtimeId: string) => Promise<string>
   openBrowser?: (runtimeId: string, browserKey: string, listener: BrowserStreamListener) => Promise<BrowserStream>
+  readBrowserFile?: (
+    runtimeId: string,
+    browserKey: string,
+    fileId: string,
+    signal: AbortSignal,
+  ) => Promise<AsyncIterable<Uint8Array>>
   send: (frame: Frame) => void
   isBackedUp?: () => boolean
   maximumQueuedMessages?: number
@@ -167,7 +176,15 @@ export const createRelay = ({
       stream.heldBytes -= Buffer.byteLength(data)
       sendCounted(sid, stream, data)
     }
+    stream.onCredit?.()
     if (stream.isRuntimeClosed && stream.held.length === 0) closeStream(sid)
+  }
+  const creditFor = async (stream: Stream, bytes: number, signal: AbortSignal) => {
+    while (!hasCreditFor(stream, bytes) && !signal.aborted)
+      await new Promise<void>((resolve) => {
+        stream.onCredit = resolve
+        signal.addEventListener('abort', () => resolve(), { once: true })
+      })
   }
   const openStream = async (sid: number, frame: Frame) => {
     openingSids.add(sid)
@@ -237,6 +254,38 @@ export const createRelay = ({
       send({ type: 'ws_close', sid, error: messageOf(error) })
     }
   }
+  const openFileStream = async (sid: number, frame: Frame) => {
+    const reading = new AbortController()
+    const stream: Stream = {
+      socket: { send: () => {}, close: () => reading.abort() },
+      queue: null,
+      creditBytes:
+        typeof frame.creditBytes === 'number' && frame.creditBytes > 0 ? frame.creditBytes : fileChunkBytes * 4,
+      unacknowledgedBytes: 0,
+      held: [],
+      heldBytes: 0,
+      isRuntimeClosed: false,
+    }
+    streams.set(sid, stream)
+    try {
+      const browserKey = String(frame.browserKey)
+      if (!readBrowserFile || !browserKeyPattern.test(browserKey)) throw new Refused('invalid browser key')
+      const chunks = await readBrowserFile(String(frame.runtimeId), browserKey, String(frame.fileId), reading.signal)
+      send({ type: 'ws_open', sid })
+      for await (const chunk of chunks)
+        for (let offset = 0; offset < chunk.length && !reading.signal.aborted; offset += fileChunkBytes) {
+          const data = Buffer.from(chunk.subarray(offset, offset + fileChunkBytes)).toString('base64')
+          await creditFor(stream, data.length, reading.signal)
+          if (!reading.signal.aborted) sendCounted(sid, stream, data)
+        }
+      if (streams.get(sid) === stream) closeStream(sid)
+    } catch (error) {
+      if (streams.get(sid) === stream && !reading.signal.aborted) {
+        streams.delete(sid)
+        send({ type: 'ws_close', sid, error: messageOf(error) })
+      }
+    }
+  }
   const forward = (sid: number, data: string) => {
     const stream = streams.get(sid)
     if (!stream) return
@@ -250,6 +299,7 @@ export const createRelay = ({
       if (frame.type === 'http') return receiveHttp(sid, frame)
       if (frame.type === 'http_body') return receiveBody(sid, String(frame.data))
       if (frame.type === 'http_end') return receiveEnd(sid)
+      if (frame.type === 'ws_connect' && frame.fileId !== undefined) return openFileStream(sid, frame)
       if (frame.type === 'ws_connect')
         return frame.browserKey === undefined ? openStream(sid, frame) : openBrowserStream(sid, frame)
       if (frame.type === 'ws_msg') return forward(sid, String(frame.data))

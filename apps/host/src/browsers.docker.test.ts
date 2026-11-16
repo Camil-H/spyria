@@ -1,7 +1,7 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { attachToBrowser, browserContainerOf, profileVolumeOf } from './browsers.ts'
+import { attachToBrowser, browserContainerOf, profileVolumeOf, tarFileContentOf } from './browsers.ts'
 import { createCommandRunner } from './commands.ts'
-import { createDocker } from './docker.ts'
+import { createDocker, createDockerReader } from './docker.ts'
 import { waitFor } from './testing.ts'
 
 setDefaultTimeout(300_000)
@@ -56,7 +56,7 @@ const browserSession = async () => {
   return { lines, stream, answerOf }
 }
 
-test("a member's browser runs the runtime image beside the runtime, reaches the runtime's own server as localhost, refuses internal networks and blocked sites, and leaves the runtime no way into its display, processes or a debugging port", async () => {
+test("a member's browser runs the runtime image beside the runtime, reaches the runtime's own server as localhost, refuses internal networks and blocked sites, hands a large download over as a file the host reads back whole, and leaves the runtime no way into its display, processes or a debugging port", async () => {
   await runner.run({ op: 'create', runtimeId, image, apiKey: 'k'.repeat(32) })
   await runner.run({ op: 'start', runtimeId })
   await runner.run({ op: 'browser_start', runtimeId, browserKey })
@@ -87,6 +87,38 @@ test("a member's browser runs the runtime image beside the runtime, reaches the 
   })
   stream.send(JSON.stringify({ type: 'watch' }))
   await waitFor(() => lines.some((line) => line.type === 'frame'))
+
+  const downloadBytes = 40 * 1024 * 1024
+  await answerOf({
+    command: 'evaluate',
+    expression: `(() => { const link = document.createElement('a'); link.download = 'big.bin'; link.href = URL.createObjectURL(new Blob([new Uint8Array(${downloadBytes}).fill(7)])); document.body.append(link); link.click(); return true })()`,
+  })
+  for (const deadline = Date.now() + 60_000; !lines.some((line) => line.type === 'download'); await Bun.sleep(100))
+    if (Date.now() > deadline) throw new Error(`No download: ${JSON.stringify(lines.slice(-5))}`)
+  const download = lines.find((line) => line.type === 'download')
+  expect(download).toEqual({
+    type: 'download',
+    file: expect.stringMatching(/^[a-f0-9]{32}$/),
+    name: 'big.bin',
+    size: downloadBytes,
+  })
+  const readDocker = createDockerReader(socketPath)
+  const filePath = await runner.browserFilePathOf(runtimeId, browserKey, String(download?.file))
+  let downloaded = 0
+  let isEachByteSeven = true
+  for await (const chunk of tarFileContentOf(await readDocker(filePath, AbortSignal.timeout(60_000)))) {
+    downloaded += chunk.length
+    isEachByteSeven &&= chunk.every((byte) => byte === 7)
+  }
+  expect({ downloaded, isEachByteSeven }).toEqual({ downloaded: downloadBytes, isEachByteSeven: true })
+  stream.send(JSON.stringify({ type: 'file_read', file: download?.file }))
+  const isRemoved = () =>
+    readDocker(filePath, AbortSignal.timeout(5000)).then(
+      () => false,
+      () => true,
+    )
+  for (const deadline = Date.now() + 10_000; !(await isRemoved()) && Date.now() < deadline; ) await Bun.sleep(100)
+  await expect(readDocker(filePath, AbortSignal.timeout(5000))).rejects.toThrow('failed with 404')
 
   const inRuntime = (command: string) => dockerText('exec', runtimeName, 'sh', '-c', command)
   expect(inRuntime('cat /proc/net/unix')).not.toContain('X11')

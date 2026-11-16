@@ -1,6 +1,12 @@
 import type { Mount } from './docker.ts'
 
 export const browserKeyPattern = /^[a-f0-9]{32}$/
+export const browserFileIdPattern = /^[a-f0-9]{32}$/
+export const browserFilesDirectory = '/var/lib/spyria/browser/files'
+const tarBlockBytes = 512
+const tarSizeField = [124, 136] as const
+const tarTypeField = 156
+const regularFileTypes = ['0', '\0']
 const gibibyte = 1024 ** 3
 const mebibyte = 1024 ** 2
 const browserEntrypoint = ['node', '/usr/local/lib/spyria/browser/browser.mjs']
@@ -56,6 +62,40 @@ export const browserBodyOf = ({
     Mounts: [{ Type: 'volume', Source: profileVolume, Target: profileTarget }] satisfies Mount[],
   },
 })
+
+export class NotAFile extends Error {
+  constructor() {
+    super('refused: not a file of the browser')
+  }
+}
+
+export async function* tarFileContentOf(chunks: AsyncIterable<Uint8Array>) {
+  let pending = Buffer.alloc(0)
+  let remaining: number | undefined
+  for await (const chunk of chunks) {
+    pending = Buffer.concat([pending, chunk])
+    if (remaining === undefined) {
+      if (pending.length < tarBlockBytes) continue
+      if (!regularFileTypes.includes(String.fromCharCode(pending[tarTypeField] ?? 0))) throw new NotAFile()
+      remaining = Number.parseInt(
+        pending
+          .subarray(...tarSizeField)
+          .toString('latin1')
+          .replace(/\0.*$/s, '')
+          .trim(),
+        8,
+      )
+      if (!Number.isSafeInteger(remaining)) throw new NotAFile()
+      pending = pending.subarray(tarBlockBytes)
+    }
+    const piece = pending.subarray(0, remaining)
+    remaining -= piece.length
+    pending = pending.subarray(piece.length)
+    if (piece.length > 0) yield piece
+    if (remaining === 0) return
+  }
+  if (remaining !== 0) throw new NotAFile()
+}
 
 export const isProfileExpired = (createdAt: string | undefined, signInHours: number | undefined, now: number) =>
   signInHours !== undefined && now - Number(createdAt ?? 0) >= signInHours * 3_600_000
