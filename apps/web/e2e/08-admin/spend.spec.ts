@@ -283,7 +283,7 @@ test.describe('Spend', () => {
 
     const openUsageSettings = async (page: Page) => {
       await openSettings(page, 'Costs and AI budgets')
-      await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
+      await expect(usageSectionOf(page)).toBeVisible()
     }
 
     const researchTotalsInDatabase = async (workerStack: WorkerStack) =>

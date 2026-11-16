@@ -35,7 +35,7 @@ const OwnBudget = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; member
         .then(setBudgets, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId, alertKey])
   return (
-    <LabelledSection title="AI budget" Heading="h3" titleClass="text-sm font-medium">
+    <LabelledSection title="AI budget" titleClass="text-sm font-medium">
       <BudgetNotice workspaceId={workspaceId} memberId={memberId} />
       {budgets === null ? (
         loadError ? (
@@ -54,7 +54,7 @@ export const MyUsageSection = ({ workspaceId, memberId }: { workspaceId: Workspa
   const commands = useUsageCommands()
   return (
     <SpendReportView
-      title="My usage"
+      label="My usage"
       workspaceId={workspaceId}
       readReport={commands.readOwnSpend}
       readTrend={commands.readOwnSpendTrend}
