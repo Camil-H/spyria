@@ -2,6 +2,7 @@ import { type MessageId, messageId, rulesOf, systemActor, type WorkspaceId } fro
 import type { AgentChat, AgentEndpoint } from '../contracts/agent.ts'
 import type { UnitOfWork } from '../contracts/transactor.ts'
 import {
+  budgetUsedUpOutcomeOf,
   type CheckResult,
   checksFixPromptOf,
   checksPollMilliseconds,
@@ -51,7 +52,7 @@ import { publishBranch } from './publish-branch.ts'
 
 type Dependencies = Pick<
   AgentDependencies,
-  'transactor' | 'runtimes' | 'agentClient' | 'checkouts' | 'isBudgetUsedUp' | 'devLoopPollMilliseconds'
+  'transactor' | 'runtimes' | 'agentClient' | 'checkouts' | 'usedUpBudgetPeriodOf' | 'devLoopPollMilliseconds'
 >
 type LoopJob = { workspaceId: WorkspaceId; loopId: MessageId }
 type ChecksJob = LoopJob & { checksRunId: string }
@@ -124,16 +125,16 @@ const lockedLoopOf = async (unitOfWork: UnitOfWork, loopId: MessageId) => {
   return loopOf(await unitOfWork.messages.find(loopId))
 }
 
-const limitOrBudgetOutcomeOf = async ({ isBudgetUsedUp }: Dependencies, unitOfWork: UnitOfWork, loop: Loop) => {
+const limitOrBudgetOutcomeOf = async ({ usedUpBudgetPeriodOf }: Dependencies, unitOfWork: UnitOfWork, loop: Loop) => {
   const chat = await unitOfWork.chats.get(loop.card.chatId)
   const costMicros = chat.localSession
     ? null
     : await unitOfWork.devLoop.costSince(loop.card.chatId, loop.step.startedAt)
   const limit = limitOutcomeOf(loop.step, Date.now(), costMicros)
   if (limit) return limit
-  if (!chat.localSession && (await isBudgetUsedUp?.(loop.card.workspaceId, loop.ownerId)))
-    return `Stopped: the monthly AI budget of ${await unitOfWork.members.displayNameOf(loop.ownerId)} is used up`
-  return undefined
+  const usedUpPeriod = chat.localSession ? null : await usedUpBudgetPeriodOf?.(loop.card.workspaceId, loop.ownerId)
+  if (!usedUpPeriod) return undefined
+  return budgetUsedUpOutcomeOf(usedUpPeriod, await unitOfWork.members.displayNameOf(loop.ownerId))
 }
 
 const withLoop = <Result>(

@@ -261,6 +261,7 @@
     "packages/usage": {
       "name": "@spyria/usage",
       "dependencies": {
+        "@radix-ui/react-tabs": "1.1.21",
         "@rocicorp/zero": "1.9.0",
         "@spyria/db": "workspace:*",
         "@spyria/kernel": "workspace:*",

@@ -18,6 +18,7 @@ import {
   type TurnOutcome,
 } from '../domain/agent-events.ts'
 import { devLoopJobTypes } from '../domain/dev-loop.ts'
+import type { BudgetPeriod } from '../domain/model-call-failures.ts'
 import type { WorkspaceRead } from '../domain/workspace-reads.ts'
 import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integrations/runtime-agent-runtimes.ts'
 import { type AgentLlm, createSpyriaAgentClient } from '../integrations/spyria-agent-client.ts'
@@ -89,7 +90,7 @@ export const createAgentHandlers = ({
   spyriaAgentImage,
   checkouts,
   deployment,
-  isBudgetUsedUp,
+  usedUpBudgetPeriodOf,
   onTurnPrompter,
 }: {
   transact: Transact
@@ -104,7 +105,7 @@ export const createAgentHandlers = ({
   spyriaAgentImage?: string
   checkouts?: RepositoryCheckouts
   deployment?: string
-  isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
+  usedUpBudgetPeriodOf?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<BudgetPeriod | null>
   onTurnPrompter?: (chat: AgentChat, prompterId: MemberId) => void
 }) => {
   const runtimes = createRuntimeAgentRuntimes(transact, sandboxProvider, { spyriaAgentImage })
@@ -122,7 +123,7 @@ export const createAgentHandlers = ({
     devLoopPollMilliseconds,
     approvalWindowMilliseconds,
     deployment,
-    isBudgetUsedUp,
+    usedUpBudgetPeriodOf,
     onTurnPrompter,
   })
   return {

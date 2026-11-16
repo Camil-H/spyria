@@ -1017,7 +1017,7 @@ export const workspaceTablesInPurgeOrder = [
   'projects',
   'service_identities',
   'budget_alerts',
-  'budgets',
+  'role_budgets',
   'connection_access',
   'tool_approvals',
   'tool_connections',

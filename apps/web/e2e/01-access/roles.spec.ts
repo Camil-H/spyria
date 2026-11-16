@@ -131,7 +131,7 @@ test.describe('Roles', () => {
     await expect(roleItemOf(page, 'Reviewer')).toHaveCount(0)
   })
 
-  test('As a member who can manage roles, I create a Finance workspace role with costs and budgets and give it to Bob: he sees only Costs, without a reload, and is refused the other settings pages', {
+  test('As a member who can manage roles, I create a Finance workspace role with costs and budgets and give it to Bob: he sees only Costs and AI budgets, with both tabs, without a reload, and is refused the other settings pages', {
     tag: ['@spec-50', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -155,10 +155,11 @@ test.describe('Roles', () => {
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Workspace settings' })).toBeVisible()
     const bobsCards = mainOf(bobPage).getByRole('region').getByRole('link')
     await expect(bobsCards).toHaveCount(1)
-    await expect(bobsCards).toHaveAccessibleName('Costs')
+    await expect(bobsCards).toHaveAccessibleName('Costs and AI budgets')
     await bobsCards.click()
-    await expect(mainOf(bobPage).getByRole('region', { name: 'Budgets' })).toBeVisible()
     await expect(mainOf(bobPage).getByRole('region', { name: 'Usage' })).toBeVisible()
+    await mainOf(bobPage).getByRole('tab', { name: 'AI budgets' }).click()
+    await expect(mainOf(bobPage).getByRole('region', { name: 'AI budgets' })).toBeVisible()
     for (const card of ['team', 'audit', 'runtime']) {
       await bobPage.goto(`/w/workspace-acme/settings/${card}`)
       await expect(mainOf(bobPage)).toContainText('Your workspace role does not give access to this page')

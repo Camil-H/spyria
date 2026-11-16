@@ -156,17 +156,17 @@ test.describe('Audit log', () => {
     await expect(retentionForm.getByRole('spinbutton', { name: 'Days' })).toHaveValue('30')
   })
 
-  test('As a member who can view the audit log, I see who created, changed and deleted a role under Roles, and who changed a monthly AI budget', {
+  test('As a member who can view the audit log, I see who created, changed and deleted a role under Roles, and who changed a role’s AI budget', {
     tag: ['@spec-44', '@spec-46', '@spec-47'],
   }, async ({ page }) => {
-    await openSettings(page, 'Costs')
-    const leeBudget = mainOf(page)
-      .getByRole('region', { name: 'Budgets' })
-      .getByRole('table', { name: 'Budgets' })
-      .getByRole('row', { name: /^Lee\b/ })
-    await leeBudget.getByRole('spinbutton', { name: 'Monthly budget of Lee' }).fill('3')
-    await leeBudget.getByRole('button', { name: 'Save the budget of Lee' }).click()
-    await expect(leeBudget.getByRole('cell').nth(1)).toHaveText('0%')
+    await openSettings(page, 'Costs and AI budgets')
+    await mainOf(page).getByRole('tab', { name: 'AI budgets' }).click()
+    const memberBudget = mainOf(page)
+      .getByRole('table', { name: 'AI budgets per role' })
+      .getByRole('row', { name: /^Member\b/ })
+    await memberBudget.getByRole('spinbutton', { name: 'Monthly budget per member of Member' }).fill('3')
+    await memberBudget.getByRole('button', { name: 'Save the budgets of Member' }).click()
+    await expect(memberBudget).toContainText('$3.00 × 2 members = $6.00')
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
 
     await createRole(page, 'Auditor', [])
@@ -176,7 +176,7 @@ test.describe('Audit log', () => {
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
     await mainOf(page).getByRole('link', { name: 'Audit log', exact: true }).click()
     const records = mainOf(page).getByRole('list', { name: 'Audit records' }).getByRole('listitem')
-    await expect(records.filter({ hasText: /Alice\s*Changed a monthly AI budget\s*Lee/ })).toHaveCount(1)
+    await expect(records.filter({ hasText: /Alice\s*Changed a role's AI budget\s*Member/ })).toHaveCount(1)
     const auditSection = mainOf(page).getByRole('region', { name: 'Audit log' })
     await auditSection
       .getByRole('group', { name: 'Filters' })

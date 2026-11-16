@@ -7,6 +7,7 @@ import {
 } from '@spyria/kernel'
 import type { GitActionOutcome } from './git-actions.ts'
 import type { CheckRun } from './github-tools.ts'
+import { type BudgetPeriod, budgetPeriodAdjectives } from './model-call-failures.ts'
 import { type CheckState, checkStateOf } from './pull-requests.ts'
 
 export type DevLoopState = 'working' | 'running' | 'reviewing' | 'waiting_for_ci' | 'handing_off' | 'done' | 'stopped'
@@ -202,6 +203,9 @@ export const limitOutcomeOf = (step: DevLoopStep, now: number, costMicros: numbe
     return `Stopped at $${(step.costLimitMicros / 1_000_000).toFixed(2)}, the cost limit of a run through the gates: over to you`
   return undefined
 }
+
+export const budgetUsedUpOutcomeOf = (period: BudgetPeriod, ownerName: string) =>
+  `Stopped: the ${budgetPeriodAdjectives[period]} AI budget of ${ownerName} is used up`
 
 const fence = (text: string) => `\`\`\`\n${text.replaceAll('```', "'''")}\n\`\`\``
 const attemptOf = (round: number, limit: number) => `attempt ${round} of ${limit}`

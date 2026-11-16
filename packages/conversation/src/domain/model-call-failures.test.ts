@@ -152,14 +152,14 @@ test.each([
   ],
   ['a body that is not JSON', answered(418, "I'm a teapot"), 'The model call failed (error 418)'],
   [
-    "the prompter's budget used up",
-    { reached: 'over_budget', budget: 'member' },
-    "Alice's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
+    "the prompter's daily budget used up",
+    { reached: 'over_budget', period: 'day' },
+    "Alice's daily AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
   ],
   [
-    "the workspace's budget used up",
-    { reached: 'over_budget', budget: 'workspace' },
-    "The workspace's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
+    "the prompter's monthly budget used up",
+    { reached: 'over_budget', period: 'month' },
+    "Alice's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings",
   ],
 ] as [string, ModelCallFailure, string][])('%s', (_, failure, notice) => {
   expect(modelCallNoticeOf(failure, names)).toBe(notice)

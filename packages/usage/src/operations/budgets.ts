@@ -3,27 +3,23 @@ import type { BudgetLedger, BudgetTransactor } from '../contracts/budgets.ts'
 import {
   type BudgetOverview,
   budgetAlertsOf,
-  budgetChangeFrom,
   budgetOverviewOf,
-  budgetProgressOf,
-  monthOf,
-  usedUpBudgetOf,
+  changedPeriodsOf,
+  ownBudgetsOf,
+  periodStartsOf,
+  roleBudgetChangeFrom,
+  startsOnOf,
+  usedUpPeriodOf,
 } from '../domain/budgets.ts'
-import { BudgetMemberNotFound } from '../domain/errors.ts'
+import { BudgetRoleNotFound } from '../domain/errors.ts'
 
 type Dependencies = { transactor: BudgetTransactor }
 
-const overviewOf = async (ledger: BudgetLedger, now: Date) => {
-  const month = monthOf(now)
-  const workspaceUse = (await ledger.uses(month, null)).find((use) => use.memberId === null)
-  return budgetOverviewOf(await ledger.memberSpends(month, null), {
-    limitMicros: workspaceUse?.limitMicros ?? null,
-    spentMicros: await ledger.workspaceSpentMicros(month),
-  })
-}
+const overviewOf = async (ledger: BudgetLedger, now: Date) =>
+  budgetOverviewOf(await ledger.roleBudgets(), await ledger.memberSpends(periodStartsOf(now), null))
 
 const recordReachedAlerts = async (ledger: BudgetLedger, now: Date) =>
-  ledger.recordAlerts(monthOf(now), budgetAlertsOf(await ledger.uses(monthOf(now), null)))
+  ledger.recordAlerts(budgetAlertsOf(await ledger.memberSpends(periodStartsOf(now), null), now))
 
 export const readBudgets = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
   transactor.run(async (ledger): Promise<BudgetOverview> => {
@@ -31,34 +27,31 @@ export const readBudgets = ({ transactor }: Dependencies, { memberId, now }: { m
     return overviewOf(ledger, now)
   })
 
-export const setBudget = (
+export const setRoleBudget = (
   { transactor }: Dependencies,
   { memberId, budget, now }: { memberId: MemberId; budget: unknown; now: Date },
 ) =>
   transactor.run(async (ledger): Promise<BudgetOverview> => {
     await requireWorkspacePermission(ledger, memberId, 'budgets.manage')
-    const change = budgetChangeFrom(budget)
-    const overview = await overviewOf(ledger, now)
-    const current =
-      change.memberId === null
-        ? overview.workspace
-        : overview.members.find((member) => member.memberId === change.memberId)
-    if (!current) throw new BudgetMemberNotFound()
-    if (current.limitMicros === change.limitMicros) return overview
-    await ledger.setBudget(change, memberId)
-    await ledger.clearAlerts(change.memberId, monthOf(now))
+    const change = roleBudgetChangeFrom(budget)
+    const current = (await ledger.roleBudgets()).find((role) => role.roleId === change.roleId)
+    if (!current) throw new BudgetRoleNotFound()
+    const changedPeriods = changedPeriodsOf(current.limits, change.limits)
+    if (changedPeriods.length === 0) return overviewOf(ledger, now)
+    await ledger.setRoleBudget(change, changedPeriods, memberId)
+    await ledger.clearRoleAlerts(
+      change.roleId,
+      changedPeriods.map((period) => ({ period, startsOn: startsOnOf(period, now) })),
+    )
     await recordReachedAlerts(ledger, now)
     return overviewOf(ledger, now)
   })
 
 export const readOwnBudget = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
-  transactor.run(async (ledger) => {
-    const [own] = await ledger.memberSpends(monthOf(now), memberId)
-    return budgetProgressOf(own?.limitMicros ?? null, own?.spentMicros ?? 0)
-  })
+  transactor.run(async (ledger) => ownBudgetsOf(await ledger.memberSpends(periodStartsOf(now), memberId)))
 
 export const findUsedUpBudget = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
-  transactor.run(async (ledger) => usedUpBudgetOf(await ledger.uses(monthOf(now), memberId)))
+  transactor.run(async (ledger) => usedUpPeriodOf(await ledger.memberSpends(periodStartsOf(now), memberId)))
 
 export const recordBudgetAlerts = ({ transactor }: Dependencies, { now }: { now: Date }) =>
   transactor.run((ledger) => recordReachedAlerts(ledger, now))

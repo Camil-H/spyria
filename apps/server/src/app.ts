@@ -200,7 +200,7 @@ export const sessionClassifierOf =
     return createGatewaySessionClassifier({
       gatewayUrl: () => gatewayUrlOf(database),
       virtualKeyOf: createMemberKeyReader(transact, llmGateway),
-      isBudgetUsedUp: async (workspaceId, memberId) => (await usedUpBudgetOf(workspaceId, memberId)) !== null,
+      usedUpBudgetPeriodOf: usedUpBudgetOf,
       listedModels: llmGateway.listedModels,
       readsImages: llmGateway.readsImages,
       headersOf: headersOf && ((chat) => headersOf(database, chat)),

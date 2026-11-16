@@ -13,7 +13,7 @@ Everything here is in **Workspace settings** (the workspace menu), as cards in t
 | | **AI providers** | `providers.manage` |
 | | **Tools** | `tools.manage` |
 | | **Quality gates** | `github.manage` |
-| Usage | **Costs** | `costs.view` or `budgets.manage` |
+| Usage | **Costs and AI budgets** | `costs.view` or `budgets.manage` |
 | | **Audit log** | `audit.view` |
 
 ## Setup checklist
@@ -185,7 +185,7 @@ The page lists the providers in two groups side by side: labs (Anthropic, OpenAI
 
 ## Spend
 
-**Costs** reports the cost of model calls made through the gateway, under a notice that sessions on a member's own machine are not counted. Its filters sit on one row: the period (this month, last month, last 30 or 90 days, or custom up to a year), the day, week or month granularity, and **Whole workspace** or some members, projects, chats or models of one kind, picked in a list of checkboxes, which narrows everything below (spend chart, tables and breakdown) and offers every one that had usage in the period or the one before it:
+**Costs and AI budgets** has two tabs, **Costs** for `costs.view` and **AI budgets** for `budgets.manage`; a member with one of the two sees only its page. **Costs** reports the cost of model calls made through the gateway, under a notice that sessions on a member's own machine are not counted. Its filters sit on one row: the period (this month, last month, last 30 or 90 days, or custom up to a year), the day, week or month granularity, and **Whole workspace** or some members, projects, chats or models of one kind, picked in a list of checkboxes, which narrows everything below (spend chart, tables and breakdown) and offers every one that had usage in the period or the one before it:
 
 - spend over time, stacked by member, project or model;
 - tables per member, project, chat and model with cost, tokens, requests and share;
@@ -197,11 +197,13 @@ Calls delegated to sub-agents count in the turn that delegated them. Every membe
 
 ## Budgets
 
-On the same page, below the spend report, a member with `budgets.manage` sets an optional monthly budget in dollars per member and an optional monthly total for the workspace. Months are calendar months in UTC.
+On the **AI budgets** tab, a member with `budgets.manage` sets, in a grid of the workspace roles, an optional budget in dollars per role for each day, week (from Monday) and month, in UTC ([decision 0038](../decisions/0038-budgets-per-role-and-period.md)).
 
-- **Alerts** at 80% and 100%, once per threshold per month: the member sees a banner in **My usage** and a notice above the composer; admins see a badge on the **Costs** card, a notice at the top of its page, and the list of members above 80%.
-- **Hard stop** at 100%: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn. The chat shows "<Name>'s monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings". Once the workspace total is reached, every member is refused with the workspace's wording.
-- Raising or removing the budget lets the member prompt again at once.
+- **Per member.** Each member gets their role's budget for themselves; it is not shared by the members who hold the role. Under each budget, the grid shows the role's total: "$5.00 × 3 members = $15.00".
+- **Workspace total.** The last row sums the roles' totals per period. It cannot be set, and shows **No limit** while a role with members has no budget for that period.
+- **Alerts** at 80% and 100%, once per threshold, member and period: the member sees a banner in **My usage** and a notice above the composer ("You have used 80% of your daily AI budget"); admins see a badge on the **Costs and AI budgets** card, a notice at the top of its page that opens the **AI budgets** tab, and the list of members above 80% with the period.
+- **Hard stop** at 100% of any period: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn, until the period ends. The chat shows "<Name>'s daily AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings", naming the longest period used up.
+- Raising or removing the role's budget lets its members prompt again at once; a member given another role gets that role's budgets.
 
 Spend is counted from the gateway's usage records, which Spyria reads every few seconds, and a call is priced only after it ran. A budget can therefore be exceeded by the calls of the last few seconds, typically cents.
 
@@ -230,7 +232,7 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 | Chats | chat members added, removed, leaving, role changes, visibility changes, transfers, chats started from another chat, deleted messages with their text |
 | Tool calls | every agent tool call, with prompter, owner, server, tool, whether it writes, approval decision and outcome |
 | Publishing | pushes, pull requests opened, reopened, turned into drafts, merged, closed |
-| Budgets | budget changes, thresholds reached |
+| Budgets | role budget changes, thresholds reached |
 | Roles | custom chat and workspace roles created, changed, deleted |
 
 The log records metadata only, with one exception: a **Deleted a message** record shows the text the message had when it was deleted, in any chat, private ones included, since that text is no longer shown in the chat itself. It never shows the body of a message that is still in a chat. Filter by person (which also lists what was done on their behalf), group and date range; **Export CSV** downloads the filtered records.

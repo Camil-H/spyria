@@ -151,11 +151,11 @@ Each message the gates send reads as written by **Quality gates**, not by the ow
 - every gate passed: "Ready for your review on pull request #N", naming the gates that passed;
 - a gate still fails after its fixes: the agent is first asked to say what it would change about the approach, without fixing again; or a gate set to stop fails;
 - the agent ends a turn without `finish_work` (it is waiting for the owner, or asked a question);
-- the run reaches its time limit (counted from the owner's prompt), its cost limit, or the owner's monthly budget;
+- the run reaches its time limit (counted from the owner's prompt), its cost limit, or one of the owner's AI budgets;
 - the owner presses **Stop**, or an admin turns off the gates of the repository;
 - any member writes in the chat, even before the run starts: it stops, and the message it had queued is not sent.
 
-Only the owner's own prompts start a run: `finish_work` from another member's prompt is refused. It works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the monthly budget applies there.
+Only the owner's own prompts start a run: `finish_work` from another member's prompt is refused. It works the same on a member's machine, except that a subscription is not metered, so neither the cost limit nor the AI budgets apply there.
 
 Admins set quality gates in **Workspace settings > Quality gates**, with the **Connect GitHub** permission. The **Default rules** apply to every repository without rules of its own; **New repository rules** gives a repository its own, starting as a copy of the default rules. Each set of rules holds its switch (off by default), its gates and the limits of a run: a time limit, 4 hours by default, and an optional cost limit. Repositories are listed once GitHub is connected; until then only the default rules can be set. See [decision 0025](../decisions/0025-dev-loop.md).
 

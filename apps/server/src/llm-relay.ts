@@ -593,7 +593,7 @@ export const createModelCallRelay = ({
     const relayed = async (): Promise<{ status?: number; isUnexplained?: boolean; gatewayRequestId?: string }> => {
       const record = (failure: ModelCallFailure) => handlers.recordModelCallFailure({ ...turn, model, failure })
       const usedUpBudget = isTokenCount ? null : await usedUpBudgetOf(host.workspaceId, turn.prompterId)
-      if (usedUpBudget) return answered(402, refusalOf(await record({ reached: 'over_budget', budget: usedUpBudget })))
+      if (usedUpBudget) return answered(402, refusalOf(await record({ reached: 'over_budget', period: usedUpBudget })))
       if (!(await isModelAllowed(host.workspaceId, turn.prompterId, soleRequestedModelOf(jsonOf(body)))))
         return answered(
           403,

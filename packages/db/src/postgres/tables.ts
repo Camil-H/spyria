@@ -855,14 +855,24 @@ export const usageEntries = table(
   ],
 )
 
-export const budgets = table(
-  'budgets',
-  { ...tenant, memberId: text(), limitMicros: bigint({ mode: 'number' }).notNull() },
+type BudgetPeriodColumn = 'day' | 'week' | 'month'
+const knownBudgetPeriod = (name: string, period: PgColumn) => check(name, sql`${period} in ('day', 'week', 'month')`)
+
+export const roleBudgets = table(
+  'role_budgets',
+  {
+    ...tenant,
+    roleId: text().notNull(),
+    period: text().$type<BudgetPeriodColumn>().notNull(),
+    limitMicros: bigint({ mode: 'number' }).notNull(),
+  },
   (table) => [
-    unique('budgets_scope_key').on(table.workspaceId, table.memberId).nullsNotDistinct(),
-    check('budgets_limit_micros', sql`${table.limitMicros} > 0`),
-    foreignKey({ columns: [table.workspaceId], foreignColumns: [workspaces.workspaceId] }),
-    memberReference(table, table.memberId),
+    primaryKey({ columns: [table.workspaceId, table.roleId, table.period] }),
+    knownBudgetPeriod('role_budgets_period', table.period),
+    check('role_budgets_limit_micros', sql`${table.limitMicros} > 0`),
+    tenantReference([table.workspaceId, table.roleId], [workspaceRoles.workspaceId, workspaceRoles.id]).onDelete(
+      'cascade',
+    ),
   ],
 )
 
@@ -871,13 +881,15 @@ export const budgetAlerts = table(
   {
     ...tenant,
     id: text().notNull(),
-    memberId: text(),
-    month: text().notNull(),
+    memberId: text().notNull(),
+    period: text().$type<BudgetPeriodColumn>().notNull(),
+    startsOn: text().notNull(),
     threshold: integer().notNull(),
     reachedAt: instant().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),
+    knownBudgetPeriod('budget_alerts_period', table.period),
     check('budget_alerts_threshold', sql`${table.threshold} in (80, 100)`),
     foreignKey({ columns: [table.workspaceId], foreignColumns: [workspaces.workspaceId] }),
     memberReference(table, table.memberId),

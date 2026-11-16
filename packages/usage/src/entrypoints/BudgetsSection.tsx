@@ -1,4 +1,4 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
+import type { WorkspaceId } from '@spyria/kernel'
 import {
   calloutClass,
   cardClass,
@@ -11,51 +11,91 @@ import {
   useGuardedAction,
 } from '@spyria/ui'
 import { useEffect, useState } from 'react'
-import { type BudgetOverview, type BudgetProgress, isOverAlertLine } from '../domain/budgets.ts'
+import {
+  type BudgetLimits,
+  type BudgetOverview,
+  type BudgetPeriod,
+  budgetPeriods,
+  periodAdjectiveOf,
+  periodTitleOf,
+  type RoleBudget,
+  roleTotalOf,
+  workspaceTotalsOf,
+} from '../domain/budgets.ts'
+import { InvalidBudget } from '../domain/errors.ts'
 import { useUsageCommands } from './providers.tsx'
 
-const cellClass = 'px-2 py-1.5'
-const dollarsOf = (limitMicros: number | null) => (limitMicros === null ? '' : String(limitMicros / 1_000_000))
+type DollarsByPeriod = Readonly<Record<BudgetPeriod, string>>
 
-const BudgetRow = ({
-  name,
-  progress,
+const cellClass = 'px-2 py-1.5'
+const memberCountLabelOf = (count: number) => `${count} ${count === 1 ? 'member' : 'members'}`
+const limitLabelOf = (limitMicros: number | null) => (limitMicros === null ? 'No limit' : formatCost(limitMicros))
+const dollarsOf = (limits: BudgetLimits) =>
+  Object.fromEntries(
+    budgetPeriods.map((period) => [period, limits[period] === null ? '' : String((limits[period] ?? 0) / 1_000_000)]),
+  ) as DollarsByPeriod
+const dollarAmountOf = (dollars: string) => {
+  if (dollars.trim() === '') return null
+  const amount = Number(dollars)
+  if (!Number.isFinite(amount)) throw new InvalidBudget()
+  return amount
+}
+const dollarAmountsOf = (dollars: DollarsByPeriod) =>
+  Object.fromEntries(budgetPeriods.map((period) => [period, dollarAmountOf(dollars[period])])) as Readonly<
+    Record<BudgetPeriod, number | null>
+  >
+const limitsKeyOf = (role: RoleBudget) => [role.roleId, ...budgetPeriods.map((period) => role.limits[period])].join('/')
+
+const RoleTotal = ({ limitMicros, memberCount }: { limitMicros: number | null; memberCount: number }) => (
+  <p className="text-xs text-muted">
+    {limitMicros === null
+      ? 'No limit'
+      : `${formatCost(limitMicros)} × ${memberCountLabelOf(memberCount)} = ${formatCost(roleTotalOf(limitMicros, memberCount) ?? 0)}`}
+  </p>
+)
+
+const RoleBudgetRow = ({
+  role,
   onSave,
 }: {
-  name: string
-  progress: BudgetProgress
-  onSave: (dollars: number | null) => Promise<unknown>
+  role: RoleBudget
+  onSave: (dollars: Readonly<Record<BudgetPeriod, number | null>>) => Promise<unknown>
 }) => {
-  const [dollars, setDollars] = useState(dollarsOf(progress.limitMicros))
+  const [dollars, setDollars] = useState(() => dollarsOf(role.limits))
   const { errorMessage, isPending, run } = useGuardedAction()
-  useEffect(() => setDollars(dollarsOf(progress.limitMicros)), [progress.limitMicros])
-  const save = () => run(() => onSave(dollars.trim() === '' ? null : Number(dollars)))
+  const save = () => run(() => onSave(dollarAmountsOf(dollars)))
   return (
     <tr className="border-t border-line align-top">
       <th scope="row" className={`${cellClass} text-left font-normal`}>
-        {name}
+        {role.name}
       </th>
-      <td className={`${cellClass} text-right`}>{formatCost(progress.spentMicros)}</td>
-      <td className={`${cellClass} text-right`}>{progress.percent === null ? '—' : `${progress.percent}%`}</td>
+      <td className={`${cellClass} text-right`}>{role.memberCount}</td>
+      {budgetPeriods.map((period) => (
+        <td key={period} className={cellClass}>
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              placeholder="No limit"
+              aria-label={`${periodTitleOf(period)} budget per member of ${role.name}`}
+              className={`${fieldClass} w-28`}
+              value={dollars[period]}
+              onChange={(event) => setDollars({ ...dollars, [period]: event.target.value })}
+              onKeyDown={(event) => event.key === 'Enter' && save()}
+            />
+            <RoleTotal limitMicros={role.limits[period]} memberCount={role.memberCount} />
+          </div>
+        </td>
+      ))}
       <td className={cellClass}>
-        <div className="flex items-center justify-end gap-2">
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
-            placeholder="No budget"
-            aria-label={`Monthly budget of ${name}`}
-            className={`${fieldClass} w-28`}
-            value={dollars}
-            onChange={(event) => setDollars(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && save()}
-          />
+        <div className="flex justify-end">
           <button
             type="button"
             className={ghostButtonClass}
             disabled={isPending}
-            aria-label={`Save the budget of ${name}`}
+            aria-label={`Save the budgets of ${role.name}`}
             onClick={save}
           >
             Save
@@ -67,22 +107,65 @@ const BudgetRow = ({
   )
 }
 
-export const BudgetsSection = ({ id, workspaceId }: { id?: string; workspaceId: WorkspaceId }) => {
+const WorkspaceTotalRow = ({ roles }: { roles: readonly RoleBudget[] }) => {
+  const totals = workspaceTotalsOf(roles)
+  return (
+    <tr className="border-t border-line font-medium">
+      <th scope="row" className={`${cellClass} text-left font-medium`}>
+        Workspace total
+      </th>
+      <td className={`${cellClass} text-right`}>{roles.reduce((count, role) => count + role.memberCount, 0)}</td>
+      {budgetPeriods.map((period) => (
+        <td key={period} className={`${cellClass} text-right`}>
+          {limitLabelOf(totals[period])}
+        </td>
+      ))}
+      <td className={cellClass} />
+    </tr>
+  )
+}
+
+const OverAlertLine = ({ overview }: { overview: BudgetOverview }) =>
+  overview.overAlertLine.length > 0 && (
+    <LabelledSection
+      title="Over 80% of their budget"
+      Heading="h3"
+      titleClass="text-sm font-medium"
+      className={`${calloutClass} flex flex-col gap-1`}
+    >
+      <ul className="flex flex-col gap-1">
+        {overview.overAlertLine.map((member) => (
+          <li key={`${member.memberId}/${member.period}`}>
+            {member.name} · {periodAdjectiveOf(member.period)} · {formatCost(member.spentMicros)} of{' '}
+            {formatCost(member.limitMicros ?? 0)} ({member.percent}%)
+          </li>
+        ))}
+      </ul>
+    </LabelledSection>
+  )
+
+export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useUsageCommands()
   const [overview, setOverview] = useState<BudgetOverview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
     commands.readBudgets({ workspaceId }).then(setOverview, (error: unknown) => setLoadError(failureMessageOf(error)))
   }, [commands, workspaceId])
-  const saveOf = (memberId: MemberId | null) => async (dollars: number | null) =>
-    setOverview(await commands.saveBudget({ workspaceId, memberId, dollars }))
-  const overAlertLine = overview?.members.filter(isOverAlertLine) ?? []
+  const saveOf = (roleId: string) => async (dollars: Readonly<Record<BudgetPeriod, number | null>>) =>
+    setOverview(await commands.saveRoleBudget({ workspaceId, roleId, dollars }))
   return (
-    <LabelledSection id={id} title="Budgets">
-      <p className="-mt-2 text-sm text-muted">
-        Monthly AI budgets in dollars, per calendar month in UTC. At 100% the member's prompts are refused until next
-        month or a higher budget; leave a budget empty to remove it.
-      </p>
+    <LabelledSection title="AI budgets">
+      <div className="-mt-2 flex flex-col gap-1 text-sm text-muted">
+        <p>
+          Each member gets the budget of their role for themselves: a role's budget is per member, not shared by the
+          members who hold it. A role's total is its budget per member × its number of members, and the workspace total
+          is the sum of the roles' totals.
+        </p>
+        <p>
+          Budgets are in dollars; days, weeks (from Monday) and months are in UTC. At 100% of any of their budgets, a
+          member's prompts are refused until the period ends or the budget is raised. Leave a budget empty for no limit.
+        </p>
+      </div>
       {overview === null ? (
         loadError ? (
           <ErrorMessage message={loadError} />
@@ -91,52 +174,35 @@ export const BudgetsSection = ({ id, workspaceId }: { id?: string; workspaceId: 
         )
       ) : (
         <>
-          {overAlertLine.length > 0 && (
-            <LabelledSection
-              title="Over 80% of their budget"
-              Heading="h3"
-              titleClass="text-sm font-medium"
-              className={`${calloutClass} flex flex-col gap-1`}
-            >
-              <ul className="flex flex-col gap-1">
-                {overAlertLine.map((member) => (
-                  <li key={member.memberId}>
-                    {member.name} · {formatCost(member.spentMicros)} of {formatCost(member.limitMicros ?? 0)} (
-                    {member.percent}%)
-                  </li>
-                ))}
-              </ul>
-            </LabelledSection>
-          )}
+          <OverAlertLine overview={overview} />
           <div className={`${cardClass} overflow-x-auto px-2 py-1`}>
-            <table aria-label="Budgets" className="w-full text-sm">
+            <table aria-label="AI budgets per role" className="w-full text-sm">
               <thead className="text-xs text-muted">
                 <tr>
                   <th scope="col" className={`${cellClass} text-left font-medium`}>
-                    Budget
+                    Role
                   </th>
                   <th scope="col" className={`${cellClass} text-right font-medium`}>
-                    Spent this month
+                    Members
                   </th>
-                  <th scope="col" className={`${cellClass} text-right font-medium`}>
-                    Used
-                  </th>
-                  <th scope="col" className={`${cellClass} text-right font-medium`}>
-                    Monthly budget ($)
+                  {budgetPeriods.map((period) => (
+                    <th key={period} scope="col" className={`${cellClass} text-right font-medium`}>
+                      {periodTitleOf(period)} per member ($)
+                    </th>
+                  ))}
+                  <th scope="col" className={cellClass}>
+                    <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <BudgetRow name="Workspace total" progress={overview.workspace} onSave={saveOf(null)} />
-                {overview.members.map((member) => (
-                  <BudgetRow
-                    key={member.memberId}
-                    name={member.name}
-                    progress={member}
-                    onSave={saveOf(member.memberId)}
-                  />
+                {overview.roles.map((role) => (
+                  <RoleBudgetRow key={limitsKeyOf(role)} role={role} onSave={saveOf(role.roleId)} />
                 ))}
               </tbody>
+              <tfoot>
+                <WorkspaceTotalRow roles={overview.roles} />
+              </tfoot>
             </table>
           </div>
         </>

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { type DevLoopRules, type DevLoopStepConfig, DomainError, defaultDevLoopRules, messageId } from '@spyria/kernel'
 import {
+  budgetUsedUpOutcomeOf,
   checksFixPromptOf,
   ciVerdictOf,
   commandGroupAt,
@@ -113,6 +114,12 @@ test('the loop stops at its time limit, and at its cost limit only when the cost
     'Stopped at $5.00, the cost limit of a run through the gates: over to you',
   )
   expect(limitOutcomeOf(capped, startedAt, null)).toBeUndefined()
+})
+
+test('a run stops on the owner’s AI budget naming the period used up', () => {
+  expect(budgetUsedUpOutcomeOf('day', 'Alice')).toBe('Stopped: the daily AI budget of Alice is used up')
+  expect(budgetUsedUpOutcomeOf('week', 'Alice')).toBe('Stopped: the weekly AI budget of Alice is used up')
+  expect(budgetUsedUpOutcomeOf('month', 'Alice')).toBe('Stopped: the monthly AI budget of Alice is used up')
 })
 
 test('while a group of commands runs, each finished command gets its outcome and the next one is running; a poll with no new result changes nothing', () => {

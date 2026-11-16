@@ -19,7 +19,7 @@ import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor
 import { expiredPromptNotice, hasOutlivedWait, unavailableNotices } from '../domain/agent-events.ts'
 import { type Message, newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import { noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
+import { type BudgetPeriod, noLlmKeyNoticeOf, noLongerPromptsNoticeOf } from '../domain/model-call-failures.ts'
 import { afterLoopTurn } from './dev-loop-turns.ts'
 import { cancelToolApprovalsOf } from './pending-approvals.ts'
 import { forgetDelegationsOf } from './running-delegations.ts'
@@ -38,7 +38,7 @@ export type AgentDependencies = {
   devLoopPollMilliseconds?: number
   approvalWindowMilliseconds?: number
   deployment?: string
-  isBudgetUsedUp?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<boolean>
+  usedUpBudgetPeriodOf?: (workspaceId: WorkspaceId, memberId: MemberId) => Promise<BudgetPeriod | null>
   onTurnPrompter?: (chat: AgentChat, prompterId: MemberId) => void
 }
 
