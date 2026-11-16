@@ -37,7 +37,7 @@ The chat gets its own working branch, `spyria/<chat name slug>-<6 characters of 
 
 ### Forking a dev chat
 
-A fork of a dev chat is a dev chat on the same repository and base branch that continues where the original stopped: its runtime checks out the original's working branch as pushed to GitHub, not the base. The member who owns the original keeps working on that same branch, and the fork shows the open pull request card, so a push updates that pull request. Any other member gets a new working branch built on top of the original's, named after the fork, and opens their own pull request from it. Commits the original never pushed stay in its runtime; when the original's branch was never pushed, the fork starts from the base.
+A fork of a dev chat is a dev chat on the same repository and base branch that continues where the original stopped: its runtime checks out the original's working branch as pushed to GitHub, not the base. The member who forks it chooses, from the fork icon's menu, between **Keep branch** and **New branch from**. A fork that keeps the branch works on that same branch and shows the open pull request card, so a push updates that pull request; pushes go through the GitHub account of the member who prompts, so GitHub decides whether they may write to it. A fork on a new branch gets a working branch built on top of the original's, named after the fork, and opens its own pull request from it. Either choice is open to the owner and to any other member who can fork. Commits the original never pushed stay in its runtime; when the original's branch was never pushed, the fork starts from the base.
 
 ## Clone and setup script
 
