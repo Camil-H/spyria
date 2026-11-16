@@ -18,9 +18,10 @@ const isWebUrl = (url) => url.startsWith('http://') || url.startsWith('https://'
 const modifiersOf = ({ alt, control, meta, shift }) =>
   (alt ? 1 : 0) | (control ? 2 : 0) | (meta ? 4 : 0) | (shift ? 8 : 0)
 
-const wouldSubmitInPage = (element, { action, key, submitPattern }) => {
+const wouldSubmitInPage = (element, { action, key = '', submitPattern }) => {
   const form = element.closest('form')
-  if (action === 'press') return key === 'Enter' && form !== null && element.tagName !== 'TEXTAREA'
+  const isEditable = element.isContentEditable || element.tagName === 'INPUT' || element.tagName === 'TEXTAREA'
+  if (action === 'press' && /(^|\+)(Enter|NumpadEnter)$/.test(key) && isEditable) return true
   const control = element.closest('button, input, a, [role="button"]')
   if (!control) return false
   const type = (control.getAttribute('type') ?? (control.tagName === 'BUTTON' ? 'submit' : '')).toLowerCase()

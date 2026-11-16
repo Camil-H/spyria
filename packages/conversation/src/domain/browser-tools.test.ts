@@ -73,8 +73,19 @@ test('running a script or submitting asks first; a click or a key press asks onl
     ref: 'e2',
     key: 'Enter',
   })
-  expect(submitCheckOf({ command: 'press', key: 'Enter' })).toBe('always')
-  expect(submitCheckOf({ command: 'press', key: 'Escape' })).toBe('never')
+  expect(submitCheckOf({ command: 'type', ref: 'e1', text: 'x\n', submit: false })).toBe('always')
+  for (const key of ['Enter', 'NumpadEnter', 'Control+Enter', 'Space', ' '])
+    expect(submitCheckOf({ command: 'press', key })).toBe('always')
+  expect(submitCheckOf({ command: 'press', key: 'Space', ref: 'e4' })).toEqual({
+    command: 'would_submit',
+    action: 'press',
+    ref: 'e4',
+    key: 'Space',
+  })
+  for (const key of ['Escape', 'ArrowDown', 'Control+A']) {
+    expect(submitCheckOf({ command: 'press', key })).toBe('never')
+    expect(submitCheckOf({ command: 'press', key, ref: 'e4' })).toBe('never')
+  }
   for (const command of ['snapshot', 'fill', 'wait', 'navigate', 'screenshot', 'open'])
     expect(submitCheckOf({ command })).toBe('never')
 })

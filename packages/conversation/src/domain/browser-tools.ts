@@ -145,14 +145,17 @@ export const browserCommandOf = (name: string, input: unknown): { browserCommand
 
 export const openCommandOf = (url: string): BrowserCommand => ({ command: 'open', url })
 
+const submittingKey = /(^|\+)(Enter|NumpadEnter|Space| )$/
+const lineBreak = /[\r\n]/
+
 export const submitCheckOf = (command: BrowserCommand): BrowserCommand | 'always' | 'never' => {
   if (command.command === 'evaluate') return 'always'
-  if (command.command === 'type') return command.submit === true ? 'always' : 'never'
+  if (command.command === 'type')
+    return command.submit === true || lineBreak.test(String(command.text)) ? 'always' : 'never'
   if (command.command === 'click') return { command: 'would_submit', action: 'click', ref: command.ref }
-  if (command.command === 'press' && command.ref !== undefined)
-    return { command: 'would_submit', action: 'press', ref: command.ref, key: command.key }
-  if (command.command === 'press') return command.key === 'Enter' ? 'always' : 'never'
-  return 'never'
+  if (command.command !== 'press' || !submittingKey.test(String(command.key))) return 'never'
+  if (command.ref === undefined) return 'always'
+  return { command: 'would_submit', action: 'press', ref: command.ref, key: command.key }
 }
 
 export const browserAnswerOf = (result: unknown): BrowserAnswer => {
