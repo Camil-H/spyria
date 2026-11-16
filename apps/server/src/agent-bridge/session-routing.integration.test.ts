@@ -462,6 +462,7 @@ test('a fork sends nothing until the forker’s first prompt, which reaches the 
       id: `message-${crypto.randomUUID()}`,
       chatId: fork,
       sourceChatId: source,
+      keepsBranch: false,
     }),
   ).toEqual(succeeded)
   expect(await routing(fork, bobInAcme, { runsOn: 'runtime' })).toEqual(succeeded)

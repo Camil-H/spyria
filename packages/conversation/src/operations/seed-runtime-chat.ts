@@ -15,6 +15,7 @@ type Seed = {
   memberId: MemberId
   header: string
   quoted: readonly Message[]
+  keepsBranch: boolean
 }
 
 const quotedMessagesOf = async (members: MemberDirectory, messages: readonly Message[]) => {
@@ -34,9 +35,9 @@ const quotedMessagesOf = async (members: MemberDirectory, messages: readonly Mes
 export const seedRuntimeChat = async (
   { messages, members }: UnitOfWork,
   runtimeChatStarter: RuntimeChatStarter,
-  { id, workspaceId, chatId, sourceChatId, name, memberId, header, quoted }: Seed,
+  { id, workspaceId, chatId, sourceChatId, name, memberId, header, quoted, keepsBranch }: Seed,
 ) => {
-  await runtimeChatStarter.start({ id: chatId, sourceChatId, name, ownerId: memberId })
+  await runtimeChatStarter.start({ id: chatId, sourceChatId, name, ownerId: memberId, keepsBranch })
   const seedId = toMessageId(id)
   await messages.record({
     type: 'message.posted',

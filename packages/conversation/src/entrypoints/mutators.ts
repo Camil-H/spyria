@@ -128,7 +128,12 @@ export const conversationMutators = defineMutators({
         ),
     ),
     forkChat: defineMutator(
-      z.extend(workspaceArguments, { id, chatId: chatIdArgument, sourceChatId: chatIdArgument }),
+      z.extend(workspaceArguments, {
+        id,
+        chatId: chatIdArgument,
+        sourceChatId: chatIdArgument,
+        keepsBranch: z.boolean(),
+      }),
       ({ tx, ctx, args }) =>
         forkChat(
           { ...dependenciesOf(tx, ctx, args), runtimeChatStarter: createZeroRuntimeChatStarter(tx, ctx) },

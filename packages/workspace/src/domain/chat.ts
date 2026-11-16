@@ -40,17 +40,17 @@ export const visibleChat = (chat: Chat, visibility: ChatVisibility): Chat => ({ 
 
 type StartedChatFields = { id: ChatId; name: Name; ownerId: MemberId }
 
-const continuedDevFieldsOf = (source: Chat, { id, name, ownerId }: StartedChatFields) =>
+const continuedDevFieldsOf = (source: Chat, { id, name }: StartedChatFields, keepsBranch: boolean) =>
   source.mode === 'dev'
     ? {
         mode: source.mode,
         repository: source.repository,
         baseBranch: source.baseBranch,
-        gitBranch: source.ownerId === ownerId ? source.gitBranch : workingBranchOf(name, id),
+        gitBranch: keepsBranch ? source.gitBranch : workingBranchOf(name, id),
       }
     : { mode: null, gitBranch: null, repository: null, baseBranch: null }
 
-export const startRuntimeChat = (source: Chat, fields: StartedChatFields): Chat => {
+export const startRuntimeChat = (source: Chat, fields: StartedChatFields, keepsBranch: boolean): Chat => {
   if (source.archived) throw new SourceChatArchived()
   return {
     ...fields,
@@ -60,7 +60,7 @@ export const startRuntimeChat = (source: Chat, fields: StartedChatFields): Chat 
     visibility: 'private',
     model: null,
     reasoningEffort: null,
-    ...continuedDevFieldsOf(source, fields),
+    ...continuedDevFieldsOf(source, fields, keepsBranch),
     originChatId: source.id,
     archived: false,
   }

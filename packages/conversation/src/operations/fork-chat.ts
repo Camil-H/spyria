@@ -4,16 +4,16 @@ import type { ConversationTransactor } from '../contracts/transactor.ts'
 import { NotForkable } from '../domain/errors.ts'
 import { newMessage } from '../domain/message.ts'
 import { MessageBody } from '../domain/message-body.ts'
-import { isOpenPullRequest, keepsSourceBranch } from '../domain/pull-requests.ts'
+import { isOpenPullRequest } from '../domain/pull-requests.ts'
 import { runtimeChatHeaderOf } from '../domain/seed-message.ts'
 import { seedRuntimeChat } from './seed-runtime-chat.ts'
 
 type Dependencies = { transactor: ConversationTransactor; runtimeChatStarter: RuntimeChatStarter }
-type Input = { id: string; chatId: ChatId; sourceChatId: ChatId; memberId: MemberId }
+type Input = { id: string; chatId: ChatId; sourceChatId: ChatId; memberId: MemberId; keepsBranch: boolean }
 
 export const forkChat = (
   { transactor, runtimeChatStarter }: Dependencies,
-  { id, chatId, sourceChatId, memberId }: Input,
+  { id, chatId, sourceChatId, memberId, keepsBranch }: Input,
 ) =>
   transactor.run(async (unitOfWork) => {
     await requireChatPermission(unitOfWork.chats, sourceChatId, memberId, 'chat.read')
@@ -28,10 +28,10 @@ export const forkChat = (
       memberId,
       header: runtimeChatHeaderOf(source.name),
       quoted: await unitOfWork.messages.history(sourceChatId),
+      keepsBranch,
     })
-    const card = keepsSourceBranch(source, memberId)
-      ? await unitOfWork.messages.pullRequestCard(sourceChatId)
-      : undefined
+    const card =
+      keepsBranch && source.baseBranch !== null ? await unitOfWork.messages.pullRequestCard(sourceChatId) : undefined
     if (card?.step?.type !== 'pull_request' || !isOpenPullRequest(card.step)) return
     await unitOfWork.messages.record({
       type: 'message.posted',

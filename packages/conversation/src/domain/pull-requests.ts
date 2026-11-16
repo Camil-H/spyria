@@ -1,4 +1,4 @@
-import { githubServerName, type MemberId } from '@spyria/kernel'
+import { githubServerName } from '@spyria/kernel'
 import { toolNotGrantedOf } from './tool-calls.ts'
 
 export type CheckState = 'pending' | 'passing' | 'failing'
@@ -28,10 +28,6 @@ export type PullRequestDraft = { title: string; body: string }
 
 const closedStates: PullRequestStep['state'][] = ['merged', 'closed']
 export const isOpenPullRequest = (step: PullRequestStep) => !closedStates.includes(step.state)
-export const keepsSourceBranch = (
-  source: { baseBranch: string | null; ownerId: MemberId | null },
-  memberId: MemberId,
-) => source.baseBranch !== null && source.ownerId === memberId
 export type PublishAction = 'push' | 'pull_request'
 
 export const noGitHubConnection = 'Connect your GitHub account in your profile to push'

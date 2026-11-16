@@ -26,6 +26,7 @@ const forkOf = async (member: typeof aliceInAcme, sourceChatId: string) => {
     id: wrapperId,
     chatId: forked,
     sourceChatId,
+    keepsBranch: false,
   })
   return { result, forked, wrapperId }
 }
