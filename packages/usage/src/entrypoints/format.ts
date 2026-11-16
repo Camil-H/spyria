@@ -21,3 +21,17 @@ export const formatBucket = (bucket: string, granularity: SpendGranularity) =>
     timeZone: 'UTC',
     ...(granularity === 'month' ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' }),
   })
+
+export const formatDollars = (dollars: number) => formatNumber(dollars, 6)
+
+const typedDollarsPattern = /^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/
+
+export const typedDollarsOf = (typed: string) => {
+  const trimmed = typed.trim()
+  return typedDollarsPattern.test(trimmed) ? Number(trimmed.replaceAll(',', '')) : null
+}
+
+export const groupedDollarsOf = (typed: string) => {
+  const dollars = typedDollarsOf(typed)
+  return dollars === null ? typed : formatDollars(dollars)
+}

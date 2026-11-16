@@ -23,6 +23,7 @@ import {
   workspaceTotalsOf,
 } from '../domain/budgets.ts'
 import { InvalidBudget } from '../domain/errors.ts'
+import { formatDollars, groupedDollarsOf, typedDollarsOf } from './format.ts'
 import { useUsageCommands } from './providers.tsx'
 
 type DollarsByPeriod = Readonly<Record<BudgetPeriod, string>>
@@ -32,12 +33,15 @@ const memberCountLabelOf = (count: number) => `${count} ${count === 1 ? 'member'
 const limitLabelOf = (limitMicros: number | null) => (limitMicros === null ? 'No limit' : formatCost(limitMicros))
 const dollarsOf = (limits: BudgetLimits) =>
   Object.fromEntries(
-    budgetPeriods.map((period) => [period, limits[period] === null ? '' : String((limits[period] ?? 0) / 1_000_000)]),
+    budgetPeriods.map((period) => [
+      period,
+      limits[period] === null ? '' : formatDollars((limits[period] ?? 0) / 1_000_000),
+    ]),
   ) as DollarsByPeriod
 const dollarAmountOf = (dollars: string) => {
   if (dollars.trim() === '') return null
-  const amount = Number(dollars)
-  if (!Number.isFinite(amount)) throw new InvalidBudget()
+  const amount = typedDollarsOf(dollars)
+  if (amount === null) throw new InvalidBudget()
   return amount
 }
 const dollarAmountsOf = (dollars: DollarsByPeriod) =>
@@ -74,15 +78,13 @@ const RoleBudgetRow = ({
         <td key={period} className={cellClass}>
           <div className="flex flex-col items-end gap-1">
             <input
-              type="number"
-              min={0}
-              step="0.01"
               inputMode="decimal"
               placeholder="No limit"
               aria-label={`${periodTitleOf(period)} budget per member of ${role.name}`}
-              className={`${fieldClass} w-28`}
+              className={`${fieldClass} w-28 text-right tabular-nums`}
               value={dollars[period]}
               onChange={(event) => setDollars({ ...dollars, [period]: event.target.value })}
+              onBlur={() => setDollars({ ...dollars, [period]: groupedDollarsOf(dollars[period]) })}
               onKeyDown={(event) => event.key === 'Enter' && save()}
             />
             <RoleTotal limitMicros={role.limits[period]} memberCount={role.memberCount} />
@@ -129,7 +131,6 @@ const OverAlertLine = ({ overview }: { overview: BudgetOverview }) =>
   overview.overAlertLine.length > 0 && (
     <LabelledSection
       title="Over 80% of their budget"
-      Heading="h3"
       titleClass="text-sm font-medium"
       className={`${calloutClass} flex flex-col gap-1`}
     >
@@ -154,8 +155,8 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const saveOf = (roleId: string) => async (dollars: Readonly<Record<BudgetPeriod, number | null>>) =>
     setOverview(await commands.saveRoleBudget({ workspaceId, roleId, dollars }))
   return (
-    <LabelledSection title="AI budgets">
-      <div className="-mt-2 flex flex-col gap-1 text-sm text-muted">
+    <section aria-label="AI budgets" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1 text-sm text-muted">
         <p>
           Each member gets the budget of their role for themselves: a role's budget is per member, not shared by the
           members who hold it. A role's total is its budget per member × its number of members, and the workspace total
@@ -207,6 +208,6 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
           </div>
         </>
       )}
-    </LabelledSection>
+    </section>
   )
 }

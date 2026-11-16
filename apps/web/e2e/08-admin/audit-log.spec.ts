@@ -164,7 +164,7 @@ test.describe('Audit log', () => {
     const memberBudget = mainOf(page)
       .getByRole('table', { name: 'AI budgets per role' })
       .getByRole('row', { name: /^Member\b/ })
-    await memberBudget.getByRole('spinbutton', { name: 'Monthly budget per member of Member' }).fill('3')
+    await memberBudget.getByRole('textbox', { name: 'Monthly budget per member of Member' }).fill('3')
     await memberBudget.getByRole('button', { name: 'Save the budgets of Member' }).click()
     await expect(memberBudget).toContainText('$3.00 × 2 members = $6.00')
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
