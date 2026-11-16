@@ -98,7 +98,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 
 `scripts/ci-suite.ts <suite> [shard]` runs one suite from the plan in `PLAN`. In CI, Playwright retries a failed test once, to show whether it is flaky or broken, and a test that passed only on retry still fails the job (`failOnFlakyTests`); a flaky test is fixed or deleted when found. Every failing test becomes an annotation of the job's check run (file, line, name and the first 20 lines of the error): Playwright's `github` reporter writes them for e2e, and `ci-suite.ts` writes them from Bun's JUnit report for unit and integration. A failed e2e shard keeps `apps/web/test-results` as an artifact for 7 days. A failed integration, e2e or docker job prints the last 200 lines of each `spyria-test-*` container's log, one folded group per container.
 
-Runs on `develop` queue instead of cancelling each other, so each one finishes; on a pull request, a newer push cancels the run in progress.
+Runs on `develop` queue instead of cancelling each other, so each one finishes; on a pull request, a newer push cancels the run in progress. A run started by hand on a branch (**Actions → CI → Run workflow**, or `gh workflow run ci.yml --ref <branch>`) tests the branch as it is (not merged with `develop`), selecting what changed since `develop`, and gitleaks scans only the branch's commits since `develop`; on `develop` it runs the full suite; `harness-bumps.yml` starts one on each bump branch it pushes, because a pull request opened with the default GitHub token starts no workflow (see [Harness bump pull requests](./development.md#harness-bump-pull-requests)).
 
 `promote.yml` runs every hour and on demand (**Actions → Promote → Run workflow**). It walks `develop`'s first-parent history from the newest commit down to `main`, takes the newest commit whose `ci.yml` push run completed with success, and fast-forwards `main` to it; a pending, failed, cancelled or missing run is skipped, and when no commit qualifies, it does nothing. Its job summary names the commit it promoted. GitHub may start scheduled runs late and disables them after 60 days without activity in the repository; the manual run covers both.
 
@@ -106,6 +106,7 @@ The repository settings that go with it:
 
 - `develop` is the default branch; a ruleset on it requires `ci-ok` and blocks force pushes and deletion.
 - A ruleset on `main` blocks force pushes, deletion and every update except by the deploy key whose private half is the `MAIN_DEPLOY_KEY` secret, used only by `promote.yml`.
+- **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** is on, for `harness-bumps.yml`.
 
 ## Test infrastructure
 

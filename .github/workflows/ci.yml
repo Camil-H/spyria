@@ -5,6 +5,7 @@ on:
     branches: [develop]
   push:
     branches: [develop]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -33,8 +34,8 @@ jobs:
       - uses: ./.github/actions/setup
       - id: plan
         env:
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD' }}
-          SCOPE: ${{ github.event_name == 'push' && '--full' || '' }}
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.ref == 'refs/heads/develop' && 'HEAD' || 'origin/develop' }}
+          SCOPE: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && '--full' || '' }}
         run: |
           plan="$RUNNER_TEMP/plan.json"
           bun scripts/check-related.ts --plan "$plan" --base "$BASE" $SCOPE
@@ -70,10 +71,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      - if: github.event_name != 'workflow_dispatch'
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_ENABLE_COMMENTS: false
+      - if: github.event_name == 'workflow_dispatch'
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/repository" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git --redact --log-opts=origin/develop..HEAD /repository
 
   unit:
     needs: plan
