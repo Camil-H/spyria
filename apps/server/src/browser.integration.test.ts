@@ -48,7 +48,7 @@ const toolCallRows = async (chatId: string) => [
     where chat_id = ${chatId} order by called_at`),
 ]
 
-test("the agent drives the browser of the member who prompted, through the host, and never another member's", async () => {
+test("the agent drives the browser of the member who prompted, through the host, and never another member's, an answer sent in parts arriving whole", async () => {
   await setBrowserSettings({})
   const host = await fakeHost('Browser routing host')
   const { chatId, token } = await runtimeTurn(host, bob)
@@ -80,10 +80,9 @@ test("the agent drives the browser of the member who prompted, through the host,
   })
   const alicesKey = await browserKeyOf(chatId, alice)
   expect(alicesKey).not.toBe(bobsKey)
-  expect(host.browsers.received(alicesKey).map(({ type, command }) => type ?? command)).toEqual([
-    'settings',
-    'screenshot',
-  ])
+  const alicesMessages = () => host.browsers.received(alicesKey).map(({ type, command }) => type ?? command)
+  await waitFor(() => alicesMessages().length === 4)
+  expect(alicesMessages()).toEqual(['settings', 'screenshot', 'part_ack', 'part_ack'])
   expect(host.browsers.received(bobsKey)).toHaveLength(2)
   expect(await toolCallRows(chatId)).toEqual([
     {

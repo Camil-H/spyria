@@ -11,7 +11,7 @@ RUN userdel -r node 2>/dev/null; groupadd -g 10001 spyria && useradd -u 10001 -g
   && mkdir -p /workspace/project /home/spyria/.claude /home/spyria/.codex /harnesses /var/cache/spyria /var/lib/spyria/snapshot /var/lib/spyria/browser \
   && chown -R 10001:10001 /workspace /home/spyria /harnesses /var/cache/spyria /var/lib/spyria/snapshot /var/lib/spyria/browser
 COPY browser/package.json browser/package-lock.json browser/screenshot.mjs browser/browser.mjs browser/browser-session.mjs \
-  browser/network-policy.mjs /usr/local/lib/spyria/browser/
+  browser/network-policy.mjs browser/output-lines.mjs /usr/local/lib/spyria/browser/
 RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/browser && npm cache clean --force \
   && node /usr/local/lib/spyria/browser/screenshot.mjs install
 COPY dist/spyria-agent /usr/local/bin/spyria-agent

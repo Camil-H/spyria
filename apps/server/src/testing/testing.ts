@@ -954,18 +954,31 @@ const createFakeBrowsers = () => {
       const messages = received.get(browserKey) ?? []
       received.set(browserKey, messages)
       const emit = (message: object) => send(JSON.stringify(message))
+      const waitingParts: string[] = []
+      const emitInParts = (message: object) => {
+        const line = JSON.stringify(message)
+        const half = Math.ceil(line.length / 2)
+        waitingParts.push(line.slice(half))
+        emit({ type: 'part', data: line.slice(0, half), isLast: false })
+      }
       outputs.set(browserKey, emit)
       return {
         onMessage: (data: string) => {
           const message = JSON.parse(data) as FakeBrowserMessage
           messages.push(message)
+          if (message.type === 'part_ack') {
+            const rest = waitingParts.shift()
+            return rest === undefined ? undefined : emit({ type: 'part', data: rest, isLast: true })
+          }
           if (message.type === 'settings') return emit({ type: 'ready' })
           if (message.type === 'watch') {
             emit({ type: 'page', url: 'https://example.com/', title: 'Example' })
             return emit({ type: 'frame', data: fakeBrowserFrame, width: 800, height: 600 })
           }
           if (message.command === 'open') emit({ type: 'visited', url: message.url })
-          if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })
+          const answer = { id: message.id, result: fakeBrowserAnswerOf(message) }
+          if (message.command === 'screenshot') return emitInParts(answer)
+          if (typeof message.command === 'string') emit(answer)
         },
         onClose: () => outputs.delete(browserKey),
       }

@@ -6,6 +6,7 @@ import {
   browserAnswerOf,
   browserAsleepRefusal,
   browserStartFailureOf,
+  joinedPartOf,
   memberMessageOf,
   visitedAddressOf,
 } from '../domain/browser-tools.ts'
@@ -31,6 +32,7 @@ type Session = Input & {
   idleTimer?: ReturnType<typeof setTimeout>
   lastVisit?: string
   visitTimes: number[]
+  collectedPart: string
   isClosed: boolean
 }
 type Slot = {
@@ -151,13 +153,15 @@ const recordVisit = (dependencies: Dependencies, session: Session, url: unknown)
     )
 }
 
-const receive = (dependencies: Dependencies, session: Session, data: string) => {
-  let message: ControllerMessage
+const controllerMessageOf = (data: string): ControllerMessage | undefined => {
   try {
-    message = JSON.parse(data)
+    return JSON.parse(data)
   } catch {
-    return
+    return undefined
   }
+}
+
+const handle = (dependencies: Dependencies, session: Session, message: ControllerMessage) => {
   if (typeof message.id === 'number') {
     const pending = session.pending.get(message.id)
     session.pending.delete(message.id)
@@ -169,6 +173,17 @@ const receive = (dependencies: Dependencies, session: Session, data: string) => 
   if (message.type === 'visited') return recordVisit(dependencies, session, message.url)
   if (message.type === 'page') session.page = { url: String(message.url ?? ''), title: String(message.title ?? '') }
   if (viewerMessageTypes.includes(String(message.type))) toViewers(session, message)
+}
+
+const receive = (dependencies: Dependencies, session: Session, data: string) => {
+  const message = controllerMessageOf(data)
+  if (message?.type !== 'part') return message && handle(dependencies, session, message)
+  const joined = joinedPartOf(session.collectedPart, message)
+  session.collectedPart = joined.collected
+  if (joined.isTooLarge) return close(session, 'The browser sent an answer too large to read')
+  session.socket.send(JSON.stringify({ type: 'part_ack' }))
+  const whole = joined.line === undefined ? undefined : controllerMessageOf(joined.line)
+  if (whole) handle(dependencies, session, whole)
 }
 
 const started = async (dependencies: Dependencies, input: Input, slot: Slot): Promise<Session> => {
@@ -192,6 +207,7 @@ const started = async (dependencies: Dependencies, input: Input, slot: Slot): Pr
     pending: new Map(),
     nextId: 1,
     visitTimes: [],
+    collectedPart: '',
     isClosed: false,
   }
   session.ready.promise.catch(() => {})

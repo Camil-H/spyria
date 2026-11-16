@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createBrowserSession } from './browser-session.mjs'
 import { blockReasons, createPolicyProxy } from './network-policy.mjs'
+import { createLineSender } from './output-lines.mjs'
 
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= new URL('./chromium', import.meta.url).pathname
 const { chromium } = await import('playwright-core')
@@ -15,15 +16,8 @@ const displayWaitMilliseconds = 10_000
 const blockMemoryMilliseconds = 30_000
 const hostMachineName = 'host.docker.internal'
 
-const maximumLineLength = 6 * 1024 * 1024
-const send = (message) => {
-  const line = JSON.stringify(message)
-  if (line.length <= maximumLineLength) return process.stdout.write(`${line}\n`)
-  const tooLarge = 'The answer is too large to send'
-  const refusal =
-    typeof message.id === 'number' ? { id: message.id, error: tooLarge } : { type: 'notice', text: tooLarge }
-  process.stdout.write(`${JSON.stringify(refusal)}\n`)
-}
+const lines = createLineSender({ write: (line) => process.stdout.write(`${line}\n`) })
+const { send } = lines
 const fail = (error) => {
   send({ type: 'failed', error: String(error?.message ?? error).split('\n')[0] })
   process.exit(1)
@@ -42,6 +36,7 @@ const firstSettings = new Promise((resolve) => {
     } catch {
       return
     }
+    if (message?.type === 'part_ack') return lines.acknowledgePart()
     if (message?.type === 'settings') {
       current = message.settings
       if (isReady) send({ type: 'ready' })

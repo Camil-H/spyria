@@ -259,3 +259,12 @@ export const browserStartFailureOf = (hostMessage: string) => {
   if (hostMessage.includes('runtime is not running')) return browserAsleepRefusal
   return 'The browser could not start'
 }
+
+const maximumJoinedLength = 8 * 1024 * 1024
+type BrowserLinePart = { data?: unknown; isLast?: unknown; [field: string]: unknown }
+
+export const joinedPartOf = (collected: string, part: BrowserLinePart) => {
+  const joined = collected + (typeof part.data === 'string' ? part.data : '')
+  if (joined.length > maximumJoinedLength) return { collected: '', isTooLarge: true }
+  return part.isLast === true ? { collected: '', line: joined } : { collected: joined }
+}

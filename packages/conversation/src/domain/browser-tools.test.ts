@@ -4,6 +4,7 @@ import {
   browserAsleepRefusal,
   browserCommandOf,
   browserStartFailureOf,
+  joinedPartOf,
   memberMessageOf,
   submitCheckOf,
   visitedAddressOf,
@@ -169,4 +170,17 @@ test("a host's refusal to start a browser reads in the member's terms", () => {
   )
   expect(browserStartFailureOf('refused: runtime is not running')).toBe(browserAsleepRefusal)
   expect(browserStartFailureOf('Runtime host x did not answer in time')).toBe('The browser could not start')
+})
+
+test('a long line of the browser comes in parts, joined whole once the last arrives, and refused past 8 MB', () => {
+  const first = joinedPartOf('', { data: '{"type":"down', isLast: false })
+  expect(first).toEqual({ collected: '{"type":"down' })
+  expect(joinedPartOf(first.collected, { data: 'load"}', isLast: true })).toEqual({
+    collected: '',
+    line: '{"type":"download"}',
+  })
+  expect(joinedPartOf('x'.repeat(8 * 1024 * 1024), { data: 'y', isLast: false })).toEqual({
+    collected: '',
+    isTooLarge: true,
+  })
 })
