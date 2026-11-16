@@ -79,7 +79,7 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 
 ## Members and invites
 
-The **Members** tab lists the members as a table (name and address, workspace role, and a menu with **Sign out everywhere** and **Remove from workspace**), then the pending invites with **Revoke**. **Invite member** opens a dialog (email and role). Inviting, revoking an invite, changing a role, removing a member, signing a member out everywhere and transferring a chat each confirm what they did in a toast that fades after 5 seconds.
+The **Members** tab lists the members as a table (name and address, workspace role, and a menu with **Sign out everywhere** and **Remove from workspace**), then the pending invites with **Revoke**. **Invite member** opens a dialog (email and role). Inviting, revoking an invite, changing a role, removing a member and signing a member out everywhere each confirm what they did in a toast that fades after 5 seconds.
 
 - Inviting is an allow-list of exact addresses: no account is created and no email is sent, so tell the person yourself. An invite works at once. The invited person signs in at that address, with their own account or, when the workspace enforces SSO, through its provider; their first sign-in accepts every open invite for that address. Nobody joins a workspace any other way.
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.
@@ -94,7 +94,7 @@ The **Members** tab lists the members as a table (name and address, workspace ro
 - their own machine is removed from the workspace, their API keys and their sign-ins to tool servers are deleted, and their linked GitHub account is forgotten;
 - they leave every chat they did not own; their name stays on past messages.
 
-Runtime chats they owned **freeze**: participants can still read them, but nobody can prompt ("This chat is frozen: its owner left the workspace"), and their runtimes stop. A frozen chat cannot act on the departed owner's rights, which is why it stops rather than continuing under someone else. A member with `members.manage` can pick a new owner with **Transfer to** in the chat; the new owner becomes its Owner and the chat thaws. Only a chat whose owner has left can be transferred. Channels never freeze, since no agent acts with their owner's rights; they can still be transferred.
+Runtime chats they owned **freeze**: participants can still read them, but nobody can prompt ("This chat is frozen: its owner left the workspace"), and their runtimes stop. A frozen chat cannot act on the departed owner's rights, which is why it stops rather than continuing under someone else. A member with `members.manage` can pick a new owner with **Transfer to** in the chat; the new owner becomes its Owner, the chat thaws and a toast confirms the transfer. Only a chat whose owner has left can be transferred. Channels never freeze, since no agent acts with their owner's rights; they can still be transferred.
 
 Inviting a removed member's address again creates a normal invite that restores their membership when they sign in.
 
