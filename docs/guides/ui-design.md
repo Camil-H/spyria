@@ -28,6 +28,8 @@ The headings carry their weight: write `text-heading`, not `text-heading font-se
 - `font-medium` (500) for what you act on or name: buttons, the selected tab or choice, labels, subsection titles, the workspace name.
 - `font-semibold` (600) for headings (through their token) and for emphasis that must read as bold: a member's name in a sentence, a total row. `<strong>` and Markdown bold are semibold.
 
+In the composer, the Markdown drawn over the text box must keep each letter's width to stay on the caret, so its bold and headings use `font-stroked`, a stroke around the regular letters, instead of a weight.
+
 ## Colour
 
 Components use semantic colours only. A token that differs between themes resolves to its light and dark value with `light-dark()` (the accent is the same in both), so a component needs no `dark:` variant for colour. The raw palette (`--palette-*`) exists only to define the tokens.

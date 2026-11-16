@@ -9,6 +9,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
   useEffect,
   useId,
   useRef,
@@ -27,6 +28,7 @@ import {
   linkedPaste,
   type TextEdit,
 } from './composer-formatting.ts'
+import { type MarkdownStyle, styledRunsOf } from './composer-markdown.ts'
 import { type ComposerQuote, useConversationCommands } from './providers.tsx'
 
 const isBlank = (text: string) => text.trim() === ''
@@ -56,6 +58,34 @@ const insertKeepingUndo = (textarea: HTMLTextAreaElement, edit: TextEdit, onUnsu
   }
   textarea.setSelectionRange(edit.selectStart, edit.selectEnd)
 }
+
+const composerTextClass =
+  'max-h-40 px-2 py-1.5 text-sm leading-5 wrap-break-word whitespace-pre-wrap [scrollbar-gutter:stable]'
+const classOfStyle: Record<MarkdownStyle, string> = {
+  marker: 'text-muted',
+  strong: 'font-stroked',
+  emphasis: 'italic',
+  underline: 'underline',
+  strike: 'line-through',
+  code: 'text-code-title',
+  link: 'text-link',
+  heading: 'font-stroked',
+  quote: 'text-muted',
+}
+
+const StyledMarkdown = ({ ref, text }: { ref: Ref<HTMLDivElement>; text: string }) => (
+  <div
+    ref={ref}
+    aria-hidden
+    className={`${composerTextClass} pointer-events-none absolute inset-0 overflow-hidden text-ink`}
+  >
+    {styledRunsOf(text).map(({ start, text: run, styles }) => (
+      <span key={start} className={styles.map((style) => classOfStyle[style]).join(' ')}>
+        {run}
+      </span>
+    ))}{' '}
+  </div>
+)
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'Not uploaded')
 
@@ -186,6 +216,7 @@ export const Composer = ({
   const latestText = useRef(text)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const styledTextRef = useRef<HTMLDivElement>(null)
   const sending = useGuardedAction()
   const mentionListId = useId()
   const mentionNames = useQuery(getMentionableNames, workspaceId)
@@ -381,24 +412,30 @@ export const Composer = ({
           />
         )}
         <div className="flex items-end gap-1 p-2">
-          <textarea
-            ref={textareaRef}
-            aria-label={threadRootId ? 'Reply' : 'Message'}
-            rows={1}
-            className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-5 outline-none field-sizing-content"
-            value={text}
-            aria-autocomplete="list"
-            aria-controls={mentionCandidates.length > 0 ? mentionListId : undefined}
-            aria-activedescendant={mentionCandidates.length > 0 ? `${mentionListId}-${highlighted}` : undefined}
-            onChange={(event) => {
-              change(event.target.value)
-              followCaret(event.target)
-            }}
-            onSelect={(event) => followCaret(event.currentTarget)}
-            onBlur={() => setCaret(undefined)}
-            onKeyDown={handleKey}
-            onPaste={paste}
-          />
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              ref={textareaRef}
+              aria-label={threadRootId ? 'Reply' : 'Message'}
+              rows={1}
+              className={`${composerTextClass} block w-full resize-none bg-transparent text-transparent caret-ink outline-none field-sizing-content`}
+              onScroll={(event) => {
+                if (styledTextRef.current) styledTextRef.current.scrollTop = event.currentTarget.scrollTop
+              }}
+              value={text}
+              aria-autocomplete="list"
+              aria-controls={mentionCandidates.length > 0 ? mentionListId : undefined}
+              aria-activedescendant={mentionCandidates.length > 0 ? `${mentionListId}-${highlighted}` : undefined}
+              onChange={(event) => {
+                change(event.target.value)
+                followCaret(event.target)
+              }}
+              onSelect={(event) => followCaret(event.currentTarget)}
+              onBlur={() => setCaret(undefined)}
+              onKeyDown={handleKey}
+              onPaste={paste}
+            />
+            <StyledMarkdown ref={styledTextRef} text={text} />
+          </div>
           <input
             ref={fileInputRef}
             type="file"

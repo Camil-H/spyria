@@ -182,3 +182,7 @@ body {
     background-size: 0.875rem;
   }
 }
+
+@utility font-stroked {
+  -webkit-text-stroke: 0.03em currentColor;
+}
