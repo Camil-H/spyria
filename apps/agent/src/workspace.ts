@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { copyFile, open, readdir, realpath, rm, stat } from 'node:fs/promises'
+import { copyFile, open, readdir, realpath, rm, stat, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 
@@ -127,12 +127,18 @@ const cutPartsOf = (parts: Record<string, { isCut: boolean }>) =>
     .filter(([, { isCut }]) => isCut)
     .map(([name]) => name)
 
+const copyIndexKeepingItsTime = async (from: string, to: string) => {
+  const { atime, mtime } = await stat(from)
+  await copyFile(from, to)
+  await utimes(to, atime, mtime)
+}
+
 export const changesOf = async (root: string, base: string, env: Record<string, string>) => {
   const mergeBase = await mergeBaseOf(root, base, env)
   if (!mergeBase) return { files: '', unstaged: '', staged: '', truncated: false, cut: [] }
   const index = join(tmpdir(), `spyria-index-${crypto.randomUUID()}`)
   try {
-    await copyFile(join(root, '.git', 'index'), index).catch(() => undefined)
+    await copyIndexKeepingItsTime(join(root, '.git', 'index'), index).catch(() => undefined)
     const indexEnvironment = { ...env, GIT_INDEX_FILE: index }
     await git(root, ['add', '--ignore-removal', '--intent-to-add', '.'], indexEnvironment)
     const [files, unstaged, staged] = await Promise.all([
