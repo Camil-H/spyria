@@ -6,6 +6,7 @@ import {
   AccountBoundElsewhere,
   displayNameFrom,
   domainOfEmail,
+  EmailNotConfirmed,
   normalizedEmail,
   OutsideClaimedDomains,
   SignInThroughClaimingProvider,
@@ -78,8 +79,11 @@ export const signInOf = async (database: Database, { workspaceId, sessionId }: S
   return session
 }
 
+const storedEmailOf = async (sql: Sql | Database['$client'], userId: string) =>
+  (await sql<{ email: string }[]>`select email from users where id = ${userId}`)[0]?.email
+
 export const emailOfUser = async (database: Database, userId: string) =>
-  (await database.$client<{ email: string }[]>`select email from users where id = ${userId}`)[0]?.email ?? ''
+  (await storedEmailOf(database.$client, userId)) ?? ''
 
 export const isSignedOutSince = async (database: Database, workspaceId: string, userId: string, signedInAt: string) => {
   const [signedOut] = await database.$client`
@@ -112,7 +116,7 @@ export const findMemberIn =
   }
 
 export type VerifiedIdentity = {
-  email: string
+  confirmedEmail: string | null
   name?: unknown
   issuer: string
   subject: string
@@ -120,6 +124,17 @@ export type VerifiedIdentity = {
   canBindByEmail: boolean
 }
 export type WorkspaceSignIn = { workspaceId: string; issuer: string; currentSubjectPattern?: string }
+
+export const confirmedEmailOf = ({ confirmedEmail }: VerifiedIdentity) => {
+  if (confirmedEmail === null) throw new EmailNotConfirmed()
+  return normalizedEmail(confirmedEmail)
+}
+
+const signInEmailOf = async (sql: Sql, identity: VerifiedIdentity, boundUserId: string | undefined) => {
+  const storedEmail =
+    identity.confirmedEmail === null && boundUserId ? await storedEmailOf(sql, boundUserId) : undefined
+  return storedEmail ?? confirmedEmailOf(identity)
+}
 
 export const claimedDomainsOf = async (sql: Sql, domain: string, workspaceId: string | null = null) =>
   sql<{ workspaceId: string; domain: string }[]>`
@@ -182,20 +197,19 @@ export const bindAccountByEmail = async (sql: Sql, { issuer, subject }: Verified
   return bound?.userId
 }
 
-export const signInWithAccount = (database: Database, identity: VerifiedIdentity) => {
-  const email = normalizedEmail(identity.email)
-  return database.$client.begin(async (sql) => {
-    if ((await claimedDomainsOf(sql, domainOfEmail(email))).length > 0) throw new SignInThroughClaimingProvider(email)
+export const signInWithAccount = (database: Database, identity: VerifiedIdentity) =>
+  database.$client.begin(async (sql) => {
     const [bound] = await sql<{ userId: string }[]>`
       select user_id as "userId" from account_identities
       where issuer = ${identity.issuer} and subject = ${identity.subject}`
+    const email = await signInEmailOf(sql, identity, bound?.userId)
+    if ((await claimedDomainsOf(sql, domainOfEmail(email))).length > 0) throw new SignInThroughClaimingProvider(email)
     const userId =
       bound?.userId ?? (identity.canBindByEmail ? await bindAccountByEmail(sql, identity, email) : undefined)
     if (!userId) return { email }
     await joinInvitedWorkspaces(sql, { userId, email, name: identity.name, providerWorkspaceId: null })
     return { userId, email }
   })
-}
 
 const bindMemberByEmail = async (
   sql: Sql,
@@ -224,17 +238,17 @@ const bindMemberByEmail = async (
 }
 
 export const signInThroughWorkspace = (database: Database, signIn: WorkspaceSignIn, identity: VerifiedIdentity) => {
-  const email = normalizedEmail(identity.email)
   const { workspaceId, issuer } = signIn
   const { subject, legacySubject = subject } = identity
   return database.$client.begin(async (sql) => {
-    const claims = await claimedDomainsOf(sql, domainOfEmail(email), workspaceId)
-    const isTrusted = claims.some((claim) => claim.workspaceId === workspaceId && claim.domain === domainOfEmail(email))
-    if (!isTrusted && claims.some((claim) => claim.workspaceId === workspaceId)) throw new OutsideClaimedDomains(email)
     const [bound] = await sql<{ userId: string }[]>`
       select user_id as "userId" from identities
       where workspace_id = ${workspaceId} and issuer = ${issuer} and subject in (${subject}, ${legacySubject})
       order by subject = ${subject} desc limit 1`
+    const email = await signInEmailOf(sql, identity, bound?.userId)
+    const claims = await claimedDomainsOf(sql, domainOfEmail(email), workspaceId)
+    const isTrusted = claims.some((claim) => claim.workspaceId === workspaceId && claim.domain === domainOfEmail(email))
+    if (!isTrusted && claims.some((claim) => claim.workspaceId === workspaceId)) throw new OutsideClaimedDomains(email)
     const userId =
       bound?.userId ?? (identity.canBindByEmail ? await bindMemberByEmail(sql, signIn, email, isTrusted) : undefined)
     if (!userId) return { email }

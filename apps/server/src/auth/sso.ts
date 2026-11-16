@@ -42,6 +42,7 @@ import type { SecretBox } from './secret-box.ts'
 import {
   bindAccountByEmail,
   claimedDomainsOf,
+  confirmedEmailOf,
   endSessionsOpenedThrough,
   type Sql,
   type VerifiedIdentity,
@@ -74,9 +75,21 @@ export const workspaceProviderOf = async (database: Database, workspaceId: strin
       where workspace_id = ${workspaceId} and workspaces.deleted_at is null`
   )[0]
 
+export type WorkspaceProviderOfEmail = Omit<SsoProvider, 'encryptedClientSecret'> & { isClaiming: boolean }
+
+export const isSameSignInApp = (
+  first: Omit<SsoProvider, 'workspaceId' | 'encryptedClientSecret'>,
+  second: Omit<SsoProvider, 'workspaceId' | 'encryptedClientSecret'>,
+) =>
+  first.preset === second.preset &&
+  first.issuer === second.issuer &&
+  first.clientId === second.clientId &&
+  first.usesInstanceApp === second.usesInstanceApp
+
 export const workspaceProvidersForEmail = (database: Database, email: string) =>
-  database.$client<{ workspaceId: string; preset: SsoPreset; isClaiming: boolean }[]>`
-    select workspace_id as "workspaceId", preset, claimed.is_claiming as "isClaiming"
+  database.$client<WorkspaceProviderOfEmail[]>`
+    select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
+      uses_instance_app as "usesInstanceApp", claimed.is_claiming as "isClaiming"
     from workspace_sso join workspaces using (workspace_id)
       cross join lateral (select exists(select 1 from domain_claims
         where domain_claims.workspace_id = workspace_sso.workspace_id and domain_claims.domain = ${domainOfEmail(email)}
@@ -232,7 +245,7 @@ export const confirmSsoSettings = (database: Database, pending: PendingSso, iden
   database.$client.begin(async (sql) => {
     const { workspaceId, userId, provider } = pending
     await requireMemberPermission(sql, pending, 'sso.manage')
-    if (normalizedEmail(identity.email) !== pending.email) throw new SsoAddressMismatch(pending.email)
+    if (confirmedEmailOf(identity) !== pending.email) throw new SsoAddressMismatch(pending.email)
     const [boundToSomeoneElse] = await sql`
       select 1 from identities
       where workspace_id = ${workspaceId} and issuer = ${provider.issuer} and subject = ${identity.subject}
@@ -357,7 +370,7 @@ export const createFirstWorkspace = async (
   identity: VerifiedIdentity,
   { installHostToken }: Pick<SsoDependencies, 'installHostToken'> = {},
 ) => {
-  const email = normalizedEmail(identity.email)
+  const email = confirmedEmailOf(identity)
   return database.$client.begin(async (sql) => {
     await sql`lock table workspaces in share row exclusive mode`
     await assertWorkspaceCreationOpen(sql)

@@ -48,7 +48,7 @@ const createGarageWorkspace = (garageDatabase: typeof database) =>
       },
     },
     {
-      email: 'owner@gmail.com',
+      confirmedEmail: 'owner@gmail.com',
       issuer: 'https://idp.install-host.test',
       subject: 'owner-subject',
       canBindByEmail: true,
@@ -131,7 +131,12 @@ test('without an install host token the first workspace comes with no host', asy
           encryptedClientSecret: 'sealed',
         },
       },
-      { email: 'owner@plain.test', issuer: 'https://idp.plain.test', subject: 'owner-subject', canBindByEmail: true },
+      {
+        confirmedEmail: 'owner@plain.test',
+        issuer: 'https://idp.plain.test',
+        subject: 'owner-subject',
+        canBindByEmail: true,
+      },
     )
     expect(await other.database.$client`select 1 from runtime_hosts`).toHaveLength(0)
   } finally {

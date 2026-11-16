@@ -376,7 +376,12 @@ test('a new issuer for the claiming workspace ends the sessions its former provi
         usesInstanceApp: false,
       },
     },
-    { email: 'ana@umbrella.com', issuer: `${umbrellaIdp.issuer}/new`, subject: 'ana-new', canBindByEmail: true },
+    {
+      confirmedEmail: 'ana@umbrella.com',
+      issuer: `${umbrellaIdp.issuer}/new`,
+      subject: 'ana-new',
+      canBindByEmail: true,
+    },
   )
   expect((await requestAs(sideToken, '/api/workspace-creation')).status).toBe(401)
   expect(await sessionRowsOf(ben)).toEqual([{ workspaceId: 'tyrell', userId: ben, providerWorkspaceId: 'tyrell' }])

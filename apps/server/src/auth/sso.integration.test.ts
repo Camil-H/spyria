@@ -1159,3 +1159,99 @@ test('a workspace awaiting its purge does not hold up the start for an app it us
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'wayne'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })
+
+const addMemberWithIdentity = async (workspaceId: string, userId: string, email: string, subject: string) => {
+  await database.$client`insert into users (id, email) values (${userId}, ${email}) on conflict do nothing`
+  await addMember(workspaceId, userId)
+  await database.$client`
+    insert into identities (workspace_id, issuer, subject, user_id)
+    values (${workspaceId}, ${hooliIdp.issuer}, ${subject}, ${userId})`
+}
+const shareHooliSignIn = (workspaceId: string) =>
+  database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+    select ${workspaceId}, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, now()
+    from workspace_sso where workspace_id = 'hooli'`
+
+test('a member already bound to a provider identity signs in when the provider stops confirming the address, under the address Spyria keeps, which the token cannot change', async () => {
+  await addMemberWithIdentity('hooli', 'member-uma', 'uma@example.com', 'uma-hooli')
+  await invite('hooli', 'other@example.com')
+  for (const unconfirmed of [{ email_verified: false }, { email_verified: undefined }]) {
+    const signedIn = await signInThrough(hooliIdp, 'workspace=hooli', {
+      sub: 'uma-hooli',
+      email: 'other@example.com',
+      ...unconfirmed,
+    })
+    expect(signedIn.page).toContain('"status":"signed_in"')
+    expect(signedIn.userId).toBe('member-uma')
+    expect(workspaceIdsOf(signedIn)).toEqual(['hooli'])
+  }
+  expect(await userIdsOf('uma@example.com')).toEqual(['member-uma'])
+  expect(await userIdsOf('other@example.com')).toEqual([])
+  expect(await isInvitationPending('hooli', 'other@example.com')).toBe(true)
+
+  const throughAccount = await signInThrough(accountIdp, 'provider=oidc', {
+    sub: 'alice-account',
+    email: 'other@example.com',
+    email_verified: false,
+  })
+  expect(throughAccount.page).toContain('"status":"signed_in"')
+  expect(throughAccount.userId).toBe(alice)
+  expect(await isInvitationPending('hooli', 'other@example.com')).toBe(true)
+})
+
+test('an unconfirmed address never binds a new identity, and the sign-in window shows why in plain words, ready to stay open without its opener', async () => {
+  const refused = await signInThrough(hooliIdp, 'workspace=hooli', {
+    sub: 'uma-elsewhere',
+    email: 'uma@example.com',
+    email_verified: false,
+  })
+  expect(refused.status).toBe(403)
+  expect(refused.sessions).toEqual([])
+  expect(await identitiesOf('uma-elsewhere')).toEqual([])
+  expect(refused.page).toContain(
+    '<p style="font:16px system-ui;margin:2rem">Your provider did not confirm this address',
+  )
+  expect(refused.page).toContain(`<a href="${testAuthSettings.appOrigin}">Return to Spyria</a>`)
+  expect(refused.page).toContain('if (window.opener) setTimeout(close,')
+  expect(refused.page).not.toContain(': close()')
+
+  const forged = await signInThrough(hooliIdp, 'workspace=hooli', { sub: 'forged', email: '"><img src=x>@evil.test' })
+  expect(forged.page).toContain('"status":"not_invited"')
+  expect(forged.page).not.toContain('<img')
+})
+
+test('workspaces signing in through the same app of a provider offer one button, and one sign-in opens each of them that admits the person, by its own rules', async () => {
+  await database.$client`insert into users (id, email) values ('member-vic', 'vic@example.com')`
+  await addWorkspace('piper', 'member-vic')
+  await shareHooliSignIn('piper')
+  await addWorkspace('gavin')
+  await shareHooliSignIn('gavin')
+  await addMemberWithIdentity('hooli', 'member-vic', 'vic@example.com', 'vic-hooli')
+  const providers = await (await app.request('/auth/providers?email=vic%40example.com')).json()
+  expect(providers).toEqual({
+    providers: [...accountProviders, { id: 'workspace-0', kind: 'oidc', isWorkspaceSso: true }],
+  })
+
+  const signedIn = await signInThrough(hooliIdp, 'email=vic%40example.com&provider=workspace-0', {
+    sub: 'vic-hooli',
+    email: 'vic@example.com',
+  })
+  expect(signedIn.page).toContain('"status":"signed_in"')
+  expect(workspaceIdsOf(signedIn).toSorted()).toEqual(['hooli', 'piper'])
+  expect(await identitiesOf('vic-hooli')).toEqual([
+    { workspace_id: 'hooli', issuer: hooliIdp.issuer, user_id: 'member-vic' },
+    { workspace_id: 'piper', issuer: hooliIdp.issuer, user_id: 'member-vic' },
+  ])
+  for (const { token, workspaceId } of signedIn.sessions) {
+    expect((await queryWith(token)).status).toBe(200)
+    expect((await openSessionWith(token, 'gavin')).status).toBe(403)
+    expect(workspaceId).not.toBe('gavin')
+  }
+
+  const forOneWorkspace = await signInThrough(hooliIdp, 'workspace=piper', {
+    sub: 'vic-hooli',
+    email: 'vic@example.com',
+  })
+  expect(workspaceIdsOf(forOneWorkspace)).toEqual(['piper'])
+})

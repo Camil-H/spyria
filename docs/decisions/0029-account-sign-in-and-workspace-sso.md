@@ -1,5 +1,7 @@
 # 0029. Sign in with an account; a workspace may enforce its own SSO
 
+Amended by [decision 0039](0039-known-identities-and-one-entry-per-sign-in-app.md): workspaces enforcing the same sign-in app share one entry, which signs in to each of them that admits the person, and a known identity needs no confirmed address.
+
 Amended by [decision 0035](0035-domain-claims.md): a workspace may claim email domains proven by DNS; its provider is then trusted for those addresses in every workspace they belong to, and addresses at a claimed domain can neither create nor join other workspaces.
 
 ## Context

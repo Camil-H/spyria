@@ -6,7 +6,6 @@ import {
   accountProvidersOf,
   ClaimedDomainNotInvited,
   domainOfEmail,
-  EmailNotConfirmed,
   entraObjectIdPattern,
   InstanceBeingSetUp,
   instanceAppFor,
@@ -23,10 +22,11 @@ import { deleteCookie, getCookie, getSignedCookie, setCookie, setSignedCookie } 
 import { HTTPException } from 'hono/http-exception'
 import type { RateLimitName } from '../rate-limits.ts'
 import { claimsDomainOf } from './domain-claims.ts'
-import { createOidc, EmailRefused, type Oidc } from './oidc.ts'
+import { createOidc, type Oidc } from './oidc.ts'
 import { isSameSecret } from './same-secret.ts'
 import { type Authentication, errorByStatus, issueSessionToken, type SessionClaims } from './session-tokens.ts'
 import {
+  confirmedEmailOf,
   deleteSession,
   emailOfUser,
   findLiveSessions,
@@ -45,6 +45,7 @@ import {
   createWorkspaceOfAccount,
   type FirstWorkspace,
   hasNoWorkspace,
+  isSameSignInApp,
   type PendingSso,
   prepareFirstWorkspace,
   prepareSsoSettings,
@@ -116,6 +117,16 @@ export const setSessionCookie = (context: Context, appOrigin: string, session: S
 const domainErrorOnly = (error: unknown) => {
   if (error instanceof DomainError) return error
   throw error
+}
+
+const htmlCharacters: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+const htmlTextOf = (text: string) => text.replace(/[&<>"']/g, (character) => htmlCharacters[character] ?? '')
+
+const popupTextOf = (result: PopupResult) => {
+  if (result.status === 'signed_in' || result.status === 'no_workspace') return 'You are signed in.'
+  if (result.status === 'not_invited') return `No workspace has invited ${result.email}.`
+  if (result.status === 'refused') return result.message
+  return 'Sign-in through your provider did not complete. Try again.'
 }
 
 const userAgentOf = (context: Context) => (context.req.header('user-agent') ?? '').slice(0, userAgentMaxLength)
@@ -203,7 +214,7 @@ export const createAuthRoutes = ({
   }
   const popup = (context: Context, result: PopupResult, status: 200 | 400 | 401 | 403 | 404 = 200) =>
     context.html(
-      `<!doctype html><meta charset="utf-8"><title>Signing in to Spyria</title><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});window.opener ? setTimeout(close, ${popupSelfCloseMilliseconds}) : close()</script>`,
+      `<!doctype html><meta charset="utf-8"><title>Signing in to Spyria</title><p style="font:16px system-ui;margin:2rem">${htmlTextOf(popupTextOf(result))} <a href="${htmlTextOf(appOrigin)}">Return to Spyria</a></p><script>window.opener?.postMessage(${JSON.stringify(result).replaceAll('<', '\\u003c')}, ${JSON.stringify(appOrigin)});if (window.opener) setTimeout(close, ${popupSelfCloseMilliseconds})</script>`,
       status,
     )
   const refusedPopup = (context: Context, error: Error) =>
@@ -217,11 +228,14 @@ export const createAuthRoutes = ({
       workspaceId,
       providerWorkspaceId,
     }: { userId?: string; email: string; workspaceId?: string; providerWorkspaceId: string | null },
+    openedThroughSameApp: readonly SessionClaims[] = [],
   ) => {
-    const opened =
-      userId === undefined
+    const opened = [
+      ...(userId === undefined
         ? []
-        : await openSessions(scope.database, userId, workspaceId, providerWorkspaceId, userAgentOf(context))
+        : await openSessions(scope.database, userId, workspaceId, providerWorkspaceId, userAgentOf(context))),
+      ...openedThroughSameApp,
+    ]
     for (const session of opened) setSessionCookie(context, appOrigin, session)
     if (opened.length > 0) return popup(context, { status: 'signed_in' })
     if (
@@ -254,12 +268,45 @@ export const createAuthRoutes = ({
         kind: provider,
         isWorkspaceSso: false,
       })),
-      ...workspaceProviders.map(({ preset }, index) => ({
-        id: `${workspaceProviderPrefix}${index}`,
-        kind: preset,
-        isWorkspaceSso: true,
-      })),
+      ...workspaceProviders.flatMap((provider, index) =>
+        workspaceProviders.findIndex((earlier) => isSameSignInApp(earlier, provider)) === index
+          ? [{ id: `${workspaceProviderPrefix}${index}`, kind: provider.preset, isWorkspaceSso: true }]
+          : [],
+      ),
     ]
+  }
+  const workspaceSignInOf = (provider: Pick<SsoProvider, 'workspaceId' | 'issuer' | 'preset'>) => ({
+    workspaceId: provider.workspaceId,
+    issuer: provider.issuer,
+    currentSubjectPattern: provider.preset === 'microsoft' ? entraObjectIdPattern : undefined,
+  })
+  const sessionsThroughSameApp = async (
+    context: Context,
+    scopedDatabase: Database,
+    provider: SsoProvider,
+    identity: VerifiedIdentity,
+    email: string,
+  ) => {
+    const sameApp = (await workspaceProvidersForEmail(scopedDatabase, email)).filter(
+      (other) => other.workspaceId !== provider.workspaceId && isSameSignInApp(other, provider),
+    )
+    const opened: SessionClaims[] = []
+    for (const other of sameApp) {
+      const signedIn = await signInThroughWorkspace(scopedDatabase, workspaceSignInOf(other), identity).catch(
+        domainErrorOnly,
+      )
+      if (signedIn instanceof Error || !signedIn.userId) continue
+      opened.push(
+        ...(await openSessions(
+          scopedDatabase,
+          signedIn.userId,
+          other.workspaceId,
+          other.workspaceId,
+          userAgentOf(context),
+        )),
+      )
+    }
+    return opened
   }
   const sessionIdByWorkspaceOf = (context: Context) =>
     Object.entries(getCookie(context)).flatMap(([name, sessionId]) =>
@@ -461,31 +508,25 @@ export const createAuthRoutes = ({
             .verifiedIdentityOf(new URL(context.req.url), login)
             .catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))))
         : undefined
-      if (identity instanceof EmailRefused && identity.refusal === 'unconfirmed')
-        return refusedPopup(context, new EmailNotConfirmed())
       if (identity === undefined || identity instanceof Error) return popup(context, { status: 'failed' }, 400)
       const signedIn = await (firstWorkspace
         ? createFirstWorkspace(scope.database, firstWorkspace, identity, sso).then((created) => ({
             ...created,
-            email: identity.email,
+            email: confirmedEmailOf(identity),
             providerWorkspaceId: firstWorkspace.provider ? created.workspaceId : null,
           }))
         : pendingSso
           ? confirmSsoSettings(scope.database, pendingSso, identity).then((confirmed) => ({
               ...confirmed,
-              email: identity.email,
+              email: confirmedEmailOf(identity),
               providerWorkspaceId: confirmed.workspaceId,
             }))
           : provider
-            ? signInThroughWorkspace(
-                scope.database,
-                {
-                  workspaceId: provider.workspaceId,
-                  issuer: provider.issuer,
-                  currentSubjectPattern: provider.preset === 'microsoft' ? entraObjectIdPattern : undefined,
-                },
-                identity,
-              ).then((user) => ({ ...user, workspaceId, providerWorkspaceId: provider.workspaceId }))
+            ? signInThroughWorkspace(scope.database, workspaceSignInOf(provider), identity).then((user) => ({
+                ...user,
+                workspaceId,
+                providerWorkspaceId: provider.workspaceId,
+              }))
             : signInWithAccount(scope.database, identity).then((user) => ({
                 ...user,
                 workspaceId,
@@ -493,7 +534,11 @@ export const createAuthRoutes = ({
               }))
       ).catch(domainErrorOnly)
       if (signedIn instanceof Error) return refusedPopup(context, signedIn)
-      return completeSignIn(context, scope, signedIn)
+      const openedThroughSameApp =
+        provider && workspaceId === undefined
+          ? await sessionsThroughSameApp(context, scope.database, provider, identity, signedIn.email)
+          : []
+      return completeSignIn(context, scope, signedIn, openedThroughSameApp)
     })
     .get('/sessions', async (context) => {
       const scope = scopeOf(context)

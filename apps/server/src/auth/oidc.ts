@@ -140,11 +140,10 @@ export const createOidc = ({
       const subject = subjectOf(payload)
       if (payload.nonce !== login.nonce || typeof subject !== 'string' || subject === '')
         throw new Error('The ID token carries no trusted subject for this login')
-      if (claimed.refusal) throw new EmailRefused(claimed.refusal)
-      const { email } = claimed
+      if (claimed.refusal === 'untrusted') throw new EmailRefused(claimed.refusal)
       const legacySubject = typeof payload.sub === 'string' && payload.sub !== subject ? payload.sub : undefined
       return {
-        email,
+        confirmedEmail: claimed.email ?? null,
         name: payload.name,
         issuer: tokenServer.issuer,
         subject,
