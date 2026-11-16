@@ -227,7 +227,7 @@ test.describe('Organize', () => {
     await test.step('sees a bar where the chat will land while dragging it', async () => {
       const researchRow = looseChatsOf(page)
         .getByRole('listitem')
-        .filter({ has: chatRowIn(looseChatsOf(page), 'Research') })
+        .filter({ has: page.getByRole('link', { name: 'Research' }) })
       await chatRowIn(looseChatsOf(page), 'Standup').hover()
       await page.mouse.down()
       await chatRowIn(looseChatsOf(page), 'Research').hover({ position: { x: 8, y: 4 } })
