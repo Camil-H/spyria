@@ -141,7 +141,7 @@ Its **Setup commands**, under the hosts since setup is how each runtime starts, 
 - **Ask before the agent submits** (on by default): the member approves each form the agent submits and each script it runs in their browser. Reading needs no approval.
 - **Block internal networks** (on by default): pages cannot reach the host machine (`host.docker.internal`) or private, link-local and reserved addresses, checked on every address a name resolves to, except the **Internal addresses allowed**, such as `staging.internal`. The chat's own runtime stays reachable as `localhost`.
 - **Sites allowed** (empty for every site; `localhost` always is) and **Sites blocked**, each site with its subdomains.
-- **Sign-ins last at most**, in hours: by default a browser keeps its sign-ins until the chat's runtime stops.
+- **Sign-ins last at most**, in hours: by default a browser keeps its sign-ins until the chat's runtime stops. Past the limit, its host removes the browser with its sign-ins within a minute, even one in use.
 - **Downloads** and **Uploads**, on by default.
 - **Record visited addresses** (on by default): each address a browser visits goes to the audit log under **Browser**, with its chat and member, without its query or fragment and never the page contents.
 

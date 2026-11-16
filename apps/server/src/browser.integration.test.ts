@@ -10,6 +10,7 @@ import {
   failedWith,
   fakeBrowserFrame,
   fakeBrowserImageFile,
+  fakeBrowserMissingRef,
   fakeBrowserSnapshot,
   lee,
   mcpCall,
@@ -213,6 +214,18 @@ test('a click that submits, or a script, waits for the prompting member’s appr
     { tool: 'browser_run_javascript', decision: 'denied', decided_by: bob, status: 'refused' },
   ])
 
+  const beforeUnchecked = host.browsers.received(bobsKey).length
+  expect(await callTool(host, token, 'browser_click', { ref: fakeBrowserMissingRef })).toMatchObject({
+    text: 'This step was not run: the browser could not tell whether it submits anything (No element has this ref)',
+    isError: true,
+  })
+  expect(
+    host.browsers
+      .received(bobsKey)
+      .slice(beforeUnchecked)
+      .map(({ command }) => command),
+  ).toEqual(['would_submit'])
+
   const stopped = new AbortController()
   const stoppedCall = mcpCall(
     host,
@@ -340,6 +353,25 @@ test("a file the member's browser downloads reaches only that member, signed in,
   ])
   expect((await fetchDownload(offered?.token, bob)).status).toBe(404)
   expect((await fetchDownload('0'.repeat(64), bob)).status).toBe(404)
+  bobs.close()
+  alices.close()
+})
+
+test("in a chat on its owner's own machine, only the owner gets a browser: another member's tab and prompts are refused and nothing starts there", async () => {
+  await setBrowserSettings({})
+  const host = await fakeHost('Browser own machine host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  await database.$client`update chats set local_session = true where id = ${chatId}`
+  const refusal = "This chat runs on its owner's own machine, so only its owner has a browser in it"
+  expect(await callTool(host, token, 'browser_snapshot')).toMatchObject({ text: refusal, isError: true })
+  const bobs = await watchBrowser(chatId, bob)
+  expect(await bobs.stateOf()).toEqual({ type: 'state', state: 'unavailable', reason: refusal })
+  expect(host.commands.filter(({ op }) => op === 'browser_start')).toEqual([])
+  const alices = await watchBrowser(chatId, alice)
+  expect(await alices.stateOf()).toMatchObject({ state: 'running' })
+  expect(host.commands.filter(({ op }) => op === 'browser_start')).toEqual([
+    { op: 'browser_start', runtimeId: expect.any(String), browserKey: await browserKeyOf(chatId, alice) },
+  ])
   bobs.close()
   alices.close()
 })

@@ -79,7 +79,7 @@ The agent browses in the browser of the member who prompted it, with that member
 - `browser_snapshot` reads the page as an accessibility tree that gives each element a ref, such as `e5`; `browser_click`, `browser_type`, `browser_fill` and `browser_press` act on an element by its ref.
 - `browser_run_javascript` reads a value from the page, `browser_wait` waits for a text or a few seconds, `browser_navigate` goes back, forward or reloads, and `browser_screenshot` sees the page as an image.
 
-Before the agent submits a form (a click on a submit button, Enter in a form, or a button such as Buy, Pay or Send) or runs a script, the member whose browser it is approves it in the chat, unless an admin turned that off. A browser the workspace turned off for agents, a runtime that is asleep or a host without room answers with a reason the agent sees.
+Before the agent submits a form (a click on a submit button, Enter in a form, or a button such as Buy, Pay or Send) or runs a script, the member whose browser it is approves it in the chat, unless an admin turned that off. A step whose check cannot run is refused rather than run unasked. A browser the workspace turned off for agents, a runtime that is asleep or a host without room answers with a reason the agent sees.
 
 ## Screenshots
 

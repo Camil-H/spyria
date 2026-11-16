@@ -943,6 +943,7 @@ const fakeBrowserAnswerOf = (message: FakeBrowserMessage) => {
   return `${message.command} done`
 }
 export const fakeBrowserImageFile = 'f'.repeat(32)
+export const fakeBrowserMissingRef = 'e9'
 const createFakeBrowsers = () => {
   const received = new Map<string, FakeBrowserMessage[]>()
   const outputs = new Map<string, (message: object) => void>()
@@ -976,6 +977,8 @@ const createFakeBrowsers = () => {
             files.set(fakeBrowserImageFile, Buffer.from('image'))
             return emit({ id: message.id, result: { text: 'Screenshot of Example', imageFile: fakeBrowserImageFile } })
           }
+          if (message.command === 'would_submit' && message.ref === fakeBrowserMissingRef)
+            return emit({ id: message.id, error: 'No element has this ref' })
           if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })
         },
         onClose: () => outputs.delete(browserKey),
