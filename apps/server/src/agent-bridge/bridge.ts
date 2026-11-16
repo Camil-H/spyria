@@ -525,7 +525,7 @@ export const createAgentBridge = ({
       githubToolsInChat: handlers.githubToolsInChat,
       githubToolPolicy: handlers.githubToolPolicy,
       callDevLoopTool: handlers.callDevLoopTool,
-      githubToolsOf: handlers.githubToolsOf,
+      devLoopToolsOf: handlers.devLoopToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,
       watchBrowser: handlers.watchBrowser,
       runGitAction: handlers.runGitAction,

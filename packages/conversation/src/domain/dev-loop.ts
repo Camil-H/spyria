@@ -414,7 +414,6 @@ export const reportReviewTool = {
 export const devLoopTools = [finishWorkTool, reportReviewTool]
 export const devLoopInstructions =
   'This workspace runs quality gates: when the work the owner asked for is done and committed, call finish_work instead of pushing or opening a pull request yourself.'
-export const isDevLoopTool = (name: string) => devLoopTools.some((tool) => tool.name === name)
 export const ciVerdictOf = (runs: CheckRun[]): CheckState | 'none' => {
   if (runs.length === 0) return 'none'
   const states = runs.map((run) => checkStateOf(run.isCompleted, run.conclusion))

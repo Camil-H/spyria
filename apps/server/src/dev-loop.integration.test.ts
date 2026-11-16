@@ -1,4 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 
 import { type ChatId, chatId, type DevLoopSettings, type DevLoopStepConfig } from '@spyria/kernel'
 import { createSecretBox } from './auth/secret-box.ts'
@@ -307,7 +308,7 @@ test('As a member, writing in the chat stops the quality gates; another memberâ€
   await database.$client`
     update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-loop' where id = ${guest.chatId}`
   const answer = await host.modelCall({
-    path: '/mcp/github',
+    path: '/mcp/spyria',
     headers: { authorization: `Bearer ${guest.token}`, 'content-type': 'application/json' },
     body: rpcOf('tools/call', { name: 'finish_work', arguments: { title: 'Mine', body: '' } }),
   })
@@ -719,4 +720,70 @@ test('As a chat owner, the gates check they still run before updating a conflict
   const [ciJob] = await database.$client`
     select attempts, state from jobs where type = 'dev_loop.ci' and payload->>'loopId' = ${failing.loopId}`
   expect(ciJob).toMatchObject({ attempts: maximumJobAttempts, state: 'done' })
+})
+
+test("the quality gates' tools come from Spyria's own tool server, to the chat's own turns only, and never from the GitHub one", async () => {
+  expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint')]))).toEqual(succeeded)
+  const { host } = await stack.agentHost('Tool servers host', { routesModelCalls: true })
+  const turn = await runtimeTurn(host, alice)
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/tool-servers' where id = ${turn.chatId}`
+  const rpcWith = async (token: string, path: string, rpc: string) =>
+    JSON.parse(
+      (
+        await host.modelCall({
+          path,
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: rpc,
+        })
+      ).body,
+    )
+  const listOf = async (token: string, path: string) => {
+    const { result } = await rpcWith(token, path, rpcOf('tools/list', {}))
+    return (result.tools as { name: string }[]).map(({ name }) => name)
+  }
+  const instructionsOf = async (token: string) =>
+    (await rpcWith(token, '/mcp/spyria', rpcOf('initialize', { protocolVersion: '2025-06-18' }))).result.instructions
+
+  expect(await listOf(turn.token, '/mcp/spyria')).toEqual(expect.arrayContaining(['finish_work', 'report_review']))
+  expect(await instructionsOf(turn.token)).toContain('call finish_work instead of pushing or opening a pull request')
+  const githubTools = await listOf(turn.token, '/mcp/github')
+  expect(githubTools).not.toContain('finish_work')
+  expect(githubTools).not.toContain('report_review')
+
+  const throughGitHub = await rpcWith(
+    turn.token,
+    '/mcp/github',
+    rpcOf('tools/call', { name: 'finish_work', arguments: { title: 'Mine', body: '' } }),
+  )
+  expect(throughGitHub.result.isError).toBe(true)
+  expect(await loopOf(chatId(turn.chatId))).toBeUndefined()
+
+  await rpcWith(
+    turn.token,
+    '/mcp/spyria',
+    rpcOf('tools/call', { name: 'finish_work', arguments: { title: 'Mine', body: '' } }),
+  )
+  expect([
+    ...(await database.$client`
+      select server from tool_calls where chat_id = ${turn.chatId} and tool = 'finish_work' order by called_at`),
+  ]).toEqual([{ server: 'github' }, { server: 'spyria' }])
+
+  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
+  await database.$client`
+    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
+    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${createHash('sha256').update(JSON.stringify(subToken)).digest('hex')}, now()
+    from chats where id = ${turn.chatId}`
+  const subagentTools = await listOf(subToken, '/mcp/spyria')
+  expect(subagentTools).toContain('open_page')
+  expect(subagentTools).not.toContain('finish_work')
+  const bySubagent = await rpcWith(
+    subToken,
+    '/mcp/spyria',
+    rpcOf('tools/call', { name: 'finish_work', arguments: { title: 'Mine', body: '' } }),
+  )
+  expect(bySubagent.error ?? bySubagent.result).toMatchObject({ isError: true })
+
+  expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint')], false))).toEqual(succeeded)
+  expect(await listOf(turn.token, '/mcp/spyria')).not.toContain('finish_work')
 })

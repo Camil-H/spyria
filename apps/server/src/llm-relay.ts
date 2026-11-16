@@ -4,9 +4,10 @@ import {
   awaitTaskTool,
   checkTaskTool,
   genericModelCallNoticeOf,
+  githubToolDefinitions,
+  githubToolsInstructions,
   githubToolsPath,
   guestPrompterOf,
-  isDevLoopTool,
   isGuestToolMethod,
   isReadOnlySpyriaTool,
   isSpyriaTool,
@@ -283,33 +284,28 @@ export const createModelCallRelay = ({
       if (rpc?.id === undefined) return answer(202, undefined)
       const reply = (result: object, replyHeaders?: Record<string, string>) =>
         answerRpc(rpc.id, { result }, replyHeaders)
-      const answerGitHubServer = async (call: RouterCall) => {
-        const { tools, instructions } = await handlers.githubToolsOf(runtime.chat)
-        return answerSpyriaServer(call, 'spyria-github', tools, instructions)
-      }
       if (rpc.method !== 'tools/call')
-        return isRouter ? answerSpyriaServer(rpc, 'spyria-router', routerTools) : answerGitHubServer(rpc)
+        return isRouter
+          ? answerSpyriaServer(rpc, 'spyria-router', routerTools)
+          : answerSpyriaServer(rpc, 'spyria-github', githubToolDefinitions, githubToolsInstructions)
       if (!isRouter && 'ownerName' in runtime && runtime.prompterId && runtime.ownerId) {
         const { chat, prompterId, ownerId } = runtime
         const toolName = String(rpc.params?.name ?? '')
         const calledAt = new Date()
-        const isDevLoopCall = isDevLoopTool(toolName)
-        const { refusal, decision, decidedBy } = isDevLoopCall
-          ? { refusal: undefined, decision: 'not_needed' as const, decidedBy: null }
-          : await handlers.authorizeToolCall(
-              {
-                turn: runtime,
-                tool: toolName,
-                serverName: githubServerName,
-                toolArguments: rpc.params?.arguments,
-                signal,
-              },
-              { policyOf: (prompter) => handlers.githubToolPolicy({ chat, memberId: prompter, toolName }) },
-            )
-        const callTool = isDevLoopCall ? handlers.callDevLoopTool : handlers.callGitHubTool
+        const { refusal, decision, decidedBy } = await handlers.authorizeToolCall(
+          {
+            turn: runtime,
+            tool: toolName,
+            serverName: githubServerName,
+            toolArguments: rpc.params?.arguments,
+            signal,
+          },
+          { policyOf: (prompter) => handlers.githubToolPolicy({ chat, memberId: prompter, toolName }) },
+        )
         const { isRefused, text, status } = refusal
           ? ({ isRefused: true, text: refusal, status: 'refused' } as const)
-          : await callTool({ chat, memberId: prompterId, name: toolName, input: rpc.params?.arguments })
+          : await handlers
+              .callGitHubTool({ chat, memberId: prompterId, name: toolName, input: rpc.params?.arguments })
               .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
               .catch((error: unknown) => {
                 log.error({
@@ -417,16 +413,35 @@ export const createModelCallRelay = ({
       if (!turn) return answer(401, refusalOf('This runtime has no chat owner'))
       const rpc = jsonOf(body) as RouterCall | undefined
       if (Array.isArray(rpc)) return answerRpc(null, methodNotFound)
+      const devLoop = turn.delegationId ? { tools: [], instructions: '' } : await handlers.devLoopToolsOf(turn.chat)
       if (rpc?.method !== 'tools/call' || rpc.id === undefined)
-        return answerSpyriaServer(rpc, 'spyria', spyriaTools, spyriaCommandInstructions)
+        return answerSpyriaServer(
+          rpc,
+          'spyria',
+          [...spyriaTools, ...devLoop.tools],
+          [spyriaCommandInstructions, devLoop.instructions].filter(Boolean).join(' '),
+        )
       const { chat, prompterId, ownerId, promptId } = turn
       if (!prompterId) return answerRpc(rpc.id, toolErrorOf('This runtime has no active turn'))
       const toolName = String(rpc.params?.name ?? '')
-      if (!isSpyriaTool(toolName)) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
+      const isDevLoopCall = devLoop.tools.some((tool) => tool.name === toolName)
+      if (!isSpyriaTool(toolName) && !isDevLoopCall) return answerRpc(rpc.id, toolErrorOf('Unknown tool'))
       const calledAt = new Date()
-      const { isRefused, text, image, status, decision, decidedBy } = await handlers
-        .callSpyriaTool({ chat, memberId: prompterId, promptId, name: toolName, input: rpc.params?.arguments, signal })
-        .then((outcome) => ({ ...outcome, status: outcome.isRefused ? 'refused' : 'succeeded' }) as const)
+      const input = rpc.params?.arguments
+      const { isRefused, text, image, status, decision, decidedBy } = await (isDevLoopCall
+        ? handlers.callDevLoopTool({ chat, memberId: prompterId, name: toolName, input })
+        : handlers.callSpyriaTool({ chat, memberId: prompterId, promptId, name: toolName, input, signal })
+      )
+        .then(
+          (outcome) =>
+            ({
+              image: undefined,
+              decision: undefined,
+              decidedBy: undefined,
+              ...outcome,
+              status: outcome.isRefused ? 'refused' : 'succeeded',
+            }) as const,
+        )
         .catch((error: unknown) => {
           log.error({
             event: 'spyria_tool.failed',

@@ -36,9 +36,10 @@ export {
   subagentFailureOf,
   unknownTaskOf,
 } from './domain/delegation.ts'
-export { isDevLoopTool } from './domain/dev-loop.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
+  githubToolDefinitions,
+  githubToolsInstructions,
   githubToolsPath,
   type Issue,
   type IssueFilter,
