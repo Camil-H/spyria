@@ -49,7 +49,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I analyze this month by day: the chart and the member, project, chat and model tables match the seed, and by model restacks the chart', {
       tag: ['@spec-45', '@smoke'],
     }, async ({ page }) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       const section = usageSectionOf(page, 'Usage')
       await expect(section).toContainText(
         "Sessions run on a member's own machine (Claude Code, Codex) use their own subscription and are not counted here.",
@@ -101,7 +101,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I see the spend decomposed into six factors against last month, tokens per request highlighted as the biggest mover', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       const decomposition = tableOf(usageSectionOf(page, 'Usage'), 'Spend decomposition')
       const expectedFactors = [
         ['Users', ['3', '3', '0%']],
@@ -124,7 +124,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I narrow the whole usage to one model, open a factor’s daily line chart by clicking its row and close it again, and the same for the total', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       const section = usageSectionOf(page, 'Usage')
       const filters = section.getByRole('group', { name: 'Filters' })
       await narrowTo(page, filters, 'Model', ['anthropic/claude-sonnet'])
@@ -175,7 +175,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I narrow the usage to two members at once and see their spend together', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       const section = usageSectionOf(page, 'Usage')
       const filters = section.getByRole('group', { name: 'Filters' })
       await narrowTo(page, filters, 'Member', ['Alice', 'Bob'])
@@ -191,7 +191,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I see the cost per merged PR as its average over time and its distribution, and export each merged PR with its chat’s cost', {
       tag: ['@spec-45'],
     }, async ({ page }) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       const mergedPulls = usageSectionOf(page, 'Cost per merged PR')
       await expect(mergedPulls).toContainText('$0.06 per merged PR · 1 merged · $0.06 spent in their chats')
       await expect(mergedPulls.getByRole('img', { name: 'Average cost per merged PR over time' })).toBeVisible()
@@ -282,7 +282,7 @@ test.describe('Spend', () => {
     const openUsageTab = (page: Page, chatName: string) => openPanelTab(page, chatName, 'Usage')
 
     const openUsageSettings = async (page: Page) => {
-      await openSettings(page, 'Costs')
+      await openSettings(page, 'Costs and AI budgets')
       await expect(usageSectionOf(page).getByRole('heading', { level: 2, name: 'Usage' })).toBeVisible()
     }
 
