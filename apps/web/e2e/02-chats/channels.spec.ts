@@ -19,6 +19,7 @@ import {
   sidebarOf,
   tabPanelOf,
   test,
+  toastOf,
 } from './fixtures'
 
 const newChannel = async (page: Page, name: string, visibility: 'Public' | 'Private') => {
@@ -102,6 +103,7 @@ test.describe('Channels', () => {
     await newChannel(page, 'Coffee', 'Public')
     await joinFromBrowse(bobPage, 'Coffee')
     await chatAction(bobPage, 'Coffee', 'Leave channel')
+    await expect(toastOf(bobPage).getByRole('status')).toHaveText('You left Coffee')
     await expect(chatLinkOf(bobPage, 'Coffee')).toHaveCount(0)
     await openBrowse(bobPage)
     await expect(browsedChatOf(bobPage, 'Coffee')).toBeVisible()
@@ -118,6 +120,7 @@ test.describe('Channels', () => {
     await openBrowse(leePage)
     await expect(browsedChatOf(leePage, 'Plans')).toBeVisible()
     await chatAction(page, 'Plans', 'Make private')
+    await expect(toastOf(page).getByRole('status')).toHaveText('Plans is now private: only its members can see it')
     await expect(browsedChatOf(leePage, 'Plans')).toHaveCount(0)
     await expect(chatLinkOf(bobPage, 'Plans')).toBeVisible()
     await page.getByRole('button', { name: 'Chat actions for Plans' }).click()
@@ -190,6 +193,9 @@ test.describe('Channels', () => {
     await bobRole.selectOption('reader')
     await expect(bobRole).toHaveValue('reader')
     await chatAction(page, 'Open floor', 'Make public')
+    await expect(toastOf(page).getByRole('status')).toHaveText(
+      'Open floor is now public: anyone in the workspace can find and join it',
+    )
     await expect(bobRole).toHaveValue('prompter')
     expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter'])
     await bobPage.context().close()

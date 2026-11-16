@@ -1,6 +1,6 @@
 import { Content, Item, Root, Trigger } from '@radix-ui/react-dropdown-menu'
 import type { WorkspaceId } from '@spyria/kernel'
-import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass } from '@spyria/ui'
+import { buttonClass, Dialog, focusRing, menuContentClass, menuItemClass, useNotifiedRun } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
 import { useState } from 'react'
 import type { ChatsPolicy } from '../domain/project.ts'
@@ -31,8 +31,14 @@ export const ProjectGroup = ({
   const commands = useWorkspaceCommands()
   const [openDialog, setOpenDialog] = useState<'chat' | 'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
+  const runNotified = useNotifiedRun(chatAction.run)
   const archiveWith = async (chatsPolicy: ChatsPolicy) => {
-    await commands.archiveProject({ workspaceId, projectId: project.id, chatsPolicy })
+    await runNotified(
+      () => commands.archiveProject({ workspaceId, projectId: project.id, chatsPolicy }),
+      chatsPolicy === 'archive'
+        ? `${project.name} archived with its chats`
+        : `${project.name} archived, its chats are now outside any project`,
+    )
     closeDialog()
   }
   return (
