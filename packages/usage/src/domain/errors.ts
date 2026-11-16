@@ -15,11 +15,11 @@ export const InvalidRetention = errorKind(
 )
 export const InvalidBudget = errorKind(
   'invalid_budget',
-  () => 'A monthly budget is an amount above $0 and up to $1,000,000',
+  () => 'A budget is an amount above $0 and up to $1,000,000',
   UsageError,
 )
-export const BudgetMemberNotFound = errorKind(
-  'budget_member_not_found',
-  () => 'Budgets are set for active members of the workspace',
+export const BudgetRoleNotFound = errorKind(
+  'budget_role_not_found',
+  () => 'Budgets are set for roles of the workspace',
   UsageError,
 )

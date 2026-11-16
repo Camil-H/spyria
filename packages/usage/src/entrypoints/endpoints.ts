@@ -6,7 +6,7 @@ import { createPostgresAuditTransactor } from '../integrations/postgres-audit-lo
 import { createPostgresBudgetTransactor } from '../integrations/postgres-budgets.ts'
 import { createPostgresSpendTransactor } from '../integrations/postgres-spend.ts'
 import { readAuditPage, readAuditRetention, setAuditRetention } from '../operations/audit-log.ts'
-import { findUsedUpBudget, readBudgets, readOwnBudget, setBudget } from '../operations/budgets.ts'
+import { findUsedUpBudget, readBudgets, readOwnBudget, setRoleBudget } from '../operations/budgets.ts'
 import { readOwnSpend, readOwnSpendTrend, readWorkspaceSpend, readWorkspaceSpendTrend } from '../operations/spend.ts'
 
 type Query = Readonly<Record<string, string | undefined>>
@@ -78,7 +78,7 @@ const budgetDependenciesOf = (transact: Transact, workspaceId: WorkspaceId) => (
 export const budgetsFromRequest = (transact: Transact, context: ZeroContext, body?: unknown) =>
   body === undefined
     ? readBudgets(budgetDependenciesOf(transact, context.workspaceId), { memberId: context.userId, now: new Date() })
-    : setBudget(budgetDependenciesOf(transact, context.workspaceId), {
+    : setRoleBudget(budgetDependenciesOf(transact, context.workspaceId), {
         memberId: context.userId,
         budget: body,
         now: new Date(),

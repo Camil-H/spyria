@@ -171,8 +171,9 @@ type UsageEntryRow = {
 type BudgetAlertRow = {
   workspaceId: WorkspaceId
   id: string
-  memberId: MemberId | null
-  month: string
+  memberId: MemberId
+  period: 'day' | 'week' | 'month'
+  startsOn: string
   threshold: number
 }
 type SourceRow = { workspaceId: WorkspaceId; chatId: ChatId; name: string; origin: string }

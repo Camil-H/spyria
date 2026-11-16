@@ -1,5 +1,5 @@
-import type { MemberId, WorkspaceId } from '@spyria/kernel'
-import type { BudgetOverview, BudgetProgress } from '../domain/budgets.ts'
+import type { WorkspaceId } from '@spyria/kernel'
+import type { BudgetOverview, BudgetPeriod, PeriodBudget } from '../domain/budgets.ts'
 import { succeeded } from './http-audit-log.ts'
 
 export const budgetsPath = '/api/budgets'
@@ -13,15 +13,15 @@ const overviewOf = async (response: Response) => (await (await succeeded(respons
 export const createHttpBudgetCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
   readBudgets: async ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     overviewOf(await getAsMember(workspaceId, budgetsPath)),
-  saveBudget: async ({
+  saveRoleBudget: async ({
     workspaceId,
-    memberId,
+    roleId,
     dollars,
   }: {
     workspaceId: WorkspaceId
-    memberId: MemberId | null
-    dollars: number | null
-  }) => overviewOf(await postAsMember(workspaceId, budgetsPath, JSON.stringify({ memberId, dollars }))),
+    roleId: string
+    dollars: Readonly<Record<BudgetPeriod, number | null>>
+  }) => overviewOf(await postAsMember(workspaceId, budgetsPath, JSON.stringify({ roleId, dollars }))),
   readOwnBudget: async ({ workspaceId }: { workspaceId: WorkspaceId }) =>
-    (await (await succeeded(await getAsMember(workspaceId, ownBudgetPath))).json()) as BudgetProgress,
+    (await (await succeeded(await getAsMember(workspaceId, ownBudgetPath))).json()) as PeriodBudget[],
 })
