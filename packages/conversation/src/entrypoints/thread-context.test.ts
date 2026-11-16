@@ -48,3 +48,8 @@ test('a thread copied as context names its channel and quotes its messages like 
     ].join('\n\n'),
   )
 })
+
+test('a long thread copied as context is quoted whole, without the limits of a runtime seed', () => {
+  const body = 'x'.repeat(70_000)
+  expect(String(threadContextOf('ops', [messageOf({ body })]))).toEndWith(`\n${body}`)
+})

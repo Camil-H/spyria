@@ -156,8 +156,13 @@ export const ChatView = ({
     (conversation.localSession ? conversation.isOwner : conversation.canPost && !conversation.needsLlmKey)
   const answerQuestion = (questionId: string, answer: QuestionAnswer) =>
     commands.answerQuestion({ workspaceId, chatId, questionId, answer })
-  const fork = async () =>
-    navigate(`/w/${workspaceId}/chats/${await commands.forkChat({ workspaceId, sourceChatId: chatId })}`)
+  const forkAction = {
+    branch: conversation.gitBranch,
+    fork: async (keepsBranch: boolean) =>
+      navigate(
+        `/w/${workspaceId}/chats/${await commands.forkChat({ workspaceId, sourceChatId: chatId, keepsBranch })}`,
+      ),
+  }
   const remoteImagesLoadedHere = loadedRemoteImages?.chatId === chatId ? loadedRemoteImages.sources : new Set<string>()
   const loadRemoteImage = (source: string) =>
     setLoadedRemoteImages((loaded) => ({
@@ -210,7 +215,7 @@ export const ChatView = ({
                   <span className="min-w-0 truncate text-sm text-muted">
                     Agent acts as <strong className="font-semibold text-ink">{conversation.ownerName}</strong>
                   </span>
-                  <ForkButton onFork={fork} />
+                  <ForkButton action={forkAction} isIcon />
                 </>
               )}
               <IconButton label="Find in this chat" shortcut="f" icon={TextSearch} onClick={findState.open} />
@@ -268,7 +273,7 @@ export const ChatView = ({
                           onStop={
                             conversation.canConfigure ? () => commands.stopAgent({ workspaceId, chatId }) : undefined
                           }
-                          onFork={conversation.isOwner ? undefined : fork}
+                          forkAction={conversation.isOwner ? undefined : forkAction}
                         />
                       </div>
                     </ChatNameContext>

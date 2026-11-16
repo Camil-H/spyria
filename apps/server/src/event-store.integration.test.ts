@@ -122,6 +122,7 @@ describe('the history written by the rebuild test, then drifted', () => {
       id: 'message-history-fork',
       chatId: 'chat-history-fork',
       sourceChatId: 'chat-history-runtime',
+      keepsBranch: false,
     })
     await succeeds('workspace.createChat', { id: 'chat-history', name: 'History', type: 'channel', projectId: null })
     await succeeds('conversation.sendMessage', { id: 'message-history-5', chatId: 'chat-history', text: 'Hi' })

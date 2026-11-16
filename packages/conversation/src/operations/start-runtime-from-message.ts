@@ -31,6 +31,7 @@ export const startRuntimeFromMessage = (
       memberId,
       header: channelThreadHeaderOf(sourceChat.name),
       quoted: thread,
+      keepsBranch: false,
     })
     await chats.recordRuntimeOrigin({
       runtimeChatId: chatId,

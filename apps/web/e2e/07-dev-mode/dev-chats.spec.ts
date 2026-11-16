@@ -41,6 +41,27 @@ test.describe('Dev chats', () => {
     await expect(branchOf(page)).toHaveText(workingBranch)
   })
 
+  test('As a member, I fork my dev chat onto a new branch built on its own, or onto its own branch', {
+    tag: ['@spec-34', '@spec-39'],
+  }, async ({ page }) => {
+    await configureGitHubApp(page)
+    const chatId = await newDevChat(page, 'Fix totals', 'acme/app')
+    const workingBranch = `spyria/fix-totals-${chatId.replace(/-/g, '').slice(0, 6)}`
+    const forkInto = async (choice: string) => {
+      await mainOf(page).getByRole('button', { name: 'Fork into my session' }).click()
+      await page.getByRole('menuitem', { name: choice }).click()
+      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Fix totals (fork)' })).toBeVisible()
+      return page.url().split('/').at(-1) ?? ''
+    }
+
+    const newBranchFork = await forkInto(`New branch from ${workingBranch}`)
+    await expect(branchOf(page)).toHaveText(`spyria/fix-totals-fork-${newBranchFork.replace(/-/g, '').slice(0, 6)}`)
+    await mainOf(page).getByRole('link', { name: 'Forked from Fix totals' }).click()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Fix totals', exact: true })).toBeVisible()
+    await forkInto(`Keep branch ${workingBranch}`)
+    await expect(branchOf(page)).toHaveText(workingBranch)
+  })
+
   test('As a member with access to a single repository, I find it already chosen with its default branch when I start a dev chat', {
     tag: ['@spec-39'],
   }, async ({ page }) => {

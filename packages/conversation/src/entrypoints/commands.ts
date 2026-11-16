@@ -38,7 +38,7 @@ export type ConversationCommands = {
   restartSession: Command<{ chatId: ChatId }>
   stopRuntime: Command<{ chatId: ChatId }>
   startRuntimeFromMessage: Command<{ messageId: MessageId }>
-  forkChat: Command<{ sourceChatId: ChatId }>
+  forkChat: Command<{ sourceChatId: ChatId; keepsBranch: boolean }>
   inviteMember: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   changeMemberRole: Command<{ chatId: ChatId; memberId: MemberId; roleId: string }>
   removeMember: Command<{ chatId: ChatId; memberId: MemberId }>

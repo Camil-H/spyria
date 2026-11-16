@@ -135,7 +135,9 @@ Every tool call is recorded with its prompter, owner and approval decision, and 
 
 ## Forking a runtime chat
 
-**Fork into my session** in a runtime chat's header creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), read by the server from the chat's history in the event store, and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. A fork of a dev chat continues on the original's branch; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
+**Fork into my session**, the fork icon in a runtime chat's header, creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), read by the server from the chat's history in the event store, and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. On a dev chat the icon asks whether the fork keeps the original's branch or starts a new one from it; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
+
+The quote stays short enough for any model: an automatic prompt of the quality gates is quoted by its first paragraph only, a message longer than 8,000 characters is cut and says how much it left out, and when the whole conversation is longer than 60,000 characters the quote keeps the first message and the newest ones that fit, with a line counting the messages left out between, to be read in the source chat. A runtime chat started from a channel thread quotes the thread the same way.
 
 Only runtime chats can be forked.
 
