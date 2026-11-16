@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createAgentTestbed } from './testing.ts'
@@ -131,6 +131,40 @@ test('changes are the diff against the base branch, and apart the files not stag
       truncated: false,
       cut: [],
     })
+})
+
+test('a file edited to the same size in the second its checkout wrote the index still shows as modified', async () => {
+  const racy = join(directory, 'racy')
+  git(directory, 'clone', '-q', source, racy)
+  git(racy, 'checkout', '-q', '-b', 'spyria/racy')
+  write(racy, { 'src/app.ts': 'export const total = 2\n' })
+  const { mtime } = statSync(join(racy, '.git', 'index'))
+  utimesSync(join(racy, 'src/app.ts'), mtime, mtime)
+  await Bun.sleep(1100)
+  const { call } = started({ workspaceDirectory: racy })
+  const { body } = await call('GET', '/api/workspace/changes?base=main')
+  expect(body.files).toBe('M\0src/app.ts\0')
+})
+
+test('a changes or commits read whose git diff or log fails answers an error, not an empty one a snapshot would keep', async () => {
+  const broken = join(directory, 'broken')
+  git(directory, 'clone', '-q', source, broken)
+  git(broken, 'checkout', '-q', '-b', 'spyria/broken')
+  write(broken, { 'src/lost.ts': 'export const lost = true\n' })
+  git(broken, 'add', 'src/lost.ts')
+  git(broken, 'commit', '-q', '-m', 'Add a file whose blob goes missing')
+  const blob = Bun.spawnSync(['git', 'rev-parse', 'HEAD:src/lost.ts'], { cwd: broken }).stdout.toString().trim()
+  rmSync(join(broken, '.git', 'objects', blob.slice(0, 2), blob.slice(2)))
+  const { call } = started({ workspaceDirectory: broken })
+  expect(await call('GET', '/api/workspace/commits?base=main')).toMatchObject({
+    status: 502,
+    body: { error: 'spyria-agent failed' },
+  })
+  writeFileSync(join(broken, '.git', 'index'), 'not an index')
+  expect(await call('GET', '/api/workspace/changes?base=main')).toMatchObject({
+    status: 502,
+    body: { error: 'spyria-agent failed' },
+  })
 })
 
 test('commits are the log since the base with each body and each patch, a merge showing only how its conflicts were resolved, all separated by a character no message or text file holds', async () => {

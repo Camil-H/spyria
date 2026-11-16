@@ -385,7 +385,8 @@ export const createAgentBridge = ({
           const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
           if (update?.sessionUpdate === 'question') {
             chatSocket.questions.set(String(update.questionId), update)
-            broadcast(chat, { promptId: shownPromptIdOf(), question: update })
+            const questionFrame = { promptId: shownPromptIdOf(), question: update }
+            recording = recording.then(() => broadcast(chat, questionFrame))
             return
           }
           if (update?.sessionUpdate === 'events_lost')

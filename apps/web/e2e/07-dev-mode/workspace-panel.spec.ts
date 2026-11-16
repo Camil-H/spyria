@@ -153,13 +153,12 @@ test.describe('Workspace panel', () => {
   }, async ({ page, agentScript, workerStack }) => {
     const chatId = await devChatWithEdits(page, agentScript, 'Sleepy totals')
     await expect
-      .poll(async () =>
-        String(
-          (await workerStack.database.$client`select workspace_snapshot from runtimes where chat_id = ${chatId}`)[0]
-            ?.workspace_snapshot,
-        ),
-      )
-      .toContain('src/new.ts')
+      .poll(async () => {
+        const [runtime] = await workerStack.database
+          .$client`select workspace_snapshot from runtimes where chat_id = ${chatId}`
+        return String(JSON.parse(runtime?.workspace_snapshot ?? '{}').changes?.files)
+      })
+      .toBe('M\0src/app.ts\0A\0src/new.ts\0')
     await fetch(
       `${serverUrl}/test/runtime?${new URLSearchParams({ db: workerStack.databaseName, chat: chatId, stop: 'true' })}`,
       {
