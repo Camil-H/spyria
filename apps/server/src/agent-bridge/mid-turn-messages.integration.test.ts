@@ -19,8 +19,12 @@ const agentHost = () => stack.agentHost('Agent host', { holdUrl })
 const stubHello = 'Hello from the stub (model spyria/mistral/codestral-latest, mode default).'
 const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
 const chatTurnOf = async (chat: string) => {
-  const [turn] = await database.$client<{ promptId: string | null; prompterId: string | null }[]>`
-    select agent_turn_message_id as "promptId", agent_turn_prompter_id as "prompterId" from chats where id = ${chat}`
+  const [turn] = await database.$client<
+    { promptId: string | null; replyToId: string | null; prompterId: string | null }[]
+  >`
+    select agent_turn_message_id as "promptId", agent_turn_reply_to_id as "replyToId",
+      agent_turn_prompter_id as "prompterId"
+    from chats where id = ${chat}`
   return turn
 }
 const pickedUpAtOf = async (messageId: string) => {
@@ -34,28 +38,27 @@ const remove = (member: typeof aliceInAcme, messageId: string) =>
   mutate(member, 'conversation.deleteMessage', { workspaceId: acme, messageId })
 const pickedUpRefusal = failedWith('The agent has already picked up this message, so it can no longer be changed')
 
-test('a message the prompter sends while their turn runs is taken into it: the turn moves to the message, keeps its prompter, and ends under it', async () => {
+test('a message the prompter sends while their turn runs is taken into it: the turn answers under the message from then on, on the same prompter, and Stop still ends it', async () => {
   const { relay } = await agentHost()
   const chat = await newRuntimeChat()
   const first = await prompt(chat, 'stub:linger Rename the module')
   await waitFor(() => relay.prompts.length === 1)
   const joined = await prompt(chat, 'stub:linger and update its imports')
-  await jobDone('agent.prompt', { messageId: joined })
+  await jobDone('agent.join', { chatId: chat })
   expect(relay.joins).toEqual(['stub:linger and update its imports'])
   expect(await pickedUpAtOf(joined)).not.toBeNull()
   expect(await edit(aliceInAcme, joined, 'Never mind')).toEqual(pickedUpRefusal)
-  expect(await chatTurnOf(chat)).toEqual({ promptId: first, prompterId: aliceInAcme.userId })
+  expect(await chatTurnOf(chat)).toEqual({ promptId: first, replyToId: null, prompterId: aliceInAcme.userId })
 
   await holds.release('linger')
   await holds.reached('steered')
-  await waitFor(async () => (await chatTurnOf(chat))?.promptId === joined)
-  expect(await chatTurnOf(chat)).toEqual({ promptId: joined, prompterId: aliceInAcme.userId })
-  await holds.release('steered')
+  await waitFor(async () => (await chatTurnOf(chat))?.replyToId === joined)
+  expect(await chatTurnOf(chat)).toEqual({ promptId: first, replyToId: joined, prompterId: aliceInAcme.userId })
+  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
   await turnEnded(chat)
+  expect(await chatTurnOf(chat)).toEqual({ promptId: null, replyToId: null, prompterId: null })
   expect(await repliesTo(first)).toEqual([{ kind: 'agent', body: '[t1]' }])
-  expect(await repliesTo(joined)).toEqual([
-    { kind: 'agent', body: `Took in: stub:linger and update its imports. ${stubHello}` },
-  ])
+  expect((await repliesTo(joined)).at(-1)).toEqual({ kind: 'notice', body: 'Stopped by Alice' })
   expect(relay.prompts).toEqual(['stub:linger Rename the module'])
   expect(await remove(aliceInAcme, joined)).toEqual(pickedUpRefusal)
 })
@@ -98,7 +101,7 @@ test('a message the runtime refuses to take into the running turn goes back to t
   const first = await prompt(chat, 'stub:linger Rename the module')
   await waitFor(() => relay.prompts.length === 1)
   const refused = await prompt(chat, 'And the tests')
-  await jobDone('agent.prompt', { messageId: refused })
+  await jobDone('agent.join', { chatId: chat })
   expect(relay.joins).toEqual(['And the tests'])
   expect(await pickedUpAtOf(refused)).toBeNull()
 
