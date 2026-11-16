@@ -22,6 +22,7 @@ import {
   roleTotalOf,
   workspaceTotalsOf,
 } from '../domain/budgets.ts'
+import { InvalidBudget } from '../domain/errors.ts'
 import { useUsageCommands } from './providers.tsx'
 
 type DollarsByPeriod = Readonly<Record<BudgetPeriod, string>>
@@ -33,10 +34,17 @@ const dollarsOf = (limits: BudgetLimits) =>
   Object.fromEntries(
     budgetPeriods.map((period) => [period, limits[period] === null ? '' : String((limits[period] ?? 0) / 1_000_000)]),
   ) as DollarsByPeriod
+const dollarAmountOf = (dollars: string) => {
+  if (dollars.trim() === '') return null
+  const amount = Number(dollars)
+  if (!Number.isFinite(amount)) throw new InvalidBudget()
+  return amount
+}
 const dollarAmountsOf = (dollars: DollarsByPeriod) =>
-  Object.fromEntries(
-    budgetPeriods.map((period) => [period, dollars[period].trim() === '' ? null : Number(dollars[period])]),
-  ) as Readonly<Record<BudgetPeriod, number | null>>
+  Object.fromEntries(budgetPeriods.map((period) => [period, dollarAmountOf(dollars[period])])) as Readonly<
+    Record<BudgetPeriod, number | null>
+  >
+const limitsKeyOf = (role: RoleBudget) => [role.roleId, ...budgetPeriods.map((period) => role.limits[period])].join('/')
 
 const RoleTotal = ({ limitMicros, memberCount }: { limitMicros: number | null; memberCount: number }) => (
   <p className="text-xs text-muted">
@@ -55,7 +63,6 @@ const RoleBudgetRow = ({
 }) => {
   const [dollars, setDollars] = useState(() => dollarsOf(role.limits))
   const { errorMessage, isPending, run } = useGuardedAction()
-  useEffect(() => setDollars(dollarsOf(role.limits)), [role.limits])
   const save = () => run(() => onSave(dollarAmountsOf(dollars)))
   return (
     <tr className="border-t border-line align-top">
@@ -190,7 +197,7 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
               </thead>
               <tbody>
                 {overview.roles.map((role) => (
-                  <RoleBudgetRow key={role.roleId} role={role} onSave={saveOf(role.roleId)} />
+                  <RoleBudgetRow key={limitsKeyOf(role)} role={role} onSave={saveOf(role.roleId)} />
                 ))}
               </tbody>
               <tfoot>
