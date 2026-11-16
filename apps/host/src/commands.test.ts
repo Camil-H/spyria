@@ -688,6 +688,11 @@ test('the status of a runtime left paused by an interrupted snapshot resumes it 
 })
 
 const browserKey = 'f'.repeat(32)
+const failureOf = (promise: Promise<unknown>) =>
+  promise.then(
+    () => 'no failure',
+    (error: Error) => error.message,
+  )
 const browserName = `spyria-rt-runtime-1-browser-${browserKey}`
 const browserDocker = ({
   isRuntimeRunning = true,
@@ -844,18 +849,20 @@ test('a profile older than the sign-in lifetime, or a browser left from an earli
 })
 
 test('a browser starts only on a running runtime of this host, with room for it, and is never one of another runtime', async () => {
-  await expect(browserDocker({ isRuntimeRunning: false }).runner.run(startBrowser)).rejects.toThrow(
+  expect(await failureOf(browserDocker({ isRuntimeRunning: false }).runner.run(startBrowser))).toContain(
     'runtime is not running',
   )
   const full = browserDocker({ freeBytes: 512 * 1024 ** 2 })
-  await expect(full.runner.run(startBrowser)).rejects.toThrow('no room for another browser on this host')
+  expect(await failureOf(full.runner.run(startBrowser))).toContain('no room for another browser on this host')
   expect(full.requests()).toEqual([])
   const foreign = browserDocker({
     browser: { networkMode: 'container:runtime-container-id', isRunning: true, runtimeLabel: 'runtime-2' },
   })
-  await expect(foreign.runner.run(startBrowser)).rejects.toThrow('not a managed browser')
-  await expect(foreign.runner.browserNameOf('runtime-1', browserKey)).rejects.toThrow('not a managed browser')
-  await expect(browserDocker().runner.browserNameOf('runtime-1', browserKey)).rejects.toThrow('browser is not running')
+  expect(await failureOf(foreign.runner.run(startBrowser))).toContain('not a managed browser')
+  expect(await failureOf(foreign.runner.browserNameOf('runtime-1', browserKey))).toContain('not a managed browser')
+  expect(await failureOf(browserDocker().runner.browserNameOf('runtime-1', browserKey))).toContain(
+    'browser is not running',
+  )
 })
 
 test('stopping a browser stops its container and keeps its sign-ins', async () => {
@@ -927,8 +934,8 @@ test("a browser's file is read by its id from the browser's files, never by a pa
     `/containers/${browserName}/archive?path=${encodeURIComponent(`/var/lib/spyria/browser/files/${'a'.repeat(32)}`)}`,
   )
   for (const fileId of ['../profile/Cookies', 'A'.repeat(32), 'a'.repeat(31)])
-    await expect(runner.browserFilePathOf('runtime-1', browserKey, fileId)).rejects.toThrow('invalid file id')
-  await expect(browserDocker().runner.browserFilePathOf('runtime-1', browserKey, 'a'.repeat(32))).rejects.toThrow(
+    expect(await failureOf(runner.browserFilePathOf('runtime-1', browserKey, fileId))).toContain('invalid file id')
+  expect(await failureOf(browserDocker().runner.browserFilePathOf('runtime-1', browserKey, 'a'.repeat(32)))).toContain(
     'browser is not running',
   )
 })

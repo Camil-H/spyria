@@ -5,6 +5,11 @@ import { createDocker, createDockerReader } from './docker.ts'
 import { waitFor } from './testing.ts'
 
 setDefaultTimeout(300_000)
+const failureOf = (promise: Promise<unknown>) =>
+  promise.then(
+    () => 'no failure',
+    (error: Error) => error.message,
+  )
 const dockerCli = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
   dockerCli(...args)
@@ -118,7 +123,7 @@ test("a member's browser runs the runtime image beside the runtime, reaches the 
       () => true,
     )
   for (const deadline = Date.now() + 10_000; !(await isRemoved()) && Date.now() < deadline; ) await Bun.sleep(100)
-  await expect(readDocker(filePath, AbortSignal.timeout(5000))).rejects.toThrow('failed with 404')
+  expect(await failureOf(readDocker(filePath, AbortSignal.timeout(5000)))).toContain('failed with 404')
 
   const inRuntime = (command: string) => dockerText('exec', runtimeName, 'sh', '-c', command)
   expect(inRuntime('cat /proc/net/unix')).not.toContain('X11')

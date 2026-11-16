@@ -182,8 +182,12 @@ export const createRelay = ({
   const creditFor = async (stream: Stream, bytes: number, signal: AbortSignal) => {
     while (!hasCreditFor(stream, bytes) && !signal.aborted)
       await new Promise<void>((resolve) => {
-        stream.onCredit = resolve
-        signal.addEventListener('abort', () => resolve(), { once: true })
+        const resumed = () => {
+          signal.removeEventListener('abort', resumed)
+          resolve()
+        }
+        stream.onCredit = resumed
+        signal.addEventListener('abort', resumed, { once: true })
       })
   }
   const openStream = async (sid: number, frame: Frame) => {
