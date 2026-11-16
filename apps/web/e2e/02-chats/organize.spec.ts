@@ -207,7 +207,7 @@ test.describe('Organize', () => {
     })
   })
 
-  test('As a member, I drag my chats to reorder my sidebar or use Move up, and a chat I do not administer stays out of projects', async ({
+  test('As a member, I drag my chats to reorder my sidebar, seeing where each will land, and a chat I do not administer stays out of projects', async ({
     page,
   }) => {
     const looseChatNames = looseChatsOf(page).getByRole('link')
@@ -227,9 +227,25 @@ test.describe('Organize', () => {
       await expect(looseChatNames).toHaveText([/Research/, /Standup/])
     })
 
-    await test.step('moves a chat up from its menu', async () => {
-      await chatAction(page, 'Standup', 'Move up')
+    await test.step('sees a bar where the chat will land while dragging it', async () => {
+      const researchRow = looseChatsOf(page)
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('link', { name: 'Research' }) })
+      await chatRowIn(looseChatsOf(page), 'Standup').hover()
+      await page.mouse.down()
+      await chatRowIn(looseChatsOf(page), 'Research').hover({ position: { x: 8, y: 4 } })
+      await chatRowIn(looseChatsOf(page), 'Research').hover({ position: { x: 8, y: 2 } })
+      await expect(researchRow.locator('[data-drop-placement="before"]')).toBeVisible()
+      await page.mouse.up()
+      await expect(researchRow.locator('[data-drop-placement]')).toHaveCount(0)
       await expect(looseChatNames).toHaveText([/Standup/, /Research/])
+    })
+
+    await test.step('finds no Move up or Move down in a chat’s menu', async () => {
+      await page.getByRole('button', { name: 'Chat actions for Standup' }).click()
+      await expect(page.getByRole('menu')).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: /Move (up|down)/ })).toHaveCount(0)
+      await page.keyboard.press('Escape')
     })
 
     await test.step('leaves a chat I do not administer in place when dropped on a project', async () => {

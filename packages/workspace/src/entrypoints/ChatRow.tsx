@@ -23,7 +23,7 @@ import type { Sidebar } from '../queries/get-sidebar.ts'
 import { NameDialog } from './NameDialog.tsx'
 import { useWorkspaceCommands } from './providers.tsx'
 import { menuTriggerClass, navLinkClass } from './ui.ts'
-import { type ChatGroup, chatDragHandlers, chatRowDropClass, useChatRowDrop, useChatStep } from './useChatDrop.ts'
+import { type ChatGroup, chatDragHandlers, useChatRowDrop } from './useChatDrop.ts'
 
 type SidebarChat = Sidebar['looseChats'][number]
 export type ChatAdornment = (chatId: ChatId) => ReactNode
@@ -52,10 +52,16 @@ export const ChatRow = ({
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(chat.type)
   const chatTypeId = useId()
   const indicatorsId = useId()
-  const rowDrop = useChatRowDrop(chat.id, { workspaceId, group, chatAction })
-  const { moveUp, moveDown } = useChatStep(chat.id, { workspaceId, group, chatAction })
+  const { placement: dropPlacement, ...rowDrop } = useChatRowDrop(chat.id, { workspaceId, group, chatAction })
   return (
-    <li {...rowDrop} {...chatDragHandlers(chat)} className={`flex items-center rounded-md ${chatRowDropClass}`}>
+    <li {...rowDrop} {...chatDragHandlers(chat)} className="relative flex items-center">
+      {dropPlacement && (
+        <span
+          aria-hidden
+          data-drop-placement={dropPlacement}
+          className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-focus ${dropPlacement === 'before' ? '-top-px' : '-bottom-px'}`}
+        />
+      )}
       <NavLink
         to={`/w/${workspaceId}/chats/${chat.id}`}
         aria-label={chat.name}
@@ -88,16 +94,6 @@ export const ChatRow = ({
           <Ellipsis aria-hidden className="size-4" />
         </Trigger>
         <Content align="start" className={menuContentClass}>
-          {moveUp && (
-            <Item className={menuItemClass} disabled={chatAction.isPending} onSelect={moveUp}>
-              Move up
-            </Item>
-          )}
-          {moveDown && (
-            <Item className={menuItemClass} disabled={chatAction.isPending} onSelect={moveDown}>
-              Move down
-            </Item>
-          )}
           {chat.canAdmin && (
             <>
               <Item className={menuItemClass} onSelect={() => setOpenDialog('rename')}>
