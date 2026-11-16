@@ -28,6 +28,7 @@ import {
   switcherOf,
   tabPanelOf,
   test,
+  toastOf,
 } from './fixtures'
 
 const frozenNotice = 'This chat is frozen: its owner left the workspace'
@@ -74,6 +75,9 @@ test.describe('Team', () => {
     tag: ['@spec-36', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     await invite(page, 'Nina@Example.com')
+    await expect(toastOf(page).getByRole('status')).toHaveText(
+      'Nina@Example.com is invited and gets in the next time they sign in',
+    )
     await expect(pendingInvitesOf(page)).toHaveCount(1)
     await expect(pendingInvitesOf(page)).toContainText('nina@example.com')
     await expect(pendingInvitesOf(page)).toContainText('Member')
@@ -95,6 +99,7 @@ test.describe('Team', () => {
     await invite(page, 'nina@example.com')
     await expect(pendingInvitesOf(page)).toHaveCount(1)
     await membersSectionOf(page).getByRole('button', { name: 'Revoke the invite of nina@example.com' }).click()
+    await expect(toastOf(page).getByRole('status')).toHaveText('Invite of nina@example.com revoked')
     await expect(pendingInvitesOf(page)).toHaveCount(0)
 
     const ninaPage = await openPageAs(browser, workerStack, null)
@@ -113,6 +118,7 @@ test.describe('Team', () => {
     await expect(settingsLinkOf(bobPage)).toHaveCount(0)
 
     await membersSectionOf(page).getByRole('combobox', { name: 'Role of Bob' }).selectOption('admin')
+    await expect(toastOf(page).getByRole('status')).toHaveText('Bob is now Admin')
     await expect(settingsLinkOf(bobPage)).toBeVisible()
     await openSettings(bobPage, 'Members and roles')
     await expect(membersSectionOf(bobPage)).toBeVisible()
@@ -136,6 +142,7 @@ test.describe('Team', () => {
     const dialog = page.getByRole('dialog', { name: 'Sign out everywhere' })
     await dialog.getByRole('button', { name: 'Sign out everywhere' }).click()
     await expect(dialog).toHaveCount(0)
+    await expect(toastOf(page).getByRole('status')).toHaveText('Bob is signed out everywhere')
 
     await expect(signedOutScreenOf(bobPage, 'Acme')).toBeVisible()
     await expect(memberRowOf(page, 'Bob')).toBeVisible()
@@ -187,6 +194,7 @@ test.describe('Team', () => {
       await expect(transfer.getByRole('combobox', { name: 'Transfer to' })).toHaveValue('member-alice')
       await agentScript(bobsChatId, { text: agentReplyText })
       await transfer.getByRole('button', { name: 'Transfer' }).click()
+      await expect(toastOf(page).getByRole('status')).toHaveText('Chat transferred to Alice')
       await expect(mainOf(page)).not.toContainText(frozenNotice)
       await expect(mainOf(page)).toContainText('Agent acts as Alice')
       await sendMessage(page, 'Back after the transfer')

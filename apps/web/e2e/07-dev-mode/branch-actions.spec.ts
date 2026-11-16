@@ -13,6 +13,7 @@ import {
   serverUrl,
   tabPanelOf,
   test,
+  toastOf,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -86,7 +87,7 @@ test.describe('Branch actions', () => {
     await connectGitHub(page)
     const chatId = await devChatWithCommit(page, agentScript, 'Commit totals')
     await headerButtonOf(page, 'Push').click()
-    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed spyria\/commit-totals-/)
+    await expect(toastOf(page).getByRole('status')).toContainText(/^Pushed spyria\/commit-totals-/)
     const statusLine = statusLineOf(page)
     await expect(statusLine).toContainText('Pushed branch up to date')
     await expect(statusLine).toContainText('Last push')
@@ -99,7 +100,7 @@ test.describe('Branch actions', () => {
     await form.getByLabel('Commit message').fill('Raise the total')
     await form.getByRole('button', { name: 'Commit' }).click()
     await expect(
-      tabPanelOf(page)
+      toastOf(page)
         .getByRole('status')
         .filter({ hasText: /^Committed [0-9a-f]{7}$/ }),
     ).toBeVisible()
@@ -149,7 +150,7 @@ test.describe('Branch actions', () => {
     await configureGitHubApp(page)
     await devChatWithCommit(page, agentScript, 'Toast totals')
     await headerButtonOf(page, 'Refresh').click()
-    const refreshed = tabPanelOf(page).getByRole('status').filter({ hasText: 'Changes refreshed' })
+    const refreshed = toastOf(page).getByRole('status').filter({ hasText: 'Changes refreshed' })
     await refreshed.hover()
     await page.waitForTimeout(toastShownMilliseconds + 1000)
     await expect(refreshed).toBeVisible()
@@ -157,7 +158,7 @@ test.describe('Branch actions', () => {
     await expect(refreshed).toHaveCount(0, { timeout: 10_000 })
 
     await headerButtonOf(page, 'Push').click()
-    const refusal = tabPanelOf(page).getByRole('alert')
+    const refusal = toastOf(page).getByRole('alert')
     await expect(refusal).toHaveText('Connect your GitHub account in your profile to push')
     await refusal.getByRole('button', { name: 'Dismiss' }).click()
     await expect(refusal).toHaveCount(0)
@@ -195,7 +196,7 @@ test.describe('Branch actions', () => {
 
     await headerButtonOf(page, 'Update from base').click()
     await expect(
-      tabPanelOf(page)
+      toastOf(page)
         .getByRole('status')
         .filter({ hasText: `Merged ${baseBranch}` }),
     ).toBeVisible()
@@ -232,7 +233,7 @@ test.describe('Branch actions', () => {
     await expect(prompt).toContainText('Alice')
     await expect(prompt.getByRole('listitem')).toHaveText(['src/app.ts'])
     await expect(messageContaining(page, 'Resolved the conflicts.')).toHaveCount(1)
-    await expect(tabPanelOf(page).getByRole('status').filter({ hasText: 'Asked the agent' })).toBeVisible()
+    await expect(toastOf(page).getByRole('status').filter({ hasText: 'Asked the agent' })).toBeVisible()
   })
 
   test('As a prompter, I see the status line and the diff but neither Commit nor Update from base', {

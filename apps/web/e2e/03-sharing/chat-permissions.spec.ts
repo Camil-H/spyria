@@ -3,6 +3,7 @@ import {
   addLlmKey,
   addParticipant,
   agentReplyText,
+  chatAction,
   chatLinkOf,
   composerOf,
   expect,
@@ -13,18 +14,21 @@ import {
   messageActionOf,
   messageContaining,
   messageItemsOf,
+  mutationGateOf,
   newRuntimeChat,
   openChat,
   openPanelTab,
   openSession,
   type Page,
   projectAction,
+  projectGroupOf,
   sendButtonOf,
   sendMessage,
   sessionOf,
   sidebarOf,
   panelTabOf as tabOf,
   test,
+  toastOf,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -74,6 +78,67 @@ test.describe('Chat permissions', () => {
       await expect(
         dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive with its chats' }),
       ).toHaveCount(0)
+      await bobPage.context().close()
+    })
+
+    test('As a member who administers a chat, a move, project archive or chat archive refused because I lost that right meanwhile shows its error in the sidebar and no toast', {
+      tag: ['@spec-28'],
+    }, async ({ page, browser, workerStack }) => {
+      const chatId = await newRuntimeChat(page, 'Bob archives')
+      await page.getByRole('button', { name: 'New project' }).click()
+      await dialogOf(page, 'New project').getByRole('textbox', { name: 'Project name' }).fill('Garden')
+      await dialogOf(page, 'New project').getByRole('button', { name: 'Confirm' }).click()
+      await insertRole(workerStack, 'role-steward', 'Steward', ['chat.read', 'chat.admin'])
+      await addParticipant(workerStack, chatId, 'member-bob', 'role-steward')
+      const setBobsRole = (roleId: string) => workerStack.database.$client`
+        update chat_participants set role_id = ${roleId} where chat_id = ${chatId} and user_id = 'member-bob'`
+      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+      const gate = await mutationGateOf(bobPage)
+      const refusal = sidebarOf(bobPage).getByRole('alert')
+      const refusalText = 'You need the chat.admin permission on this chat'
+      const runRefused = async (act: () => Promise<void>) => {
+        gate.hold()
+        await act()
+        await setBobsRole('prompter')
+        gate.release()
+        await expect(refusal).toHaveText(refusalText)
+      }
+      const restoreAndMove = async (destination: string, confirmation: string) => {
+        await setBobsRole('role-steward')
+        await chatAction(bobPage, 'Bob archives', 'Move to')
+        await bobPage.getByRole('menuitem', { name: destination }).click()
+        await expect(toastOf(bobPage).getByRole('status')).toHaveText(confirmation)
+        await expect(refusal).toHaveCount(0)
+      }
+
+      await test.step('a refused move leaves the chat out of the project', async () => {
+        await runRefused(async () => {
+          await chatAction(bobPage, 'Bob archives', 'Move to')
+          await bobPage.getByRole('menuitem', { name: 'Garden' }).click()
+        })
+        await expect(toastOf(bobPage).getByRole('status')).toHaveCount(0)
+        await expect(projectGroupOf(bobPage, 'Garden').getByRole('link', { name: 'Bob archives' })).toHaveCount(0)
+      })
+
+      await test.step('a refused project archive with its chats keeps the project', async () => {
+        await restoreAndMove('Garden', 'Bob archives moved to Garden')
+        await runRefused(async () => {
+          await projectAction(bobPage, 'Garden', 'Archive project')
+          await dialogOf(bobPage, 'Archive project').getByRole('button', { name: 'Archive with its chats' }).click()
+        })
+        await expect(toastOf(bobPage)).not.toContainText('Garden archived')
+        await expect(projectGroupOf(bobPage, 'Garden').getByRole('link', { name: 'Bob archives' })).toBeVisible()
+      })
+
+      await test.step('a refused chat archive keeps the chat', async () => {
+        await restoreAndMove('No project', 'Bob archives is no longer in a project')
+        await runRefused(async () => {
+          await chatAction(bobPage, 'Bob archives', 'Archive chat')
+          await dialogOf(bobPage, 'Archive chat').getByRole('button', { name: 'Archive' }).click()
+        })
+        await expect(toastOf(bobPage)).not.toContainText('Bob archives archived')
+        await expect(chatLinkOf(bobPage, 'Bob archives')).toBeVisible()
+      })
       await bobPage.context().close()
     })
   })

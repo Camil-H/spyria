@@ -14,6 +14,7 @@ import {
   menuItemClass,
   tooltipClass,
   type useGuardedAction,
+  useNotifiedRun,
 } from '@spyria/ui'
 import { Ellipsis } from 'lucide-react'
 import { type ReactNode, useId, useState } from 'react'
@@ -44,6 +45,8 @@ export const ChatRow = ({
   chatAdornment?: ChatAdornment
 }) => {
   const commands = useWorkspaceCommands()
+  const runNotified = useNotifiedRun(chatAction.run)
+  const isPublic = chat.visibility === 'public'
   const [openDialog, setOpenDialog] = useState<'rename' | 'archive' | null>(null)
   const closeDialog = () => setOpenDialog(null)
   const { Icon: ChatTypeIcon, label: chatTypeLabel } = chatTypeIconOf(chat.type)
@@ -103,7 +106,14 @@ export const ChatRow = ({
                     <Item
                       className={menuItemClass}
                       key={project.id ?? ''}
-                      onSelect={() => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id })}
+                      onSelect={() =>
+                        runNotified(
+                          () => commands.moveChat({ workspaceId, chatId: chat.id, projectId: project.id }),
+                          project.id
+                            ? `${chat.name} moved to ${project.name}`
+                            : `${chat.name} is no longer in a project`,
+                        )
+                      }
                     >
                       {project.name}
                     </Item>
@@ -114,16 +124,20 @@ export const ChatRow = ({
                 className={menuItemClass}
                 disabled={chatAction.isPending}
                 onSelect={() =>
-                  chatAction.run(() =>
-                    commands.changeVisibility({
-                      workspaceId,
-                      chatId: chat.id,
-                      visibility: chat.visibility === 'public' ? 'private' : 'public',
-                    }),
+                  runNotified(
+                    () =>
+                      commands.changeVisibility({
+                        workspaceId,
+                        chatId: chat.id,
+                        visibility: isPublic ? 'private' : 'public',
+                      }),
+                    isPublic
+                      ? `${chat.name} is now private: only its members can see it`
+                      : `${chat.name} is now public: anyone in the workspace can find and join it`,
                   )
                 }
               >
-                {chat.visibility === 'public' ? 'Make private' : 'Make public'}
+                {isPublic ? 'Make private' : 'Make public'}
               </Item>
               <Item className={menuItemClass} onSelect={() => setOpenDialog('archive')}>
                 Archive chat
@@ -134,7 +148,9 @@ export const ChatRow = ({
             <Item
               className={menuItemClass}
               disabled={chatAction.isPending}
-              onSelect={() => chatAction.run(() => commands.leaveChat({ workspaceId, chatId: chat.id }))}
+              onSelect={() =>
+                runNotified(() => commands.leaveChat({ workspaceId, chatId: chat.id }), `You left ${chat.name}`)
+              }
             >
               {chat.type === 'channel' ? 'Leave channel' : 'Leave chat'}
             </Item>
@@ -156,8 +172,9 @@ export const ChatRow = ({
             type="button"
             data-initial-focus
             className={buttonClass}
+            disabled={chatAction.isPending}
             onClick={async () => {
-              await commands.archiveChat({ workspaceId, chatId: chat.id })
+              await runNotified(() => commands.archiveChat({ workspaceId, chatId: chat.id }), `${chat.name} archived`)
               closeDialog()
             }}
           >

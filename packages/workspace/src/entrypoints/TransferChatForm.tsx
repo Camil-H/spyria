@@ -1,7 +1,7 @@
 import { useQuery } from '@spyria/db/react'
 import { type ChatId, memberId as toMemberId, type WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
-import { buttonClass, ErrorMessage, fieldClass, useGuardedAction } from '@spyria/ui'
+import { buttonClass, ErrorMessage, fieldClass, useGuardedAction, useNotifiedRun } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { listMembers } from '../queries/list-members.ts'
 import { useWorkspaceCommands } from './providers.tsx'
@@ -13,11 +13,16 @@ export const TransferChatForm = ({ workspaceId, chatId }: { workspaceId: Workspa
   const canTransfer = useWorkspacePermissions(workspaceId).includes('members.manage')
   const members = useQuery(listMembers, workspaceId)
   const [ownerId, setOwnerId] = useState<string>(memberId)
-  const { errorMessage, isPending, run } = useGuardedAction()
+  const { errorMessage, isPending, run: runGuarded } = useGuardedAction()
+  const run = useNotifiedRun(runGuarded)
   if (!canTransfer) return null
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    await run(() => commands.transferChat({ workspaceId, chatId, ownerId: toMemberId(ownerId) }))
+    const newOwnerName = members.find((member) => member.id === ownerId)?.name ?? 'the new owner'
+    await run(
+      () => commands.transferChat({ workspaceId, chatId, ownerId: toMemberId(ownerId) }),
+      `Chat transferred to ${newOwnerName}`,
+    )
   }
   return (
     <form aria-label="Transfer chat" onSubmit={submit} className="flex flex-wrap items-center justify-center gap-2">

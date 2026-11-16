@@ -13,6 +13,7 @@ import {
   projectGroupOf,
   sidebarOf,
   test,
+  toastOf,
 } from './fixtures'
 
 const moveChatTo = async (page: Page, chatName: string, destination: string) => {
@@ -160,6 +161,7 @@ test.describe('Organize', () => {
       await chatRowIn(looseChatsOf(page), 'Research').click()
       const urlBeforeMove = page.url()
       await moveChatTo(page, 'Research', 'Billing')
+      await expect(toastOf(page).getByRole('status')).toHaveText('Research moved to Billing')
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Research' })).toBeVisible()
       expect(page.url()).toBe(urlBeforeMove)
     })
@@ -171,6 +173,7 @@ test.describe('Organize', () => {
 
     await test.step('moves a chat out of its project', async () => {
       await moveChatTo(page, 'Invoice bug', 'No project')
+      await expect(toastOf(page).getByRole('status')).toHaveText('Invoice bug is no longer in a project')
       await expect(chatRowIn(looseChatsOf(page), 'Invoice bug')).toBeVisible()
       await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Invoice bug')).toHaveCount(0)
     })
@@ -301,6 +304,7 @@ test.describe('Organize', () => {
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' })).toBeVisible()
       await projectAction(page, 'Billing', 'Archive project')
       await page.getByRole('button', { name: 'Archive with its chats' }).click()
+      await expect(toastOf(page).getByRole('status')).toHaveText('Billing archived with its chats')
       await expect(mainOf(page).getByRole('heading', { level: 1 })).toHaveCount(0)
       await expect(mainOf(page)).toContainText('Select a chat')
     })
@@ -314,6 +318,9 @@ test.describe('Organize', () => {
   test('As a member, I archive a project and keep its chats as loose chats', async ({ page }) => {
     await projectAction(page, 'Billing', 'Archive project')
     await page.getByRole('button', { name: 'Archive, keep chats' }).click()
+    await expect(toastOf(page).getByRole('status')).toHaveText(
+      'Billing archived, its chats are now outside any project',
+    )
     await expect(projectGroupOf(page, 'Billing')).toHaveCount(0)
     await expect(chatRowIn(looseChatsOf(page), 'Invoice bug')).toBeVisible()
   })
@@ -322,6 +329,7 @@ test.describe('Organize', () => {
     await test.step('returns the main area to its empty state when the selected chat is archived by itself', async () => {
       await chatRowIn(looseChatsOf(page), 'Research').click()
       await archiveChat(page, 'Research')
+      await expect(toastOf(page).getByRole('status')).toHaveText('Research archived')
       await expect(mainOf(page)).toContainText('Select a chat')
     })
 

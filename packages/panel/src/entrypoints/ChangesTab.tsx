@@ -1,8 +1,8 @@
 import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
-import { iconButtonClass } from '@spyria/ui'
+import { iconButtonClass, useNotify } from '@spyria/ui'
 import { ChevronsDownUp, ChevronsUpDown, FileDiff, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { branchStatusOf, changeGroupsOf, commitsOf } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
@@ -13,7 +13,6 @@ import { GitActions } from './GitActions.tsx'
 import { PublishActions } from './PublishActions.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass, moreCommitsNotice } from './ui.ts'
-import { useActionNotice } from './useActionNotice.tsx'
 import { useFileExpansion } from './useFileExpansion.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
 import { WorkspaceStatus } from './WorkspaceStatus.tsx'
@@ -24,7 +23,7 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const changesReading = useWorkspaceReading(workspaceId, chatId, 'changes')
   const commitsReading = useWorkspaceReading(workspaceId, chatId, 'commits')
   const statusReading = useWorkspaceReading(workspaceId, chatId, 'status')
-  const { toast, notify } = useActionNotice()
+  const notify = useNotify()
   const [isRefreshAsked, setIsRefreshAsked] = useState(false)
   const commits = commitsReading.reading
   const isRead = changesReading.reading !== undefined && commits !== undefined
@@ -34,10 +33,12 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const expansionLabel = isAnyExpanded ? 'Collapse all' : 'Open all'
   const status = branchStatusOf(statusReading.reading)
   const isRefreshing = changesReading.isLoading || commitsReading.isLoading || statusReading.isLoading
-  if (isRefreshAsked && !isRefreshing) {
+  const isRefreshDone = isRefreshAsked && !isRefreshing
+  useEffect(() => {
+    if (!isRefreshDone) return
     setIsRefreshAsked(false)
-    notify({ isRefused: false, text: 'Changes refreshed' })
-  }
+    notify({ text: 'Changes refreshed' })
+  }, [isRefreshDone, notify])
   const refresh = () => {
     changesReading.refresh()
     commitsReading.refresh()
@@ -133,7 +134,6 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
         </section>
       ))}
       {commits?.hasMoreCommits === true && <p className={emptyClass}>{moreCommitsNotice}</p>}
-      {toast}
     </div>
   )
 }
