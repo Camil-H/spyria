@@ -11,7 +11,7 @@ export type BrowserMessage =
   | Readonly<{ type: 'page'; url: string; title: string }>
   | Readonly<{ type: 'notice'; text: string }>
   | Readonly<{ type: 'file_chooser'; multiple: boolean }>
-  | Readonly<{ type: 'download'; name: string; data: string }>
+  | Readonly<{ type: 'download'; token: string; name: string; size: number }>
 type Size = Readonly<{ width: number; height: number }>
 
 const searchUrl = 'https://www.bing.com/search?q='
