@@ -6,7 +6,10 @@ export type FormattingKey = Readonly<{ key: string; isPrimary: boolean; isShift:
 const markerOf = { bold: '**', italic: '*', underline: '__' } as const
 const urlPattern = /^https?:\/\/\S+$/
 const listItemPattern = /^(\s*)(?:([-*+])|(\d{1,9})([.)]))\s+(\[[ xX]\]\s+)?/
+const listMarkerPattern = /^( *)(?:[-*+]|\d{1,9}[.)]) +/
 const linkPlaceholder = 'url'
+
+type ListLine = Readonly<{ text: string; indent: number; contentColumn: number }>
 
 const withoutSurroundingSpaces = ({ text, start, end }: TextSelection): TextSelection => {
   const selected = text.slice(start, end)
@@ -115,4 +118,50 @@ export const continuedList = ({ text, start, end }: TextSelection): TextEdit | u
     return { start: lineStart, end: lineEnd, insert: '', selectStart: lineStart, selectEnd: lineStart }
   const next = `\n${indent}${bullet ?? `${Number(number) + 1}${delimiter}`} ${task ? '[ ] ' : ''}`
   return { start, end, insert: next, selectStart: start + next.length, selectEnd: start + next.length }
+}
+
+const listLineOf = (text: string): ListLine | undefined => {
+  const match = listMarkerPattern.exec(text)
+  return match ? { text, indent: match[1]?.length ?? 0, contentColumn: match[0].length } : undefined
+}
+
+const lineEndOf = (text: string, index: number) => {
+  const end = text.indexOf('\n', index)
+  return end === -1 ? text.length : end
+}
+
+const nestedIndentOf = (earlierLines: readonly string[], line: ListLine, isOutdent: boolean) => {
+  for (const earlierLine of earlierLines.toReversed()) {
+    const earlier = listLineOf(earlierLine)
+    if (!earlier) break
+    if (isOutdent && earlier.indent < line.indent) return earlier.indent
+    if (!isOutdent && earlier.indent === line.indent) return earlier.contentColumn
+    if (!isOutdent && earlier.indent < line.indent) return line.indent
+  }
+  return isOutdent ? 0 : line.indent
+}
+
+export const indentedList = ({ text, start, end }: TextSelection, isOutdent: boolean): TextEdit | undefined => {
+  const firstLineStart = text.lastIndexOf('\n', start - 1) + 1
+  const isEndAfterNewLine = end > start && text[end - 1] === '\n'
+  const lastLineEnd = lineEndOf(text, isEndAfterNewLine ? end - 1 : end)
+  const lines = text.slice(firstLineStart, lastLineEnd).split('\n')
+  const items = lines.flatMap((line) => listLineOf(line) ?? [])
+  const [first] = items
+  if (!first || items.length !== lines.length) return undefined
+  const earlierLines = text.slice(0, firstLineStart).split('\n').slice(0, -1)
+  const shift = nestedIndentOf(earlierLines, first, isOutdent) - first.indent
+  if (shift === 0) return undefined
+  const shifted = items.map(
+    ({ text: line, indent }) => `${' '.repeat(Math.max(0, indent + shift))}${line.slice(indent)}`,
+  )
+  const insert = shifted.join('\n')
+  const selectStart = Math.max(firstLineStart, start + (shifted[0] ?? '').length - first.text.length)
+  return {
+    start: firstLineStart,
+    end: lastLineEnd,
+    insert,
+    selectStart,
+    selectEnd: Math.max(selectStart, end + insert.length - (lastLineEnd - firstLineStart)),
+  }
 }

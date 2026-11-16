@@ -4,6 +4,7 @@ import {
   type Formatting,
   formattedText,
   formattingOfKey,
+  indentedList,
   linkedPaste,
   type TextEdit,
   type TextSelection,
@@ -95,4 +96,28 @@ test('shortcuts need the platform key alone, plus Shift only for code', () => {
   expect(key('b', { isShift: true })).toBeUndefined()
   expect(key('b', { isPrimary: false })).toBeUndefined()
   expect(key('b', { isOtherModifier: true })).toBeUndefined()
+})
+
+const indented = (marked: string, isOutdent = false) =>
+  applied(selectionOf(marked), indentedList(selectionOf(marked), isOutdent))
+
+test('Tab nests a list item under the item above it, and Shift+Tab brings it back', () => {
+  expect(indented('- first\n- sec{}ond')).toBe('- first\n  - sec{}ond')
+  expect(indented('1. first\n- sec{}ond')).toBe('1. first\n   - sec{}ond')
+  expect(indented('- first\n  - nested\n  - mo{}re')).toBe('- first\n  - nested\n    - mo{}re')
+  expect(indented('- first\n  - sec{}ond', true)).toBe('- first\n- sec{}ond')
+  expect(indented('- first\n  - nested\n    - de{}ep', true)).toBe('- first\n  - nested\n  - de{}ep')
+})
+
+test('Tab and Shift+Tab move every selected item and keep the selection', () => {
+  expect(indented('- first\n- {second\n  - nested}')).toBe('- first\n  - {second\n    - nested}')
+  expect(indented('- first\n  - {second\n    - nested}', true)).toBe('- first\n- {second\n  - nested}')
+})
+
+test('Tab leaves the message box as usual on an item that cannot move and on a line outside a list', () => {
+  expect(indented('- fir{}st')).toBeUndefined()
+  expect(indented('- fir{}st', true)).toBeUndefined()
+  expect(indented('- first\n  - nested\n- sec{}ond', true)).toBeUndefined()
+  expect(indented('plain {}text')).toBeUndefined()
+  expect(indented('- {first\nplain} text')).toBeUndefined()
 })

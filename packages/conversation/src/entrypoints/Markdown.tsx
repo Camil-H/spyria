@@ -1,10 +1,13 @@
 import { CopyButton, focusRing } from '@spyria/ui'
-import { Children, memo, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
+import type { Element as HastElement } from 'hast'
+import { fromDom } from 'hast-util-from-dom'
+import { Children, type ClipboardEvent, memo, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { isRuntimeMediaPath } from '../domain/attachments.ts'
 import { mentionSegmentsOf } from '../domain/mentions.ts'
 import { streamedBlocksOf } from '../domain/streamed-markdown.ts'
+import { copiedSelectionOf, copySkippedAttribute } from './copied-markdown.ts'
 import { RuntimeMedia } from './Media.tsx'
 import { isShownImage, withDefinitionsShared } from './markdown-outline.ts'
 import { LoadedRemoteImagesContext } from './providers.tsx'
@@ -142,7 +145,7 @@ const CodeBlock = ({ code, language }: { code: string; language: string | undefi
         className={`absolute top-1 right-1 rounded-md px-2 py-0.5 text-xs text-muted hover:bg-hover ${focusRing}`}
       />
       <pre className="overflow-x-auto rounded-md border border-line bg-app p-2 text-xs">
-        <code className={tokenColors}>{highlighted ?? code}</code>
+        <code className={language ? `${tokenColors} language-${language}` : tokenColors}>{highlighted ?? code}</code>
       </pre>
     </div>
   )
@@ -151,7 +154,11 @@ const CodeBlock = ({ code, language }: { code: string; language: string | undefi
 const components: Components = {
   a: ({ href, children }) => (
     <a href={href} target="_blank" rel="noopener noreferrer" className="text-link underline">
-      {children} <span className="text-xs text-muted">({domainOf(href)})</span>
+      {children}
+      <span {...{ [copySkippedAttribute]: '' }} className="text-xs text-muted">
+        {' '}
+        ({domainOf(href)})
+      </span>
     </a>
   ),
   img: ({ src, alt, ...properties }) => {
@@ -185,6 +192,35 @@ type MarkdownBlocksProps = MarkdownProps & { autoLoadedImages?: number }
 const markdownClassName =
   'flex flex-col gap-2 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-hover [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:text-xs'
 
+const inlineSelector = 'a, b, code, del, em, i, s, strong, u'
+const blockSelector = 'blockquote, div, h1, h2, h3, h4, h5, h6, hr, li, ol, p, pre, table, tr, ul'
+
+const elementOf = (node: Node) => (node instanceof Element ? node : node.parentElement)
+
+const copyAsMarkdown = (event: ClipboardEvent<HTMLElement>) => {
+  const selection = document.getSelection()
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined
+  const container = event.currentTarget
+  if (!range || range.collapsed || !container.contains(range.commonAncestorContainer)) return
+  const fragment = range.cloneContents()
+  const isWithinOneBlock = fragment.querySelector(blockSelector) === null
+  const commonElement = elementOf(range.commonAncestorContainer)
+  if (isWithinOneBlock && commonElement?.closest('pre')) return
+  let selected: Node = fragment
+  for (let element = commonElement; element && element !== container; element = element.parentElement) {
+    if (isWithinOneBlock && !element.matches(inlineSelector)) break
+    const shell = element.cloneNode(false)
+    shell.appendChild(selected)
+    selected = shell
+  }
+  const copied = document.createElement('div')
+  copied.appendChild(selected)
+  const { html, markdown } = copiedSelectionOf(fromDom(copied) as HastElement)
+  event.preventDefault()
+  event.clipboardData.setData('text/plain', markdown)
+  event.clipboardData.setData('text/html', html)
+}
+
 const MarkdownBlocks = memo(
   ({
     text,
@@ -212,7 +248,7 @@ export const StreamedMarkdown = ({ text, ...options }: MarkdownProps) => {
   const { completed, tail } = streamedBlocksOf(text)
   let imagesBefore = 0
   return (
-    <div className={markdownClassName}>
+    <div className={markdownClassName} onCopy={copyAsMarkdown}>
       {withDefinitionsShared(completed, tail).map((block) => {
         const autoLoadedImages = Math.max(0, autoLoadedImagesPerMessage - imagesBefore)
         imagesBefore += block.shownImages
@@ -223,7 +259,7 @@ export const StreamedMarkdown = ({ text, ...options }: MarkdownProps) => {
 }
 
 const Markdown = (props: MarkdownProps) => (
-  <div className={markdownClassName}>
+  <div className={markdownClassName} onCopy={copyAsMarkdown}>
     <MarkdownBlocks {...props} />
   </div>
 )
