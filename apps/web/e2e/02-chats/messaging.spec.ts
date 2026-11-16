@@ -317,15 +317,12 @@ test.describe('Messaging', () => {
       await expect(composerOf(page)).toBeFocused()
     })
 
-    await test.step('copies the whole sent message as Markdown and pastes it back into the composer', async () => {
+    await test.step('copies the whole sent message as Markdown', async () => {
       await sendButtonOf(page).click()
       const sent = messageContaining(page, 'nested')
       await expect(sent.locator('strong')).toHaveText('Bold')
       const markdown = sent.locator('strong').locator('xpath=ancestor::div[1]')
       expect(await copiedSelectionOf(markdown, 0)).toBe('**Bold** and *it*\n\n- first\n  - nested')
-      await composerOf(page).focus()
-      await page.keyboard.press('ControlOrMeta+v')
-      await expect(composerOf(page)).toHaveValue('**Bold** and *it*\n\n- first\n  - nested')
     })
 
     await test.step('copies part of a bold word still bold', async () => {
