@@ -58,7 +58,7 @@ The chip in the chat shows the session model and effort (before the first prompt
 
 In a session on a member's machine, the owner picks the tool's own **Model** and **Effort** instead, from the lists Claude Code or Codex report.
 
-Next to the chip, a circle shows how full the agent's context is: the tokens of its latest model call out of the model's context window, turning red from 80%, with the figures in its tooltip. It updates after every model call of the main agent, not its subagents, empties when the model is switched or a new session starts until the next call, and shows the tokens alone when the window is unknown. The tooltip shows on hover and on keyboard focus. For the calls Spyria relays, the window comes from the gateway's model list; for Claude Code and Codex on a member's subscription, both figures come from what the agent reports after each call.
+Next to the chip, a circle shows how full the agent's context is: the tokens of its latest model call out of the model's context window, turning red from 80%, with the figures in its tooltip. It updates after every model call of the main agent, not its subagents, empties when the model is switched or a new session starts until the next call, and shows the tokens alone when the window is unknown. The tooltip shows on hover and on keyboard focus. For the calls Spyria relays, the window comes from the gateway's model list; for Claude Code and Codex on a member's subscription, both figures come from what the agent reports after each call. A member who may prompt the chat clicks the circle to **Compact the conversation** when the agent is not working: it sends `/compact`, which summarizes the earlier conversation to free up context, and the circle shrinks once it is done. Typing `/compact`, with optional instructions after it to focus the summary, does the same; Claude Code and Codex run their own `/compact`, and on a Spyria runtime the summary runs on the cheapest model as below.
 
 ## Questions
 
@@ -133,7 +133,7 @@ Live text streams to viewers over a WebSocket; only completed events are stored 
 
 ## Long conversations
 
-When a Pi session's context fills up, Pi compacts the earlier conversation into a summary. Spyria makes that summary run on the prompter's cheapest reachable model rather than the session model, because summarizing does not need the strongest model. When an agent session cannot be resumed (for example after its runtime was removed), the agent starts a new one and the chat says that it does not remember earlier messages.
+When a Pi session's context fills up, or a member compacts it from the context circle, Pi compacts the earlier conversation into a summary. Spyria makes that summary run on the prompter's cheapest reachable model rather than the session model, because summarizing does not need the strongest model. When an agent session cannot be resumed (for example after its runtime was removed), the agent starts a new one and the chat says that it does not remember earlier messages.
 
 ## Budgets and usage, as a member sees them
 

@@ -988,7 +988,7 @@ const piCommands = {
   get_state: () => ({
     sessionFile: sessionFile(piSessionId),
     sessionId: piSessionId,
-    model: piModelOf(piSession().model),
+    model: { ...piModelOf(piSession().model), contextWindow: 200_000 },
     thinkingLevel: piSession().thought_level,
   }),
   get_available_models: () => ({ models: models.map(({ value, name }) => ({ ...piModelOf(value), name })) }),
@@ -1016,6 +1016,11 @@ const piCommands = {
     piSend({ type: 'queue_update', steering: [], followUp: [] })
     return { steering, followUp: [] }
   },
+  compact: ({ customInstructions }) => ({
+    summary: 'The earlier conversation, summarized.',
+    tokensBefore: 150_000,
+    estimatedTokensAfter: customInstructions ? 24_000 : 32_000,
+  }),
   abort: async () => {
     cancel(piSession())
     await queues.get(piSessionId)
