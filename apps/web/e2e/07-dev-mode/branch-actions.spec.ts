@@ -100,7 +100,7 @@ test.describe('Branch actions', () => {
     await form.getByLabel('Commit message').fill('Raise the total')
     await form.getByRole('button', { name: 'Commit' }).click()
     await expect(
-      tabPanelOf(page)
+      toastOf(page)
         .getByRole('status')
         .filter({ hasText: /^Committed [0-9a-f]{7}$/ }),
     ).toBeVisible()
@@ -196,7 +196,7 @@ test.describe('Branch actions', () => {
 
     await headerButtonOf(page, 'Update from base').click()
     await expect(
-      tabPanelOf(page)
+      toastOf(page)
         .getByRole('status')
         .filter({ hasText: `Merged ${baseBranch}` }),
     ).toBeVisible()
