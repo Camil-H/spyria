@@ -9,6 +9,7 @@ import {
   bobInAcme,
   failedWith,
   fakeBrowserFrame,
+  fakeBrowserImageFile,
   fakeBrowserSnapshot,
   lee,
   mcpCall,
@@ -48,7 +49,7 @@ const toolCallRows = async (chatId: string) => [
     where chat_id = ${chatId} order by called_at`),
 ]
 
-test("the agent drives the browser of the member who prompted, through the host, and never another member's, an answer sent in parts arriving whole", async () => {
+test("the agent drives the browser of the member who prompted, through the host, and never another member's, a screenshot coming back from a file of that browser", async () => {
   await setBrowserSettings({})
   const host = await fakeHost('Browser routing host')
   const { chatId, token } = await runtimeTurn(host, bob)
@@ -81,8 +82,9 @@ test("the agent drives the browser of the member who prompted, through the host,
   const alicesKey = await browserKeyOf(chatId, alice)
   expect(alicesKey).not.toBe(bobsKey)
   const alicesMessages = () => host.browsers.received(alicesKey).map(({ type, command }) => type ?? command)
-  await waitFor(() => alicesMessages().length === 4)
-  expect(alicesMessages()).toEqual(['settings', 'screenshot', 'part_ack', 'part_ack'])
+  await waitFor(() => alicesMessages().length === 3)
+  expect(alicesMessages()).toEqual(['settings', 'screenshot', 'file_read'])
+  expect(host.browsers.received(alicesKey).at(-1)).toEqual({ type: 'file_read', file: fakeBrowserImageFile })
   expect(host.browsers.received(bobsKey)).toHaveLength(2)
   expect(await toolCallRows(chatId)).toEqual([
     {
@@ -286,6 +288,52 @@ test('a member watches and drives only their own browser; the actions they send 
   const lees = await watchBrowser(chatId, lee)
   expect(await lees.stateOf()).toMatchObject({ state: 'unavailable' })
   for (const watcher of [bobs, alices, lees]) watcher.close()
+})
+
+test("a file the member's browser downloads reaches only that member, once, through a token that never shows in an address", async () => {
+  await setBrowserSettings({})
+  const host = await fakeHost('Browser download host')
+  const { chatId } = await runtimeTurn(host, bob)
+  const bobs = await watchBrowser(chatId, bob)
+  const alices = await watchBrowser(chatId, alice)
+  expect(await bobs.stateOf()).toMatchObject({ state: 'running' })
+  expect(await alices.stateOf()).toMatchObject({ state: 'running' })
+  const file = 'd'.repeat(32)
+  const video = Buffer.from(Array.from({ length: 300_000 }, (_, index) => index % 251))
+  host.browsers.files.set(file, video)
+  host.browsers.emit(await browserKeyOf(chatId, bob), {
+    type: 'download',
+    file,
+    name: 'clip été.mp4',
+    size: video.length,
+  })
+  await waitFor(() => bobs.frames.some(({ type }) => type === 'download'))
+  const offered = bobs.frames.find(({ type }) => type === 'download')
+  expect(offered).toEqual({
+    type: 'download',
+    token: expect.stringMatching(/^[a-f0-9]{64}$/),
+    name: 'clip été.mp4',
+    size: video.length,
+  })
+  expect(alices.frames.some(({ type }) => type === 'download')).toBe(false)
+
+  const fetchDownload = (token: unknown) =>
+    app.request('/api/browser-downloads', { method: 'POST', body: new URLSearchParams({ token: String(token) }) })
+  const downloaded = await fetchDownload(offered?.token)
+  expect(downloaded.status).toBe(200)
+  expect(downloaded.headers.get('content-disposition')).toBe(
+    `attachment; filename="clip _t_.mp4"; filename*=UTF-8''clip%20%C3%A9t%C3%A9.mp4`,
+  )
+  expect(Buffer.from(await downloaded.arrayBuffer())).toEqual(video)
+  const bobsKey = await browserKeyOf(chatId, bob)
+  await waitFor(() => host.browsers.received(bobsKey).some(({ type }) => type === 'file_read'))
+  expect(host.browsers.received(bobsKey).filter(({ type }) => type === 'file_read')).toEqual([
+    { type: 'file_read', file },
+  ])
+  expect((await fetchDownload(offered?.token)).status).toBe(404)
+  expect((await fetchDownload('0'.repeat(64))).status).toBe(404)
+  bobs.close()
+  alices.close()
 })
 
 test('with browsing off for members, a member watches the agent in their browser but cannot drive it', async () => {

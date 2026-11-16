@@ -940,45 +940,43 @@ const fakeBrowserAnswerOf = (message: FakeBrowserMessage) => {
   if (message.command === 'snapshot') return fakeBrowserSnapshot
   if (message.command === 'would_submit') return message.ref === 'e1'
   if (message.command === 'open') return `Opened Example (${message.url})`
-  if (message.command === 'screenshot') return { text: 'Screenshot of Example', image: 'aW1hZ2U=' }
   return `${message.command} done`
 }
+export const fakeBrowserImageFile = 'f'.repeat(32)
 const createFakeBrowsers = () => {
   const received = new Map<string, FakeBrowserMessage[]>()
   const outputs = new Map<string, (message: object) => void>()
+  const files = new Map<string, Buffer>()
   return {
+    files,
     received: (browserKey: string) => received.get(browserKey) ?? [],
+    readFile: ({ fileId, send, close }: { fileId: string; send(data: string): void; close(): void }) => {
+      const file = files.get(fileId)
+      if (file) send(file.toString('base64'))
+      close()
+    },
     keys: () => [...received.keys()],
     emit: (browserKey: string, message: object) => outputs.get(browserKey)?.(message),
     connect: ({ browserKey, send }: { browserKey: string; send(data: string): void }) => {
       const messages = received.get(browserKey) ?? []
       received.set(browserKey, messages)
       const emit = (message: object) => send(JSON.stringify(message))
-      const waitingParts: string[] = []
-      const emitInParts = (message: object) => {
-        const line = JSON.stringify(message)
-        const half = Math.ceil(line.length / 2)
-        waitingParts.push(line.slice(half))
-        emit({ type: 'part', data: line.slice(0, half), isLast: false })
-      }
       outputs.set(browserKey, emit)
       return {
         onMessage: (data: string) => {
           const message = JSON.parse(data) as FakeBrowserMessage
           messages.push(message)
-          if (message.type === 'part_ack') {
-            const rest = waitingParts.shift()
-            return rest === undefined ? undefined : emit({ type: 'part', data: rest, isLast: true })
-          }
           if (message.type === 'settings') return emit({ type: 'ready' })
           if (message.type === 'watch') {
             emit({ type: 'page', url: 'https://example.com/', title: 'Example' })
             return emit({ type: 'frame', data: fakeBrowserFrame, width: 800, height: 600 })
           }
           if (message.command === 'open') emit({ type: 'visited', url: message.url })
-          const answer = { id: message.id, result: fakeBrowserAnswerOf(message) }
-          if (message.command === 'screenshot') return emitInParts(answer)
-          if (typeof message.command === 'string') emit(answer)
+          if (message.command === 'screenshot') {
+            files.set(fakeBrowserImageFile, Buffer.from('image'))
+            return emit({ id: message.id, result: { text: 'Screenshot of Example', imageFile: fakeBrowserImageFile } })
+          }
+          if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })
         },
         onClose: () => outputs.delete(browserKey),
       }
@@ -1190,8 +1188,15 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             receivedFrames.push(JSON.stringify(request))
             answerHttp(request)
           }
-          const { browserKey } = frame as HostFrame & { browserKey?: string }
-          if (frame.type === 'ws_connect' && browserKey !== undefined) {
+          const { browserKey, fileId } = frame as HostFrame & { browserKey?: string; fileId?: string }
+          if (frame.type === 'ws_connect' && fileId !== undefined) {
+            send({ type: 'ws_open', sid })
+            browsers.readFile({
+              fileId,
+              send: (data) => send({ type: 'ws_msg', sid, data }),
+              close: () => send({ type: 'ws_close', sid }),
+            })
+          } else if (frame.type === 'ws_connect' && browserKey !== undefined) {
             send({ type: 'ws_open', sid })
             streams.set(
               sid,

@@ -304,8 +304,10 @@ export const createRuntimeHostGateway = ({
     const listener = connection.streams.get(requestId)
     if (frame.type === 'ws_open') listener?.onOpen()
     if (frame.type === 'ws_msg' && listener) {
-      listener.onMessage(String(frame.data))
-      acknowledgeStream(connection, requestId, String(frame.data))
+      const data = String(frame.data)
+      const handled = listener.onMessage(data)
+      if (handled instanceof Promise) void handled.then(() => acknowledgeStream(connection, requestId, data))
+      else acknowledgeStream(connection, requestId, data)
     }
     if (frame.type === 'ws_close' && connection.streams.delete(requestId)) {
       connection.receivedStreamBytes.delete(requestId)
@@ -465,7 +467,7 @@ export const createRuntimeHostGateway = ({
     volumeKeyOf(JSON.stringify(['browser', workspaceId, runtimeId, owner]))
   const openStream = (
     sandbox: SandboxLocation,
-    target: { path: string } | { browserKey: string },
+    target: { path: string } | { browserKey: string; fileId?: string },
     listener: SandboxSocketListener,
   ) => {
     const connection = connectionOf(sandbox)
@@ -546,6 +548,8 @@ export const createRuntimeHostGateway = ({
         })
       },
       openBrowser: (owner, listener) => openStream(sandbox, { browserKey: browserKeyOf(sandbox, owner) }, listener),
+      openBrowserFile: (owner, fileId, listener) =>
+        openStream(sandbox, { browserKey: browserKeyOf(sandbox, owner), fileId }, listener),
     }),
   }
 

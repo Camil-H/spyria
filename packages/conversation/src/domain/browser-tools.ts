@@ -260,11 +260,31 @@ export const browserStartFailureOf = (hostMessage: string) => {
   return 'The browser could not start'
 }
 
-const maximumJoinedLength = 8 * 1024 * 1024
-type BrowserLinePart = { data?: unknown; isLast?: unknown; [field: string]: unknown }
+const browserFileIdPattern = /^[a-f0-9]{32}$/
+const maximumFileNameLength = 255
+export type BrowserDownload = Readonly<{ file: string; name: string; size: number }>
 
-export const joinedPartOf = (collected: string, part: BrowserLinePart) => {
-  const joined = collected + (typeof part.data === 'string' ? part.data : '')
-  if (joined.length > maximumJoinedLength) return { collected: '', isTooLarge: true }
-  return part.isLast === true ? { collected: '', line: joined } : { collected: joined }
+export const browserDownloadOf = (message: Record<string, unknown>): BrowserDownload | undefined => {
+  const { file, name, size } = message
+  const isDownload =
+    typeof file === 'string' &&
+    browserFileIdPattern.test(file) &&
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= maximumFileNameLength &&
+    Number.isSafeInteger(size) &&
+    (size as number) >= 0
+  return isDownload ? { file, name, size: size as number } : undefined
+}
+
+export const imageFileOf = (result: unknown) => {
+  const { imageFile } = (result ?? {}) as { imageFile?: unknown }
+  return typeof imageFile === 'string' && browserFileIdPattern.test(imageFile) ? imageFile : undefined
+}
+
+export const browserDownloadsPath = '/api/browser-downloads'
+
+export const contentDispositionOf = (name: string) => {
+  const plainName = name.replace(/[^\x20-\x7e]|["\\]/g, '_')
+  return `attachment; filename="${plainName}"; filename*=UTF-8''${encodeURIComponent(name)}`
 }

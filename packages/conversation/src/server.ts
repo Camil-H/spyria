@@ -24,6 +24,7 @@ export {
   chatAttachmentsPathOf,
   chatMediaPathOf,
 } from './domain/attachments.ts'
+export { browserDownloadsPath, contentDispositionOf } from './domain/browser-tools.ts'
 export { switchedToolServersOf, toolServerOffNoticeOf } from './domain/chat-tool-servers.ts'
 export { logExcerptOf } from './domain/ci-logs.ts'
 export {
@@ -113,6 +114,7 @@ export {
 export { rebuildMessages } from './integrations/postgres-message-projection.ts'
 export { type AgentLlm, createSpyriaAgentClient } from './integrations/spyria-agent-client.ts'
 export { createStoreDraftRepository } from './integrations/store-draft-repository.ts'
+export { openBrowserDownload } from './operations/browser-sessions.ts'
 export { saveDraft } from './operations/save-draft.ts'
 export { getAttachment } from './queries/get-attachment.ts'
 export { getChatRouting } from './queries/get-chat-routing.ts'

@@ -1,5 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { type Attachment, chatAttachmentsPathOf, isChatAttachmentPath } from '../domain/attachments.ts'
+import { browserDownloadsPath } from '../domain/browser-tools.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
@@ -20,6 +21,20 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 
 export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
+  saveBrowserDownload: ({ token }: { token: string }) => {
+    const form = document.createElement('form')
+    form.method = 'post'
+    form.action = browserDownloadsPath
+    form.hidden = true
+    const field = document.createElement('input')
+    field.type = 'hidden'
+    field.name = 'token'
+    field.value = token
+    form.append(field)
+    document.body.append(form)
+    form.submit()
+    form.remove()
+  },
   commandOutput: async ({ workspaceId, chatId, stepId }: ChatInput & { stepId: string }) => {
     const response = await getAsMember(workspaceId, commandOutputPathOf(chatId, stepId))
     if (!response.ok) throw new Error(`The command output read answered ${response.status}`)

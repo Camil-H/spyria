@@ -5,8 +5,9 @@ import {
   type BrowserCommand,
   browserAnswerOf,
   browserAsleepRefusal,
+  browserDownloadOf,
   browserStartFailureOf,
-  joinedPartOf,
+  imageFileOf,
   memberMessageOf,
   visitedAddressOf,
 } from '../domain/browser-tools.ts'
@@ -32,9 +33,9 @@ type Session = Input & {
   idleTimer?: ReturnType<typeof setTimeout>
   lastVisit?: string
   visitTimes: number[]
-  collectedPart: string
   isClosed: boolean
 }
+type Download = { session: Session; file: string; name: string; size: number; expiresAt: number }
 type Slot = {
   starting?: Promise<Session>
   session?: Session
@@ -47,7 +48,11 @@ const defaultStartMilliseconds = 60_000
 const defaultCommandMilliseconds = 90_000
 const visitWindowMilliseconds = 60_000
 const maximumVisitsPerWindow = 30
-const viewerMessageTypes = ['frame', 'page', 'notice', 'file_chooser', 'download']
+const viewerMessageTypes = ['frame', 'page', 'notice', 'file_chooser']
+const downloadLifetimeMilliseconds = 10 * 60_000
+const fileStreamBufferBytes = 4 * 1024 * 1024
+const maximumImageBytes = 32 * 1024 * 1024
+const downloads = new Map<string, Download>()
 const watchedMessageTypes = ['resize', 'frame_ack']
 const slots = new Map<string, Slot>()
 const keyOf = ({ chat, memberId }: Input) => `${chat.workspaceId}/${chat.chatId}/${memberId}`
@@ -161,6 +166,68 @@ const controllerMessageOf = (data: string): ControllerMessage | undefined => {
   }
 }
 
+const fileStreamOf = (session: Session, file: string) => {
+  let socket: { close(): void } | undefined
+  let resumeReading: (() => void) | undefined
+  let isDone = false
+  return new ReadableStream<Uint8Array>(
+    {
+      start: (controller) => {
+        socket = session.transport.openBrowserFile(session.memberId, file, {
+          onOpen: () => {},
+          onMessage: (data) => {
+            controller.enqueue(Buffer.from(data, 'base64'))
+            if ((controller.desiredSize ?? 0) > 0) return
+            return new Promise<void>((resolve) => {
+              resumeReading = resolve
+            })
+          },
+          onClose: () => {
+            if (isDone) return
+            isDone = true
+            if (!session.isClosed) session.socket.send(JSON.stringify({ type: 'file_read', file }))
+            controller.close()
+          },
+        })
+      },
+      pull: () => {
+        resumeReading?.()
+        resumeReading = undefined
+      },
+      cancel: () => {
+        isDone = true
+        socket?.close()
+      },
+    },
+    { highWaterMark: fileStreamBufferBytes, size: (chunk) => chunk?.byteLength ?? 0 },
+  )
+}
+
+const bytesOf = async (stream: ReadableStream<Uint8Array>, maximumBytes: number) => {
+  const reader = stream.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    size += read.value.byteLength
+    if (size > maximumBytes) {
+      await reader.cancel()
+      throw new BrowserUnavailable('The screenshot is too large to read')
+    }
+    parts.push(read.value)
+  }
+  return Buffer.concat(parts)
+}
+
+const offerDownload = (session: Session, message: ControllerMessage) => {
+  const download = browserDownloadOf(message)
+  if (!download) return
+  const now = Date.now()
+  for (const [token, { expiresAt }] of downloads) if (expiresAt <= now) downloads.delete(token)
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll('-', '')
+  downloads.set(token, { session, ...download, expiresAt: now + downloadLifetimeMilliseconds })
+  toViewers(session, { type: 'download', token, name: download.name, size: download.size })
+}
+
 const handle = (dependencies: Dependencies, session: Session, message: ControllerMessage) => {
   if (typeof message.id === 'number') {
     const pending = session.pending.get(message.id)
@@ -171,19 +238,14 @@ const handle = (dependencies: Dependencies, session: Session, message: Controlle
   if (message.type === 'ready') return session.ready.resolve()
   if (message.type === 'failed') return close(session, String(message.error ?? 'failed'))
   if (message.type === 'visited') return recordVisit(dependencies, session, message.url)
+  if (message.type === 'download') return offerDownload(session, message)
   if (message.type === 'page') session.page = { url: String(message.url ?? ''), title: String(message.title ?? '') }
   if (viewerMessageTypes.includes(String(message.type))) toViewers(session, message)
 }
 
 const receive = (dependencies: Dependencies, session: Session, data: string) => {
   const message = controllerMessageOf(data)
-  if (message?.type !== 'part') return message && handle(dependencies, session, message)
-  const joined = joinedPartOf(session.collectedPart, message)
-  session.collectedPart = joined.collected
-  if (joined.isTooLarge) return close(session, 'The browser sent an answer too large to read')
-  session.socket.send(JSON.stringify({ type: 'part_ack' }))
-  const whole = joined.line === undefined ? undefined : controllerMessageOf(joined.line)
-  if (whole) handle(dependencies, session, whole)
+  if (message) handle(dependencies, session, message)
 }
 
 const started = async (dependencies: Dependencies, input: Input, slot: Slot): Promise<Session> => {
@@ -207,7 +269,6 @@ const started = async (dependencies: Dependencies, input: Input, slot: Slot): Pr
     pending: new Map(),
     nextId: 1,
     visitTimes: [],
-    collectedPart: '',
     isClosed: false,
   }
   session.ready.promise.catch(() => {})
@@ -276,7 +337,19 @@ export const runBrowserCommand = async (
   input: Input & { command: BrowserCommand },
 ): Promise<BrowserAnswer> => {
   const session = await sessionOf(dependencies, input)
-  return browserAnswerOf(await sent(dependencies, session, input.command))
+  const result = await sent(dependencies, session, input.command)
+  const imageFile = imageFileOf(result)
+  if (!imageFile) return browserAnswerOf(result)
+  const image = await bytesOf(fileStreamOf(session, imageFile), maximumImageBytes)
+  if (image.byteLength === 0) throw new BrowserUnavailable('The screenshot could not be read')
+  return { ...browserAnswerOf(result), image: image.toString('base64') }
+}
+
+export const openBrowserDownload = (token: string) => {
+  const download = downloads.get(token)
+  downloads.delete(token)
+  if (!download || download.expiresAt <= Date.now()) return undefined
+  return { name: download.name, size: download.size, body: fileStreamOf(download.session, download.file) }
 }
 
 export const checkBrowserCommand = async (dependencies: Dependencies, input: Input & { command: BrowserCommand }) =>

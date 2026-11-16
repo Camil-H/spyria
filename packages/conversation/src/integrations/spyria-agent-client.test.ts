@@ -24,6 +24,7 @@ const endpoint: AgentConversation = {
     startBrowser: async () => {},
     stopBrowser: async () => {},
     openBrowser: () => ({ send: () => {}, close: () => {} }),
+    openBrowserFile: () => ({ send: () => {}, close: () => {} }),
   },
 }
 const toolsSecretsOf = (token: string) => ({ SPYRIA_MCP_TOKEN: { kind: 'StaticSecret', value: token } })

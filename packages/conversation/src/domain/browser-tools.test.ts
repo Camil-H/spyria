@@ -3,8 +3,10 @@ import {
   browserAnswerOf,
   browserAsleepRefusal,
   browserCommandOf,
+  browserDownloadOf,
   browserStartFailureOf,
-  joinedPartOf,
+  contentDispositionOf,
+  imageFileOf,
   memberMessageOf,
   submitCheckOf,
   visitedAddressOf,
@@ -172,15 +174,33 @@ test("a host's refusal to start a browser reads in the member's terms", () => {
   expect(browserStartFailureOf('Runtime host x did not answer in time')).toBe('The browser could not start')
 })
 
-test('a long line of the browser comes in parts, joined whole once the last arrives, and refused past 8 MB', () => {
-  const first = joinedPartOf('', { data: '{"type":"down', isLast: false })
-  expect(first).toEqual({ collected: '{"type":"down' })
-  expect(joinedPartOf(first.collected, { data: 'load"}', isLast: true })).toEqual({
-    collected: '',
-    line: '{"type":"download"}',
+test('a download the browser reports names its file by id, with a name and a size, or it is ignored', () => {
+  const file = 'a'.repeat(32)
+  expect(browserDownloadOf({ type: 'download', file, name: 'video.mp4', size: 3_000_000_000 })).toEqual({
+    file,
+    name: 'video.mp4',
+    size: 3_000_000_000,
   })
-  expect(joinedPartOf('x'.repeat(8 * 1024 * 1024), { data: 'y', isLast: false })).toEqual({
-    collected: '',
-    isTooLarge: true,
-  })
+  for (const message of [
+    { file: '../profile/Cookies', name: 'x', size: 1 },
+    { file, name: '', size: 1 },
+    { file, name: 'x'.repeat(256), size: 1 },
+    { file, name: 'x', size: -1 },
+    { file, name: 'x', size: '1' },
+  ])
+    expect(browserDownloadOf(message)).toBeUndefined()
+})
+
+test('a screenshot answer names its image file by id', () => {
+  expect(imageFileOf({ text: 'Screenshot', imageFile: 'b'.repeat(32) })).toBe('b'.repeat(32))
+  expect(imageFileOf({ text: 'Screenshot', imageFile: '../x' })).toBeUndefined()
+  expect(imageFileOf('Clicked')).toBeUndefined()
+})
+
+test('a downloaded file keeps its name in the save dialog, any character included, without breaking the header', () => {
+  expect(contentDispositionOf('report.pdf')).toBe(`attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`)
+  expect(contentDispositionOf('été "final".mp4')).toBe(
+    `attachment; filename="_t_ _final_.mp4"; filename*=UTF-8''%C3%A9t%C3%A9%20%22final%22.mp4`,
+  )
+  expect(contentDispositionOf('a\r\nSet-Cookie: x')).not.toContain('\n')
 })

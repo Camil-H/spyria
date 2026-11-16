@@ -5,6 +5,7 @@ import { handleMutateRequest, handleQueryRequest } from '@rocicorp/zero/server'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import {
   type AgentChat,
+  browserDownloadsPath,
   chatAttachmentPathOf,
   chatAttachmentsPathOf,
   chatGitHubToolsPathOf,
@@ -15,6 +16,7 @@ import {
   chatRoutingPathOf,
   chatWorkspacePathOf,
   commandOutputPathOf,
+  contentDispositionOf,
   conversationMutators,
   createGatewaySessionClassifier,
   getAttachment,
@@ -23,6 +25,7 @@ import {
   isGitAction,
   isWorkspaceRead,
   mediaResponseOf,
+  openBrowserDownload,
   type PublishAction,
   questionAnswerOf,
   uploadAttachmentFromRequest,
@@ -427,6 +430,20 @@ export const createApp = ({
     .get('/host', rateLimited('hostConnection'), runtimeHosts.upgrade)
     .get('/api/stream', agentBridge.stream(authenticate, databaseOf))
     .get('/api/browser', agentBridge.browserStream(authenticate, databaseOf))
+    .post(browserDownloadsPath, async (context) => {
+      const form = await context.req.parseBody().catch(() => ({}) as Record<string, unknown>)
+      const download = typeof form.token === 'string' ? openBrowserDownload(form.token) : undefined
+      if (!download) return context.text('This download is no longer available', 404)
+      return new Response(download.body, {
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-length': String(download.size),
+          'content-disposition': contentDispositionOf(download.name),
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        },
+      })
+    })
     .get(toolConsentCallbackPath, async (context) =>
       context.html(await toolConsentPageFromRequest(gatewayOf(), new URL(context.req.url).search)),
     )
