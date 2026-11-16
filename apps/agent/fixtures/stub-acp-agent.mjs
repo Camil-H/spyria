@@ -8,6 +8,7 @@ const stateDirectory = process.env.STUB_STATE ?? '/tmp/stub-acp-state'
 const gapMilliseconds = Number(process.env.STUB_GAP_MS ?? 20)
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 const holdUrl = process.env.STUB_HOLD_URL
+const steerAnswerDelayMilliseconds = Number(process.env.STUB_STEER_DELAY_MS ?? 0)
 const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method: 'POST' }) : sleep(1500))
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
 const piSend = (record) => process.stdout.write(`${JSON.stringify(record)}\n`)
@@ -484,8 +485,9 @@ const gatewayTurn = async (session, text, state, update) => {
 const turn = async (id, { sessionId, prompt }) => {
   const session = sessions.get(sessionId)
   if (deadSessions.has(sessionId)) return send({ id, error: claudeExited })
+  if (cancelledBeforeStart.delete(id)) return send({ id, result: { stopReason: 'cancelled' } })
   session.prompts += 1
-  const state = { cancelled: false, abort: new AbortController() }
+  const state = { cancelled: false, abort: new AbortController(), steering: [], isOver: false }
   session.current = state
   save(sessionId, session)
   const text = prompt.map((block) => block.text ?? '').join('\n')
@@ -520,10 +522,13 @@ const turn = async (id, { sessionId, prompt }) => {
     await step()
     update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: chunk } })
   }
+  const steering = isPi ? piSteering : state.steering
   const takeSteering = async () => {
-    for (let steered = piSteering.shift(); steered !== undefined; steered = piSteering.shift()) {
-      piSend({ type: 'queue_update', steering: [...piSteering], followUp: [] })
-      piSend({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: steered }] } })
+    for (let steered = steering.shift(); steered !== undefined; steered = steering.shift()) {
+      if (isPi) {
+        piSend({ type: 'queue_update', steering: [...piSteering], followUp: [] })
+        piSend({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: steered }] } })
+      }
       await say(`Took in: ${steered}. `)
       if (steered.includes('stub:linger')) await lingerAs('steered')
     }
@@ -847,6 +852,11 @@ const turn = async (id, { sessionId, prompt }) => {
     if (has('usage')) update({ sessionUpdate: 'usage_update', used: 53_000, size: 200_000 })
     if (seen.length > 0) await say(`Saw ${seen.join(', ')}. `)
     await takeSteering()
+    state.isOver = true
+    if (has('outro')) {
+      await say('Wrapping up. ')
+      await lingerAs('outro')
+    }
     await say(`Hello from the stub (model ${session.model}, mode ${session.mode}).`)
     finish('end_turn')
   } catch (error) {
@@ -856,6 +866,8 @@ const turn = async (id, { sessionId, prompt }) => {
       update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'LATE ' } })
     }
     finish('cancelled')
+  } finally {
+    state.isOver = true
   }
 }
 
@@ -876,6 +888,23 @@ const opened = (sessionId, { prompts, history }) => {
 }
 const fresh = () => ({ prompts: 0, history: [] })
 const savedOf = (path) => ({ ...fresh(), ...JSON.parse(readFileSync(path, 'utf8')) })
+const steer = ({ sessionId, prompt, _meta }) => {
+  const current = sessions.get(sessionId)?.current
+  if (current && !current.isOver && !current.cancelled) {
+    current.steering.push(prompt.map((block) => block.text ?? '').join('\n'))
+    return sleep(steerAnswerDelayMilliseconds).then(() => ({ outcome: 'injected' }))
+  }
+  if (!isCodex && _meta?.steering?.idleBehavior === 'promptRequired')
+    return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+  const started = Promise.withResolvers()
+  queue(sessionId, async () => {
+    await sleep(steerAnswerDelayMilliseconds)
+    const detached = turn(`steered-${randomUUID()}`, { sessionId, prompt })
+    started.resolve()
+    return detached
+  })
+  return started.promise.then(() => ({ outcome: 'startedNewTurn' }))
+}
 const handlers = {
   initialize: ({ clientCapabilities }) => {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
@@ -888,8 +917,12 @@ const handlers = {
       },
       agentInfo: { name: 'stub-acp-agent', version: '0.0.2' },
       authMethods: [],
+      ...(!process.env.STUB_NO_STEERING && { _meta: { steering: { supported: true } } }),
     }
   },
+  ...(!process.env.STUB_NO_STEERING && {
+    '_session/steering': (params) => new Promise(setImmediate).then(() => steer(params)),
+  }),
   'session/new': ({ _meta }) => {
     if (process.env.STUB_FAIL_START) throw { code: -32000, message: 'Authentication required' }
     systemPromptOptions = _meta?.systemPrompt
@@ -929,6 +962,20 @@ const piSteering = []
 const cancel = (session) => {
   if (session?.current) session.current.cancelled = true
   session?.current?.abort.abort()
+}
+const unstartedPromptIds = new Map()
+const cancelledBeforeStart = new Set()
+const queuePrompt = (id, params) => {
+  if (isCodex) unstartedPromptIds.set(params.sessionId, id)
+  queue(params.sessionId, () => {
+    if (unstartedPromptIds.get(params.sessionId) === id) unstartedPromptIds.delete(params.sessionId)
+    return turn(id, params)
+  })
+}
+const cancelNewest = (sessionId) => {
+  if (!unstartedPromptIds.has(sessionId)) return cancel(sessions.get(sessionId))
+  cancelledBeforeStart.add(unstartedPromptIds.get(sessionId))
+  unstartedPromptIds.delete(sessionId)
 }
 let piSessionId = randomUUID()
 if (isPi) opened(piSessionId, fresh())
@@ -1005,13 +1052,18 @@ createInterface({ input: process.stdin })
     const frame = JSON.parse(line)
     if (isPi) return void onPiCommand(frame)
     if (frame.method === undefined) return answers.get(frame.id)?.(frame)
-    if (frame.method === 'session/prompt') return queue(frame.params.sessionId, () => turn(frame.id, frame.params))
-    if (frame.method === 'session/cancel') return cancel(sessions.get(frame.params.sessionId))
+    if (frame.method === 'session/prompt') return queuePrompt(frame.id, frame.params)
+    if (frame.method === 'session/cancel') return cancelNewest(frame.params.sessionId)
     if (frame.id === undefined || isSilentOn(frame.method)) return
     const handler = handlers[frame.method]
     if (!handler) return send({ id: frame.id, error: { code: -32601, message: `stub: ${frame.method}` } })
     try {
-      send({ id: frame.id, result: handler(frame.params ?? {}) })
+      const result = handler(frame.params ?? {})
+      if (!(result instanceof Promise)) return send({ id: frame.id, result })
+      result.then(
+        (settled) => send({ id: frame.id, result: settled }),
+        (error) => send({ id: frame.id, error }),
+      )
     } catch (error) {
       send({ id: frame.id, error })
     }

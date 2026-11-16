@@ -328,11 +328,15 @@ const app = createApp({
     return context.json({ id: fakeHost.host.id, conversations: fakeHost.relay.created })
   })
   .post('/test/fake-machine', async (context) => {
-    const { db = '', owner, signedIn, online, drop, installFailure, holdInstall } = context.req.query()
+    const { db = '', owner, signedIn, online, drop, installFailure, holdInstall, steering } = context.req.query()
     if (owner) {
       await fakeMachineByDatabase.get(db)?.host.disconnect()
       await fakeMachineByDatabase.get(db)?.relay.stop()
-      const relay = createSpyriaAgentRelay({ gapMilliseconds: stubGapMilliseconds, holdUrl: holdUrlOf(db) })
+      const relay = createSpyriaAgentRelay({
+        gapMilliseconds: stubGapMilliseconds,
+        holdUrl: holdUrlOf(db),
+        advertisesSteering: steering !== 'false',
+      })
       const host = await createFakeHosts({ port, database: databaseByName(db) }).fakeHost('My machine', {
         memoryGibibytes: 16,
         containerAgent: relay.containerAgent,

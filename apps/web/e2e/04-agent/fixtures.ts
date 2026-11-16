@@ -23,12 +23,17 @@ export const delegationsFinished = (workerStack: WorkerStack, chatId: string) =>
     )
     .toEqual(['finished'])
 
-export type Harness = { name: 'Pi' | 'Claude Code' | 'Codex'; machine?: { owner: string; signedIn: string } }
+export type Harness = {
+  name: 'Pi' | 'Claude Code' | 'Codex'
+  machine?: { owner: string; signedIn: string; steering?: 'false' }
+}
 export const harnesses: Harness[] = [
   { name: 'Pi' },
   { name: 'Claude Code', machine: { owner: 'member-alice', signedIn: 'claude-code' } },
   { name: 'Codex', machine: { owner: 'member-alice', signedIn: 'codex' } },
 ]
+export const withoutSteering = (harness: Harness): Harness =>
+  harness.machine ? { ...harness, machine: { ...harness.machine, steering: 'false' } } : harness
 export const forEachHarness = (declare: (harness: Harness) => void) => {
   for (const harness of harnesses)
     machineTest.describe(() => {

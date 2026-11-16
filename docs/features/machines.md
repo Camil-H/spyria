@@ -107,6 +107,7 @@ Claude Code, Codex and their adapters are not in the runtime image. Their versio
 ### What a machine session does and does not do
 
 - Only the owner prompts; other participants read. Questions and steps work as in [Agents](./agents.md).
+- A message you send while the agent works joins its running turn, as on Pi: Claude Code takes it at once, Codex at its next step (see [Agents](./agents.md#agent-chats)). While your machine is offline or the tool is signed out, it stays queued and starts the next turn once the session is back.
 - The tool runs on your plan's models, chosen in the session chip; Spyria does not route, meter or budget it.
 - The agent's tools (MCP) still go through Spyria's gateway, as the chat owner.
 - If your machine is offline, prompts wait with "Your machine is offline".

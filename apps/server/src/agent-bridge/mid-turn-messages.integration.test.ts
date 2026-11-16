@@ -1,7 +1,8 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import {
   acme,
   addLlmKey,
+  alice,
   aliceInAcme,
   bob,
   bobInAcme,
@@ -37,6 +38,9 @@ const edit = (member: typeof aliceInAcme, messageId: string, text: string) =>
 const remove = (member: typeof aliceInAcme, messageId: string) =>
   mutate(member, 'conversation.deleteMessage', { workspaceId: acme, messageId })
 const pickedUpRefusal = failedWith('The agent has already picked up this message, so it can no longer be changed')
+afterEach(async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id = ${alice} and removed_at is null`
+})
 
 test('a message the prompter sends while their turn runs is taken into it: the turn answers under the message from then on, on the same prompter, and Stop still ends it', async () => {
   const { relay } = await agentHost()
@@ -112,3 +116,33 @@ test('a message the runtime refuses to take into the running turn goes back to t
   expect(await repliesTo(first)).toEqual([{ kind: 'agent', body: `[t1] ${stubHello}` }])
   expect(await repliesTo(refused)).toEqual([{ kind: 'agent', body: `[t2] ${stubHello}` }])
 })
+
+test.each([
+  { harness: 'claude-code', model: 'stub-default' },
+  { harness: 'codex', model: 'gpt-stub' },
+])(
+  'on a $harness machine session, the owner’s message sent while their turn runs reaches the agent through the machine, and the turn answers under it',
+  async ({ harness, model }) => {
+    const { relay } = await stack.agentHost('Machine', { ownerId: alice, signedIn: [harness], holdUrl })
+    const chat = await newRuntimeChat({ harness })
+    const first = await prompt(chat, 'stub:linger Rename the module')
+    await holds.reached('linger')
+    const joined = await prompt(chat, 'and update its imports')
+    await jobDone('agent.join', { chatId: chat })
+    expect(relay.joins).toEqual(['and update its imports'])
+    expect(await pickedUpAtOf(joined)).not.toBeNull()
+    await waitFor(async () => (await chatTurnOf(chat))?.replyToId === joined)
+    expect(await chatTurnOf(chat)).toEqual({ promptId: first, replyToId: joined, prompterId: aliceInAcme.userId })
+
+    await holds.release('linger')
+    await turnEnded(chat)
+    expect(relay.prompts).toEqual(['stub:linger Rename the module'])
+    expect(await repliesTo(first)).toEqual([{ kind: 'agent', body: '[t1]' }])
+    expect(await repliesTo(joined)).toEqual([
+      {
+        kind: 'agent',
+        body: `Took in: and update its imports. Hello from the stub (model ${model}, mode bypassPermissions).`,
+      },
+    ])
+  },
+)

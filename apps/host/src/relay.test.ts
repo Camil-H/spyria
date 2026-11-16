@@ -173,6 +173,7 @@ test.each([
   ['GET', `/api/conversations/${conversationId}`],
   ['DELETE', `/api/conversations/${conversationId}`],
   ['POST', `/api/conversations/${conversationId}/events`],
+  ['POST', `/api/conversations/${conversationId}/joins`],
   ['POST', `/api/conversations/${conversationId}/attachments`],
   ['POST', `/api/conversations/${conversationId}/interrupt`],
   ['POST', `/api/conversations/${conversationId}/restart`],

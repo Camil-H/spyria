@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
 import { startTelemetry } from './telemetry.ts'
@@ -82,20 +83,182 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
   expect((await call('GET', `/api/conversations/${id}`)).status).toBe(404)
 })
 
-test('a harness over ACP refuses a message joined to its running turn, so the message waits for the turn to end', async () => {
-  const { call, open, create, prompt } = started()
+const joinedBy = (call: ReturnType<typeof started>['call'], id: string) => ({
+  send: (action: 'events' | 'joins', text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/${action}`, { content: [{ type: 'text', text }], prompt_id: promptId }),
+})
+const commandWith = (...variables: string[]) => [stubCommand[0] ?? 'env', ...variables, ...stubCommand.slice(1)]
+
+test('a harness over ACP that advertises steering takes a joined message into its running turn at once, and the turn still ends as its first prompt', async () => {
+  const { call, open, create } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  await prompt(id, 'stub:long')
-  await socket.until((event) => event.update.status === 'in_progress')
-  const joined = await call('POST', `/api/conversations/${id}/joins`, {
-    content: [{ type: 'text', text: 'and then this' }],
-    prompt_id: 'joined-1',
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:pause', 'prompt-1')
+  await socket.until((event) => textOf([event]) === 'Before the pause. ')
+  expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('prompt_joined'))
+  expect(socket.events.filter(kindOf('prompt_joined')).map(({ update }) => update)).toEqual([
+    { sessionUpdate: 'prompt_joined', promptId: 'joined-1' },
+  ])
+  expect(socket.events.filter(kindOf('turn_end'))).toEqual([])
+  expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-1',
   })
-  expect(joined).toEqual({ status: 409, body: { error: 'This agent takes messages only between turns' } })
+  expect(textOf(socket.events)).toBe(
+    '[t1] Before the pause. Took in: use tabs. Hello from the stub (model stub-default, mode bypassPermissions).',
+  )
+  expect(socket.events.filter(kindOf('prompt_joined'))).toHaveLength(1)
+})
+
+test('a harness over ACP that does not advertise steering refuses a joined message, so it waits for the turn to end', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_NO_STEERING=1') }))
+  const socket = open(id)
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:long', 'prompt-1')
+  await socket.until((event) => event.update.status === 'in_progress')
+  expect(await send('joins', 'and then this', 'joined-1')).toEqual({
+    status: 409,
+    body: { error: 'This agent takes messages only between turns' },
+  })
   expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
   await socket.until(kindOf('turn_end'))
   expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+})
+
+test('with no turn running, a joined message is refused without reaching the harness, which would otherwise start a turn of its own', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_FLAVOUR=codex') }))
+  const socket = open(id)
+  expect(await joinedBy(call, id).send('joins', 'too early', 'early-1')).toEqual({
+    status: 409,
+    body: { error: 'The agent has no turn running' },
+  })
+  await Bun.sleep(100)
+  expect(socket.events.filter(kindOf('agent_message_chunk'))).toEqual([])
+})
+
+test.each([
+  { flavour: 'claude-code', refusal: 'promptRequired', nextTurn: '[t2]' },
+  { flavour: 'codex', refusal: 'startedNewTurn', nextTurn: '[t3]' },
+])(
+  'a message joined as the $flavour turn ends is refused ($refusal): any turn the harness started for it is cancelled, and it runs once as the next turn',
+  async ({ flavour, refusal, nextTurn }) => {
+    const { call, open, create } = started()
+    const id = await create(launchOf({ acp_command: commandWith(`STUB_FLAVOUR=${flavour}`) }))
+    const socket = open(id)
+    const { send } = joinedBy(call, id)
+    await send('events', 'stub:outro', 'prompt-1')
+    await socket.until((event) => textOf([event]) === 'Wrapping up. ')
+    expect(await send('joins', 'use tabs', 'joined-1')).toEqual({
+      status: 409,
+      body: { error: `The agent did not take the message: ${refusal}` },
+    })
+    await socket.until(kindOf('turn_end'))
+    expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+    await Bun.sleep(100)
+    expect(textOf(socket.events)).not.toContain('[t2] Hello')
+
+    expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+    await socket.until(kindOf('turn_end'), 2)
+    expect(socket.events.at(-1)?.update).toEqual({
+      sessionUpdate: 'turn_end',
+      stopReason: 'end_turn',
+      promptId: 'joined-1',
+    })
+    expect(textOf(socket.events)).toEndWith(
+      `${nextTurn} Hello from the stub (model ${flavour === 'codex' ? 'gpt-stub' : 'stub-default'}, mode bypassPermissions).`,
+    )
+    expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(2)
+  },
+)
+
+test('a message the harness injects only after its turn was stopped is refused, so it runs as its own turn rather than being counted as joined', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:long', 'prompt-1')
+  await socket.until((event) => event.update.status === 'in_progress')
+  const joined = send('joins', 'use tabs', 'joined-1')
+  await Bun.sleep(50)
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-1' })).status).toBe(200)
+  expect(await joined).toEqual({ status: 409, body: { error: 'The turn ended before the agent took the message' } })
+  expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+
+  expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'joined-1',
+  })
+})
+
+test('on Codex, a message joined while the turn still prepares its prompt waits until the prompt reached Codex, so it is taken into that turn rather than starting one that would get the prompt cancelled', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_FLAVOUR=codex', 'STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const photo = join(stateDirectory, 'attachments', 'held-1', 'photo.png')
+  mkdirSync(dirname(photo), { recursive: true })
+  expect(Bun.spawnSync(['mkfifo', photo]).exitCode).toBe(0)
+  expect(
+    (
+      await call('POST', `/api/conversations/${id}/events`, {
+        content: [
+          { type: 'text', text: 'stub:pause Look at this' },
+          { type: 'attachment', path: photo, mimeType: 'image/png' },
+        ],
+        prompt_id: 'prompt-1',
+      })
+    ).status,
+  ).toBe(200)
+  const joinOnceTheTurnRuns = async () => {
+    for (;;) {
+      const joined = await joinedBy(call, id).send('joins', 'use tabs', 'joined-1')
+      if (joined.body.error !== 'The agent has no turn running') return joined
+    }
+  }
+  const joined = joinOnceTheTurnRuns()
+  await Bun.sleep(100)
+  await writeFile(photo, 'png')
+  expect(await joined).toEqual({ status: 200, body: {} })
+
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-1',
+  })
+  expect(textOf(socket.events)).toContain('Took in: use tabs. Hello from the stub')
+  expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(1)
+})
+
+test('on Codex, the next prompt waits for a refused hand-off, so cancelling the turn Codex started for the message never cancels the prompt that follows', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_FLAVOUR=codex', 'STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const { send } = joinedBy(call, id)
+  await send('events', 'stub:outro', 'prompt-1')
+  await socket.until((event) => textOf([event]) === 'Wrapping up. ')
+  const joined = send('joins', 'use tabs', 'joined-1')
+  await socket.until(kindOf('turn_end'))
+  expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+  expect(await joined).toEqual({ status: 409, body: { error: 'The agent did not take the message: startedNewTurn' } })
+
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'joined-1',
+  })
+  expect(textOf(socket.events)).toEndWith('[t3] Hello from the stub (model gpt-stub, mode bypassPermissions).')
+  expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(2)
 })
 
 test('a conversation stays running while a later prompt runs after an earlier one was stopped, and finishes with the last', async () => {

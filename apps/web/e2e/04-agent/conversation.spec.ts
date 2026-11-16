@@ -19,6 +19,7 @@ import {
   machineTest as test,
   turnEnded,
   unreadIconOf,
+  withoutSteering,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -226,7 +227,7 @@ test.describe('Conversation', () => {
         await expect(mainOf(page)).not.toContainText(newSessionNotice)
         return
       }
-      await newHarnessChat(page, harness, `${harness.name} stopped`, { machine })
+      await newHarnessChat(page, withoutSteering(harness), `${harness.name} stopped`, { machine })
       await sendMessage(page, 'stub:long Sleep for a while')
       await expect(messageContaining(page, 'sleep 600').getByRole('img', { name: 'Running' })).toBeVisible()
       await sendMessage(page, 'Carry on')

@@ -19,6 +19,7 @@ type MachineQuery = {
   online?: string
   installFailure?: string
   holdInstall?: 'true' | 'false'
+  steering?: 'false'
 }
 
 export const machineTest = test.extend<{ machine: (query?: MachineQuery) => Promise<Machine> }>({

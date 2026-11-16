@@ -136,6 +136,22 @@ test('a messages change shows inserts, updates and deletes, keeps unchanged rows
   expect(second.readMarkers).toBe(first.readMarkers)
 })
 
+test('in a runtime chat, a member message needs a reply until it or a later member message is answered, as when two messages joined one turn', () => {
+  const build = createSnapshotBuilder(alice)
+  const chats = [zeroRowOf({ workspaceId: 'workspace-acme', id: 'chat-research', type: 'runtime' })]
+  const needsReplyOf = (chatMessages: object[]) =>
+    snapshotFrom(build, { ...workspaceRows, chats, chatMessages }).messages.map(
+      ({ id, needsReply }) => `${id} ${needsReply ? 'waits' : 'done'}`,
+    )
+  expect(needsReplyOf([messageOf(1), messageOf(2)])).toEqual(['message-1 waits', 'message-2 waits'])
+  expect(needsReplyOf([messageOf(1), messageOf(2), messageOf(3), messageOf(4, { replyToId: 'message-2' })])).toEqual([
+    'message-1 done',
+    'message-2 done',
+    'message-4 done',
+    'message-3 waits',
+  ])
+})
+
 test('a reply sorts under its prompt even when a later prompt came between them', () => {
   const build = createSnapshotBuilder(alice)
   const messages = [messageOf(1), messageOf(2), messageOf(3, { replyToId: 'message-1' })]
