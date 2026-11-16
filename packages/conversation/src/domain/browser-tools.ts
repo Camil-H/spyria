@@ -237,7 +237,12 @@ export const memberMessageOf = (received: unknown): { type: string; [field: stri
   const message = (typeof received === 'object' && received !== null ? received : {}) as Record<string, unknown>
   if (message.type === 'frame_ack') return { type: 'frame_ack' }
   if (message.type === 'resize')
-    return { type: 'resize', width: numberOf(message.width), height: numberOf(message.height) }
+    return {
+      type: 'resize',
+      width: numberOf(message.width),
+      height: numberOf(message.height),
+      scale: numberOf(message.scale),
+    }
   if (message.type === 'go')
     return directions.includes(message.direction as (typeof directions)[number])
       ? { type: 'go', direction: message.direction }

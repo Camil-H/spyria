@@ -11,7 +11,9 @@ const maximumFrameCharacters = 2 * 1024 * 1024
 const fileIdPattern = /^[a-f0-9]{32}$/
 const maximumScreenshotSide = 10_000
 const maximumTitleCharacters = 300
-const screencastQuality = 70
+const screencastQuality = 80
+const maximumScreenScale = 2
+const maximumStreamedWidth = 3200
 const viewportRange = { width: [320, 2560], height: [240, 1600] }
 const mouseButtons = ['left', 'middle', 'right']
 const submitWords = /\b(buy|pay|order|purchase|checkout|check out|subscribe|confirm|place|send|submit|book|donate)\b/i
@@ -45,6 +47,8 @@ export const removeFilesOlderThan = async (directory, maximumAgeMilliseconds, no
 }
 
 const firstLineOf = (error) => String(error?.message ?? error).split('\n')[0]
+export const screenScaleOf = (scale, width) =>
+  Math.max(1, Math.min(Number(scale) || 1, maximumScreenScale, maximumStreamedWidth / Math.max(1, width)))
 const clamp = (value, [minimum, maximum]) => Math.min(maximum, Math.max(minimum, Math.round(Number(value) || 0)))
 const truncated = (text, maximum) =>
   text.length > maximum ? `${text.slice(0, maximum)}\n[cut at ${maximum} characters]` : text
@@ -74,6 +78,7 @@ export const createBrowserSession = ({
 }) => {
   let activePage
   let screencast
+  let screenScale = 1
   let isWatched = false
   let fileChooser
   const titleOf = async (page) => (await page.title().catch(() => '')).slice(0, maximumTitleCharacters)
@@ -102,11 +107,18 @@ export const createBrowserSession = ({
       send({ type: 'frame', data, width: metadata.deviceWidth, height: metadata.deviceHeight })
     })
     const { width, height } = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+    const scale = screenScaleOf(screenScale, width)
+    await session.send('Emulation.setDeviceMetricsOverride', {
+      width: 0,
+      height: 0,
+      deviceScaleFactor: scale,
+      mobile: false,
+    })
     await session.send('Page.startScreencast', {
       format: 'jpeg',
       quality: screencastQuality,
-      maxWidth: width,
-      maxHeight: height,
+      maxWidth: Math.round(width * scale),
+      maxHeight: Math.round(height * scale),
     })
   }
   const acknowledgeFrame = async () => {
@@ -307,7 +319,8 @@ export const createBrowserSession = ({
     go: async ({ direction }) => {
       await commands.navigate({ direction })
     },
-    resize: async ({ width, height }) => {
+    resize: async ({ width, height, scale }) => {
+      screenScale = Number(scale) || 1
       const page = await pageNow()
       const session = await context.newCDPSession(page)
       const { windowId } = await session.send('Browser.getWindowForTarget')

@@ -303,6 +303,28 @@ test('a member watches and drives only their own browser; the actions they send 
   for (const watcher of [bobs, alices, lees]) watcher.close()
 })
 
+test('a browser that failed to start says why and starts when the member tries again', async () => {
+  await setBrowserSettings({})
+  const host = await fakeHost('Browser retry host')
+  const { chatId } = await runtimeTurn(host, bob)
+  host.browsers.failNextStart()
+  const bobs = await watchBrowser(chatId, bob)
+  await waitFor(() => bobs.frames.at(-1)?.state === 'unavailable')
+  expect(bobs.frames.at(-1)).toEqual({
+    type: 'state',
+    state: 'unavailable',
+    reason: 'The virtual display did not start',
+  })
+  bobs.send({ type: 'start' })
+  await waitFor(() => bobs.frames.at(-1)?.type === 'frame')
+  expect(bobs.frames.findLast(({ type }) => type === 'state')).toEqual({
+    type: 'state',
+    state: 'running',
+    canBrowse: true,
+  })
+  bobs.close()
+})
+
 test("a file the member's browser downloads reaches only that member, signed in, once, through a token that never shows in an address", async () => {
   await setBrowserSettings({})
   const host = await fakeHost('Browser download host')

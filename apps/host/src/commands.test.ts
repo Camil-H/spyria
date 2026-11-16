@@ -701,7 +701,7 @@ const browserDocker = ({
   freeBytes = 4 * 1024 ** 3,
 }: {
   isRuntimeRunning?: boolean
-  browser?: { networkMode: string; isRunning: boolean; runtimeLabel?: string }
+  browser?: { networkMode: string; isRunning: boolean; runtimeLabel?: string; image?: string }
   profileCreatedAt?: number
   freeBytes?: number
 } = {}) => {
@@ -717,7 +717,10 @@ const browserDocker = ({
     if (path === `/containers/${browserName}/json`) {
       if (!browser) throw new DockerError(404, 'No such container')
       return {
-        Config: { Labels: { 'spyria.managed': '1', 'spyria.browser': browser.runtimeLabel ?? 'runtime-1' } },
+        Config: {
+          Image: browser.image ?? image,
+          Labels: { 'spyria.managed': '1', 'spyria.browser': browser.runtimeLabel ?? 'runtime-1' },
+        },
         HostConfig: { NetworkMode: browser.networkMode },
         State: { Running: browser.isRunning },
       }
@@ -816,6 +819,20 @@ test('a running browser is left as it is, and a stopped one starts again with it
   })
   await stopped.runner.run(startBrowser)
   expect(stopped.requests()).toEqual([`POST /containers/${browserName}/start`])
+})
+
+test("a browser made from another image than its runtime's is made again from the runtime's image, keeping its sign-ins", async () => {
+  const stale = browserDocker({
+    browser: { networkMode: 'container:runtime-container-id', isRunning: false, image: 'sha256:older-runtime-image' },
+    profileCreatedAt: 0,
+  })
+  await stale.runner.run(startBrowser)
+  expect(stale.requests()).toEqual([
+    `DELETE /containers/${browserName}?force=true`,
+    `POST /containers/create?name=${browserName}`,
+    `POST /containers/${browserName}/start`,
+  ])
+  expect(stale.calls.find(({ path }) => path.startsWith('/containers/create'))?.body).toMatchObject({ Image: image })
 })
 
 test('a profile older than the sign-in lifetime, or a browser left from an earlier runtime container, starts over empty', async () => {
@@ -953,7 +970,7 @@ test("a running browser loses its sign-ins once they outlive the admin's limit, 
         }
       if (path === `/containers/${browserName}/json`)
         return {
-          Config: { Labels: { 'spyria.managed': '1', 'spyria.browser': 'runtime-1' } },
+          Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.browser': 'runtime-1' } },
           HostConfig: { NetworkMode: 'container:runtime-container-id' },
           State: { Running: true },
         }

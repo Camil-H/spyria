@@ -43,3 +43,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0037](0037-a-browser-per-member-next-to-the-runtime.md) | Each member gets a real browser of their own, next to the chat's runtime |
 | [0038](0038-budgets-per-role-and-period.md) | AI budgets are set per role, for each day, week and month |
 | [0039](0039-known-identities-and-one-entry-per-sign-in-app.md) | A known identity signs in without a confirmed address, and workspaces sharing a sign-in app share one entry |
+| [0040](0040-the-browser-is-the-agents-browser.md) | The streamed browser is the agent's browser, not a browser to watch videos in |

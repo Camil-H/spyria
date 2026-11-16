@@ -948,8 +948,12 @@ const createFakeBrowsers = () => {
   const received = new Map<string, FakeBrowserMessage[]>()
   const outputs = new Map<string, (message: object) => void>()
   const files = new Map<string, Buffer>()
+  let failingStarts = 0
   return {
     files,
+    failNextStart: () => {
+      failingStarts += 1
+    },
     received: (browserKey: string) => received.get(browserKey) ?? [],
     readFile: ({ fileId, send, close }: { fileId: string; send(data: string): void; close(): void }) => {
       const file = files.get(fileId)
@@ -967,6 +971,10 @@ const createFakeBrowsers = () => {
         onMessage: (data: string) => {
           const message = JSON.parse(data) as FakeBrowserMessage
           messages.push(message)
+          if (message.type === 'settings' && failingStarts > 0) {
+            failingStarts -= 1
+            return emit({ type: 'failed', error: 'The virtual display did not start' })
+          }
           if (message.type === 'settings') return emit({ type: 'ready' })
           if (message.type === 'watch') {
             emit({ type: 'page', url: 'https://example.com/', title: 'Example' })

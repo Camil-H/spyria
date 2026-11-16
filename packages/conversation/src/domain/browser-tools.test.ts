@@ -132,10 +132,11 @@ test("a member's message reaches their browser only as a known action, with only
     url: 'https://example.com/a',
   })
   expect(memberMessageOf({ type: 'go', direction: 'forward' })).toEqual({ type: 'go', direction: 'forward' })
-  expect(memberMessageOf({ type: 'resize', width: 800, height: '600' })).toEqual({
+  expect(memberMessageOf({ type: 'resize', width: 800, height: '600', scale: 2, x: 1 })).toEqual({
     type: 'resize',
     width: 800,
     height: 0,
+    scale: 2,
   })
   expect(memberMessageOf({ type: 'frame_ack', sessionId: 4 })).toEqual({ type: 'frame_ack' })
   expect(
