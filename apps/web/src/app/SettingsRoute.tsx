@@ -114,8 +114,8 @@ const cardSections: readonly { title: string; cards: readonly SettingsCard[] }[]
     cards: [
       {
         path: 'costs',
-        title: 'Costs',
-        description: 'Spend over time by member, project, chat and model, with what drove it',
+        title: 'Costs and AI budgets',
+        description: 'Spend over time by member, project, chat and model, and the AI budget of each role',
         permissions: ['costs.view', 'budgets.manage'],
         Page: UsageSection,
         isWide: true,
@@ -196,7 +196,7 @@ const SettingsRoute = () => {
     : syncedStatuses
   const month = new Date().toISOString().slice(0, 7)
   const isMonthUsageComplete = useScoped(workspaceId, 'monthUsage', { month })?.isComplete === true
-  const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, month)
+  const budgetAlertCount = useQuery(countBudgetAlerts, workspaceId, new Date().toISOString().slice(0, 10))
   const isAllowed = (settingsCard: SettingsCard) =>
     settingsCard.permissions.some((permission) => permissions.includes(permission))
   const allowedSections = cardSections

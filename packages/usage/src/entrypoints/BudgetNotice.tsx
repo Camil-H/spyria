@@ -1,24 +1,25 @@
 import { useQuery } from '@spyria/db/react'
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
 import { formatCost } from '@spyria/ui'
-import { type BudgetProgress, monthOf } from '../domain/budgets.ts'
+import { type BudgetProgress, periodAdjectiveOf } from '../domain/budgets.ts'
 import { getOwnBudgetAlert } from '../queries/budget-alerts.ts'
 
 export const useOwnBudgetAlert = (workspaceId: WorkspaceId, memberId: MemberId) =>
-  useQuery(getOwnBudgetAlert, workspaceId, memberId, monthOf(new Date()))
+  useQuery(getOwnBudgetAlert, workspaceId, memberId, new Date().toISOString().slice(0, 10))
 
 export const BudgetNotice = ({ workspaceId, memberId }: { workspaceId: WorkspaceId; memberId: MemberId }) => {
-  const threshold = useOwnBudgetAlert(workspaceId, memberId)
-  if (threshold === 0) return null
+  const alert = useOwnBudgetAlert(workspaceId, memberId)
+  if (alert === null) return null
+  const budgetName = `${periodAdjectiveOf(alert.period)} AI budget`
   return (
     <p
       role="status"
       aria-label="Budget alert"
-      className={`rounded-md px-3 py-2 text-sm ${threshold >= 100 ? 'bg-removed' : 'border border-line bg-raised'}`}
+      className={`rounded-md px-3 py-2 text-sm ${alert.threshold >= 100 ? 'bg-removed' : 'border border-line bg-raised'}`}
     >
-      {threshold >= 100
-        ? 'Your monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings'
-        : `You have used ${threshold}% of your monthly AI budget`}
+      {alert.threshold >= 100
+        ? `Your ${budgetName} is used up; a member with the Manage budgets permission can raise it in Workspace settings`
+        : `You have used ${alert.threshold}% of your ${budgetName}`}
     </p>
   )
 }
