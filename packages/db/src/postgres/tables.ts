@@ -360,6 +360,7 @@ export const chats = table(
     baseBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),
+    agentTurnReplyToId: text(),
     agentTurnPrompterId: text(),
     agentTurnFailure: text(),
     contextTokens: integer(),

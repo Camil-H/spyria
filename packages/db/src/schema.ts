@@ -119,6 +119,7 @@ export type ChatRow = {
   baseBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null
+  agentTurnReplyToId: MessageId | null
   contextTokens: number | null
   contextWindow: number | null
   toolServersOff: readonly string[]

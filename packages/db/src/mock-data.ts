@@ -56,6 +56,7 @@ const chat = (
   baseBranch: null,
   originChatId: null,
   agentTurnMessageId: null,
+  agentTurnReplyToId: null,
   contextTokens: null,
   contextWindow: null,
   toolServersOff: [],

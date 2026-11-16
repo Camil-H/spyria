@@ -1,1 +1,0 @@
-ALTER TABLE "messages" ADD COLUMN "picked_up_at" timestamp with time zone;
