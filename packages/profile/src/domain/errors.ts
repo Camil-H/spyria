@@ -71,3 +71,18 @@ export const ConnectionSetupFailed = errorKind(
   (name: string) => `${name} listed no tools after your sign-in: add it again and finish signing in`,
   ProfileError,
 )
+export const SignInWindowBlocked = errorKind(
+  'sign_in_window_blocked',
+  () => 'Your browser blocked the sign-in window. Allow pop-ups for Spyria, then try again.',
+  ProfileError,
+)
+export const SignInWindowClosed = errorKind(
+  'sign_in_window_closed',
+  () => 'The sign-in window was closed before the sign-in finished. Try again.',
+  ProfileError,
+)
+export const SignInReplaced = errorKind(
+  'sign_in_replaced',
+  () => 'Another sign-in started, so this one stopped waiting.',
+  ProfileError,
+)
