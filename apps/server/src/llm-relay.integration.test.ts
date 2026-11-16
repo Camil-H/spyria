@@ -11,6 +11,7 @@ import {
   alice,
   bob,
   captureConsole,
+  captureLogs,
   createFakeHosts,
   type FakeHost,
   gatewayLogsOf,
@@ -23,6 +24,7 @@ import {
   testAuthSettings,
   testSecretsKeyring,
   virtualKeyOf,
+  waitFor,
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
@@ -200,6 +202,38 @@ test('a key the provider refuses is classified on the turn without provider text
   const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
   expect(refused.status).toBe(401)
   expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
+})
+
+test('a call with tools sets the chat’s context size and a call without tools, such as a compaction summary, leaves it', async () => {
+  const host = await fakeHost('Context host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const contextTokensOf = async () =>
+    (await database.$client`select context_tokens from chats where id = ${chatId}`)[0]?.context_tokens
+  const logs = captureLogs()
+  const relayedCallCount = () =>
+    logs.events.filter((logged) => logged.event === 'gen_ai.call' && logged.attributes?.['chat.id'] === chatId).length
+  const relayed = async (body: object) => {
+    const callsBefore = relayedCallCount()
+    const answer = await host.modelCall({
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...JSON.parse(completion), ...body }),
+    })
+    await waitFor(() => relayedCallCount() > callsBefore)
+    return answer
+  }
+  try {
+    expect(await relayed({ tools: [{ type: 'function', function: { name: 'bash', parameters: {} } }] })).toMatchObject({
+      status: 200,
+    })
+    expect(await contextTokensOf()).toBe(2)
+    await database.$client`update chats set context_tokens = 7 where id = ${chatId}`
+    expect(
+      await relayed({ messages: [{ role: 'user', content: 'Summarize the whole earlier conversation, please.' }] }),
+    ).toMatchObject({ status: 200 })
+    expect(await contextTokensOf()).toBe(7)
+  } finally {
+    logs.restore()
+  }
 })
 
 test('a context-window rejection reaches the agent unchanged and records no turn failure, so the agent can compact', async () => {

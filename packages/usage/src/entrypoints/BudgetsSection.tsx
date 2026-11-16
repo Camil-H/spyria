@@ -156,17 +156,10 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     setOverview(await commands.saveRoleBudget({ workspaceId, roleId, dollars }))
   return (
     <section aria-label="AI budgets" className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1 text-sm text-muted">
-        <p>
-          Each member gets the budget of their role for themselves: a role's budget is per member, not shared by the
-          members who hold it. A role's total is its budget per member × its number of members, and the workspace total
-          is the sum of the roles' totals.
-        </p>
-        <p>
-          Budgets are in dollars; days, weeks (from Monday) and months are in UTC. At 100% of any of their budgets, a
-          member's prompts are refused until the period ends or the budget is raised. Leave a budget empty for no limit.
-        </p>
-      </div>
+      <p className="text-sm text-muted">
+        A role's budget is per member, not shared by the members who hold it, in dollars per UTC day, week (from Monday)
+        and month. At 100%, a member's prompts are refused until the period ends. Leave empty for no limit.
+      </p>
       {overview === null ? (
         loadError ? (
           <ErrorMessage message={loadError} />

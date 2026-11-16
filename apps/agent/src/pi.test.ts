@@ -129,6 +129,29 @@ test('Stop aborts a Pi turn as cancelled and the next prompt continues the sessi
   expect(socket.events.findLast(kindOf('turn_end'))?.update.stopReason).toBe('end_turn')
 })
 
+test("/compact runs Pi's compaction, with any instructions after it, instead of a model turn, and reports the smaller context", async () => {
+  const { open, create, prompt } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  await prompt(id, '/compact')
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.find(kindOf('usage_update'))?.update).toEqual({
+    sessionUpdate: 'usage_update',
+    used: 32_000,
+    size: 200_000,
+  })
+  expect(textOf(socket.events)).toBe(
+    'Compacted the earlier conversation into a summary: the context went from 150K to about 32K tokens.',
+  )
+  expect(socket.events.at(-1)?.update).toEqual({ sessionUpdate: 'turn_end', stopReason: 'end_turn' })
+  await prompt(id, '/compact  keep the test plan')
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.findLast(kindOf('usage_update'))?.update.used).toBe(24_000)
+  await prompt(id, 'hello')
+  await socket.until(kindOf('turn_end'), 3)
+  expect(textOf(socket.events)).toEndWith(piHello(1))
+})
+
 test('a new spyria-agent reopens a Pi session from its file with no replay, and a missing file falls back to a new session', async () => {
   const first = started()
   const id = await first.create(piLaunchOf())

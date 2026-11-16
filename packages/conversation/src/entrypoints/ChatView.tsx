@@ -45,6 +45,7 @@ import { useLiveMessages, withLiveMessages } from './useLiveMessages.ts'
 const DevLoopCard = lazy(() => import('./DevLoopCard.tsx'))
 
 const frozenNotice = new ChatFrozen().message
+const compactCommand = '/compact'
 type FindState = Readonly<{ chatId: ChatId; text: string; messageId: MessageId | null; openings: number }>
 
 const findRequestOf = (state: unknown) =>
@@ -390,7 +391,19 @@ export const ChatView = ({
                   canConfigure={conversation.canConfigure}
                   contextTokens={conversation.context?.tokens ?? null}
                 />
-                {conversation.context && <ContextChip context={conversation.context} />}
+                {conversation.context && (
+                  <ContextChip
+                    context={conversation.context}
+                    compactAction={
+                      mayPrompt
+                        ? {
+                            compact: () => commands.sendMessage({ workspaceId, chatId, text: compactCommand }),
+                            isAgentWorking: conversation.isAgentWorking,
+                          }
+                        : undefined
+                    }
+                  />
+                )}
               </>
             )
           }

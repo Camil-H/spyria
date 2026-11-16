@@ -17,6 +17,8 @@ const otherChoice = 'Other…'
 const dialogMethods = ['select', 'confirm', 'input', 'editor']
 const confirmChoices = { yes: 'Yes', no: 'No' }
 const toolKinds: Record<string, string> = { bash: 'execute', read: 'read', edit: 'edit', write: 'edit' }
+const compactCommand = /^\/compact(?:\s+([\s\S]+))?$/
+const compactTokens = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
 const textOf = (result: Json) =>
   ((result.content ?? []) as Json[])
@@ -242,6 +244,26 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       ],
     }
   }
+  const compact = async (customInstructions: string | undefined) => {
+    const { tokensBefore, estimatedTokensAfter } = await send(
+      'compact',
+      customInstructions ? { customInstructions } : {},
+    )
+    const { model } = await send('get_state')
+    update({
+      sessionUpdate: 'usage_update',
+      used: estimatedTokensAfter,
+      size: (model as Json | undefined)?.contextWindow,
+    })
+    update({
+      sessionUpdate: 'agent_message_chunk',
+      content: {
+        type: 'text',
+        text: `Compacted the earlier conversation into a summary: the context went from ${compactTokens.format(Number(tokensBefore))} to about ${compactTokens.format(Number(estimatedTokensAfter))} tokens.`,
+      },
+    })
+    return { stopReason: 'end_turn' }
+  }
   const methods: Record<string, (params: Json) => Promise<Json>> = {
     initialize: async () => ({ agentCapabilities: { promptCapabilities: { image: true } } }),
     'session/new': sessionOf,
@@ -253,9 +275,16 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     'session/prompt': ({ prompt }) => {
       const ended = turnsEnded.then(async () => {
         isAborting = false
+        const message = piMessageOf(prompt as Json[])
+        const compactRequest = compactCommand.exec(message.message.trim())
+        if (compactRequest)
+          return compact(compactRequest[1]).catch((error) => {
+            if (isAborting) return { stopReason: 'cancelled' }
+            throw error
+          })
         turn = Promise.withResolvers()
         isPromptTakenIn = false
-        const started = send('prompt', piMessageOf(prompt as Json[]))
+        const started = send('prompt', message)
         runStarted = started
         const { disposition } = await started.catch((error) => {
           runStarted = undefined

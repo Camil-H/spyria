@@ -114,6 +114,10 @@ const relayPathOf = (path: string) => {
   return isNormalized && !/%2e|%2f|%5c/i.test(url.pathname) ? path : ''
 }
 const modelOf = (body: string) => (jsonOf(body) as { model?: unknown } | undefined)?.model?.toString()
+const carriesToolsOf = (body: string) => {
+  const { tools } = (jsonOf(body) ?? {}) as { tools?: unknown }
+  return Array.isArray(tools) && tools.length > 0
+}
 const anthropicPathPrefix = '/v1/messages'
 const usagePatterns = {
   'gen_ai.usage.input_tokens': /"(?:input_tokens|prompt_tokens)"\s*:\s*(\d+)/g,
@@ -591,6 +595,7 @@ export const createModelCallRelay = ({
     const turn = token ? await handlers.modelCallTurn(host, token) : undefined
     if (!turn) return answer(401, refusalOf('This runtime has no active turn'))
     const model = modelOf(body)
+    const isAgentCall = carriesToolsOf(body)
     const startedAt = performance.now()
     const usageReader = createUsageReader()
     const callAttributes = {
@@ -666,7 +671,14 @@ export const createModelCallRelay = ({
       async (span) => {
         const { status, isUnexplained, gatewayRequestId } = await relayed()
         const contextTokens = contextTokensOf(usageReader.usage)
-        if (status !== undefined && status < 400 && !isTokenCount && !turn.delegationId && contextTokens > 0)
+        if (
+          status !== undefined &&
+          status < 400 &&
+          isAgentCall &&
+          !isTokenCount &&
+          !turn.delegationId &&
+          contextTokens > 0
+        )
           await handlers.recordContextSize({ chat: turn.chat, model, tokens: contextTokens }).catch((error) =>
             log.error({
               event: 'context_size.record_failed',
