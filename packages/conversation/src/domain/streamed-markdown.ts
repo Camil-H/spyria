@@ -17,7 +17,7 @@ export const streamedBlocksOf = (text: string) => {
       if (isClosingFence(line, openFence)) openFence = undefined
     } else {
       openFence = openingFenceOf(line)
-      if (!openFence && line.trim() === '' && /^\S/.test(lines[index + 1] ?? '')) {
+      if (!openFence && offset > blockStart && line.trim() === '' && /^\S/.test(lines[index + 1] ?? '')) {
         const block = text.slice(blockStart, offset - 1)
         if (block.trim() !== '') completed.push({ offset: blockStart, text: block })
         blockStart = nextOffset

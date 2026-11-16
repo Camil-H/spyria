@@ -40,3 +40,7 @@ test('a draft too long to style while typing is shown plain', () => {
 test('each paragraph is styled on its own, with the blank lines between them kept', () => {
   expect(shown('**a**\n\n- b')).toBe('[**|marker strong][a|strong][**|marker strong]\n\n[- |marker]b')
 })
+
+test('a draft that starts with a blank line is shown once', () => {
+  expect(shown('\n# Plan')).toBe('\n[# |heading marker][Plan|heading]')
+})

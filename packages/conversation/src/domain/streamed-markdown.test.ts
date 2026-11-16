@@ -15,6 +15,11 @@ test('blocks before a blank line are complete once the next block has started, a
   expect(streamedBlocksOf('# Plan\n\nSecond').tail).toEqual({ offset: 8, text: 'Second' })
 })
 
+test('a text that starts with a blank line is one block until a later blank line, never repeated', () => {
+  expect(textsOf('\n# Plan')).toEqual({ completed: [], tail: '\n# Plan' })
+  expect(textsOf('\nFirst\n\nSecond')).toEqual({ completed: ['\nFirst'], tail: 'Second' })
+})
+
 test('a blank line inside a fenced block or before an indented continuation does not end the block', () => {
   const fenced = 'Run:\n\n```sh\nbun install\n\nbun test\n```\n\nDone'
   expect(textsOf(fenced)).toEqual({ completed: ['Run:', '```sh\nbun install\n\nbun test\n```'], tail: 'Done' })
