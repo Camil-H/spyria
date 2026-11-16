@@ -308,6 +308,13 @@ export const createAgentBridge = ({
         else forgetStreamOf(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
+      if (promptId)
+        void transact((tx) =>
+          tx.run(zql.chats.where('workspaceId', chat.workspaceId).where('id', chat.chatId).one()),
+        ).then((row) => {
+          const isSameTurn = row?.agentTurnMessageId === chatSocket.promptId && chatSocket.replyToId === null
+          if (isSameTurn) chatSocket.replyToId = row?.agentTurnReplyToId ?? null
+        }, logFailure(chat))
       const shownPromptIdOf = () => chatSocket.replyToId ?? chatSocket.promptId
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
         const promptAtEvent = chatSocket.promptId
