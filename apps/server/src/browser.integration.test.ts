@@ -8,6 +8,7 @@ import {
   bob,
   bobInAcme,
   failedWith,
+  fakeBrowserFrame,
   fakeBrowserSnapshot,
   lee,
   mcpCall,
@@ -243,7 +244,7 @@ test('a member watches and drives only their own browser; the actions they send 
   await waitFor(() => bobs.frames.some(({ type }) => type === 'frame'))
   expect(bobs.frames.filter(({ type }) => type !== 'state')).toEqual([
     { type: 'page', url: 'https://example.com/', title: 'Example' },
-    { type: 'frame', data: 'ZnJhbWU=', width: 800, height: 600 },
+    { type: 'frame', data: fakeBrowserFrame, width: 800, height: 600 },
   ])
   const bobsKey = await browserKeyOf(chatId, bob)
   bobs.send({ type: 'input', event: { kind: 'key', action: 'down', key: 'a' } })

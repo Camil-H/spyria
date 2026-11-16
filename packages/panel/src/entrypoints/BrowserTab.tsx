@@ -1,38 +1,47 @@
 import { useQuery, useScoped } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
-import { fieldClass, focusRing, ghostButtonClass, iconButtonClass } from '@spyria/ui'
-import { ArrowLeft, ExternalLink, Globe, List } from 'lucide-react'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import {
+  calloutClass,
+  fieldClass,
+  focusRing,
+  ghostButtonClass,
+  iconButtonClass,
+  Spinner,
+  smallGhostButtonClass,
+} from '@spyria/ui'
+import { ArrowLeft, ArrowRight, ExternalLink, FileText, RotateCw } from 'lucide-react'
+import {
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   type BrowserPage,
   browsedPageOf,
-  followedPageOf,
-  framedHtmlOf,
   isHtmlFile,
-  isOnMembersMachine,
   isWebAddress,
-  type WebPage,
+  maximumUploadBytes,
+  mouseButtonOf,
+  pageKeyOf,
+  pagePointOf,
+  stateTextOf,
 } from '../domain/browser.ts'
 import { getOpenedPages } from '../queries/get-browser.ts'
-import { EmptyState } from './EmptyState.tsx'
-import { usePanelCommands } from './providers.tsx'
 import type { TabProps } from './TabProps.ts'
 import { emptyClass } from './ui.ts'
+import { type LiveBrowser, useLiveBrowser } from './useLiveBrowser.ts'
 import { useWorkspaceReading } from './useWorkspaceReading.ts'
-
-type Choice = Readonly<{
-  page: BrowserPage | null
-  isTyped: boolean
-  seenOpenedAt: string
-  trail: readonly BrowserPage[]
-}>
-type Reading = Readonly<{ url: string; page?: WebPage; failure?: string }>
 
 const frameClass = 'min-h-80 w-full flex-1 rounded-md border border-line bg-white'
 const reportFramePath = '/report-frame.html'
-const pageFramePath = '/page-frame.html'
-const webPageSandbox = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'
+const warningSeenKey = 'spyria.browser-warning-seen'
+const resizeDelayMilliseconds = 200
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
 const ReportFrame = ({ title, content }: { title: string; content: string }) => (
   <iframe
@@ -66,77 +75,8 @@ const WorkspaceFile = ({
   )
 }
 
-const DirectFrame = ({ url }: { url: string }) => (
-  <iframe title={url} src={url} sandbox={webPageSandbox} referrerPolicy="no-referrer" className={frameClass} />
-)
-
-const WebPageFrame = ({
-  workspaceId,
-  url,
-  onFollow,
-}: {
-  workspaceId: WorkspaceId
-  url: string
-  onFollow: (page: BrowserPage) => void
-}) => {
-  const { readWebPage } = usePanelCommands()
-  const [reading, setReading] = useState<Reading>()
-  const frame = useRef<HTMLIFrameElement>(null)
-  const isPosted = useRef(false)
-  const [frameToken] = useState(() => crypto.randomUUID())
-  useEffect(() => {
-    let isCurrent = true
-    void readWebPage({ workspaceId, url }).then(
-      (page) => isCurrent && setReading({ url, page }),
-      (error: Error) => isCurrent && setReading({ url, failure: error.message }),
-    )
-    return () => {
-      isCurrent = false
-    }
-  }, [readWebPage, workspaceId, url])
-  useEffect(() => {
-    const follow = (event: MessageEvent) => {
-      const message = event.data as { navigate?: unknown; token?: unknown } | null
-      if (event.source !== frame.current?.contentWindow || message?.token !== frameToken) return
-      const page = followedPageOf(message.navigate)
-      if (page) onFollow(page)
-    }
-    addEventListener('message', follow)
-    return () => removeEventListener('message', follow)
-  }, [onFollow, frameToken])
-  if (reading?.url !== url) return <p className={emptyClass}>Loading the page…</p>
-  const { page, failure } = reading
-  if (!page)
-    return (
-      <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-line p-3 text-sm">
-        <p>{failure}</p>
-        <a href={url} target="_blank" rel="noopener noreferrer" className={ghostButtonClass}>
-          Open it in a new tab
-        </a>
-      </div>
-    )
-  if (page.html === undefined) return <DirectFrame url={page.url} />
-  return (
-    <iframe
-      ref={frame}
-      title={url}
-      src={pageFramePath}
-      sandbox={webPageSandbox}
-      onLoad={(event) => {
-        if (isPosted.current) return
-        isPosted.current = true
-        event.currentTarget.contentWindow?.postMessage(
-          { html: framedHtmlOf(page), url: page.url, token: frameToken },
-          '*',
-        )
-      }}
-      className={frameClass}
-    />
-  )
-}
-
-const OpenedPages = ({ pages, onOpen }: { pages: readonly BrowserPage[]; onOpen: (page: BrowserPage) => void }) => (
-  <ul aria-label="Pages the agent opened" className="flex flex-col gap-1 text-sm">
+const OpenedFiles = ({ pages, onOpen }: { pages: readonly BrowserPage[]; onOpen: (page: BrowserPage) => void }) => (
+  <ul aria-label="Files the agent opened" className="flex flex-col gap-1 text-sm">
     {pages.map((page) => (
       <li key={page.url}>
         <button
@@ -144,132 +84,280 @@ const OpenedPages = ({ pages, onOpen }: { pages: readonly BrowserPage[]; onOpen:
           onClick={() => onOpen(page)}
           className={`flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-hover ${focusRing}`}
         >
-          <span className="max-w-full truncate font-medium">{page.url}</span>
-          {page.title !== page.url && <span className="max-w-full truncate text-xs text-muted">{page.title}</span>}
+          <span className="max-w-full truncate font-medium">{page.title}</span>
+          {page.title !== page.url && <span className="max-w-full truncate text-xs text-muted">{page.url}</span>}
         </button>
       </li>
     ))}
   </ul>
 )
 
-const ShownPage = ({
-  workspaceId,
-  chatId,
-  page,
-  isTyped,
-  onFollow,
-}: {
-  workspaceId: WorkspaceId
-  chatId: ChatId
-  page: BrowserPage
-  isTyped: boolean
-  onFollow: (page: BrowserPage) => void
-}) => {
-  const [isLoaded, setIsLoaded] = useState(false)
-  if (!isTyped && !isLoaded)
-    return (
-      <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-line p-3 text-sm">
-        <p className="text-muted">The agent opened this page. Check its address before you load it.</p>
-        <p className="font-mono break-all">{page.url}</p>
-        <button type="button" onClick={() => setIsLoaded(true)} className={ghostButtonClass}>
-          Load page
-        </button>
-      </div>
-    )
-  if (!isWebAddress(page.url)) return <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={page} />
-  return isOnMembersMachine(page.url) ? (
-    <DirectFrame url={page.url} />
-  ) : (
-    <WebPageFrame workspaceId={workspaceId} url={page.url} onFollow={onFollow} />
+const SharedChatWarning = () => {
+  const [isSeen, setIsSeen] = useState(() => localStorage.getItem(warningSeenKey) === 'yes')
+  if (isSeen) return null
+  return (
+    <div className={`${calloutClass} flex flex-col items-start gap-2`}>
+      <p>
+        Only you see this browser, and it keeps your sign-ins for this chat. When you prompt the agent, it can read and
+        act in it, and what it reads can end up in the chat, where everyone in it can see it.
+      </p>
+      <button
+        type="button"
+        className={smallGhostButtonClass}
+        onClick={() => {
+          localStorage.setItem(warningSeenKey, 'yes')
+          setIsSeen(true)
+        }}
+      >
+        Got it
+      </button>
+    </div>
   )
 }
 
-export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
-  const status = useScoped(workspaceId, 'chatBrowserPages', { chatId })
-  const isComplete = status?.isComplete === true
-  const pages = useQuery(getOpenedPages, workspaceId, chatId)
-  const isLoaded = isComplete && pages.length === status?.rows.length
-  const latestOpenedAt = pages[0]?.openedAt ?? ''
-  const [choice, setChoice] = useState<Choice>()
-  if (isLoaded && choice === undefined)
-    setChoice({ page: null, isTyped: false, seenOpenedAt: latestOpenedAt, trail: [] })
-  const isNewlyOpened = choice !== undefined && latestOpenedAt > choice.seenOpenedAt
-  const shown = isNewlyOpened ? (pages[0] ?? null) : (choice?.page ?? null)
-  const isTyped = !isNewlyOpened && choice?.isTyped === true
-  const trail = isNewlyOpened ? [] : (choice?.trail ?? [])
-  const choose = (page: BrowserPage | null, isTyped = false, nextTrail: readonly BrowserPage[] = []) =>
-    setChoice({ page, isTyped, seenOpenedAt: latestOpenedAt, trail: nextTrail })
-  const follow = (page: BrowserPage) => {
-    if (page.url !== shown?.url) choose(page, true, shown ? [...trail, shown] : trail)
+const filesOf = async (list: FileList) => {
+  const files = [...list]
+  if (files.reduce((total, file) => total + file.size, 0) > maximumUploadBytes) return undefined
+  return Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      mimeType: file.type,
+      data: btoa(Array.from(new Uint8Array(await file.arrayBuffer()), (byte) => String.fromCharCode(byte)).join('')),
+    })),
+  )
+}
+
+const FileRequest = ({ live }: { live: LiveBrowser }) => {
+  const [isTooLarge, setIsTooLarge] = useState(false)
+  if (!live.fileChooser) return null
+  return (
+    <div className={`${calloutClass} flex flex-col items-start gap-2`}>
+      <label className="flex flex-col gap-1">
+        The page asks for {live.fileChooser.multiple ? 'files' : 'a file'}
+        <input
+          type="file"
+          multiple={live.fileChooser.multiple}
+          onChange={async (event) => {
+            const files = event.target.files && (await filesOf(event.target.files))
+            if (!files) return setIsTooLarge(true)
+            live.send({ type: 'files', files })
+            live.closeFileChooser()
+          }}
+        />
+      </label>
+      {isTooLarge && <p className="text-xs">Files over 25 MB in all are not sent</p>}
+      <button type="button" className={smallGhostButtonClass} onClick={live.closeFileChooser}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+const BrowserStatus = ({ live, onReconnect }: { live: LiveBrowser; onReconnect: () => void }) => {
+  const text = stateTextOf(live.state)
+  if (!text) return null
+  const isBusy = live.state.state === 'connecting' || live.state.state === 'starting'
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-app/90 p-4 text-center text-sm">
+      {isBusy && <Spinner />}
+      <p>{text}</p>
+      {live.state.state === 'stopped' && (
+        <button type="button" className={ghostButtonClass} onClick={live.start}>
+          Start again
+        </button>
+      )}
+      {live.state.state === 'disconnected' && (
+        <button type="button" className={ghostButtonClass} onClick={onReconnect}>
+          Reconnect
+        </button>
+      )}
+    </div>
+  )
+}
+
+const isPasteShortcut = (event: KeyboardEvent) => event.key.toLowerCase() === 'v' && (event.ctrlKey || event.metaKey)
+
+const BrowserView = ({
+  live,
+  canBrowse,
+  onReconnect,
+}: {
+  live: LiveBrowser
+  canBrowse: boolean
+  onReconnect: () => void
+}) => {
+  const area = useRef<HTMLDivElement>(null)
+  const isMovePending = useRef(false)
+  const { frame, send } = live
+  useEffect(() => {
+    const element = area.current
+    if (!element) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver(([entry]) => {
+      clearTimeout(timer)
+      const { width = 0, height = 0 } = entry?.contentRect ?? {}
+      timer = setTimeout(() => send({ type: 'resize', width, height }), resizeDelayMilliseconds)
+    })
+    observer.observe(element)
+    const scroll = (event: WheelEvent) => {
+      if (!canBrowse || !frame) return
+      event.preventDefault()
+      const rect = element.getBoundingClientRect()
+      const point = pagePointOf({ x: event.clientX - rect.left, y: event.clientY - rect.top }, rect, frame)
+      send({
+        type: 'input',
+        event: { kind: 'mouse', action: 'wheel', ...point, deltaX: event.deltaX, deltaY: event.deltaY },
+      })
+    }
+    element.addEventListener('wheel', scroll, { passive: false })
+    return () => {
+      clearTimeout(timer)
+      observer.disconnect()
+      element.removeEventListener('wheel', scroll)
+    }
+  }, [send, canBrowse, frame])
+  const mouse = (action: 'down' | 'up' | 'move') => (event: MouseEvent<HTMLDivElement>) => {
+    if (!canBrowse || !frame) return
+    if (action === 'move' && isMovePending.current) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const point = pagePointOf({ x: event.clientX - rect.left, y: event.clientY - rect.top }, rect, frame)
+    const modifiers = { alt: event.altKey, control: event.ctrlKey, meta: event.metaKey, shift: event.shiftKey }
+    const input = {
+      kind: 'mouse',
+      action,
+      ...point,
+      button: mouseButtonOf(event.button),
+      clickCount: event.detail,
+      ...modifiers,
+    }
+    if (action !== 'move') return send({ type: 'input', event: input })
+    isMovePending.current = true
+    requestAnimationFrame(() => {
+      isMovePending.current = false
+      send({ type: 'input', event: input })
+    })
   }
-  const goBack = () => choose(trail.at(-1) ?? null, true, trail.slice(0, -1))
+  const key = (action: 'down' | 'up') => (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!canBrowse || isPasteShortcut(event)) return
+    event.preventDefault()
+    send({ type: 'input', event: { kind: 'key', action, key: pageKeyOf(event.key, isMac) } })
+  }
+  const paste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (!canBrowse) return
+    event.preventDefault()
+    send({ type: 'input', event: { kind: 'text', text: event.clipboardData.getData('text') } })
+  }
+  return (
+    <div
+      ref={area}
+      role="application"
+      aria-label="Your browser"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: an ARIA application takes focus to pass the member's keys to the live page
+      tabIndex={0}
+      onMouseDown={(event) => {
+        event.currentTarget.focus()
+        mouse('down')(event)
+      }}
+      onMouseUp={mouse('up')}
+      onMouseMove={mouse('move')}
+      onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={key('down')}
+      onKeyUp={key('up')}
+      onPaste={paste}
+      className={`relative min-h-80 flex-1 overflow-hidden rounded-md border border-line bg-white ${focusRing}`}
+    >
+      {frame && (
+        <img
+          src={`data:image/jpeg;base64,${frame.data}`}
+          alt={live.page?.title || 'The page in your browser'}
+          draggable={false}
+          onLoad={() => send({ type: 'frame_ack' })}
+          className="pointer-events-none h-full w-full select-none"
+        />
+      )}
+      <BrowserStatus live={live} onReconnect={onReconnect} />
+    </div>
+  )
+}
+
+const AddressBar = ({ live, canBrowse }: { live: LiveBrowser; canBrowse: boolean }) => {
+  const go = (direction: 'back' | 'forward' | 'reload') => live.send({ type: 'go', direction })
   const browse = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const page = browsedPageOf(String(new FormData(event.currentTarget).get('address') ?? ''))
-    if (page) follow(page)
+    if (page) live.send({ type: 'go_to', url: page.url })
   }
   return (
-    <div className="flex h-full flex-col gap-3">
-      <search>
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        aria-label="Back"
+        title="Back"
+        disabled={!canBrowse}
+        onClick={() => go('back')}
+        className={iconButtonClass}
+      >
+        <ArrowLeft aria-hidden className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Forward"
+        title="Forward"
+        disabled={!canBrowse}
+        onClick={() => go('forward')}
+        className={iconButtonClass}
+      >
+        <ArrowRight aria-hidden className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Reload"
+        title="Reload"
+        disabled={!canBrowse}
+        onClick={() => go('reload')}
+        className={iconButtonClass}
+      >
+        <RotateCw aria-hidden className="size-4" />
+      </button>
+      <search className="min-w-0 flex-1">
         <form aria-label="Browse" onSubmit={browse}>
           <input
-            key={shown?.url}
+            key={live.page?.url}
             type="search"
             name="address"
             aria-label="Search or type an address"
             placeholder="Search or type an address"
-            defaultValue={shown?.url}
+            defaultValue={live.page?.url}
+            readOnly={!canBrowse}
             className={`${fieldClass} w-full`}
           />
         </form>
       </search>
-      {shown ? (
-        <>
-          <div className="flex items-center gap-1">
-            {trail.length > 0 && (
-              <button type="button" aria-label="Back" title="Back" onClick={goBack} className={iconButtonClass}>
-                <ArrowLeft aria-hidden className="size-4" />
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label="All pages"
-              title="All pages"
-              onClick={() => choose(null)}
-              className={iconButtonClass}
-            >
-              <List aria-hidden className="size-4" />
-            </button>
-            <p className="min-w-0 truncate text-sm font-medium" title={shown.url}>
-              {shown.url}
-            </p>
-          </div>
-          <ShownPage
-            key={`${isTyped}:${shown.url}`}
-            workspaceId={workspaceId}
-            chatId={chatId}
-            page={shown}
-            isTyped={isTyped}
-            onFollow={follow}
-          />
-        </>
-      ) : pages.length > 0 ? (
-        <OpenedPages pages={pages} onOpen={choose} />
-      ) : (
-        isComplete && (
-          <EmptyState
-            Icon={Globe}
-            title="No page open"
-            hint="Search or type an address above. Pages the agent opens for you, like a report it built, show here too."
-          />
-        )
-      )}
+    </div>
+  )
+}
+
+const LiveBrowserTab = ({
+  workspaceId,
+  chatId,
+  actionsSlot,
+  onReconnect,
+}: Omit<TabProps, 'Markdown'> & { onReconnect: () => void }) => {
+  const live = useLiveBrowser(workspaceId, chatId)
+  const canBrowse = live.state.state === 'running' && live.state.canBrowse
+  return (
+    <>
+      <AddressBar live={live} canBrowse={canBrowse} />
+      <SharedChatWarning />
+      <FileRequest live={live} />
+      <BrowserView live={live} canBrowse={canBrowse} onReconnect={onReconnect} />
+      {live.notice && <p className="text-xs text-muted">{live.notice}</p>}
       {actionsSlot &&
-        shown &&
-        isWebAddress(shown.url) &&
+        live.page &&
+        isWebAddress(live.page.url) &&
         createPortal(
           <a
-            href={shown.url}
+            href={live.page.url}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open in a new tab"
@@ -280,6 +368,62 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           </a>,
           actionsSlot,
         )}
+    </>
+  )
+}
+
+export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
+  const status = useScoped(workspaceId, 'chatBrowserPages', { chatId })
+  const files = useQuery(getOpenedPages, workspaceId, chatId)
+  const isLoaded = status?.isComplete === true && files.length === status.rows.length
+  const latestOpenedAt = files[0]?.openedAt ?? ''
+  const [seenOpenedAt, setSeenOpenedAt] = useState<string>()
+  const [shownFile, setShownFile] = useState<BrowserPage | null>(null)
+  const [isListing, setIsListing] = useState(false)
+  const [connectionCount, setConnectionCount] = useState(0)
+  if (isLoaded && seenOpenedAt === undefined) setSeenOpenedAt(latestOpenedAt)
+  if (seenOpenedAt !== undefined && latestOpenedAt > seenOpenedAt) {
+    setSeenOpenedAt(latestOpenedAt)
+    setShownFile(files[0] ?? null)
+  }
+  const openFile = (file: BrowserPage) => {
+    setShownFile(file)
+    setIsListing(false)
+  }
+  return (
+    <div className="flex h-full flex-col gap-3">
+      {files.length > 0 && (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-pressed={isListing || shownFile !== null}
+            onClick={() => {
+              setIsListing(!isListing && shownFile === null)
+              setShownFile(null)
+            }}
+            className={`flex items-center gap-1.5 ${smallGhostButtonClass}`}
+          >
+            <FileText aria-hidden className="size-4" />
+            {isListing || shownFile ? 'Back to your browser' : 'Files the agent opened'}
+          </button>
+          {shownFile && (
+            <p className="min-w-0 truncate text-sm font-medium" title={shownFile.url}>
+              {shownFile.title}
+            </p>
+          )}
+        </div>
+      )}
+      {shownFile && <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={shownFile} />}
+      {isListing && !shownFile && <OpenedFiles pages={files} onOpen={openFile} />}
+      <div className={`flex min-h-0 flex-1 flex-col gap-3 ${shownFile || isListing ? 'hidden' : ''}`}>
+        <LiveBrowserTab
+          key={connectionCount}
+          workspaceId={workspaceId}
+          chatId={chatId}
+          actionsSlot={actionsSlot}
+          onReconnect={() => setConnectionCount((count) => count + 1)}
+        />
+      </div>
     </div>
   )
 }

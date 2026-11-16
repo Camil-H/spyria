@@ -933,6 +933,8 @@ const fakeHostHeartbeatMilliseconds = 60 * 60_000
 export const fakeAgentProtocolVersion = 2
 
 type FakeBrowserMessage = Record<string, unknown> & { type?: string; command?: string; id?: number }
+export const fakeBrowserFrame =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 export const fakeBrowserSnapshot = '- button "Place order" [ref=e1]\n- button "Menu" [ref=e2]'
 const fakeBrowserAnswerOf = (message: FakeBrowserMessage) => {
   if (message.command === 'snapshot') return fakeBrowserSnapshot
@@ -960,7 +962,7 @@ const createFakeBrowsers = () => {
           if (message.type === 'settings') return emit({ type: 'ready' })
           if (message.type === 'watch') {
             emit({ type: 'page', url: 'https://example.com/', title: 'Example' })
-            return emit({ type: 'frame', data: 'ZnJhbWU=', width: 800, height: 600 })
+            return emit({ type: 'frame', data: fakeBrowserFrame, width: 800, height: 600 })
           }
           if (message.command === 'open') emit({ type: 'visited', url: message.url })
           if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })

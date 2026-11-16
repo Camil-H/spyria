@@ -63,6 +63,41 @@ export type Application = {
 
 const notSignedInCloseCode = 4001
 
+const createBrowserConnector =
+  (store: Store): PanelCommands['openBrowser'] =>
+  ({ workspaceId, chatId }, onMessage) => {
+    let socket: WebSocket | undefined
+    let isClosed = false
+    let hasRenewed = false
+    const open = () => {
+      const opened = new WebSocket(`${location.origin.replace(/^http/, 'ws')}/api/browser`)
+      socket = opened
+      opened.onopen = () => opened.send(JSON.stringify({ type: 'open', token: store.tokenOf(workspaceId), chatId }))
+      opened.onmessage = (message) => {
+        hasRenewed = false
+        onMessage(JSON.parse(String(message.data)))
+      }
+      opened.onclose = async (event) => {
+        if (isClosed || socket !== opened) return
+        if (event.code !== notSignedInCloseCode || hasRenewed)
+          return onMessage({ type: 'state', state: 'disconnected' })
+        hasRenewed = true
+        await store.renewSession(workspaceId).catch(console.error)
+        if (!isClosed) open()
+      }
+    }
+    open()
+    return {
+      send: (message) => {
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+      },
+      close: () => {
+        isClosed = true
+        socket?.close()
+      },
+    }
+  }
+
 const createAgentStream = (store: Store): AgentStream => {
   type Listener = Parameters<AgentStream['subscribe']>[2]
   const listenersByWorkspace = new Map<WorkspaceId, Map<ChatId, Set<Listener>>>()
@@ -294,7 +329,7 @@ export const createApp = async (
     }),
     conversationCommands,
     agentStream,
-    panelCommands: conversationCommands,
+    panelCommands: { ...conversationCommands, openBrowser: createBrowserConnector(store) },
     profileCommands: commandsOf<ProfileCommands>(profileMutators.profile, {
       addLlmCredential: createHttpLlmCredentialAdder(postAsMember),
       ...toolConnections,

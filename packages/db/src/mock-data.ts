@@ -250,19 +250,6 @@ export const createMockSnapshot = (): Snapshot => {
         title: 'Invoice totals',
         openedAt: '2026-10-01T09:05:00.000Z',
       },
-      {
-        ...invoiceBug,
-        url: 'https://example.com/invoices',
-        title: 'Invoices',
-        openedAt: '2026-10-01T09:06:00.000Z',
-      },
-      {
-        workspaceId: acme,
-        chatId: welcomeChat,
-        url: 'https://example.com/onboarding',
-        title: 'Onboarding guide',
-        openedAt: '2026-10-01T09:00:00.000Z',
-      },
     ],
     usageEntries: [
       {
