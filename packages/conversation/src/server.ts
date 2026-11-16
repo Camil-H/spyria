@@ -15,6 +15,7 @@ export {
   isApprovalQuestion,
   isAuthRequiredError,
   isStoredAgentEvent,
+  promptJoinedIdOf,
   streamedTextOf,
   toolCallIdOf,
   turnEndPromptIdOf,

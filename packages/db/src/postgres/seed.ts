@@ -75,11 +75,12 @@ const insertSnapshot = async (transaction: Transaction, snapshot: Snapshot) => {
     .values(snapshot.chatRoles.map((role) => ({ ...role, permissions: [...role.permissions] })))
   await transaction.insert(tables.chatParticipants).values(snapshot.chatMembers.map(withUserId))
   await transaction.insert(tables.messages).values(
-    snapshot.messages.map(({ needsReply, createdAt, editedAt, deletedAt, ...message }) => ({
+    snapshot.messages.map(({ needsReply, createdAt, editedAt, deletedAt, pickedUpAt, ...message }) => ({
       ...message,
       createdAt: new Date(createdAt),
       editedAt: editedAt === null ? null : new Date(editedAt),
       deletedAt: deletedAt === null ? null : new Date(deletedAt),
+      pickedUpAt: pickedUpAt === null ? null : new Date(pickedUpAt),
     })),
   )
   await transaction.insert(tables.events).values(

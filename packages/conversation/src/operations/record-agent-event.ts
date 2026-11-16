@@ -6,6 +6,7 @@ import {
   delegatedProjectionOf,
   isAuthRequiredError,
   observedProjectionStep,
+  promptJoinedIdOf,
   subagentDelegationOf,
   toolCallIdOf,
   turnEndNoticeOf,
@@ -31,7 +32,8 @@ const recordIn = async (
   { workspaceId, chatId, event, ...input }: Input,
 ) => {
   const previous = await unitOfWork.agentEvents.last(chatId)
-  const promptId = input.turnPromptId ?? activePromptId ?? previous?.replyToId ?? null
+  const replyTarget = activePromptId && !input.turnPromptId ? await unitOfWork.agentTurns.replyTarget(chatId) : null
+  const promptId = input.turnPromptId ?? replyTarget ?? activePromptId ?? previous?.replyToId ?? null
   const delegation =
     input.delegation ??
     (toolCallIdOf(event) && promptId
@@ -41,6 +43,10 @@ const recordIn = async (
   const seq = await unitOfWork.agentEvents.append(chatId, event, promptId, recordedAt, delegation)
   const projected = agentProjectionOf(event)
   const isOwnTurn = (input.turnPromptId ?? activePromptId) === activePromptId
+  const joinedPromptId =
+    seq !== undefined && !delegation && isOwnTurn && activePromptId ? promptJoinedIdOf(event) : undefined
+  const joined = joinedPromptId ? await unitOfWork.messages.find(messageId(joinedPromptId)) : undefined
+  if (joined?.chatId === chatId) await unitOfWork.agentTurns.setReplyTarget(chatId, joined.id)
   if (
     seq !== undefined &&
     !delegation &&

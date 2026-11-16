@@ -125,4 +125,9 @@ export const TooManyToolServersOff = errorKind(
   () => 'A chat turns off at most 100 tool servers',
   ConversationError,
 )
+export const PromptPickedUp = errorKind(
+  'prompt_picked_up',
+  () => 'The agent has already picked up this message, so it can no longer be changed',
+  ConversationError,
+)
 export const BrowserUnavailable = errorKind('browser_unavailable', (reason: string) => reason, ConversationError)

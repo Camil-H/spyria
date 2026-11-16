@@ -1,4 +1,5 @@
 import {
+  boundingBoxOf,
   composerOf,
   expect,
   expectMembers,
@@ -10,13 +11,14 @@ import {
   panelTabOf as tabOf,
   tabPanelOf,
   test,
+  viewportOf,
 } from '../fixtures'
 
 const tabListOf = (page: Page) => panelOf(page).getByRole('tablist', { name: 'Panel tabs' })
-const panelWidthOf = async (page: Page) => (await panelOf(page).boundingBox())!.width
+const panelWidthOf = async (page: Page) => (await boundingBoxOf(panelOf(page))).width
 
 const dragResizeHandleBy = async (page: Page, horizontalOffset: number) => {
-  const handleBox = (await page.getByRole('separator', { name: 'Resize panel' }).boundingBox())!
+  const handleBox = await boundingBoxOf(page.getByRole('separator', { name: 'Resize panel' }))
   const handleCenterX = handleBox.x + handleBox.width / 2
   const handleCenterY = handleBox.y + handleBox.height / 2
   await page.mouse.move(handleCenterX, handleCenterY)
@@ -69,17 +71,17 @@ test.describe('Side panel', () => {
     })
 
     await test.step('spans the full height of the window, flush with the right edge', async () => {
-      const viewport = page.viewportSize()!
-      const panelBox = (await panelOf(page).boundingBox())!
+      const viewport = viewportOf(page)
+      const panelBox = await boundingBoxOf(panelOf(page))
       expect(panelBox.y).toBeLessThan(2)
       expect(panelBox.y + panelBox.height).toBeGreaterThan(viewport.height - 2)
       expect(panelBox.x + panelBox.width).toBeGreaterThan(viewport.width - 2)
     })
 
     await test.step('keeps the chat header in the chat column, beside the panel', async () => {
-      const panelBox = (await panelOf(page).boundingBox())!
-      const titleBox = (await mainOf(page).getByRole('heading', { level: 1 }).boundingBox())!
-      const toggleBox = (await page.getByRole('button', { name: 'Hide panel' }).boundingBox())!
+      const panelBox = await boundingBoxOf(panelOf(page))
+      const titleBox = await boundingBoxOf(mainOf(page).getByRole('heading', { level: 1 }))
+      const toggleBox = await boundingBoxOf(page.getByRole('button', { name: 'Hide panel' }))
       expect(titleBox.x + titleBox.width).toBeLessThan(panelBox.x)
       expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(panelBox.x)
     })
@@ -257,13 +259,13 @@ test.describe('Side panel', () => {
     const widthBeforeHiding = await panelWidthOf(page)
 
     await test.step('hides the panel and gives the width and the full height back to the chat view', async () => {
-      const composerWidthWithPanel = (await composerOf(page).boundingBox())!.width
+      const composerWidthWithPanel = (await boundingBoxOf(composerOf(page))).width
       await page.getByRole('button', { name: 'Hide panel' }).click()
       await expect(panelOf(page)).toBeHidden()
       await expect(page.getByRole('button', { name: 'Show panel' })).toBeVisible()
-      expect((await composerOf(page).boundingBox())!.width).toBeGreaterThan(composerWidthWithPanel + 200)
-      const sendBox = (await page.getByRole('button', { name: 'Send' }).boundingBox())!
-      expect(sendBox.x + sendBox.width).toBeGreaterThan(page.viewportSize()!.width - 96)
+      expect((await boundingBoxOf(composerOf(page))).width).toBeGreaterThan(composerWidthWithPanel + 200)
+      const sendBox = await boundingBoxOf(page.getByRole('button', { name: 'Send' }))
+      expect(sendBox.x + sendBox.width).toBeGreaterThan(viewportOf(page).width - 96)
     })
 
     await test.step('restores the previous width and tab when shown again', async () => {
@@ -319,7 +321,7 @@ test.describe('Side panel', () => {
     })
 
     await test.step('stays between 280px and the width that leaves the chat 320px, beyond the former 640px cap', async () => {
-      const maximumWidth = Math.floor((await mainOf(page).boundingBox())!.width - 320)
+      const maximumWidth = Math.floor((await boundingBoxOf(mainOf(page))).width - 320)
       expect(maximumWidth).toBeGreaterThan(640)
       await expect(separator).toHaveAttribute('aria-valuemax', String(maximumWidth))
       await dragResizeHandleBy(page, -1000)
@@ -330,14 +332,14 @@ test.describe('Side panel', () => {
 
     await test.step('narrows a wide panel when the window shrinks so it never covers the chat', async () => {
       await dragResizeHandleBy(page, -1000)
-      const viewport = page.viewportSize()!
+      const viewport = viewportOf(page)
       await page.setViewportSize({ width: viewport.width - 200, height: viewport.height })
-      const mainBox = (await mainOf(page).boundingBox())!
+      const mainBox = await boundingBoxOf(mainOf(page))
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(Math.floor(mainBox.width - 320), 0)
-      const panelBox = (await panelOf(page).boundingBox())!
+      const panelBox = await boundingBoxOf(panelOf(page))
       expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1)
       await page.setViewportSize(viewport)
-      const restoredMaximumWidth = Math.floor((await mainOf(page).boundingBox())!.width - 320)
+      const restoredMaximumWidth = Math.floor((await boundingBoxOf(mainOf(page))).width - 320)
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(restoredMaximumWidth, 0)
       await dragResizeHandleBy(page, 1000)
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)

@@ -317,3 +317,67 @@ test('Stop while a Pi question waits closes it as stopped and cancels the dialog
   ])
   expect(subSocket.events.filter(kindOf('question'))).toEqual([])
 })
+
+test('a message joined while a Pi turn runs is taken in before the turn ends, which still ends as the first prompt, and none is run twice', async () => {
+  const { call, open, create } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  const send = (action: 'events' | 'joins', text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/${action}`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  await send('events', 'stub:pause', 'prompt-1')
+  await socket.until((event) => textOf([event]) === 'Before the pause. ')
+  expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
+  expect((await send('joins', 'use tabs', 'joined-1')).status).toBe(200)
+  expect((await send('joins', 'and keep tests', 'joined-2')).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(
+    socket.events
+      .filter((event) => kindOf('prompt_joined')(event) || kindOf('turn_end')(event))
+      .map(({ update }) => update),
+  ).toEqual([
+    { sessionUpdate: 'prompt_joined', promptId: 'joined-1' },
+    { sessionUpdate: 'prompt_joined', promptId: 'joined-2' },
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-1' },
+  ])
+  expect(textOf(socket.events)).toBe(
+    `[t1] Before the pause. Took in: use tabs. Took in: and keep tests. ${piHello(1).slice(5)}`,
+  )
+
+  expect((await send('events', 'use tabs', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-1',
+  })
+  expect(textOf(socket.events)).not.toContain('[t2]')
+})
+
+test('a message joined to a Pi turn that Stop aborts is never taken in, and runs as its own prompt afterwards; with no turn running, a join is refused', async () => {
+  const { call, open, create } = started()
+  const id = await create(piLaunchOf())
+  const socket = open(id)
+  const send = (action: 'events' | 'joins', text: string, promptId: string) =>
+    call('POST', `/api/conversations/${id}/${action}`, { content: [{ type: 'text', text }], prompt_id: promptId })
+  expect((await send('joins', 'too early', 'early-1')).status).toBe(409)
+  await send('events', 'stub:long', 'prompt-1')
+  await socket.until((event) => event.update.toolCallId === 'long-1')
+  expect((await send('joins', 'and then this', 'joined-1')).status).toBe(200)
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-1' })).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'cancelled',
+    promptId: 'prompt-1',
+  })
+
+  expect((await send('events', 'and then this', 'joined-1')).status).toBe(200)
+  await socket.until(kindOf('turn_end'), 2)
+  expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+  expect(socket.events.at(-1)?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'joined-1',
+  })
+  expect(textOf(socket.events)).toEndWith(piHello(2))
+})

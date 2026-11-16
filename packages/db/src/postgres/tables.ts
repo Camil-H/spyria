@@ -362,6 +362,7 @@ export const chats = table(
     baseBranch: text(),
     originChatId: text(),
     agentTurnMessageId: text(),
+    agentTurnReplyToId: text(),
     agentTurnPrompterId: text(),
     agentTurnFailure: text(),
     contextTokens: integer(),
@@ -470,6 +471,7 @@ export const messages = table(
     createdAt: instant().notNull(),
     editedAt: instant(),
     deletedAt: instant(),
+    pickedUpAt: instant(),
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.id] }),

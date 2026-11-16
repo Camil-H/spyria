@@ -47,6 +47,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       createdAt: minute(1),
       editedAt: minute(3),
       deletedAt: null,
+      pickedUpAt: null,
     },
     {
       workspaceId: 'acme',
@@ -64,6 +65,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       createdAt: minute(2),
       editedAt: null,
       deletedAt: null,
+      pickedUpAt: null,
     },
     {
       workspaceId: 'acme',
@@ -81,6 +83,7 @@ test('messagesFromEvents folds posted, replied, thread reply, edited and deleted
       createdAt: minute(4),
       editedAt: null,
       deletedAt: minute(5),
+      pickedUpAt: null,
     },
   ])
 })
@@ -163,4 +166,20 @@ test('a card posted by an agent keeps the member it acts for as author, and a no
     { kind: 'step', authorId: 'alice' },
     { kind: 'notice', authorId: null },
   ])
+})
+
+test('a prompt the agent picked up keeps when it was picked up, until it is put back in the queue', () => {
+  const pickedUpAtOf = (events: StoredEvent[]) =>
+    messagesFromEvents([
+      eventAt(1, 'message.posted', 'alice', { ...posted, body: 'Use tabs' }, 'prompt'),
+      ...events,
+    ]).map(({ pickedUpAt }) => pickedUpAt)
+  expect(pickedUpAtOf([])).toEqual([null])
+  expect(pickedUpAtOf([eventAt(2, 'message.picked_up', null, { messageId: 'prompt' })])).toEqual([minute(2)])
+  expect(
+    pickedUpAtOf([
+      eventAt(2, 'message.picked_up', null, { messageId: 'prompt' }),
+      eventAt(3, 'message.requeued', null, { messageId: 'prompt' }),
+    ]),
+  ).toEqual([null])
 })

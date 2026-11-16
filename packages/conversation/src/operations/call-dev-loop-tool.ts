@@ -78,7 +78,7 @@ const unresolvedRefusalOf = (step: Loop['step']) => {
 }
 
 const reportReview = async (unitOfWork: UnitOfWork, { loop, prompt }: Turn, input: unknown) => {
-  if (!loop || loop.step.state !== 'reviewing' || loop.step.lastPromptId !== prompt.id)
+  if (loop?.step.state !== 'reviewing' || loop.step.lastPromptId !== prompt.id)
     return refused('No review was asked for in this turn')
   const findings = reviewFindingsOf(input)
   if (!findings)

@@ -155,7 +155,8 @@ export const MessageItem = ({
         ref={ref}
         data-message-id={message.id}
         aria-current={message.id === linkedMessageId || undefined}
-        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent aria-current:ring-inset"
+        data-queued={message.isQueued || undefined}
+        className="group relative rounded-md px-3 py-2 hover:bg-hover aria-current:bg-hover aria-current:ring-1 aria-current:ring-accent aria-current:ring-inset data-queued:opacity-60 data-queued:focus-within:opacity-100 data-queued:hover:opacity-100"
       >
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
@@ -179,6 +180,7 @@ export const MessageItem = ({
                 {timeFormat.format(message.createdAt)}
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
+              {message.isQueued && <span className="text-xs text-muted">Queued</span>}
             </div>
             {message.quote && !message.isDeleted && <QuotedMessage quote={message.quote} />}
             {mode === 'edit' ? (

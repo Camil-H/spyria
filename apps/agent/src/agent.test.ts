@@ -82,6 +82,22 @@ test('a prompt streams chunks and ends its turn; Stop cancels the next turn and 
   expect((await call('GET', `/api/conversations/${id}`)).status).toBe(404)
 })
 
+test('a harness over ACP refuses a message joined to its running turn, so the message waits for the turn to end', async () => {
+  const { call, open, create, prompt } = started()
+  const id = await create(launchOf())
+  const socket = open(id)
+  await prompt(id, 'stub:long')
+  await socket.until((event) => event.update.status === 'in_progress')
+  const joined = await call('POST', `/api/conversations/${id}/joins`, {
+    content: [{ type: 'text', text: 'and then this' }],
+    prompt_id: 'joined-1',
+  })
+  expect(joined).toEqual({ status: 409, body: { error: 'This agent takes messages only between turns' } })
+  expect((await call('POST', `/api/conversations/${id}/interrupt`, {})).status).toBe(200)
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.filter(kindOf('prompt_joined'))).toEqual([])
+})
+
 test('a conversation stays running while a later prompt runs after an earlier one was stopped, and finishes with the last', async () => {
   const { call, open, create, prompt } = started()
   const id = await create(launchOf())

@@ -24,6 +24,7 @@ type MessageFields = Readonly<{
   step: StoredStep | null
   createdAt: Date
   editedAt: Date | null
+  pickedUpAt: Date | null
   replyToId: MessageId | null
   threadRootId: MessageId | null
   quotedMessageId: MessageId | null
@@ -34,7 +35,14 @@ export type DeletedMessage = MessageFields & Readonly<{ status: 'deleted'; delet
 export type Message = LiveMessage | DeletedMessage
 
 export type MessageChange = Readonly<{
-  type: 'message.posted' | 'message.replied' | 'message.edited' | 'message.deleted' | 'message.step_changed'
+  type:
+    | 'message.posted'
+    | 'message.replied'
+    | 'message.edited'
+    | 'message.deleted'
+    | 'message.step_changed'
+    | 'message.picked_up'
+    | 'message.requeued'
   actor: Actor
   message: Message
 }>
@@ -120,5 +128,6 @@ export const newMessage = (
   attachments: [],
   ...fields,
   editedAt: null,
+  pickedUpAt: null,
   status: 'live',
 })

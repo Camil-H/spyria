@@ -17,6 +17,7 @@ const answer: ConversationMessage = {
   step: null,
   replyToId: messageId('message-prompt'),
   canEdit: false,
+  isQueued: false,
   isDeleted: false,
   isEdited: false,
   isRunning: true,

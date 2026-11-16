@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "72a4bf55-a020-4dcd-a98b-b524b6c1356e",
-  "prevIds": ["b58b2c49-0e6e-4c0c-9a7a-9a0fc2b4731e"],
+  "id": "6b7bb319-83ff-4f77-a878-bc00ad00ee94",
+  "prevIds": ["44a057f8-e307-4c61-acdc-8785bb329efb"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -975,6 +975,19 @@
       "generated": null,
       "identity": null,
       "name": "agent_turn_message_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_turn_reply_to_id",
       "entityType": "columns",
       "schema": "public",
       "table": "chats"
@@ -2873,6 +2886,19 @@
       "generated": null,
       "identity": null,
       "name": "deleted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "picked_up_at",
       "entityType": "columns",
       "schema": "public",
       "table": "messages"

@@ -30,6 +30,7 @@ import { devLoopAuthorName, isDevLoopPrompt } from '../domain/dev-loop.ts'
 import { noReplyAuthorOf } from '../domain/git-actions.ts'
 import type { Message } from '../domain/message.ts'
 import { modelNotAllowedNoticeOf, noLlmKeyNoticeOf, publicModelNameOf } from '../domain/model-call-failures.ts'
+import { joinsRunningTurn } from '../domain/queued-prompts.ts'
 import { agentPromptTextOf, type QuotedMessage } from '../domain/seed-message.ts'
 import {
   piModelOf,
@@ -44,9 +45,12 @@ import {
   beginAgentTurn,
   closeAgentTurn,
   noticeWaitingPrompts,
+  pickUp,
   releaseAgentTurn,
+  requeue,
 } from './agent-turn.ts'
 import { decide, routingUnavailableOf } from './decide.ts'
+import { loopOfPrompt } from './dev-loop-turns.ts'
 
 type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean; isRetry: boolean }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
@@ -97,6 +101,63 @@ const savedAttachmentsOf = async (
     if (path) savedPaths.set(id, path)
   }
   return savedPaths
+}
+
+const savedAttachmentListOf = (prompt: Message, savedPaths: ReadonlyMap<string, string>) =>
+  prompt.attachments.flatMap(({ id, mediaType }) => {
+    const path = savedPaths.get(id)
+    return path ? [{ path, mediaType }] : []
+  })
+
+const pickUpQueuedPrompt = async (unitOfWork: UnitOfWork, chatId: ChatId) => {
+  const { agentTurns, messages, chats } = unitOfWork
+  const turnPromptId = await agentTurns.lock(chatId)
+  if (turnPromptId === null) return undefined
+  const [queued] = (await agentTurns.waitingPrompts(chatId)).filter((prompt) => prompt.pickedUpAt === null)
+  const turnPrompt = await messages.get(turnPromptId)
+  if (!queued?.authorId || !joinsRunningTurn(turnPrompt, queued)) return undefined
+  if (await loopOfPrompt(unitOfWork, turnPrompt)) return undefined
+  if (!can(await chats.permissions(chatId, queued.authorId), 'chat.post')) return undefined
+  await pickUp(messages, queued)
+  return queued
+}
+
+const handedToRunningTurn = async (
+  dependencies: AgentDependencies,
+  chat: AgentChat,
+  conversation: AgentConversation,
+  prompt: Message,
+) => {
+  const { transactor, agentClient } = dependencies
+  const quoted = await transactor.run((unitOfWork) => quotedByPrompt(unitOfWork, prompt))
+  const savedPaths = await savedAttachmentsOf(dependencies, { chat, conversation, prompt, isLastAttempt: true })
+  return agentClient.joinTurn(
+    conversation,
+    agentPromptTextOf(prompt, undefined, quoted, savedPaths),
+    prompt.id,
+    savedAttachmentListOf(prompt, savedPaths),
+  )
+}
+
+export const joinRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat) => {
+  const { transactor, runtimes } = dependencies
+  const endpoint = await runtimes.endpointOf(chat)
+  if (!endpoint?.conversationId) return undefined
+  const conversation = { ...endpoint, conversationId: endpoint.conversationId }
+  for (;;) {
+    const prompt = await transactor.run((unitOfWork) => pickUpQueuedPrompt(unitOfWork, chat.chatId))
+    if (!prompt) return undefined
+    const isHanded = await handedToRunningTurn(dependencies, chat, conversation, prompt).catch((error) => {
+      log.warn({
+        event: 'agent.join_failed',
+        body: 'Handing a message to the running turn failed; it waits for the next turn',
+        attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
+        error,
+      })
+      return false
+    })
+    if (!isHanded) return transactor.run((unitOfWork) => requeue(unitOfWork, prompt.id))
+  }
 }
 
 const reachableChatModelsOf = async (
@@ -467,7 +528,7 @@ export const promptAgent = async (
   const prompt = await transactor.run((unitOfWork) =>
     beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
   )
-  if (!prompt) return undefined
+  if (!prompt) return localSession ? undefined : transactor.run(({ agentJobs }) => agentJobs.joinTurn(chatId))
   if (prompt.authorId) dependencies.onTurnPrompter?.(chat, prompt.authorId)
   let conversation: AgentConversation
   try {
@@ -491,10 +552,7 @@ export const promptAgent = async (
       conversation,
       agentPromptTextOf(prompt, seed, quoted, savedPaths),
       prompt.id,
-      prompt.attachments.flatMap(({ id, mediaType }) => {
-        const path = savedPaths.get(id)
-        return path ? [{ path, mediaType }] : []
-      }),
+      savedAttachmentListOf(prompt, savedPaths),
     )
   } catch (error) {
     if (await runtimes.isWaitingOnHost(chat)) return waitForRuntime({ state: 'host_offline' }, prompt.id)

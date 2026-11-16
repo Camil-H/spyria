@@ -16,6 +16,10 @@ const completionRequest = () =>
     headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
     body: '{"model":"mistral/codestral-latest"}',
   })
+const bodyOf = (response: Response) => {
+  if (!response.body) throw new Error('The response has no body')
+  return response.body
+}
 
 test('refuses anything outside /v1 without contacting Spyria', async () => {
   const { relay, sent } = relayCollecting()
@@ -38,7 +42,7 @@ test('relays a /v1 call to Spyria and streams the answer chunk by chunk', async 
   const response = await answer
   expect(response.status).toBe(200)
   expect(response.headers.get('content-type')).toBe('text/event-stream')
-  const reader = response.body!.getReader()
+  const reader = bodyOf(response).getReader()
   relay.handle({ type: 'gw_chunk', sid: request.sid, data: 'data: one\n\n' })
   expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: one\n\n')
   relay.handle({ type: 'gw_chunk', sid: request.sid, data: 'data: [DONE]\n\n' })
@@ -67,7 +71,7 @@ test('tells Spyria to cancel when the caller stops reading', async () => {
   const answer = relay.fetch(completionRequest())
   const { sid } = await nextOf('gw_req')
   relay.handle({ type: 'gw_head', sid, status: 200, headers: {} })
-  await (await answer).body!.cancel()
+  await bodyOf(await answer).cancel()
   expect(await nextOf('gw_cancel')).toEqual({ type: 'gw_cancel', sid })
   relay.handle({ type: 'gw_chunk', sid, data: 'late' })
 })

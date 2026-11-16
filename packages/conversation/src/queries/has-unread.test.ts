@@ -21,6 +21,7 @@ const messageOf = (seq: number, authorId: MessageRow['authorId']): MessageRow =>
   createdAt: '2026-10-01T09:00:00.000Z',
   editedAt: null,
   deletedAt: null,
+  pickedUpAt: null,
   needsReply: false,
 })
 

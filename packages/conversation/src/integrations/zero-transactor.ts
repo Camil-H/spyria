@@ -105,6 +105,7 @@ const toMessage = ({ seq, attachments, deletedAt, ...row }: MessageRow): Message
     attachments: attachments ?? [],
     createdAt: new Date(row.createdAt),
     editedAt: dateOrNull(row.editedAt),
+    pickedUpAt: dateOrNull(row.pickedUpAt ?? null),
     replyToId: row.replyToId === null ? null : messageId(row.replyToId),
     threadRootId: row.threadRootId === null ? null : messageId(row.threadRootId),
     quotedMessageId: row.quotedMessageId === null ? null : messageId(row.quotedMessageId),
@@ -179,11 +180,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       actor: change.actor,
       payload: payloadOf(change),
       createdAt:
-        change.type === 'message.step_changed'
+        change.type === 'message.step_changed' || change.type === 'message.requeued'
           ? new Date()
-          : message.status === 'deleted'
-            ? message.deletedAt
-            : (message.editedAt ?? message.createdAt),
+          : change.type === 'message.picked_up'
+            ? (change.message.pickedUpAt ?? new Date())
+            : message.status === 'deleted'
+              ? message.deletedAt
+              : (message.editedAt ?? message.createdAt),
       ...(isPosted(change.type) && { id: message.id }),
     })
   }
@@ -224,8 +227,14 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
   const publicChatsQuery = () =>
     zql.chats.where('workspaceId', contextWorkspaceId).where('visibility', 'public').where('archived', false)
   const messageRow = (id: string) => tx.run(zql.messages.where('workspaceId', contextWorkspaceId).where('id', id).one())
-  const enqueue = (type: string, payload: object, delayMilliseconds = 0) =>
-    enqueueJob(tx, { workspaceId: contextWorkspaceId, type, payload, delayMilliseconds }).then(() => undefined)
+  const enqueue = (type: string, payload: object, delayMilliseconds = 0, serialKey?: string) =>
+    enqueueJob(tx, {
+      workspaceId: contextWorkspaceId,
+      type,
+      payload,
+      delayMilliseconds,
+      ...(serialKey && { serialKey }),
+    }).then(() => undefined)
   const ownedStepCard = async (id: ChatId, type: 'pull_request' | 'dev_loop') => {
     const row = await tx.run(
       zql.messages
@@ -250,6 +259,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
     body: message.status === 'deleted' ? '' : message.body,
     createdAt: message.createdAt.getTime(),
     editedAt: timeOrNull(message.editedAt),
+    pickedUpAt: timeOrNull(message.pickedUpAt),
     deletedAt: message.status === 'deleted' ? message.deletedAt.getTime() : null,
   })
   const unitOfWork: UnitOfWork = {
@@ -304,12 +314,13 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       history: async (id) =>
         messagesFromEvents(await chatEventsOf(tx, contextWorkspaceId, id))
           .filter((message) => message.kind === 'member' || message.kind === 'agent')
-          .map(({ createdAt, editedAt, deletedAt, ...message }) =>
+          .map(({ createdAt, editedAt, deletedAt, pickedUpAt, ...message }) =>
             toMessage({
               ...message,
               createdAt: createdAt.getTime(),
               editedAt: timeOrNull(editedAt),
               deletedAt: timeOrNull(deletedAt),
+              pickedUpAt: timeOrNull(pickedUpAt),
             }),
           ),
       pullRequestCard: (id) => ownedStepCard(id, 'pull_request'),
@@ -371,6 +382,7 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
       prompt: (message) => enqueue(agentJobTypes.prompt, { messageId: message.id }),
       startSession: (chatId) => enqueue(agentJobTypes.startSession, { chatId }),
       interrupt: (interrupt) => enqueue(agentJobTypes.interrupt, interrupt),
+      joinTurn: (id) => enqueue(agentJobTypes.join, { chatId: id }, 0, `${agentJobTypes.join}/${id}`),
       isInterruptRequested: (id, promptId) =>
         isJobPending(tx, contextWorkspaceId, agentJobTypes.interrupt, { chatId: id, promptId }),
       restartSession: (restart) => enqueue(agentJobTypes.restartSession, restart),
@@ -397,9 +409,20 @@ export const createZeroTransactor = (tx: Transaction, contextWorkspaceId: Worksp
         return promptId ? messageId(promptId) : null
       },
       set: async (id, prompt) => {
-        await tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, agentTurnMessageId: prompt?.id ?? null })
+        await tx.mutate.chats.update({
+          workspaceId: contextWorkspaceId,
+          id,
+          agentTurnMessageId: prompt?.id ?? null,
+          agentTurnReplyToId: null,
+        })
         await setChatTurnPrompter(tx, contextWorkspaceId, id, prompt?.authorId ?? null)
       },
+      replyTarget: async (id) => {
+        const chat = await tx.run(zql.chats.where('workspaceId', contextWorkspaceId).where('id', id).one())
+        return chat?.agentTurnReplyToId ? messageId(chat.agentTurnReplyToId) : null
+      },
+      setReplyTarget: (id, promptId) =>
+        tx.mutate.chats.update({ workspaceId: contextWorkspaceId, id, agentTurnReplyToId: promptId }),
       modelCallTurn: async (id) => {
         const turn = await chatTurnOf(tx, contextWorkspaceId, id)
         return turn?.promptId && turn.prompterId && !turn.localSession

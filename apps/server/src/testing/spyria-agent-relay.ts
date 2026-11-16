@@ -127,6 +127,7 @@ export const createSpyriaAgentRelay = ({
   const created: Record<string, unknown>[] = []
   const requests: { method: string; path: string; body?: string }[] = []
   const prompts: string[] = []
+  const joins: string[] = []
   const modelSwitches: (string | undefined)[] = []
   const thoughtLevels: (string | undefined)[] = []
   const interrupts: string[] = []
@@ -192,6 +193,7 @@ export const createSpyriaAgentRelay = ({
       requests.push({ method, path, body })
       if (isFailing(path)) return { status: 500, body: '{"error":"Failed on purpose"}' }
       if (path.endsWith('/events')) prompts.push(sent.content?.[0]?.text)
+      if (path.endsWith('/joins')) joins.push(sent.content?.[0]?.text)
       if (path.endsWith('/interrupt')) interrupts.push(path.split('/')[3] ?? '')
       if (path.endsWith('/switch_acp_model')) {
         modelSwitches.push(sent.model)
@@ -247,6 +249,7 @@ export const createSpyriaAgentRelay = ({
     requests,
     failRequests: (path: string, after?: string) => failures.push({ path, after }),
     prompts,
+    joins,
     modelSwitches,
     thoughtLevels,
     interrupts,
