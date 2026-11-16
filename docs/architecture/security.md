@@ -112,7 +112,7 @@ Outbound calls have timeouts; calls that are safe to repeat are retried a few ti
 
 ## Budgets
 
-Budgets are a hard stop, enforced by the relay before each model call: when the prompter's monthly budget or the workspace's is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
+Budgets are a hard stop, enforced by the relay before each model call: when one of the prompter's budgets (the day's, week's or month's of their role) is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
 
 ## Secrets at rest
 

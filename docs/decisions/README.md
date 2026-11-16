@@ -17,7 +17,7 @@ Each record states one decision: the context that called for it, what was decide
 | [0011](0011-publishing-through-server-side-bundles.md) | Publishing goes through server-side bundles |
 | [0012](0012-per-workspace-sso.md) | Per-workspace SSO (amended by 0029 and 0035) |
 | [0013](0013-removed-members-chats-freeze.md) | A removed member's chats freeze and can be transferred |
-| [0014](0014-hard-stop-budgets.md) | Budgets are a hard stop at the relay |
+| [0014](0014-hard-stop-budgets.md) | Budgets are a hard stop at the relay (amended by 0038) |
 | [0015](0015-opentelemetry-and-json-logs.md) | OpenTelemetry traces and JSON logs |
 | [0016](0016-deployment-name-prefix.md) | A deployment name prefixes every Docker object |
 | [0017](0017-one-compose-file-one-origin.md) | One Compose file and one origin |
@@ -41,3 +41,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0035](0035-domain-claims.md) | A workspace may claim its organization's email domains, proven by DNS |
 | [0036](0036-tool-access-per-role-only.md) | Tool access is set per role only |
 | [0037](0037-a-browser-per-member-next-to-the-runtime.md) | Each member gets a real browser of their own, next to the chat's runtime |
+| [0038](0038-budgets-per-role-and-period.md) | AI budgets are set per role, for each day, week and month |
