@@ -398,7 +398,7 @@ test.describe('Tools catalogue', () => {
       await expect(servers).toHaveCount(2)
       await expect(servers.first()).toHaveAttribute('aria-label', 'Spyria')
       const builtIn = serverCardOf(page, 'Spyria')
-      await expect(builtIn).toContainText('11 tools · 7 read · 4 write')
+      await expect(builtIn).toContainText('20 tools · 11 read · 9 write')
       await expect(builtIn).toContainText('Built in · every role has them')
       const builtInAccess = accessTo(page, 'Spyria')
       await expect(builtInAccess).toHaveCount(0)
@@ -408,9 +408,9 @@ test.describe('Tools catalogue', () => {
         /^Write/,
       ])
       const readTools = builtInAccess.getByRole('table', { name: 'Read tools of Spyria' })
-      await expect(readTools.getByRole('rowheader')).toHaveCount(7)
+      await expect(readTools.getByRole('rowheader')).toHaveCount(11)
       await expect(readTools).toContainText(
-        "open_pageOpens a web page or a file of the project in the chat's Browser tab",
+        "open_pageOpens a web page in the prompting member's browser, or a file of the project in the chat's Browser tab",
       )
       for (const roleName of ['Admin', 'Member']) {
         const givenOpenPage = readTools.getByRole('checkbox', { name: `open_page for ${roleName}, always given` })
@@ -423,7 +423,7 @@ test.describe('Tools catalogue', () => {
       await expect(builtIn.getByRole('combobox')).toHaveCount(0)
       await builtInAccess.getByRole('tab', { name: /^Write/ }).click()
       const writeTools = builtInAccess.getByRole('table', { name: 'Write tools of Spyria' })
-      await expect(writeTools.getByRole('rowheader')).toHaveCount(4)
+      await expect(writeTools.getByRole('rowheader')).toHaveCount(9)
       await expect(writeTools.getByRole('checkbox', { name: 'finish_work for Member, always given' })).toBeChecked()
       await expect(builtIn.getByRole('checkbox', { disabled: false })).toHaveCount(0)
       await writeTools.getByRole('link', { name: 'Set in Quality gates' }).first().click()

@@ -2,15 +2,16 @@ FROM node:24-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep ca-certificates poppler-utils \
   libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 libcups2 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 \
   libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libx11-6 libxcb1 libxext6 libpango-1.0-0 libcairo2 \
-  libasound2 fonts-liberation \
+  libasound2 fonts-liberation fonts-noto-color-emoji fonts-wqy-zenhei xvfb \
   && rm -rf /var/lib/apt/lists/*
 COPY pi/package.json pi/package-lock.json /usr/local/lib/spyria/pi/
 RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/pi && npm cache clean --force \
   && ln -s /usr/local/lib/spyria/pi/node_modules/.bin/pi /usr/local/bin/pi
 RUN userdel -r node 2>/dev/null; groupadd -g 10001 spyria && useradd -u 10001 -g 10001 -m -d /home/spyria spyria \
-  && mkdir -p /workspace/project /home/spyria/.claude /home/spyria/.codex /harnesses /var/cache/spyria /var/lib/spyria/snapshot \
-  && chown -R 10001:10001 /workspace /home/spyria /harnesses /var/cache/spyria /var/lib/spyria/snapshot
-COPY browser/package.json browser/package-lock.json browser/screenshot.mjs /usr/local/lib/spyria/browser/
+  && mkdir -p /workspace/project /home/spyria/.claude /home/spyria/.codex /harnesses /var/cache/spyria /var/lib/spyria/snapshot /var/lib/spyria/browser \
+  && chown -R 10001:10001 /workspace /home/spyria /harnesses /var/cache/spyria /var/lib/spyria/snapshot /var/lib/spyria/browser
+COPY browser/package.json browser/package-lock.json browser/screenshot.mjs browser/browser.mjs browser/browser-session.mjs \
+  browser/network-policy.mjs browser/output-lines.mjs /usr/local/lib/spyria/browser/
 RUN npm ci --omit=dev --prefix /usr/local/lib/spyria/browser && npm cache clean --force \
   && node /usr/local/lib/spyria/browser/screenshot.mjs install
 COPY dist/spyria-agent /usr/local/bin/spyria-agent

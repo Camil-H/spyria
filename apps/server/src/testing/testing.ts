@@ -824,6 +824,8 @@ type HostCommand = {
   apiKey?: string
   packageCacheKey?: string
   snapshotKey?: string
+  browserKey?: string
+  signInHours?: number
   keep?: string[]
 }
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
@@ -926,9 +928,64 @@ const gibibyte = 1024 ** 3
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export const fakeHostVersion = 'test'
-export const fakeHostProtocolVersion = 4
+export const fakeHostProtocolVersion = 5
 const fakeHostHeartbeatMilliseconds = 60 * 60_000
 export const fakeAgentProtocolVersion = 2
+
+type FakeBrowserMessage = Record<string, unknown> & { type?: string; command?: string; id?: number }
+export const fakeBrowserFrame =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+export const fakeBrowserSnapshot = '- button "Place order" [ref=e1]\n- button "Menu" [ref=e2]'
+const fakeBrowserAnswerOf = (message: FakeBrowserMessage) => {
+  if (message.command === 'snapshot') return fakeBrowserSnapshot
+  if (message.command === 'would_submit') return message.ref === 'e1'
+  if (message.command === 'open') return `Opened Example (${message.url})`
+  return `${message.command} done`
+}
+export const fakeBrowserImageFile = 'f'.repeat(32)
+export const fakeBrowserMissingRef = 'e9'
+const createFakeBrowsers = () => {
+  const received = new Map<string, FakeBrowserMessage[]>()
+  const outputs = new Map<string, (message: object) => void>()
+  const files = new Map<string, Buffer>()
+  return {
+    files,
+    received: (browserKey: string) => received.get(browserKey) ?? [],
+    readFile: ({ fileId, send, close }: { fileId: string; send(data: string): void; close(): void }) => {
+      const file = files.get(fileId)
+      if (file) send(file.toString('base64'))
+      close()
+    },
+    keys: () => [...received.keys()],
+    emit: (browserKey: string, message: object) => outputs.get(browserKey)?.(message),
+    connect: ({ browserKey, send }: { browserKey: string; send(data: string): void }) => {
+      const messages = received.get(browserKey) ?? []
+      received.set(browserKey, messages)
+      const emit = (message: object) => send(JSON.stringify(message))
+      outputs.set(browserKey, emit)
+      return {
+        onMessage: (data: string) => {
+          const message = JSON.parse(data) as FakeBrowserMessage
+          messages.push(message)
+          if (message.type === 'settings') return emit({ type: 'ready' })
+          if (message.type === 'watch') {
+            emit({ type: 'page', url: 'https://example.com/', title: 'Example' })
+            return emit({ type: 'frame', data: fakeBrowserFrame, width: 800, height: 600 })
+          }
+          if (message.command === 'open') emit({ type: 'visited', url: message.url })
+          if (message.command === 'screenshot') {
+            files.set(fakeBrowserImageFile, Buffer.from('image'))
+            return emit({ id: message.id, result: { text: 'Screenshot of Example', imageFile: fakeBrowserImageFile } })
+          }
+          if (message.command === 'would_submit' && message.ref === fakeBrowserMissingRef)
+            return emit({ id: message.id, error: 'No element has this ref' })
+          if (typeof message.command === 'string') emit({ id: message.id, result: fakeBrowserAnswerOf(message) })
+        },
+        onClose: () => outputs.delete(browserKey),
+      }
+    },
+  }
+}
 
 export const createFakeHosts = ({ port, database }: { port: number; database: Database }) => {
   const connectedHosts = new Set<FakeHost>()
@@ -973,6 +1030,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       { frames: HostFrame[]; done: () => void; onChunk?: (data: string) => void; onHead?: (status?: number) => void }
     >()
     const receivedFrames: string[] = []
+    const browsers = createFakeBrowsers()
     let nextModelCallId = 1
     const run = (op: string, { runtimeId = '', apiKey = '', harness = '' }: Record<string, string>) => {
       if (failingOps.has(op)) throw new Error(`${op} failed`)
@@ -1013,6 +1071,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         return resolve
       },
       receivedFrames,
+      browsers,
       modelCall: (async ({
         method = 'POST',
         path = '/v1/chat/completions',
@@ -1132,7 +1191,21 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
             receivedFrames.push(JSON.stringify(request))
             answerHttp(request)
           }
-          if (frame.type === 'ws_connect' && containerAgent && container?.running) {
+          const { browserKey, fileId } = frame as HostFrame & { browserKey?: string; fileId?: string }
+          if (frame.type === 'ws_connect' && fileId !== undefined) {
+            send({ type: 'ws_open', sid })
+            browsers.readFile({
+              fileId,
+              send: (data) => send({ type: 'ws_msg', sid, data }),
+              close: () => send({ type: 'ws_close', sid }),
+            })
+          } else if (frame.type === 'ws_connect' && browserKey !== undefined) {
+            send({ type: 'ws_open', sid })
+            streams.set(
+              sid,
+              browsers.connect({ browserKey, send: (data) => streams.has(sid) && send({ type: 'ws_msg', sid, data }) }),
+            )
+          } else if (frame.type === 'ws_connect' && containerAgent && container?.running) {
             send({ type: 'ws_open', sid })
             streams.set(
               sid,

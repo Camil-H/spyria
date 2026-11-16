@@ -901,14 +901,14 @@ test.each([
     const lines: Record<string, unknown>[] = []
     const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
     try {
-      const { call } = started({ requestTimeoutMilliseconds: 300 })
+      const { call } = started({ requestTimeoutMilliseconds: 2000 })
       const silentLaunch = launch()
       silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
       const { status, body } = await call('POST', '/api/conversations', silentLaunch)
       expect(status).toBe(201)
       expect(body).toMatchObject({
         execution_status: 'error',
-        error: `The agent did not respond within 0.3 seconds. It reported: Waiting on ${method}`,
+        error: `The agent did not respond within 2 seconds. It reported: Waiting on ${method}`,
       })
       const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
       for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)

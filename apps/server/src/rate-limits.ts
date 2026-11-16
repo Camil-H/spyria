@@ -37,7 +37,7 @@ export const rateBudgets = {
   uploads: { count: 30, perMilliseconds: minute, per: 'member' },
   attachmentReads: { count: 240, perMilliseconds: minute, per: 'member' },
   runtimeMediaReads: { count: 30, perMilliseconds: minute, per: 'member' },
-  webPageReads: { count: 120, perMilliseconds: minute, per: 'member' },
+  browserDownloads: { count: 60, perMilliseconds: minute, per: 'address' },
   runtimeCreation: { count: 10, perMilliseconds: minute, per: 'member' },
 } as const satisfies Record<string, Budget>
 export type RateLimitName = keyof typeof rateBudgets

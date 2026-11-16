@@ -7,7 +7,7 @@ const allTabs = ['changes', 'files', 'browser', 'sources', 'usage', 'connections
 export type PanelTabId = (typeof allTabs)[number]
 
 const runtimeTabs = allTabs.filter((tabId) => tabId !== 'sources')
-const channelTabs = allTabs.filter((tabId) => !['files', 'changes'].includes(tabId))
+const channelTabs = allTabs.filter((tabId) => !['files', 'changes', 'browser'].includes(tabId))
 const withoutOwnerConnections = (tabIds: readonly PanelTabId[]) => tabIds.filter((tabId) => tabId !== 'connections')
 const runtimeTabsOfReaders = withoutOwnerConnections(runtimeTabs)
 const channelTabsOfReaders = withoutOwnerConnections(channelTabs)

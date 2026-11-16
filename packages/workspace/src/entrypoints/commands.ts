@@ -1,4 +1,5 @@
 import type {
+  BrowserSettings,
   ChatId,
   ChatPermission,
   ChatVisibility,
@@ -46,6 +47,7 @@ export type WorkspaceCommands = {
   deleteWorkspace: Command<{ confirmation: 'DELETE' }>
   setDevLoop: Command<{ settings: DevLoopSettings | null }>
   setSetupCommands: Command<{ commands: readonly SetupCommand[] }>
+  setBrowserSettings: Command<{ settings: BrowserSettings }>
   readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
   confirmSsoSettings: (input: {
     workspaceId: WorkspaceId

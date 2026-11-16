@@ -1,3 +1,16 @@
+import {
+  browserBodyOf,
+  browserContainerOf,
+  browserFileIdPattern,
+  browserFilesDirectory,
+  browserKeyPattern,
+  browserLabel,
+  isProfileExpired,
+  minimumFreeBytesForBrowser,
+  profileCreatedLabel,
+  profileVolumeOf,
+  signInHoursLabel,
+} from './browsers.ts'
 import { type Docker, DockerError, hostMachineMapping, type Mount } from './docker.ts'
 import {
   type HarnessId,
@@ -50,17 +63,22 @@ const operations = [
   'list',
   'snapshot',
   'prune_snapshots',
+  'browser_start',
+  'browser_stop',
 ] as const
 
 type Operation = (typeof operations)[number]
 type HarnessOperation = 'installed' | 'install'
 type CreateOperation = 'create' | 'recreate'
+type BrowserOperation = 'browser_start' | 'browser_stop'
 type RuntimeOperation = Exclude<
   Operation,
-  CreateOperation | 'prepare' | 'list' | HarnessOperation | 'snapshot' | 'prune_snapshots'
+  CreateOperation | 'prepare' | 'list' | HarnessOperation | 'snapshot' | 'prune_snapshots' | BrowserOperation
 >
 type ContainerInfo = {
+  Id?: string
   Config?: { Labels?: Record<string, string>; Image?: string }
+  HostConfig?: { NetworkMode?: string }
   State?: { Running?: boolean; Paused?: boolean }
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> }
 }
@@ -79,6 +97,8 @@ export type Command =
   | { op: HarnessOperation; runtimeId: string; harness: HarnessId }
   | { op: 'snapshot'; runtimeId: string; snapshotKey: string }
   | { op: 'prune_snapshots'; keep: string[] }
+  | { op: 'browser_start'; runtimeId: string; browserKey: string; signInHours?: number }
+  | { op: 'browser_stop'; runtimeId: string; browserKey: string }
 
 const fieldOf = (fields: Record<string, unknown>, name: string, pattern: RegExp, reason: string) => {
   const value = fields[name]
@@ -98,6 +118,8 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     list: [],
     installed: ['runtimeId', 'harness'],
     install: ['runtimeId', 'harness'],
+    browser_start: ['runtimeId', 'browserKey', 'signInHours'],
+    browser_stop: ['runtimeId', 'browserKey'],
   }[op as string] ?? ['runtimeId']
   const extraFields = Object.keys(fields).filter((field) => !allowedFields.includes(field))
   if (extraFields.length > 0) throw new Refused(`unexpected fields ${extraFields.join(', ')}`)
@@ -124,6 +146,20 @@ export const parseCommand = (op: unknown, args: unknown, images?: string): Comma
     return { op, runtimeId, harness: fields.harness as HarnessId }
   }
   if (op === 'snapshot') return { op, runtimeId, snapshotKey: volumeKeyOf('snapshotKey', 'invalid snapshot key') }
+  if (op === 'browser_stop')
+    return { op, runtimeId, browserKey: fieldOf(fields, 'browserKey', browserKeyPattern, 'invalid browser key') }
+  if (op === 'browser_start') {
+    const { signInHours } = fields
+    const isSignInHours =
+      signInHours === undefined || (Number.isSafeInteger(signInHours) && (signInHours as number) > 0)
+    if (!isSignInHours) throw new Refused('invalid sign-in hours')
+    return {
+      op,
+      runtimeId,
+      browserKey: fieldOf(fields, 'browserKey', browserKeyPattern, 'invalid browser key'),
+      ...(signInHours !== undefined && { signInHours: signInHours as number }),
+    }
+  }
   if (op !== 'create' && op !== 'recreate') return { op: op as RuntimeOperation, runtimeId }
   return {
     op,
@@ -261,11 +297,15 @@ export const createCommandRunner = ({
   prefix,
   selfContainerId,
   personal = false,
+  freeMemoryBytes = async () => Number.POSITIVE_INFINITY,
+  now = Date.now,
 }: {
   docker: Docker
   prefix: string
   selfContainerId?: string
   personal?: boolean
+  freeMemoryBytes?: () => Promise<number>
+  now?: () => number
 }) => {
   const managedContainer = async (runtimeId: string) => {
     const container = await docker<ContainerInfo>('GET', `/containers/${containerNameOf(prefix, runtimeId)}/json`)
@@ -433,6 +473,129 @@ export const createCommandRunner = ({
       containerBodyOf({ prefix, ...request, snapshotVolume: newestSnapshot?.name, personal }),
     )
   }
+  const browserOf = async (runtimeId: string, browserKey: string) => {
+    const name = browserContainerOf(containerNameOf(prefix, runtimeId), browserKey)
+    const container = await docker<ContainerInfo>('GET', `/containers/${name}/json`).catch((error) => {
+      ignoringMissing(error)
+      return undefined
+    })
+    if (container && container.Config?.Labels?.[browserLabel] !== runtimeId) throw new Refused('not a managed browser')
+    return { name, container }
+  }
+  const removeBrowser = async (name: string) => {
+    await docker('DELETE', `/containers/${name}?force=true`).catch(ignoringMissing)
+    await docker('DELETE', `/volumes/${profileVolumeOf(name)}`).catch(ignoring(404, 409))
+  }
+  const removeBrowsersOf = async (runtimeId: string) => {
+    const namePrefix = browserContainerOf(containerNameOf(prefix, runtimeId), '')
+    const isBrowserOfRuntime = (name: string) =>
+      name.startsWith(namePrefix) && browserKeyPattern.test(name.slice(namePrefix.length))
+    const filters = encodeURIComponent(JSON.stringify({ label: [`${browserLabel}=${runtimeId}`] }))
+    const containers = await docker<{ Names: string[] }[]>('GET', `/containers/json?all=true&filters=${filters}`)
+    const { Volumes } = await docker<{ Volumes: { Name: string }[] | null }>('GET', `/volumes?filters=${filters}`)
+    const names = [
+      ...containers.flatMap(({ Names }) => Names.map((name) => name.slice(1))),
+      ...(Volumes ?? []).map(({ Name }) => Name.replace(/-profile$/, '')),
+    ]
+    for (const name of new Set(names.filter(isBrowserOfRuntime))) await removeBrowser(name)
+  }
+  const volumeOf = (name: string) =>
+    docker<{ Labels?: Record<string, string> | null }>('GET', `/volumes/${name}`).catch((error) => {
+      ignoringMissing(error)
+      return undefined
+    })
+  const startBrowser = async ({
+    runtimeId,
+    browserKey,
+    signInHours,
+  }: {
+    runtimeId: string
+    browserKey: string
+    signInHours?: number
+  }) => {
+    const runtime = await managedContainer(runtimeId)
+    if (!runtime.State?.Running || !runtime.Id) throw new Refused('runtime is not running')
+    const { name, container } = await browserOf(runtimeId, browserKey)
+    signInHoursByBrowser.set(name, signInHours)
+    const profileVolume = profileVolumeOf(name)
+    const profile = await volumeOf(profileVolume)
+    const isOnOtherRuntime = container !== undefined && container.HostConfig?.NetworkMode !== `container:${runtime.Id}`
+    const isExpired =
+      profile !== undefined && isProfileExpired(profile.Labels?.[profileCreatedLabel], signInHours, now())
+    if (isOnOtherRuntime || isExpired) await removeBrowser(name)
+    const isKept = container !== undefined && !isOnOtherRuntime && !isExpired
+    if (isKept && container.State?.Running) return
+    if ((await freeMemoryBytes()) < minimumFreeBytesForBrowser)
+      throw new Refused('no room for another browser on this host')
+    if (!isKept) {
+      if (!profile || isOnOtherRuntime || isExpired)
+        await docker('POST', '/volumes/create', {
+          Name: profileVolume,
+          Labels: {
+            'spyria.managed': '1',
+            [browserLabel]: runtimeId,
+            [profileCreatedLabel]: String(now()),
+            ...(signInHours !== undefined && { [signInHoursLabel]: String(signInHours) }),
+          },
+        })
+      await docker(
+        'POST',
+        `/containers/create?name=${name}`,
+        browserBodyOf({ runtimeId, runtimeContainerId: runtime.Id, image: runtime.Config?.Image ?? '', profileVolume }),
+      )
+    }
+    await docker('POST', `/containers/${name}/start`)
+  }
+  const unattachedSince = new Map<string, number>()
+  const signInHoursByBrowser = new Map<string, number | undefined>()
+  const isBrowserOfDeployment = (name: string) => {
+    const [runtimeName, browserKey = ''] = name.split(/-browser-(?=[a-f0-9]{32}$)/)
+    return (
+      runtimeName !== name && runtimeName?.startsWith(`${prefix}rt-`) === true && browserKeyPattern.test(browserKey)
+    )
+  }
+  const browserNamesOf = async (includingStopped: boolean) => {
+    const filters = encodeURIComponent(JSON.stringify({ label: [browserLabel] }))
+    const containers = await docker<{ Names: string[] }[]>(
+      'GET',
+      `/containers/json?all=${includingStopped}&filters=${filters}`,
+    )
+    return containers.flatMap(({ Names }) => Names.map((name) => name.slice(1))).filter(isBrowserOfDeployment)
+  }
+  const removeExpiredBrowsers = async () => {
+    for (const name of await browserNamesOf(true)) {
+      const profile = await volumeOf(profileVolumeOf(name))
+      const labelledHours = profile?.Labels?.[signInHoursLabel]
+      const signInHours = signInHoursByBrowser.has(name)
+        ? signInHoursByBrowser.get(name)
+        : labelledHours === undefined
+          ? undefined
+          : Number(labelledHours)
+      if (profile && isProfileExpired(profile.Labels?.[profileCreatedLabel], signInHours, now())) {
+        await removeBrowser(name)
+        signInHoursByBrowser.delete(name)
+      }
+    }
+  }
+  const stopUnattachedBrowsers = async (isAttached: (name: string) => boolean, idleMilliseconds: number) => {
+    const names = await browserNamesOf(false)
+    for (const known of unattachedSince.keys()) if (!names.includes(known)) unattachedSince.delete(known)
+    for (const name of names) {
+      if (isAttached(name)) {
+        unattachedSince.delete(name)
+        continue
+      }
+      const since = unattachedSince.get(name) ?? now()
+      unattachedSince.set(name, since)
+      if (now() - since < idleMilliseconds) continue
+      await docker('POST', `/containers/${name}/stop?t=5`).catch(ignoring(304, 404))
+      unattachedSince.delete(name)
+    }
+  }
+  const stopBrowser = async (runtimeId: string, browserKey: string) => {
+    const { name, container } = await browserOf(runtimeId, browserKey)
+    if (container?.State?.Running) await docker('POST', `/containers/${name}/stop?t=5`)
+  }
   const run = async (command: Command) => {
     if (command.op === 'prepare') return void (await prepare(command.image))
     if (command.op === 'list') return runtimeIdsOf(true)
@@ -441,9 +604,12 @@ export const createCommandRunner = ({
       return removeSnapshots((key, isNewest) => !command.keep.includes(key) || !isNewest)
     }
     if (command.op === 'snapshot') return snapshot(command.runtimeId, command.snapshotKey)
+    if (command.op === 'browser_start') return startBrowser(command)
+    if (command.op === 'browser_stop') return stopBrowser(command.runtimeId, command.browserKey)
     const name = containerNameOf(prefix, command.runtimeId)
     if (command.op === 'create') return create(command)
     if (command.op === 'recreate') {
+      await removeBrowsersOf(command.runtimeId)
       const replaced = await managedContainer(command.runtimeId).catch(ignoringMissing)
       if (replaced) await docker('DELETE', `/containers/${name}?force=true`)
       return create(command)
@@ -467,6 +633,7 @@ export const createCommandRunner = ({
       return docker('POST', `/containers/${name}/start`)
     }
     const container = await managedContainer(command.runtimeId).catch(ignoringMissing)
+    await removeBrowsersOf(command.runtimeId)
     if (command.op === 'stop') {
       if (container) await docker('POST', `/containers/${name}/stop?t=10`)
       return removeNetwork(network)
@@ -487,5 +654,18 @@ export const createCommandRunner = ({
       return `http://${address}:${spyriaAgentPort}`
     },
     runningCount: async () => (await runtimeIdsOf(false)).length,
+    stopUnattachedBrowsers,
+    removeExpiredBrowsers,
+    browserFilePathOf: async (runtimeId: string, browserKey: string, fileId: string) => {
+      if (!browserFileIdPattern.test(fileId)) throw new Refused('invalid file id')
+      const { name, container } = await browserOf(runtimeId, browserKey)
+      if (!container) throw new Refused('browser is not running')
+      return `/containers/${name}/archive?path=${encodeURIComponent(`${browserFilesDirectory}/${fileId}`)}`
+    },
+    browserNameOf: async (runtimeId: string, browserKey: string) => {
+      const { name, container } = await browserOf(runtimeId, browserKey)
+      if (!container?.State?.Running) throw new Refused('browser is not running')
+      return name
+    },
   }
 }

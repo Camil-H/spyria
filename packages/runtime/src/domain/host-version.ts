@@ -1,4 +1,4 @@
-export const minimumHostProtocol = 4
+export const minimumHostProtocol = 5
 
 type Versioned = {
   status: 'waiting' | 'online' | 'offline' | 'expired'

@@ -155,6 +155,10 @@ const fakeRuntimeEvents = () => {
         })
         return { send: () => {}, close: () => listeners.delete(chat) }
       },
+      startBrowser: () => Promise.reject(new Error('The load test runtime has no browser')),
+      stopBrowser: async () => {},
+      openBrowser: () => ({ send: () => {}, close: () => {} }),
+      openBrowserFile: () => ({ send: () => {}, close: () => {} }),
     },
   })
   const tokenEvent = (chat: string, seq: number) =>

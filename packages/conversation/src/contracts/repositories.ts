@@ -1,5 +1,6 @@
 import type {
   Actor,
+  BrowserSettings,
   ChatId,
   ChatPermission,
   ChatRole,
@@ -154,6 +155,11 @@ export type PublicChatDirectory = {
 }
 
 export type BrowserPageRepository = { open(chatId: ChatId, page: OpenedPage, openedAt: Date): Promise<void> }
+
+export type BrowserRepository = {
+  settings(): Promise<BrowserSettings>
+  recordVisit(visit: { chatId: ChatId; memberId: MemberId; url: string }): Promise<void>
+}
 
 export type ReadMarkerRepository = {
   markNewestRead(chatId: ChatId, memberId: MemberId): Promise<void>

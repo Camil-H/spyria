@@ -1,5 +1,6 @@
 import {
   type AiProviderAllowList,
+  type BrowserSettings,
   type ChatId,
   type ChatPermission,
   type ChatVisibility,
@@ -28,6 +29,7 @@ type WorkspaceRow = {
   aiProviderAllowList: AiProviderAllowList | null
   devLoop: DevLoopSettings | null
   setupCommands: readonly SetupCommand[]
+  browser: BrowserSettings
 }
 type MembershipRow = {
   memberId: MemberId

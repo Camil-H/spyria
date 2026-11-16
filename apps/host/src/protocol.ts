@@ -1,2 +1,2 @@
-export const hostProtocolVersion = 4
+export const hostProtocolVersion = 5
 export const hostVersion = process.env.SPYRIA_VERSION || 'dev'

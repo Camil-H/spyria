@@ -22,8 +22,8 @@ type SandboxRequest = {
 export type SandboxResponse = { status: number; headers: Record<string, string>; body: string }
 export type SandboxSocketListener = {
   onOpen(): void
-  onMessage(data: string): void
-  onClose(): void
+  onMessage(data: string): unknown
+  onClose(error?: string): void
 }
 type SandboxSocket = { send(data: string): void; close(): void }
 
@@ -31,6 +31,10 @@ export type SandboxTransport = {
   gatewayUrl: string
   fetch(request: SandboxRequest): Promise<SandboxResponse>
   openSocket(path: string, listener: SandboxSocketListener): SandboxSocket
+  startBrowser(owner: string, options: { signInHours?: number }): Promise<void>
+  stopBrowser(owner: string): Promise<void>
+  openBrowser(owner: string, listener: SandboxSocketListener): SandboxSocket
+  openBrowserFile(owner: string, fileId: string, listener: SandboxSocketListener): SandboxSocket
 }
 
 export type SandboxProvider = {

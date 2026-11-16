@@ -1,8 +1,9 @@
 import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
-import type { WebPage } from '../domain/browser.ts'
+import type { BrowserMessage } from '../domain/browser.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace.ts'
 
 type Command<Input, Result = unknown> = (input: Input & { workspaceId: WorkspaceId }) => Promise<Result>
+export type BrowserConnection = { send(message: object): void; close(): void }
 export type GitActionOutcome = { isRefused: boolean; text: string; conflicts?: string[] | undefined }
 
 export type PanelCommands = {
@@ -13,7 +14,11 @@ export type PanelCommands = {
   switchChatToolServer: Command<{ chatId: ChatId; connectionId: string; isOn: boolean }>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }>
-  readWebPage: Command<{ url: string }, WebPage>
+  saveBrowserDownload: (input: { workspaceId: WorkspaceId; token: string; onRefused: (reason: string) => void }) => void
+  openBrowser: (
+    input: { workspaceId: WorkspaceId; chatId: ChatId },
+    onMessage: (message: BrowserMessage) => void,
+  ) => BrowserConnection
   publishBranch: Command<
     { chatId: ChatId; action: 'push' | 'pull_request'; draft: { title: string; body: string } },
     { isRefused: boolean; text: string }

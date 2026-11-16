@@ -26,6 +26,7 @@ import { createTransactingZeroTransactor } from '../integrations/zero-transactor
 import { continueLoopAfterTurn, judgeLoopCi, pollLoopChecks, runLoop } from '../operations/advance-dev-loop.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
+import type { BrowserViewer } from '../operations/browser-sessions.ts'
 import { callDevLoopTool, githubToolsOf } from '../operations/call-dev-loop-tool.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
 import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
@@ -50,6 +51,7 @@ import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { restartAgentSession } from '../operations/restart-session.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
 import { interruptAgent } from '../operations/stop-agent.ts'
+import { watchMemberBrowser } from '../operations/watch-browser.ts'
 
 type AgentJob = Omit<Job, 'transact'>
 
@@ -185,6 +187,8 @@ export const createAgentHandlers = ({
     },
     readWorkspace: (chat: AgentChat, member: MemberId, read: WorkspaceRead, path: string) =>
       readWorkspace(dependenciesOf(chat.workspaceId), { chat, memberId: member, read, path }),
+    watchBrowser: (chat: AgentChat, member: MemberId, viewer: BrowserViewer) =>
+      watchMemberBrowser(dependenciesOf(chat.workspaceId), { chat, memberId: member, viewer }),
     readRuntimeMedia: (chat: AgentChat, member: MemberId, path: string) =>
       readRuntimeMedia(dependenciesOf(chat.workspaceId), { chat, memberId: member, path }),
     publishBranch: (input: Parameters<typeof publishBranch>[1]) =>

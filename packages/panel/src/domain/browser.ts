@@ -1,21 +1,30 @@
 export type BrowserPage = Readonly<{ url: string; title: string }>
-export type WebPage = Readonly<{ url: string; html?: string }>
+export type BrowserState =
+  | Readonly<{ state: 'connecting' }>
+  | Readonly<{ state: 'starting' }>
+  | Readonly<{ state: 'disconnected' }>
+  | Readonly<{ state: 'running'; canBrowse: boolean }>
+  | Readonly<{ state: 'stopped' | 'unavailable'; reason: string }>
+export type BrowserMessage =
+  | (BrowserState & { type: 'state' })
+  | Readonly<{ type: 'frame'; data: string; width: number; height: number }>
+  | Readonly<{ type: 'page'; url: string; title: string }>
+  | Readonly<{ type: 'notice'; text: string }>
+  | Readonly<{ type: 'file_chooser'; multiple: boolean }>
+  | Readonly<{ type: 'download'; token: string; name: string; size: number }>
+type Size = Readonly<{ width: number; height: number }>
 
 const searchUrl = 'https://www.bing.com/search?q='
-const bingClickPath = /^https:\/\/www\.bing\.com\/ck\/a\b/i
 const webAddress = /^https?:\/\//i
 const hostAddress = /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#]\S*)?$/i
 const localAddress = /^(localhost|127\.0\.0\.1)([:/?#]|$)/i
 const htmlFile = /\.(html?|svg)$/i
-const headTag = /<head(\s[^>]*)?>/i
-const doctype = /^\s*<!doctype[^>]*>/i
-const baseHref = /<base\s[^>]*href\s*=\s*["']?([^"'\s>]+)/i
+const mouseButtons = ['left', 'middle', 'right'] as const
+export const maximumUploadBytes = 8 * 1024 * 1024
 
 export const isWebAddress = (url: string) => webAddress.test(url)
 
 export const isHtmlFile = (path: string) => htmlFile.test(path)
-
-export const isOnMembersMachine = (url: string) => isWebAddress(url) && localAddress.test(url.replace(webAddress, ''))
 
 export const browsedPageOf = (typed: string): BrowserPage | undefined => {
   const text = typed.trim()
@@ -28,29 +37,20 @@ export const browsedPageOf = (typed: string): BrowserPage | undefined => {
   return { url: `${searchUrl}${encodeURIComponent(text)}`, title: text }
 }
 
-const decodedBase64Url = (encoded: string) => {
-  try {
-    return atob(encoded.replaceAll('-', '+').replaceAll('_', '/'))
-  } catch {
-    return ''
-  }
-}
+export const pagePointOf = (point: { x: number; y: number }, shown: Size, page: Size) => ({
+  x: shown.width > 0 ? Math.round((point.x * page.width) / shown.width) : 0,
+  y: shown.height > 0 ? Math.round((point.y * page.height) / shown.height) : 0,
+})
 
-export const followedPageOf = (address: unknown): BrowserPage | undefined => {
-  const url = typeof address === 'string' && URL.parse(address)
-  if (!url || !isWebAddress(url.href)) return undefined
-  const target = bingClickPath.test(url.href) ? (url.searchParams.get('u') ?? '') : ''
-  const unwrapped = target.startsWith('a1') ? decodedBase64Url(target.slice(2)) : ''
-  const href = isWebAddress(unwrapped) && URL.canParse(unwrapped) ? unwrapped : url.href
-  return { url: href, title: href }
-}
+export const mouseButtonOf = (button: number) => mouseButtons[button] ?? 'left'
 
-const attributeOf = (text: string) => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
+export const pageKeyOf = (key: string, isMac: boolean) => (isMac && key === 'Meta' ? 'Control' : key)
 
-export const framedHtmlOf = ({ url, html = '' }: WebPage) => {
-  const ownBase = baseHref.exec(html)?.[1]
-  const base = `<base href="${attributeOf(URL.parse(ownBase ?? '', url)?.href ?? url)}">`
-  if (headTag.test(html)) return html.replace(headTag, (head) => `${head}${base}`)
-  const declared = doctype.exec(html)?.[0] ?? ''
-  return `${declared}${base}${html.slice(declared.length)}`
+export const stateTextOf = (state: BrowserState) => {
+  if (state.state === 'connecting' || state.state === 'starting') return 'Starting your browser…'
+  if (state.state === 'disconnected') return 'The connection to your browser was lost'
+  if (state.state === 'running') return undefined
+  if (state.reason === 'idle') return 'Your browser stopped after 10 minutes without use'
+  if (state.reason === 'stopped') return 'Your browser stopped'
+  return state.reason
 }

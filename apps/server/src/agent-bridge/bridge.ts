@@ -23,7 +23,7 @@ import {
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
 import { chatPermissionsOf, type Transact, type ZeroContext, zql } from '@spyria/db/zero-queries'
-import { can, chatId, log, type MemberId, type MessageId, messageId, workspaceId } from '@spyria/kernel'
+import { can, chatId, DomainError, log, type MemberId, type MessageId, messageId, workspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '@spyria/runtime/server'
 import { createBudgetGuard } from '@spyria/usage/server'
 import type { ServerWebSocket } from 'bun'
@@ -35,6 +35,7 @@ import { toolListChangesOf } from '../tool-list-changes.ts'
 
 type Segment = { first: AgentEvent; last: AgentEvent; text: string; isReasoning: boolean }
 type StreamFrame = { type?: unknown; token?: unknown; chatId?: unknown }
+type BrowserView = { receive(message: unknown): void; close(): void }
 
 const readyTimeoutMilliseconds = 5000
 const readableRetryMilliseconds = 100
@@ -525,6 +526,7 @@ export const createAgentBridge = ({
       callDevLoopTool: handlers.callDevLoopTool,
       githubToolsOf: handlers.githubToolsOf,
       callSpyriaTool: handlers.callSpyriaTool,
+      watchBrowser: handlers.watchBrowser,
       runGitAction: handlers.runGitAction,
       applyPullRequestEvent: handlers.applyPullRequestEvent,
       wakeWorkspace: handlers.wakeWorkspace,
@@ -611,9 +613,73 @@ export const createAgentBridge = ({
     bridges.set(database, bridge)
     return bridge
   }
+  const browserStream = (
+    authenticate: (authorization: string | undefined) => Promise<Authentication>,
+    databaseOf: (databaseName: string | undefined) => Database | undefined,
+  ) =>
+    upgradeWebSocket(() => {
+      let view: BrowserView | undefined
+      let isOpening = false
+      let isClosed = false
+      let stopWatchingSession = () => {}
+      const open = async (frame: StreamFrame, socket: WSContext) => {
+        const authentication = typeof frame.token === 'string' ? await authenticate(`Bearer ${frame.token}`) : undefined
+        const database = authentication?.status === 200 ? databaseOf(authentication.databaseName) : undefined
+        if (authentication?.status !== 200 || !database || typeof frame.chatId !== 'string')
+          return socket.close(notSignedInCloseCode, 'Not signed in')
+        const { context: viewing, sessionId, expiresAt } = authentication
+        const viewer = { send: (message: object) => socket.readyState === 1 && socket.send(JSON.stringify(message)) }
+        const chat = { workspaceId: viewing.workspaceId, chatId: chatId(frame.chatId) }
+        const opened = await forDatabase(database)
+          .watchBrowser(chat, viewing.userId, viewer)
+          .catch((error: unknown) => {
+            viewer.send({
+              type: 'state',
+              state: 'unavailable',
+              reason: error instanceof DomainError ? error.message : 'The browser could not open',
+            })
+            return undefined
+          })
+        if (isClosed) return opened?.close()
+        view = opened
+        const expiry = setTimeout(() => socket.close(notSignedInCloseCode, 'Not signed in'), expiresAt - Date.now())
+        const unwatch = sessionEndingsOf(database).watch({
+          workspaceId: viewing.workspaceId,
+          sessionId,
+          end: () => socket.close(notSignedInCloseCode, 'Not signed in'),
+        })
+        stopWatchingSession = () => {
+          clearTimeout(expiry)
+          unwatch()
+        }
+      }
+      return {
+        onMessage: (event, socket) => {
+          let frame: StreamFrame
+          try {
+            frame = JSON.parse(String(event.data))
+          } catch {
+            return
+          }
+          if (view) return view.receive(frame)
+          if (isOpening || frame?.type !== 'open') return
+          isOpening = true
+          open(frame, socket).catch((error) => {
+            log.error({ event: 'browser.stream.failed', body: 'A browser stream failed', error })
+            socket.close(1011, 'Internal error')
+          })
+        },
+        onClose: () => {
+          isClosed = true
+          stopWatchingSession()
+          view?.close()
+        },
+      }
+    })
   return {
     forDatabase,
     turnContextOf,
+    browserStream,
     release: async (database: Database) => {
       bridges.get(database)?.release()
       bridges.delete(database)

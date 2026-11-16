@@ -35,7 +35,7 @@ const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
 const runtimeTabNames = ['Changes', 'Files', 'Browser', 'Usage', 'Connected tools', 'Members']
-const channelTabNames = ['Browser', 'Sources', 'Usage', 'Connected tools', 'Members']
+const channelTabNames = ['Sources', 'Usage', 'Connected tools', 'Members']
 
 const expectOwnerConnections = async (page: Page) => {
   await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
@@ -100,7 +100,7 @@ test.describe('Side panel', () => {
       await tabOf(page, 'Browser').click()
       await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
       await expect(tabOf(page, 'Files')).toHaveAttribute('aria-selected', 'false')
-      await expect(tabPanelOf(page)).toContainText('Invoices')
+      await expect(tabPanelOf(page).getByRole('button', { name: 'Files the agent opened' })).toBeVisible()
     })
 
     await test.step('usage: shows one row per member and a total on a runtime chat, and one row per model', async () => {
@@ -117,22 +117,11 @@ test.describe('Side panel', () => {
       await expect(modelTable.getByRole('row', { name: /^Sonnet 5.5/ })).toContainText('$0.23')
     })
 
-    await test.step('browser: lists the pages the agent opened in a runtime chat, newest first, by address', async () => {
+    await test.step('browser: lists the project files the agent opened in a runtime chat, by title and path', async () => {
       await openPanelTab(page, 'Invoice bug', 'Browser')
-      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
-      await expect(opened.getByRole('listitem')).toHaveText([
-        'https://example.com/invoicesInvoices',
-        'reports/invoice-totals.htmlInvoice totals',
-      ])
-    })
-
-    await test.step('browser: shows the address of a page the agent opened before loading it', async () => {
-      await tabPanelOf(page)
-        .getByRole('button', { name: /^https:\/\/example\.com\/invoices/ })
-        .click()
-      await expect(tabPanelOf(page)).toContainText('The agent opened this page')
-      await expect(tabPanelOf(page).getByRole('button', { name: 'Load page' })).toBeVisible()
-      await expect(tabPanelOf(page).locator('iframe')).toHaveCount(0)
+      await tabPanelOf(page).getByRole('button', { name: 'Files the agent opened' }).click()
+      const opened = tabPanelOf(page).getByRole('list', { name: 'Files the agent opened' })
+      await expect(opened.getByRole('listitem')).toHaveText(['Invoice totalsreports/invoice-totals.html'])
     })
 
     await test.step('lists the tools of the owner, who has signed in to none, on Invoice bug', async () => {
@@ -154,12 +143,7 @@ test.describe('Side panel', () => {
     await test.step('shows the channel tabs in order with the first selected', async () => {
       await openChat(page, 'Welcome')
       expect(await tabLabelsOf(page)).toEqual(channelTabNames)
-      await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
-    })
-
-    await test.step('browser: lists the page the agent opened in a channel by address', async () => {
-      const opened = tabPanelOf(page).getByRole('list', { name: 'Pages the agent opened' })
-      await expect(opened.getByRole('listitem')).toHaveText(['https://example.com/onboardingOnboarding guide'])
+      await expect(tabOf(page, 'Sources')).toHaveAttribute('aria-selected', 'true')
     })
 
     await test.step('sources: lists the sources with their origin', async () => {
@@ -221,11 +205,6 @@ test.describe('Side panel', () => {
       await expect(members.nth(0)).toContainText('Owner')
     })
 
-    await test.step('browser: shows an empty state without data', async () => {
-      await openChat(page, 'Standup')
-      await expect(tabPanelOf(page)).toContainText('No page open')
-    })
-
     await test.step('sources: shows an empty state without data', async () => {
       await openPanelTab(page, 'Standup', 'Sources')
       await expect(tabPanelOf(page)).toContainText('No sources')
@@ -268,7 +247,7 @@ test.describe('Side panel', () => {
     await test.step('selects the first tab again when another chat is opened', async () => {
       await openPanelTab(page, 'Invoice bug', 'Files')
       await openChat(page, 'Welcome')
-      await expect(tabOf(page, 'Browser')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Sources')).toHaveAttribute('aria-selected', 'true')
       await openChat(page, 'Invoice bug')
       await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })

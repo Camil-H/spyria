@@ -24,6 +24,7 @@ import { renameChat } from '../operations/rename-chat.ts'
 import { renameProject } from '../operations/rename-project.ts'
 import { reorderChats } from '../operations/reorder-chats.ts'
 import { revokeInvite } from '../operations/revoke-invite.ts'
+import { setBrowserSettings } from '../operations/set-browser-settings.ts'
 import { setDevLoop } from '../operations/set-dev-loop.ts'
 import { setSetupCommands } from '../operations/set-setup-commands.ts'
 import { transferChat } from '../operations/transfer-chat.ts'
@@ -58,6 +59,20 @@ const stepArgument = z.union([
 export const setupCommandsArgument = z.array(
   z.object({ repository: z.nullable(z.string()), command: z.string(), warmRuntimes: z.optional(z.number()) }),
 )
+const addressesArgument = z.array(z.string())
+export const browserSettingsArgument = z.object({
+  forAgents: z.boolean(),
+  forMembers: z.boolean(),
+  blockInternalNetworks: z.boolean(),
+  allowedInternalAddresses: addressesArgument,
+  allowedSites: addressesArgument,
+  blockedSites: addressesArgument,
+  signInHours: z.nullable(z.number()),
+  downloads: z.boolean(),
+  uploads: z.boolean(),
+  approveSubmits: z.boolean(),
+  recordVisits: z.boolean(),
+})
 export const devLoopArgument = z.nullable(
   z.object({
     rules: z.array(
@@ -154,6 +169,11 @@ export const workspaceMutators = defineMutators({
     ),
     setDevLoop: defineMutator(z.extend(workspaceArguments, { settings: devLoopArgument }), ({ tx, ctx, args }) =>
       setDevLoop(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, settings: args.settings }),
+    ),
+    setBrowserSettings: defineMutator(
+      z.extend(workspaceArguments, { settings: browserSettingsArgument }),
+      ({ tx, ctx, args }) =>
+        setBrowserSettings(dependenciesOf(tx, ctx, args), { actorId: ctx.userId, settings: args.settings }),
     ),
     deleteWorkspace: defineMutator(
       z.extend(workspaceArguments, { confirmation: z.literal('DELETE') }),

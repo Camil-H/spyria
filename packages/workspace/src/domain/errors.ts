@@ -233,3 +233,10 @@ export const InstanceBeingSetUp = errorKind(
   () => 'This Spyria is being set up: open the setup link to create its first workspace',
   WorkspaceError,
 )
+
+export const InvalidBrowserSettings = errorKind(
+  'invalid_browser_settings',
+  () =>
+    'Addresses are host names or IP addresses, at most 200 in each list and each once; sign-ins last from 1 hour to 30 days',
+  WorkspaceError,
+)

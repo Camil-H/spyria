@@ -141,6 +141,7 @@ Rules that apply today without a mechanism, or with a known hole.
 | S8 | the CI job `secrets` runs gitleaks on every pull request and push to `develop`; no pre-commit scan, and none in `check:all` |
 | G2 | `packages/db/src/postgres/client.ts` reads `DATABASE_URL` at module level |
 | C7 | same module: importing `@spyria/db/postgres` reads configuration |
+| C4 | `packages/conversation/src/operations/pending-approvals.ts`, `running-delegations.ts` and `browser-sessions.ts` keep in-process state at module level (waiting approvals, running sub-agents, members' browser streams and their timers), which lives only while the server runs and cannot be in Postgres |
 | TX5a | `POST /api/llm-credentials` takes no idempotency key (Zero mutations are deduplicated by Zero's client mutation ids) |
 | RS3 | job retries back off linearly (`attempts * 1 s`) without jitter or cap |
 | RS6 | the postgres.js pool is bounded (default 10) but has no statement timeout |

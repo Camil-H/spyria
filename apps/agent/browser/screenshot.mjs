@@ -13,18 +13,14 @@ const viewports = {
 }
 
 const install = () => {
-  const installed = spawnSync(
-    process.execPath,
-    [playwrightCli, 'install', '--no-progress', 'chromium-headless-shell'],
-    {
-      stdio: ['ignore', 'ignore', 'inherit'],
-    },
-  )
+  const installed = spawnSync(process.execPath, [playwrightCli, 'install', '--no-progress', '--no-shell', 'chromium'], {
+    stdio: ['ignore', 'ignore', 'inherit'],
+  })
   process.exitCode = installed.status ?? 1
 }
 
 const capture = async ({ url, output, viewport, fullPage, theme }) => {
-  const browser = await chromium.launch({ args: ['--disable-dev-shm-usage'] })
+  const browser = await chromium.launch({ channel: 'chromium', args: ['--disable-dev-shm-usage'] })
   try {
     const page = await browser.newPage({ ...viewports[viewport], colorScheme: theme })
     await page.goto(url, { waitUntil: 'load', timeout: loadTimeoutMilliseconds })

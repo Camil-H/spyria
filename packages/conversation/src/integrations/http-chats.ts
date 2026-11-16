@@ -1,6 +1,6 @@
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { type Attachment, chatAttachmentsPathOf, isChatAttachmentPath } from '../domain/attachments.ts'
-import { type WebPage, webPagePath } from '../domain/browser-pages.ts'
+import { browserDownloadsPath } from '../domain/browser-tools.ts'
 import type { GitAction, GitActionOutcome } from '../domain/git-actions.ts'
 import type { PublishAction, PullRequestDraft } from '../domain/pull-requests.ts'
 import type { WorkspaceRead, WorkspaceReading } from '../domain/workspace-reads.ts'
@@ -18,9 +18,56 @@ const storedRetryMilliseconds = 100
 
 type PostAsMember = (workspaceId: WorkspaceId, path: string, body?: BodyInit) => Promise<Response>
 type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
+type SessionTokenOf = (workspaceId: WorkspaceId) => string
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 
-export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: GetAsMember) => ({
+const downloadFrameMilliseconds = 60_000
+const hiddenFieldOf = (name: string, value: string) => {
+  const field = document.createElement('input')
+  field.type = 'hidden'
+  field.name = name
+  field.value = value
+  return field
+}
+const downloadFrameOf = (onRefused: (reason: string) => void) => {
+  const frame = document.createElement('iframe')
+  frame.name = `spyria-browser-download-${crypto.randomUUID()}`
+  frame.title = 'Browser download'
+  frame.hidden = true
+  frame.addEventListener('load', () => {
+    if (frame.contentWindow?.location.href === 'about:blank') return
+    onRefused(frame.contentDocument?.body?.textContent?.trim() || 'The download could not start')
+    frame.remove()
+  })
+  document.body.append(frame)
+  setTimeout(() => frame.remove(), downloadFrameMilliseconds)
+  return frame
+}
+
+export const createHttpChatCommands = (
+  postAsMember: PostAsMember,
+  getAsMember: GetAsMember,
+  sessionTokenOf: SessionTokenOf,
+) => ({
+  saveBrowserDownload: ({
+    workspaceId,
+    token,
+    onRefused,
+  }: {
+    workspaceId: WorkspaceId
+    token: string
+    onRefused: (reason: string) => void
+  }) => {
+    const form = document.createElement('form')
+    form.method = 'post'
+    form.action = browserDownloadsPath
+    form.target = downloadFrameOf(onRefused).name
+    form.hidden = true
+    form.append(hiddenFieldOf('token', token), hiddenFieldOf('session', sessionTokenOf(workspaceId)))
+    document.body.append(form)
+    form.submit()
+    form.remove()
+  },
   commandOutput: async ({ workspaceId, chatId, stepId }: ChatInput & { stepId: string }) => {
     const response = await getAsMember(workspaceId, commandOutputPathOf(chatId, stepId))
     if (!response.ok) throw new Error(`The command output read answered ${response.status}`)
@@ -97,12 +144,6 @@ export const createHttpChatCommands = (postAsMember: PostAsMember, getAsMember: 
       throw new Error(message ?? `The media read answered ${response.status}`)
     }
     return response.blob()
-  },
-  readWebPage: async ({ workspaceId, url }: { workspaceId: WorkspaceId; url: string }) => {
-    const response = await getAsMember(workspaceId, `${webPagePath}?${new URLSearchParams({ url })}`)
-    const answer = (await response.json().catch(() => ({}))) as WebPage & { message?: string }
-    if (!response.ok) throw new Error(answer.message ?? `Reading the page answered ${response.status}`)
-    return answer
   },
   wakeWorkspace: async ({ workspaceId, chatId }: ChatInput) => {
     const response = await postAsMember(workspaceId, chatWorkspacePathOf(chatId, 'wake'))

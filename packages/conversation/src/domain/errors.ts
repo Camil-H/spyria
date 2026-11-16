@@ -120,17 +120,6 @@ export const AttachmentNotFound = errorKind(
   () => 'This attachment is no longer available',
   ConversationError,
 )
-export const WebPageUnreachable = errorKind(
-  'web_page_unreachable',
-  () => 'This page could not be reached',
-  ConversationError,
-)
-export const WebPageNotPublic = errorKind(
-  'web_page_not_public',
-  () => 'This page is not on the public web, so Spyria does not open it',
-  ConversationError,
-)
-export const WebPageTooLarge = errorKind('web_page_too_large', () => 'This page is over 5 MB', ConversationError)
 export const TooManyToolServersOff = errorKind(
   'too_many_tool_servers_off',
   () => 'A chat turns off at most 100 tool servers',
@@ -141,3 +130,4 @@ export const PromptPickedUp = errorKind(
   () => 'The agent has already picked up this message, so it can no longer be changed',
   ConversationError,
 )
+export const BrowserUnavailable = errorKind('browser_unavailable', (reason: string) => reason, ConversationError)

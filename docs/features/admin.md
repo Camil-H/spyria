@@ -133,13 +133,27 @@ Claims and releases are recorded in the audit log.
 
 Its **Setup commands**, under the hosts since setup is how each runtime starts, set what a dev chat's runtime runs when it starts, before the agent gets a message: a **Default setup command** tab for the repositories without one of their own, a tab for each repository that has its own, and a **New repository setup command** tab to add one, as the quality gates do. Nothing runs without one, even a repository's `.spyria/setup.sh`. A repository's own setup command can also keep up to 5 runtimes ready, set up on its default branch, so a new dev chat starts at once ([Runtimes kept ready](./dev-mode.md#runtimes-kept-ready)). Every member can read them, so they hold no secret. See [Dev mode](./dev-mode.md#clone-and-setup-script).
 
+## Browser
+
+**Browser** (for a role with **Manage the tools catalogue**) sets the browser each member gets in each AI chat, next to the chat's runtime (see [Chats and sharing](./chats-and-sharing.md#browser)):
+
+- **Agents use a browser** and **Members browse**, separately: with browsing off for members, a member still watches the agent in their browser but cannot click or type in it; with both off, the Browser tab says the browser is off.
+- **Ask before the agent submits** (on by default): the member approves each form the agent submits and each script it runs in their browser. Reading needs no approval.
+- **Block internal networks** (on by default): pages cannot reach the host machine (`host.docker.internal`) or private, link-local and reserved addresses, checked on every address a name resolves to, except the **Internal addresses allowed**, such as `staging.internal`. The chat's own runtime stays reachable as `localhost`.
+- **Sites allowed** (empty for every site; `localhost` always is) and **Sites blocked**, each site with its subdomains.
+- **Sign-ins last at most**, in hours: by default a browser keeps its sign-ins until the chat's runtime stops. Past the limit, its host removes the browser with its sign-ins within a minute, even one in use.
+- **Downloads** and **Uploads**, on by default.
+- **Record visited addresses** (on by default): each address a browser visits goes to the audit log under **Browser**, with its chat and member, without its query or fragment and never the page contents.
+
+A change applies to the agent's next step and to each browser when it next starts. Each change is recorded in the audit log.
+
 ## Quality gates
 
 **Quality gates** sets the gates the work of dev chat agents goes through before it reaches the owner: the **Default rules**, and rules for each repository that needs its own, each with its own switch, its gates and the limits of a run (time and cost). Gates run in order (commands, a code review, the pull request, CI), each saying whether a failure goes back to the agent, and how many times, or hands over to the owner. Repositories are listed once GitHub is connected. See [Dev mode](./dev-mode.md#quality-gates).
 
 ## Tools
 
-**Tools** lists the servers, each folded to one row (its name, state and how members sign in) that opens its details when clicked; a server waiting for a sign-in or a review opens on its own. **Spyria** comes first, a row like any other, with the same tabs, search and access grid: Spyria's own tools, which every role has, so each box is ticked and locked, with what each does: `open_page`, `take_screenshot`, `web_search`, `list_public_chats`, `search_public_chats`, `read_public_chat` and `await_task` read; `delegate`, `check_task`, `finish_work` and `report_review` write. Their settings live with their feature, the Browser tab for `open_page` and `take_screenshot` and **Quality gates**, which their rows link to, for `finish_work` and `report_review`.
+**Tools** lists the servers, each folded to one row (its name, state and how members sign in) that opens its details when clicked; a server waiting for a sign-in or a review opens on its own. **Spyria** comes first, a row like any other, with the same tabs, search and access grid: Spyria's own tools, which every role has, so each box is ticked and locked, with what each does: `open_page`, `browser_snapshot`, `browser_wait`, `browser_navigate`, `browser_screenshot`, `take_screenshot`, `web_search`, `list_public_chats`, `search_public_chats`, `read_public_chat` and `await_task` read; `browser_click`, `browser_type`, `browser_fill`, `browser_press`, `browser_run_javascript`, `delegate`, `check_task`, `finish_work` and `report_review` write. Their settings live with their feature, **Browser** for `open_page` and the `browser_` tools and **Quality gates** for `finish_work` and `report_review`, which their rows link to.
 
 **GitHub** comes next, a row like any other: its commands with what each does (`fetch_branch`, `read_review_threads`, `read_checks`, `list_issues` and `read_issue` read; `push_branch`, `open_pull_request` and `update_pull_request` write, as Spyria marks them), the tools each role may use in its access grid, and each member's approvals in their profile. A role without a GitHub setting has every command, so dev chats work before you set access. Its setup (the App, repositories, members' accounts) stays in **GitHub**, which its row links to (**Set up in GitHub**). The agent's GitHub tools, the Changes panel's Push and Open pull request, the pull request card's Address review comments and the quality gates all go through the same check of the member's GitHub access. A catalogue server cannot be named GitHub.
 

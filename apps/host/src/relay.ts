@@ -1,10 +1,13 @@
+import { type BrowserStream, type BrowserStreamListener, browserKeyPattern } from './browsers.ts'
 import { Refused, relayUrlOf } from './commands.ts'
 import { isAllowedOnPersonalHost, isMediaHoldingSecret, redacted } from './personal.ts'
 import { contextOf, traceHeadersOf, withSpan } from './telemetry.ts'
 
 export type Frame = { type: string; sid?: unknown; [field: string]: unknown }
+type StreamTarget = { send(data: string): void; close(): void }
 type Stream = {
-  socket: WebSocket
+  socket: StreamTarget
+  onCredit?: () => void
   queue: string[] | null
   creditBytes?: number
   unacknowledgedBytes: number
@@ -25,6 +28,7 @@ export const messageOf = (error: unknown) => (error instanceof Error ? error.mes
 export const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const maximumHeldStreamBytes = 8 * 1024 * 1024
+const fileChunkBytes = 192 * 1024
 export const maximumFrameBytes = 64 * 1024 * 1024
 const tooLarge = 'The response is too large to relay'
 export const frameTextOf = (frame: Frame, maximumBytes = maximumFrameBytes) => {
@@ -52,8 +56,17 @@ export const createRelay = ({
   maximumQueuedMessages = 256,
   maximumHeldBytes = maximumHeldStreamBytes,
   personal,
+  openBrowser,
+  readBrowserFile,
 }: {
   addressOf: (runtimeId: string) => Promise<string>
+  openBrowser?: (runtimeId: string, browserKey: string, listener: BrowserStreamListener) => Promise<BrowserStream>
+  readBrowserFile?: (
+    runtimeId: string,
+    browserKey: string,
+    fileId: string,
+    signal: AbortSignal,
+  ) => Promise<AsyncIterable<Uint8Array>>
   send: (frame: Frame) => void
   isBackedUp?: () => boolean
   maximumQueuedMessages?: number
@@ -163,7 +176,19 @@ export const createRelay = ({
       stream.heldBytes -= Buffer.byteLength(data)
       sendCounted(sid, stream, data)
     }
+    stream.onCredit?.()
     if (stream.isRuntimeClosed && stream.held.length === 0) closeStream(sid)
+  }
+  const creditFor = async (stream: Stream, bytes: number, signal: AbortSignal) => {
+    while (!hasCreditFor(stream, bytes) && !signal.aborted)
+      await new Promise<void>((resolve) => {
+        const resumed = () => {
+          signal.removeEventListener('abort', resumed)
+          resolve()
+        }
+        stream.onCredit = resumed
+        signal.addEventListener('abort', resumed, { once: true })
+      })
   }
   const openStream = async (sid: number, frame: Frame) => {
     openingSids.add(sid)
@@ -171,8 +196,9 @@ export const createRelay = ({
       const url = await urlOf(frame, 'WS')
       if (!openingSids.delete(sid)) return
       url.protocol = 'ws:'
+      const socket = new WebSocket(url)
       const stream: Stream = {
-        socket: new WebSocket(url),
+        socket,
         queue: [],
         creditBytes: typeof frame.creditBytes === 'number' && frame.creditBytes > 0 ? frame.creditBytes : undefined,
         unacknowledgedBytes: 0,
@@ -181,19 +207,87 @@ export const createRelay = ({
         isRuntimeClosed: false,
       }
       streams.set(sid, stream)
-      stream.socket.onopen = () => {
+      socket.onopen = () => {
         send({ type: 'ws_open', sid })
-        for (const data of stream.queue ?? []) stream.socket.send(data)
+        for (const data of stream.queue ?? []) socket.send(data)
         stream.queue = null
       }
-      stream.socket.onmessage = (message) => relayFromRuntime(sid, stream, forwarded(String(message.data)))
-      stream.socket.onclose = () => {
+      socket.onmessage = (message) => relayFromRuntime(sid, stream, forwarded(String(message.data)))
+      socket.onclose = () => {
         stream.isRuntimeClosed = true
         if (streams.get(sid) === stream && stream.held.length === 0) closeStream(sid)
       }
     } catch (error) {
       openingSids.delete(sid)
       send({ type: 'ws_close', sid, error: messageOf(error) })
+    }
+  }
+  const openBrowserStream = async (sid: number, frame: Frame) => {
+    openingSids.add(sid)
+    const stream: Stream = {
+      socket: { send: () => {}, close: () => {} },
+      queue: [],
+      creditBytes: typeof frame.creditBytes === 'number' && frame.creditBytes > 0 ? frame.creditBytes : undefined,
+      unacknowledgedBytes: 0,
+      held: [],
+      heldBytes: 0,
+      isRuntimeClosed: false,
+    }
+    streams.set(sid, stream)
+    let earlyLines: string[] | null = []
+    try {
+      const browserKey = String(frame.browserKey)
+      if (!openBrowser || !browserKeyPattern.test(browserKey)) throw new Refused('invalid browser key')
+      const attached = await openBrowser(String(frame.runtimeId), browserKey, {
+        onLine: (line) => (earlyLines ? earlyLines.push(line) : relayFromRuntime(sid, stream, line)),
+        onClose: () => {
+          stream.isRuntimeClosed = true
+          if (streams.get(sid) === stream && stream.held.length === 0) closeStream(sid)
+        },
+      })
+      if (!openingSids.delete(sid)) return attached.close()
+      stream.socket = attached
+      send({ type: 'ws_open', sid })
+      for (const data of stream.queue ?? []) attached.send(data)
+      stream.queue = null
+      for (const line of earlyLines) relayFromRuntime(sid, stream, line)
+      earlyLines = null
+    } catch (error) {
+      openingSids.delete(sid)
+      streams.delete(sid)
+      send({ type: 'ws_close', sid, error: messageOf(error) })
+    }
+  }
+  const openFileStream = async (sid: number, frame: Frame) => {
+    const reading = new AbortController()
+    const stream: Stream = {
+      socket: { send: () => {}, close: () => reading.abort() },
+      queue: null,
+      creditBytes:
+        typeof frame.creditBytes === 'number' && frame.creditBytes > 0 ? frame.creditBytes : fileChunkBytes * 4,
+      unacknowledgedBytes: 0,
+      held: [],
+      heldBytes: 0,
+      isRuntimeClosed: false,
+    }
+    streams.set(sid, stream)
+    try {
+      const browserKey = String(frame.browserKey)
+      if (!readBrowserFile || !browserKeyPattern.test(browserKey)) throw new Refused('invalid browser key')
+      const chunks = await readBrowserFile(String(frame.runtimeId), browserKey, String(frame.fileId), reading.signal)
+      send({ type: 'ws_open', sid })
+      for await (const chunk of chunks)
+        for (let offset = 0; offset < chunk.length && !reading.signal.aborted; offset += fileChunkBytes) {
+          const data = Buffer.from(chunk.subarray(offset, offset + fileChunkBytes)).toString('base64')
+          await creditFor(stream, data.length, reading.signal)
+          if (!reading.signal.aborted) sendCounted(sid, stream, data)
+        }
+      if (streams.get(sid) === stream) closeStream(sid)
+    } catch (error) {
+      if (streams.get(sid) === stream && !reading.signal.aborted) {
+        streams.delete(sid)
+        send({ type: 'ws_close', sid, error: messageOf(error) })
+      }
     }
   }
   const forward = (sid: number, data: string) => {
@@ -209,7 +303,9 @@ export const createRelay = ({
       if (frame.type === 'http') return receiveHttp(sid, frame)
       if (frame.type === 'http_body') return receiveBody(sid, String(frame.data))
       if (frame.type === 'http_end') return receiveEnd(sid)
-      if (frame.type === 'ws_connect') return openStream(sid, frame)
+      if (frame.type === 'ws_connect' && frame.fileId !== undefined) return openFileStream(sid, frame)
+      if (frame.type === 'ws_connect')
+        return frame.browserKey === undefined ? openStream(sid, frame) : openBrowserStream(sid, frame)
       if (frame.type === 'ws_msg') return forward(sid, String(frame.data))
       if (frame.type === 'ws_ack') return acknowledge(sid, frame.bytes)
       if (frame.type === 'ws_close') return closeStream(sid)

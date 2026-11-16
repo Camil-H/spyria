@@ -7,71 +7,19 @@ const maximumAddressLength = 2048
 const maximumTitleLength = 200
 const webAddress = /^https?:\/\//i
 const anyScheme = /^[a-z][\w+.-]*:/i
-const ipv4Address = /^\d+\.\d+\.\d+\.\d+$/
-const localName = /(^|\.)(localhost|local)$/
 
 export const openPageTool = {
   name: 'open_page',
   description:
-    "Open a page in the member's Browser panel: a public http or https address, or the path of a file in the project such as an HTML report you wrote. When you build something the member should look at, such as a report or a page, open it with open_page. Addresses on the member's own machine or network, such as localhost or 192.168.x.x, are not opened.",
+    'Open a web address in the browser of the member who prompted you, with their own sign-ins, where they watch it live in the Browser tab; http://localhost:<port> reaches the app you run in this runtime. Or open the path of a file in the project, such as an HTML report you wrote, for everyone in the chat. Then read and act on a web page with the browser_ tools.',
   inputSchema: {
     type: 'object',
     required: ['address'],
     properties: { address: { type: 'string' }, title: { type: 'string' } },
   },
 }
-export const pageOpenedText = "The page is open in the member's Browser panel."
-export const webPagePath = '/api/web-page'
-export const maximumWebPageBytes = 5 * 1024 * 1024
-export type WebPage = Readonly<{ url: string; html?: string }>
-
-const isPrivateIpv4 = ([first = 0, second = 0]: readonly number[]) =>
-  first === 0 ||
-  first === 10 ||
-  first === 127 ||
-  (first === 100 && second >= 64 && second < 128) ||
-  (first === 169 && second === 254) ||
-  (first === 172 && second >= 16 && second < 32) ||
-  (first === 192 && second === 168) ||
-  (first === 198 && (second === 18 || second === 19)) ||
-  first >= 224
-
-const dottedTail = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/
-const withHexTail = (address: string) =>
-  address.replace(dottedTail, (_match, head: string, ...bytes: string[]) => {
-    const [a = 0, b = 0, c = 0, d = 0] = bytes.slice(0, 4).map(Number)
-    return `${head}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
-  })
-
-const ipv6GroupsOf = (address: string) => {
-  const groupsOf = (part: string) => (part === '' ? [] : part.split(':').map((group) => Number.parseInt(group, 16)))
-  const [head = '', tail] = withHexTail(address).split('::')
-  if (tail === undefined) return groupsOf(head)
-  const [headGroups, tailGroups] = [groupsOf(head), groupsOf(tail)]
-  return [...headGroups, ...Array<number>(8 - headGroups.length - tailGroups.length).fill(0), ...tailGroups]
-}
-
-const isPrivateEmbeddedIpv4 = (high = 0, low = 0) => isPrivateIpv4([high >> 8, high & 0xff, low >> 8, low & 0xff])
-
-const isPrivateIpv6 = (address: string) => {
-  const groups = ipv6GroupsOf(address)
-  const [first = 0, second = 0, third = 0, , , sixth = 0, seventh = 0, eighth = 0] = groups
-  const isMappedIpv4 = groups.slice(0, 5).every((group) => group === 0) && sixth === 0xffff
-  const isNat64 = first === 0x64 && second === 0xff9b && groups.slice(2, 6).every((group) => group === 0)
-  if (isMappedIpv4 || isNat64) return isPrivateEmbeddedIpv4(seventh, eighth)
-  if (first === 0x2002) return isPrivateEmbeddedIpv4(second, third)
-  return groups.slice(0, 7).every((group) => group === 0) || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80
-}
-
-export const isPrivateNetworkAddress = (address: string) =>
-  address.includes(':') ? isPrivateIpv6(address) : isPrivateIpv4(address.split('.').map(Number))
-
-const isOnMembersNetwork = (url: string) => {
-  const host = new URL(url).hostname.replace(/\.$/, '')
-  if (host.startsWith('[')) return isPrivateIpv6(host.slice(1, -1))
-  if (ipv4Address.test(host)) return isPrivateNetworkAddress(host)
-  return !host.includes('.') || localName.test(host)
-}
+export const pageOpenedText = "The file is open in the chat's Browser tab."
+export const isWebPage = (page: OpenedPage) => webAddress.test(page.url)
 
 const addressOf = (address: unknown): string | Refusal => {
   const text = typeof address === 'string' ? address.trim() : ''
@@ -80,9 +28,7 @@ const addressOf = (address: unknown): string | Refusal => {
     return { refusal: `The address is longer than ${maximumAddressLength} characters` }
   if (webAddress.test(text)) {
     if (!URL.canParse(text)) return { refusal: `${text} is not a valid web address` }
-    return isOnMembersNetwork(text)
-      ? { refusal: `${text} is on the member's own machine or network, so it is not opened` }
-      : text
+    return text
   }
   if (anyScheme.test(text)) return { refusal: 'Only http and https addresses and project files are opened' }
   const path = pathOf(text).replace(/^(\.?\/)+/, '')

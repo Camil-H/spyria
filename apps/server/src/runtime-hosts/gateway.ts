@@ -173,7 +173,7 @@ export const createRuntimeHostGateway = ({
     connection.identifying.resolve()
     for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
     for (const call of modelCalls.values()) call.abort()
-    for (const listener of streams.values()) listener.onClose()
+    for (const listener of streams.values()) listener.onClose('The runtime host disconnected')
     streams.clear()
     connection.receivedStreamBytes.clear()
     connection.incomingBodies.clear()
@@ -304,12 +304,15 @@ export const createRuntimeHostGateway = ({
     const listener = connection.streams.get(requestId)
     if (frame.type === 'ws_open') listener?.onOpen()
     if (frame.type === 'ws_msg' && listener) {
-      listener.onMessage(String(frame.data))
-      acknowledgeStream(connection, requestId, String(frame.data))
+      const data = String(frame.data)
+      const handled = listener.onMessage(data)
+      if (handled instanceof Promise)
+        void handled.then(() => connection.streams.has(requestId) && acknowledgeStream(connection, requestId, data))
+      else acknowledgeStream(connection, requestId, data)
     }
     if (frame.type === 'ws_close' && connection.streams.delete(requestId)) {
       connection.receivedStreamBytes.delete(requestId)
-      listener?.onClose()
+      listener?.onClose(typeof frame.error === 'string' ? frame.error : undefined)
     }
   }
 
@@ -461,6 +464,31 @@ export const createRuntimeHostGateway = ({
         ...(setupSnapshot && { snapshotKey: snapshotKeyOf(sandbox.workspaceId, setupSnapshot) }),
       })
     }
+  const browserKeyOf = ({ workspaceId, runtimeId }: SandboxLocation, owner: string) =>
+    volumeKeyOf(JSON.stringify(['browser', workspaceId, runtimeId, owner]))
+  const openStream = (
+    sandbox: SandboxLocation,
+    target: { path: string } | { browserKey: string; fileId?: string },
+    listener: SandboxSocketListener,
+  ) => {
+    const connection = connectionOf(sandbox)
+    const sid = nextRequestId++
+    connection.streams.set(sid, listener)
+    sendTo(connection, {
+      type: 'ws_connect',
+      sid,
+      runtimeId: sandbox.runtimeId,
+      ...target,
+      creditBytes: streamCreditBytes,
+    })
+    return {
+      send: (data: string) => sendTo(connection, { type: 'ws_msg', sid, data }),
+      close: () => {
+        connection.receivedStreamBytes.delete(sid)
+        if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
+      },
+    }
+  }
   const sandboxProvider: SandboxProvider = {
     create: createWith('create'),
     recreate: createWith('recreate'),
@@ -506,25 +534,23 @@ export const createRuntimeHostGateway = ({
         )
         return { status, headers, body } as SandboxResponse
       },
-      openSocket: (path, listener) => {
-        const connection = connectionOf(sandbox)
-        const sid = nextRequestId++
-        connection.streams.set(sid, listener)
-        sendTo(connection, {
-          type: 'ws_connect',
-          sid,
+      openSocket: (path, listener) => openStream(sandbox, { path }, listener),
+      startBrowser: async (owner, { signInHours }) => {
+        await command(sandbox, 'browser_start', {
           runtimeId: sandbox.runtimeId,
-          path,
-          creditBytes: streamCreditBytes,
+          browserKey: browserKeyOf(sandbox, owner),
+          ...(signInHours !== undefined && { signInHours }),
         })
-        return {
-          send: (data) => sendTo(connection, { type: 'ws_msg', sid, data }),
-          close: () => {
-            connection.receivedStreamBytes.delete(sid)
-            if (connection.streams.delete(sid)) sendTo(connection, { type: 'ws_close', sid })
-          },
-        }
       },
+      stopBrowser: async (owner) => {
+        await command(sandbox, 'browser_stop', {
+          runtimeId: sandbox.runtimeId,
+          browserKey: browserKeyOf(sandbox, owner),
+        })
+      },
+      openBrowser: (owner, listener) => openStream(sandbox, { browserKey: browserKeyOf(sandbox, owner) }, listener),
+      openBrowserFile: (owner, fileId, listener) =>
+        openStream(sandbox, { browserKey: browserKeyOf(sandbox, owner), fileId }, listener),
     }),
   }
 

@@ -1,6 +1,7 @@
 import { type AnyMutatorRegistry, type MutatorResultDetails, type Row, Zero } from '@rocicorp/zero'
 import {
   aiProviderAllowListFrom,
+  browserSettingsFrom,
   devLoopSettingsFrom,
   domainErrorOf,
   type MemberId,
@@ -176,13 +177,14 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
     uniqueBy(workspaces, (workspace) => workspace.workspaceId),
   )
   const workspaceRowsOf = memoizedOnSources((workspaces: ZeroRows['workspaces']) =>
-    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands }) => ({
+    workspaces.map(({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands, browser }) => ({
       id: workspaceId,
       name,
       localSessions: localSessions ?? true,
       aiProviderAllowList: aiProviderAllowListFrom(aiProviderAllowList),
       devLoop: devLoopSettingsFrom(devLoop),
       setupCommands: setupCommandsFrom(setupCommands),
+      browser: browserSettingsFrom(browser),
     })),
   )
   const membershipsOf = memoizedOnSources(
