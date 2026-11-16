@@ -47,6 +47,7 @@ const watchSessionEndingsIn = (database: Database) => {
     listening ??= database.$client.listen(sessionsEndedChannel, check, check).then(
       (listener) => {
         hasLoggedListenFailure = false
+        check()
         return listener
       },
       (error: unknown) => {

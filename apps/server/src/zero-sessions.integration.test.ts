@@ -57,3 +57,10 @@ test('a Zero socket forwarded by the server closes as not signed in once its ses
   expect(otherSocket.socket.readyState).toBe(WebSocket.OPEN)
   otherSocket.socket.close()
 })
+
+test('a Zero socket opened with a session that already ended closes as not signed in', async () => {
+  const ended = await issueTestSession(database, acme, alice)
+  await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ended.sessionId}`
+  const endedSocket = await openZeroSocket(ended.token)
+  expect((await endedSocket.closed).code).toBe(4001)
+})
