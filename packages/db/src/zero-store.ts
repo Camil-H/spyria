@@ -266,6 +266,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
           runtimeChatIds.has(message.chatId) &&
             message.kind === 'member' &&
             message.replyToId === null &&
+            message.deletedAt === null &&
             !answeredMessageIds.has(message.id),
         )
       })

@@ -72,7 +72,10 @@ const readSnapshot = async () => {
       deletedAt: isoOrNull(deletedAt),
       pickedUpAt: isoOrNull(pickedUpAt),
       needsReply:
-        chatType.get(message.chatId) === 'runtime' && message.kind === 'member' && !answeredIds.has(message.id),
+        chatType.get(message.chatId) === 'runtime' &&
+        message.kind === 'member' &&
+        deletedAt === null &&
+        !answeredIds.has(message.id),
     })),
     readMarkers: readMarkers.map(userAsMember),
     threadReadMarkers: (await database.select().from(tables.threadReadMarkers)).map(userAsMember),
