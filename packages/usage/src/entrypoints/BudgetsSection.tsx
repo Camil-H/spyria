@@ -157,8 +157,8 @@ export const BudgetsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   return (
     <section aria-label="AI budgets" className="flex flex-col gap-3">
       <p className="text-sm text-muted">
-        Each member of a role gets its budget for themselves, in dollars per UTC day, week (from Monday) and month. At
-        100%, their prompts are refused until the period ends. Leave empty for no limit.
+        A role's budget is per member, not shared by the members who hold it, in dollars per UTC day, week (from Monday)
+        and month. At 100%, a member's prompts are refused until the period ends. Leave empty for no limit.
       </p>
       {overview === null ? (
         loadError ? (
