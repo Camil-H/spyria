@@ -5,6 +5,7 @@ import {
   type BrowserCommand,
   browserAnswerOf,
   browserAsleepRefusal,
+  browserStartFailureOf,
   memberMessageOf,
   visitedAddressOf,
 } from '../domain/browser-tools.ts'
@@ -124,7 +125,11 @@ const started = async (dependencies: Dependencies, input: Input): Promise<Sessio
   if (!endpoint) throw new BrowserUnavailable(browserAsleepRefusal)
   const settings = await dependencies.transactor.run(({ browser }) => browser.settings())
   const { transport } = endpoint
-  await transport.startBrowser(input.memberId, { signInHours: settings.signInHours ?? undefined })
+  await transport
+    .startBrowser(input.memberId, { signInHours: settings.signInHours ?? undefined })
+    .catch((error: unknown) => {
+      throw new BrowserUnavailable(browserStartFailureOf(error instanceof Error ? error.message : ''))
+    })
   const session: Session = {
     key: keyOf(input),
     ...input,

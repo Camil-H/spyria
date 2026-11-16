@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test'
-import { browserAnswerOf, browserCommandOf, memberMessageOf, submitCheckOf, visitedAddressOf } from './browser-tools.ts'
+import {
+  browserAnswerOf,
+  browserAsleepRefusal,
+  browserCommandOf,
+  browserStartFailureOf,
+  memberMessageOf,
+  submitCheckOf,
+  visitedAddressOf,
+} from './browser-tools.ts'
 
 const commandOf = (name: string, input: unknown) => {
   const parsed = browserCommandOf(name, input)
@@ -132,4 +140,12 @@ test("the browser's answer is its text, with an image when it took one", () => {
   expect(browserAnswerOf('Clicked e5')).toEqual({ text: 'Clicked e5' })
   expect(browserAnswerOf({ text: 'Screenshot', image: 'abc' })).toEqual({ text: 'Screenshot', image: 'abc' })
   expect(browserAnswerOf(undefined)).toEqual({ text: '' })
+})
+
+test("a host's refusal to start a browser reads in the member's terms", () => {
+  expect(browserStartFailureOf('refused: no room for another browser on this host')).toBe(
+    "The runtime's host has no room for another browser right now",
+  )
+  expect(browserStartFailureOf('refused: runtime is not running')).toBe(browserAsleepRefusal)
+  expect(browserStartFailureOf('Runtime host x did not answer in time')).toBe('The browser could not start')
 })

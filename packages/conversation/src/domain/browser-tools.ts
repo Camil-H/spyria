@@ -247,3 +247,10 @@ export const memberMessageOf = (received: unknown): { type: string; [field: stri
   }
   return undefined
 }
+
+export const browserStartFailureOf = (hostMessage: string) => {
+  if (hostMessage.includes('no room for another browser'))
+    return "The runtime's host has no room for another browser right now"
+  if (hostMessage.includes('runtime is not running')) return browserAsleepRefusal
+  return 'The browser could not start'
+}
