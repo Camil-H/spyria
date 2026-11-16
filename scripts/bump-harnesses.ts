@@ -37,12 +37,19 @@ const checklists: Record<HarnessId, string[]> = {
 
 const isStable = (version: string) => /^\d+\.\d+\.\d+$/.test(version)
 
-export const publishedAfter = (versions: string[], pinned: string) =>
-  versions.filter((version) => isStable(version) && Bun.semver.order(version, pinned) > 0).sort(Bun.semver.order)
+export type Registry = { versions: string[]; latest: string }
 
-export const bumpsOf = (pins: Record<string, string>, versionsByPackage: Record<string, string[]>): Bump[] =>
+const isWithinLatest = (version: string, latest: string) => !isStable(latest) || Bun.semver.order(version, latest) <= 0
+
+export const publishedAfter = ({ versions, latest }: Registry, pinned: string) =>
+  versions
+    .filter((version) => isStable(version) && Bun.semver.order(version, pinned) > 0 && isWithinLatest(version, latest))
+    .sort(Bun.semver.order)
+
+export const bumpsOf = (pins: Record<string, string>, registries: Record<string, Registry>): Bump[] =>
   Object.entries(pins).flatMap(([name, pinned]) => {
-    const published = publishedAfter(versionsByPackage[name] ?? [], pinned)
+    const registry = registries[name]
+    const published = registry ? publishedAfter(registry, pinned) : []
     const latest = published.at(-1)
     return latest ? [{ package: name, from: pinned, to: latest, published }] : []
   })
@@ -116,18 +123,19 @@ const pin = (harness: HarnessId, bumps: Bump[]) => {
   writeJson(harnessesFile, pins)
 }
 
-const versionsOf = async (name: string) => {
+const registryOf = async (name: string): Promise<Registry> => {
   const response = await fetch(`https://registry.npmjs.org/${name}`, {
     headers: { accept: 'application/vnd.npm.install-v1+json' },
   })
   if (!response.ok) throw new Error(`npm answered ${response.status} for ${name}`)
-  return Object.keys(((await response.json()) as { versions: Record<string, unknown> }).versions)
+  const document = (await response.json()) as { versions: Record<string, unknown>; 'dist-tags': { latest: string } }
+  return { versions: Object.keys(document.versions), latest: document['dist-tags'].latest }
 }
 
 const bumpsFor = async (harness: HarnessId) => {
   const pins = pinsOf(harness)
-  const versions = await Promise.all(Object.keys(pins).map(async (name) => [name, await versionsOf(name)] as const))
-  return { programPackage: Object.keys(pins)[0] ?? '', bumps: bumpsOf(pins, Object.fromEntries(versions)) }
+  const registries = await Promise.all(Object.keys(pins).map(async (name) => [name, await registryOf(name)] as const))
+  return { programPackage: Object.keys(pins)[0] ?? '', bumps: bumpsOf(pins, Object.fromEntries(registries)) }
 }
 
 const openPullRequestOf = (branch: string) =>
@@ -153,7 +161,7 @@ const openOrUpdatePullRequest = (harness: HarnessId, title: string, bumps: Bump[
     run(['gh', 'pr', 'create', '--base', baseBranch, '--head', branch, '--title', title, '--body-file', '-'], {
       stdin: body,
     })
-  if (changed) run(['gh', 'workflow', 'run', 'ci.yml', '--ref', branch])
+  if (changed || !openPullRequest) run(['gh', 'workflow', 'run', 'ci.yml', '--ref', branch])
   run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
   console.log(`${openPullRequest ? `Updated #${openPullRequest}` : 'Opened a pull request'}: ${title}`)
 }

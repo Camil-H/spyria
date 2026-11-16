@@ -172,7 +172,7 @@ A personal machine (Profile > My machine > Add my machine) runs the same host pr
 
 ### Harness bump pull requests
 
-Every Monday, and on demand (**Actions → Harness bumps → Run workflow**), `.github/workflows/harness-bumps.yml` runs `scripts/bump-harnesses.ts --pull-requests`. Without the flag the script only prints what it would bump. It compares the pins on `develop` with the latest stable versions on npm, ignoring pre-releases. The harnesses it checks:
+Every Monday, and on demand (**Actions → Harness bumps → Run workflow**), `.github/workflows/harness-bumps.yml` runs `scripts/bump-harnesses.ts --pull-requests`. Without the flag the script only prints what it would bump. It compares the pins on `develop` with the latest stable versions on npm, ignoring pre-releases and any version above npm's `latest` tag. The harnesses it checks:
 
 - Claude Code: `@anthropic-ai/claude-code` and `@agentclientprotocol/claude-agent-acp`, in `apps/host/src/harnesses.json`.
 - Codex: `@openai/codex` and `@agentclientprotocol/codex-acp`, in the same file.
@@ -185,7 +185,7 @@ To read and merge one:
 1. The title gives the program's move (`build: Claude Code 2.1.296 → 2.1.310`), or the adapter's when only the adapter moved. The description lists each package from its old version to its new one, with a link to every release in between: read them for removed flags, changed sign-in, or ACP changes.
 2. A pull request opened with the default token starts no workflow, so the bump workflow starts `ci.yml` on the branch itself. The pins sit in `apps/host` and `apps/agent`, so the run includes `check:docker`, which installs the new harnesses and runs the docker tests against them. Its checks show on the pull request like any other run. If one fails, fix the code on the same branch.
 3. Work through the description's checklist by hand: on one machine, sign in with a real subscription, then send one real prompt to the harness (for Pi, rebuild the image and use a real API key). See [Manual checks](./testing.md#manual-checks).
-4. Merge it yourself. Nothing merges automatically.
+4. Merge it yourself. Nothing merges automatically. Closing it without merging does not skip that version: the next run opens it again, so fix what breaks instead.
 
 ### Host dependencies and lockfiles
 

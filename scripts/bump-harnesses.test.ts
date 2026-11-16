@@ -3,16 +3,21 @@ import { bodyOf, branchOf, bumpsOf, publishedAfter, titleOf } from './bump-harne
 
 test('only stable versions newer than the pin count, oldest first, so pre-releases and older lines are ignored', () => {
   const versions = ['2.1.310', '2.1.296', '2.1.290', '2.1.300-beta.1', '2.1.297', '0.169.0-linux-x64', '2.1.311-alpha']
-  expect(publishedAfter(versions, '2.1.296')).toEqual(['2.1.297', '2.1.310'])
-  expect(publishedAfter(['1.5.2', '0.74.2', '1.2.0'], '1.2.0')).toEqual(['1.5.2'])
+  expect(publishedAfter({ versions, latest: '2.1.310' }, '2.1.296')).toEqual(['2.1.297', '2.1.310'])
+  expect(publishedAfter({ versions: ['1.5.2', '0.74.2', '1.2.0'], latest: '1.5.2' }, '1.2.0')).toEqual(['1.5.2'])
+})
+
+test('a version above the latest tag is ignored, so a release its maintainers pulled back is not proposed', () => {
+  expect(publishedAfter({ versions: ['1.0.0', '1.1.0', '1.2.0'], latest: '1.1.0' }, '1.0.0')).toEqual(['1.1.0'])
+  expect(publishedAfter({ versions: ['1.0.0', '1.1.0'], latest: '1.2.0-beta.1' }, '1.0.0')).toEqual(['1.1.0'])
 })
 
 test('a package already on its latest stable version is not bumped', () => {
   const bumps = bumpsOf(
     { '@anthropic-ai/claude-code': '2.1.296', '@agentclientprotocol/claude-agent-acp': '0.90.0' },
     {
-      '@anthropic-ai/claude-code': ['2.1.296', '2.1.297', '2.1.310'],
-      '@agentclientprotocol/claude-agent-acp': ['0.90.0', '0.91.0-preview.1'],
+      '@anthropic-ai/claude-code': { versions: ['2.1.296', '2.1.297', '2.1.310'], latest: '2.1.310' },
+      '@agentclientprotocol/claude-agent-acp': { versions: ['0.90.0', '0.91.0-preview.1'], latest: '0.90.0' },
     },
   )
   expect(bumps).toEqual([
