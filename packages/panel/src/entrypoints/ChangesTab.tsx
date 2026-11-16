@@ -2,7 +2,7 @@ import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
 import { iconButtonClass, useNotify } from '@spyria/ui'
 import { ChevronsDownUp, ChevronsUpDown, FileDiff, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { branchStatusOf, changeGroupsOf, commitsOf } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
@@ -33,10 +33,12 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const expansionLabel = isAnyExpanded ? 'Collapse all' : 'Open all'
   const status = branchStatusOf(statusReading.reading)
   const isRefreshing = changesReading.isLoading || commitsReading.isLoading || statusReading.isLoading
-  if (isRefreshAsked && !isRefreshing) {
+  const isRefreshDone = isRefreshAsked && !isRefreshing
+  useEffect(() => {
+    if (!isRefreshDone) return
     setIsRefreshAsked(false)
-    notify({ isRefused: false, text: 'Changes refreshed' })
-  }
+    notify({ text: 'Changes refreshed' })
+  }, [isRefreshDone, notify])
   const refresh = () => {
     changesReading.refresh()
     commitsReading.refresh()
