@@ -5,11 +5,23 @@ const maximumWaitSeconds = 30
 const maximumSnapshotCharacters = 60_000
 const maximumResultCharacters = 20_000
 const maximumDownloadBytes = 3 * 1024 * 1024
-const maximumScreenshotHeight = 10_000
+const maximumScreenshotSide = 10_000
+const maximumTitleCharacters = 300
 const screencastQuality = 70
 const viewportRange = { width: [320, 2560], height: [240, 1600] }
 const mouseButtons = ['left', 'middle', 'right']
 const submitWords = /\b(buy|pay|order|purchase|checkout|check out|subscribe|confirm|place|send|submit|book|donate)\b/i
+
+export const screenshotOptionsOf = (fullPage, page) => {
+  const isCut = fullPage && (page.width > maximumScreenshotSide || page.height > maximumScreenshotSide)
+  const clip = {
+    x: 0,
+    y: 0,
+    width: Math.min(page.width, maximumScreenshotSide),
+    height: Math.min(page.height, maximumScreenshotSide),
+  }
+  return { type: 'jpeg', quality: 70, fullPage, ...(isCut && { clip }) }
+}
 
 const firstLineOf = (error) => String(error?.message ?? error).split('\n')[0]
 const clamp = (value, [minimum, maximum]) => Math.min(maximum, Math.max(minimum, Math.round(Number(value) || 0)))
@@ -36,7 +48,7 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
   let screencast
   let isWatched = false
   let fileChooser
-  const titleOf = (page) => page.title().catch(() => '')
+  const titleOf = async (page) => (await page.title().catch(() => '')).slice(0, maximumTitleCharacters)
   const sendPage = async (page) => {
     if (page !== activePage) return
     send({ type: 'page', url: page.url(), title: await titleOf(page) })
@@ -196,15 +208,13 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
     },
     screenshot: async ({ fullPage }) => {
       const page = await pageNow()
-      const height = await page.evaluate(() => document.documentElement.scrollHeight)
-      const width = await page.evaluate(() => document.documentElement.scrollWidth)
-      const isCut = fullPage === true && height > maximumScreenshotHeight
-      const image = await page.screenshot({
-        type: 'jpeg',
-        quality: 70,
-        fullPage: fullPage === true,
-        ...(isCut && { clip: { x: 0, y: 0, width, height: maximumScreenshotHeight } }),
-      })
+      const size = fullPage
+        ? await page.evaluate(() => ({
+            width: Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth ?? 0),
+            height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
+          }))
+        : { width: 0, height: 0 }
+      const image = await page.screenshot(screenshotOptionsOf(fullPage === true, size))
       return { text: `Screenshot of ${await describe(page)}`, image: image.toString('base64') }
     },
     would_submit: async ({ action, ref, key }) =>
