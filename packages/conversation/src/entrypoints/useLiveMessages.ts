@@ -13,10 +13,11 @@ import type { ConversationItem, ConversationMessage } from '../queries/get-conve
 import type { AgentStream } from './commands.ts'
 import { useAgentStream } from './providers.tsx'
 
-const withLiveMessage = (items: readonly ConversationItem[], live: ConversationMessage) => {
-  const threadEnd = items.findLastIndex(
-    (item) =>
-      item.type === 'message' && (item.message.id === live.replyToId || item.message.replyToId === live.replyToId),
+export const withLiveMessage = (items: readonly ConversationItem[], live: ConversationMessage) => {
+  const threadEnd = items.findLastIndex((item) =>
+    item.type === 'fold'
+      ? item.promptId === live.replyToId
+      : item.message.id === live.replyToId || item.message.replyToId === live.replyToId,
   )
   const liveItem = { type: 'message', message: live } as const
   return threadEnd === -1 ? [...items, liveItem] : items.toSpliced(threadEnd + 1, 0, liveItem)
