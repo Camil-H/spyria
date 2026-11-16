@@ -82,6 +82,8 @@ export const messageContaining = (page: Page, text: string | RegExp) => messageI
 export const workingIndicatorOf = (page: Page) => page.getByRole('status', { name: 'Agent is working' })
 export const foldOf = (page: Page, steps: number) =>
   messageItemsOf(page).getByRole('button', { name: new RegExp(`^Worked for .+ · ${steps} steps$`) })
+export const workingFoldOf = (page: Page, steps: number) =>
+  messageItemsOf(page).getByRole('button', { name: `Working · ${steps} steps`, exact: true })
 export const chatAction = async (page: Page, chatName: string, itemName: string) => {
   await page.getByRole('button', { name: `Chat actions for ${chatName}` }).click()
   await page.getByRole('menuitem', { name: itemName }).click()

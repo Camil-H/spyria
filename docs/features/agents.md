@@ -123,6 +123,8 @@ Each delegation appears as one step, "Delegated to *model* · N steps · duratio
 
 Between messages, the agent's work shows as collapsible steps: thoughts, commands with their output, files created or edited, tool calls ("Used *tool* (*server*)", the server named as the workspace registered it), questions and errors. A command shows its command line as soon as the agent has written it, and its output live while it runs on Pi or Codex; Claude Code reports a command's output only when it ends, so until then its step says **No output yet**. When a tool needs the prompter to connect or reconnect an account, GitHub included, the step says so, with a **Connect** or **Reconnect** link for that prompter only. Secrets that appear in output from a member's machine are stored as `[redacted]`.
 
+A turn's finished steps fold into one line, with the agent's text between them, where the first step was: **Working · N steps** while the turn runs, **Worked for** *duration* **· N steps** once it ends, timed from the first step to the turn's last message. A fold needs at least two steps. The agent's latest text, its reply or its most recent progress note, and a step still running stay below the fold. Questions, a step that ended in an error and the stop notice never fold; the steps before and after one fold separately. A fold you open stays open as new steps arrive and after the turn ends, and stays open on that device after a reload.
+
 Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
 
 ## Stop
