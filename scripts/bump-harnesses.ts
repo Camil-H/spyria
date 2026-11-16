@@ -144,13 +144,43 @@ const openPullRequestOf = (branch: string) =>
     ...['--json', 'number', '--jq', '.[0].number // empty'],
   ]) || undefined
 
+export const pinFiles = [
+  'apps/host/src/harnesses.json',
+  'apps/agent/pi/package.json',
+  'apps/agent/pi/package-lock.json',
+]
+
+export const conflictsOutsidePins = (conflicted: string[]) => conflicted.filter((file) => !pinFiles.includes(file))
+
+const isMerging = () =>
+  Bun.spawnSync(['git', 'rev-parse', '--quiet', '--verify', 'MERGE_HEAD'], { cwd: repositoryRoot }).exitCode === 0
+
+const mergeBaseBranch = (branch: string) => {
+  const merge = Bun.spawnSync(['git', 'merge', '--quiet', '--no-commit', '--no-ff', `origin/${baseBranch}`], {
+    cwd: repositoryRoot,
+    stdout: 'ignore',
+    stderr: 'inherit',
+  })
+  if (merge.exitCode === 0) return
+  const conflicted = run(['git', 'diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean)
+  const unresolvable = conflictsOutsidePins(conflicted)
+  if (conflicted.length === 0 || unresolvable.length > 0) {
+    if (isMerging()) run(['git', 'merge', '--abort'])
+    throw new Error(
+      `${branch} does not merge ${baseBranch}: resolve ${unresolvable.join(', ') || 'the merge'} on the branch by hand`,
+    )
+  }
+  run(['git', 'checkout', '--theirs', '--', ...conflicted])
+}
+
 const openOrUpdatePullRequest = (harness: HarnessId, title: string, bumps: Bump[]) => {
   const branch = branchOf(harness)
   const openPullRequest = openPullRequestOf(branch)
   run(['git', 'fetch', '--quiet', 'origin', baseBranch, ...(openPullRequest ? [branch] : [])])
   run(['git', 'checkout', '--quiet', '--force', '-B', branch, `origin/${openPullRequest ? branch : baseBranch}`])
+  if (openPullRequest) mergeBaseBranch(branch)
   pin(harness, bumps)
-  const changed = run(['git', 'status', '--porcelain']) !== ''
+  const changed = isMerging() || run(['git', 'status', '--porcelain']) !== ''
   if (changed) {
     run(['git', 'commit', '--quiet', '--all', '--message', title])
     run(['git', 'push', '--quiet', ...(openPullRequest ? [] : ['--force']), 'origin', branch])
@@ -162,7 +192,6 @@ const openOrUpdatePullRequest = (harness: HarnessId, title: string, bumps: Bump[
       stdin: body,
     })
   if (changed || !openPullRequest) run(['gh', 'workflow', 'run', 'ci.yml', '--ref', branch])
-  run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
   console.log(`${openPullRequest ? `Updated #${openPullRequest}` : 'Opened a pull request'}: ${title}`)
 }
 
@@ -178,11 +207,9 @@ const closeStalePullRequest = (harness: HarnessId) => {
 
 if (import.meta.main) {
   const openPullRequests = process.argv.includes('--pull-requests')
-  if (openPullRequests) {
-    run(['git', 'fetch', '--quiet', 'origin', baseBranch])
-    run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
-  }
+  if (openPullRequests) run(['git', 'fetch', '--quiet', 'origin', baseBranch])
   for (const harness of harnessIds) {
+    if (openPullRequests) run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
     const { programPackage, bumps } = await bumpsFor(harness)
     if (bumps.length === 0) {
       console.log(`${harnessNames[harness]} is on its latest versions`)
@@ -190,7 +217,16 @@ if (import.meta.main) {
       continue
     }
     const title = titleOf(harness, programPackage, bumps)
-    if (openPullRequests) openOrUpdatePullRequest(harness, title, bumps)
-    else console.log(`${title}\n${bumps.map((bump) => `  ${bump.package} ${bump.from} → ${bump.to}`).join('\n')}`)
+    if (!openPullRequests) {
+      console.log(`${title}\n${bumps.map((bump) => `  ${bump.package} ${bump.from} → ${bump.to}`).join('\n')}`)
+      continue
+    }
+    try {
+      openOrUpdatePullRequest(harness, title, bumps)
+    } catch (error) {
+      console.error(`${harnessNames[harness]}: ${error instanceof Error ? error.message : error}`)
+      if (isMerging()) run(['git', 'merge', '--abort'])
+      process.exitCode = 1
+    }
   }
 }

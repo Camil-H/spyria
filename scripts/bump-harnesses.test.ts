@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { bodyOf, branchOf, bumpsOf, publishedAfter, titleOf } from './bump-harnesses.ts'
+import { bodyOf, branchOf, bumpsOf, conflictsOutsidePins, publishedAfter, titleOf } from './bump-harnesses.ts'
 
 test('only stable versions newer than the pin count, oldest first, so pre-releases and older lines are ignored', () => {
   const versions = ['2.1.310', '2.1.296', '2.1.290', '2.1.300-beta.1', '2.1.297', '0.169.0-linux-x64', '2.1.311-alpha']
@@ -43,4 +43,11 @@ test('the description lists each package, links every release in between and end
   )
   expect(body).toContain('- [ ] On one machine, sign in to Codex with a real ChatGPT plan')
   expect(body).toContain('- [ ] Send one real prompt in a chat that runs on **Local · Codex**')
+})
+
+test('merging develop into an open bump branch resolves conflicts in the pin files only', () => {
+  expect(conflictsOutsidePins(['apps/host/src/harnesses.json', 'apps/agent/pi/package-lock.json'])).toEqual([])
+  expect(conflictsOutsidePins(['apps/host/src/harnesses.json', 'apps/host/src/main.ts'])).toEqual([
+    'apps/host/src/main.ts',
+  ])
 })
