@@ -139,3 +139,34 @@ test('files nobody fetched are removed once they are older than their lifetime',
   await removeFilesOlderThan(filesDirectory, 30_000, now)
   expect(readdirSync(filesDirectory)).toEqual(['new'])
 })
+
+test('downloads under way are stopped once the files waiting in the browser pass the budget, so a page cannot fill the disk', async () => {
+  const page = fakePage()
+  const filesDirectory = filesDirectoryOf()
+  const sent = []
+  const context = { on: () => {}, pages: () => [page], newPage: async () => page }
+  const session = createBrowserSession({
+    context,
+    send: (message) => sent.push(message),
+    settings: () => ({ downloads: true, uploads: true }),
+    filesDirectory,
+    filesBudgetBytes: 1000,
+  })
+  const stopped = Promise.withResolvers()
+  const endless = {
+    path: () => stopped.promise,
+    suggestedFilename: () => 'endless.bin',
+    cancel: async () => stopped.resolve(null),
+  }
+  page.handlers.get('download')(endless)
+  await settled()
+  writeFileSync(join(filesDirectory, 'partial'), Buffer.alloc(500))
+  await session.enforceFilesBudget()
+  expect(sent).toEqual([])
+  writeFileSync(join(filesDirectory, 'partial'), Buffer.alloc(2000))
+  await session.enforceFilesBudget()
+  await settled()
+  expect(sent).toEqual([
+    { type: 'notice', text: 'endless.bin was stopped: downloads waiting in this browser are over 4 GB' },
+  ])
+})

@@ -6,7 +6,7 @@ const commandTimeoutMilliseconds = 30_000
 const maximumWaitSeconds = 30
 const maximumSnapshotCharacters = 60_000
 const maximumResultCharacters = 20_000
-const maximumDownloadBytes = 4 * 1024 ** 3
+const maximumFilesBytes = 4 * 1024 ** 3
 const maximumFrameCharacters = 2 * 1024 * 1024
 const fileIdPattern = /^[a-f0-9]{32}$/
 const maximumScreenshotSide = 10_000
@@ -28,6 +28,13 @@ export const screenshotOptionsOf = (fullPage, page) => {
 }
 
 const newFileId = () => randomBytes(16).toString('hex')
+
+export const bytesIn = async (directory) => {
+  let total = 0
+  for (const name of await readdir(directory).catch(() => []))
+    total += (await stat(join(directory, name)).catch(() => ({ size: 0 }))).size
+  return total
+}
 
 export const removeFilesOlderThan = async (directory, maximumAgeMilliseconds, now = Date.now()) => {
   for (const name of await readdir(directory).catch(() => [])) {
@@ -57,7 +64,14 @@ const wouldSubmitInPage = (element, { action, key = '', submitPattern }) => {
   return control.tagName !== 'A' && new RegExp(submitPattern, 'i').test(label)
 }
 
-export const createBrowserSession = ({ context, send, settings, blockOf, filesDirectory }) => {
+export const createBrowserSession = ({
+  context,
+  send,
+  settings,
+  blockOf,
+  filesDirectory,
+  filesBudgetBytes = maximumFilesBytes,
+}) => {
   let activePage
   let screencast
   let isWatched = false
@@ -108,20 +122,32 @@ export const createBrowserSession = ({ context, send, settings, blockOf, filesDi
     await sendPage(page)
     await startScreencast()
   }
+  const activeDownloads = new Set()
   const sendDownload = async (download) => {
     if (!settings().downloads) {
       await download.cancel()
       return send({ type: 'notice', text: 'Downloads are turned off in this workspace' })
     }
-    const path = await download.path()
+    activeDownloads.add(download)
+    const path = await download.path().catch(() => null)
+    activeDownloads.delete(download)
+    if (!path) return
     const { size } = await stat(path)
-    if (size > maximumDownloadBytes) {
-      await download.delete()
-      return send({ type: 'notice', text: `${download.suggestedFilename()} is over 4 GB, so it was not downloaded` })
-    }
     const file = newFileId()
     await rename(path, join(filesDirectory, file))
     send({ type: 'download', file, name: download.suggestedFilename(), size })
+  }
+  const enforceFilesBudget = async () => {
+    if (activeDownloads.size === 0 || (await bytesIn(filesDirectory)) <= filesBudgetBytes) return
+    const cancelled = [...activeDownloads]
+    activeDownloads.clear()
+    for (const download of cancelled) {
+      await download.cancel().catch(() => {})
+      send({
+        type: 'notice',
+        text: `${download.suggestedFilename()} was stopped: downloads waiting in this browser are over 4 GB`,
+      })
+    }
   }
   const watchPage = (page) => {
     page.on('framenavigated', (frame) => {
@@ -319,6 +345,7 @@ export const createBrowserSession = ({ context, send, settings, blockOf, filesDi
   }
   for (const page of context.pages()) watchPage(page)
   return {
+    enforceFilesBudget,
     reset: async () => {
       isWatched = false
       fileChooser = undefined

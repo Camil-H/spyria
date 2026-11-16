@@ -16,6 +16,7 @@ const profileDirectory = `${browserDirectory}/profile`
 const filesDirectory = `${browserDirectory}/files`
 const fileLifetimeMilliseconds = 30 * 60_000
 const fileSweepMilliseconds = 5 * 60_000
+const filesBudgetCheckMilliseconds = 2_000
 const displayWaitMilliseconds = 10_000
 const blockMemoryMilliseconds = 30_000
 const hostMachineName = 'host.docker.internal'
@@ -105,6 +106,7 @@ context.on('close', () => fail(new Error('The browser closed')))
 
 const session = createBrowserSession({ context, send, settings: () => current, blockOf, filesDirectory })
 reset = session.reset
+setInterval(() => void session.enforceFilesBudget().catch(() => {}), filesBudgetCheckMilliseconds)
 await session.start().catch(fail)
 receive = (message) => void session.receive(message)
 for (const message of pending.splice(0)) receive(message)
