@@ -36,7 +36,14 @@ export const ForkButton = ({ action: { branch, fork }, isIcon = false }: { actio
       {!isIcon && label}
     </button>
   )
-  const trigger = branch === null ? button : <Trigger asChild>{button}</Trigger>
+  const trigger =
+    branch === null ? (
+      button
+    ) : (
+      <Trigger asChild disabled={isPending}>
+        {button}
+      </Trigger>
+    )
   const withTooltip = isIcon ? (
     <TooltipRoot>
       <TooltipTrigger asChild>{trigger}</TooltipTrigger>
