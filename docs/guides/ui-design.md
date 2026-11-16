@@ -69,7 +69,7 @@ Reuse before styling. The classes in [`classes.ts`](../../packages/ui/src/classe
 | Lists of items | `rowListClass` with `rowClass` rows and a `rowHeaderClass` header |
 | A grouped block | `cardClass` |
 | A titled section | `LabelledSection` |
-| Dialogs, toasts, tooltips | `Dialog`, `Toast`, `tooltipClass` |
+| Dialogs, toasts, tooltips | `Dialog`, `useNotify` (or `useNotifiedRun` around a guarded action) to confirm an action whose result is out of sight, `tooltipClass` |
 | Status | `StatusBadge`, `Spinner`, `ErrorMessage` |
 | Keyboard shortcuts | `ShortcutKeys` |
 

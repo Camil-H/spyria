@@ -1,6 +1,7 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
+import type { ActionOutcome } from '@spyria/ui'
 import { buttonClass, fieldClass, ghostButtonClass, labelClass, Spinner, smallGhostButtonClass } from '@spyria/ui'
 import { type FormEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -9,7 +10,6 @@ import { getDevWorkspace } from '../queries/get-dev-workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import type { GitActionOutcome } from './commands.ts'
 import { usePanelCommands } from './providers.tsx'
-import type { ActionOutcome } from './useActionNotice.tsx'
 
 type ConflictOutcome = GitActionOutcome & { conflicts: string[] }
 

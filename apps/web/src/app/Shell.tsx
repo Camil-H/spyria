@@ -13,7 +13,7 @@ import { PanelProvider, PanelToggle, SidePanel } from '@spyria/panel'
 import { ProfileProvider } from '@spyria/profile'
 import { RuntimeProvider, RuntimeStatus } from '@spyria/runtime'
 import { SessionProvider, useSession } from '@spyria/session'
-import { KeyboardShortcuts } from '@spyria/ui'
+import { KeyboardShortcuts, ToastProvider } from '@spyria/ui'
 import { BudgetNotice, UsageProvider } from '@spyria/usage'
 import { NoChatSelected, TransferChatForm, WorkspaceLayout, WorkspaceProvider } from '@spyria/workspace'
 import { lazy, Suspense } from 'react'
@@ -71,61 +71,63 @@ const ChatRoute = ({ commands }: { commands: Application['conversationCommands']
 }
 
 export const App = ({ app }: { app: Application }) => (
-  <StoreProvider store={app.store}>
-    <SessionProvider session={app.session}>
-      <WorkspaceProvider commands={app.workspaceCommands}>
-        <ConversationProvider commands={app.conversationCommands} agentStream={app.agentStream}>
-          <ProfileProvider commands={app.profileCommands}>
-            <RuntimeProvider commands={app.runtimeCommands}>
-              <UsageProvider commands={app.usageCommands}>
-                <OnboardingProvider commands={app.onboardingCommands}>
-                  <BrowserRouter>
-                    <PanelProvider commands={app.panelCommands}>
-                      <Routes>
-                        <Route
-                          path="/w/:workspaceId"
-                          element={
-                            <WorkspaceLayout
-                              chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />}
-                              sidebarTopItem={(props) => <SidebarChecklistLink {...props} />}
-                              searchDialog={(props) => (
+  <ToastProvider>
+    <StoreProvider store={app.store}>
+      <SessionProvider session={app.session}>
+        <WorkspaceProvider commands={app.workspaceCommands}>
+          <ConversationProvider commands={app.conversationCommands} agentStream={app.agentStream}>
+            <ProfileProvider commands={app.profileCommands}>
+              <RuntimeProvider commands={app.runtimeCommands}>
+                <UsageProvider commands={app.usageCommands}>
+                  <OnboardingProvider commands={app.onboardingCommands}>
+                    <BrowserRouter>
+                      <PanelProvider commands={app.panelCommands}>
+                        <Routes>
+                          <Route
+                            path="/w/:workspaceId"
+                            element={
+                              <WorkspaceLayout
+                                chatAdornment={(chatId) => <ChatIndicators chatId={chatId} />}
+                                sidebarTopItem={(props) => <SidebarChecklistLink {...props} />}
+                                searchDialog={(props) => (
+                                  <Suspense>
+                                    <SearchDialog {...props} />
+                                  </Suspense>
+                                )}
+                              />
+                            }
+                          >
+                            <Route index element={<NoChatSelected />} />
+                            <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
+                            <Route
+                              path="settings/:card?"
+                              element={
                                 <Suspense>
-                                  <SearchDialog {...props} />
+                                  <SettingsRoute />
                                 </Suspense>
-                              )}
+                              }
                             />
-                          }
-                        >
-                          <Route index element={<NoChatSelected />} />
-                          <Route path="chats/:chatId" element={<ChatRoute commands={app.conversationCommands} />} />
-                          <Route
-                            path="settings/:card?"
-                            element={
-                              <Suspense>
-                                <SettingsRoute />
-                              </Suspense>
-                            }
-                          />
-                          <Route
-                            path="profile/:card?"
-                            element={
-                              <Suspense>
-                                <ProfileRoute />
-                              </Suspense>
-                            }
-                          />
-                        </Route>
-                        <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
-                      </Routes>
-                      <KeyboardShortcuts />
-                    </PanelProvider>
-                  </BrowserRouter>
-                </OnboardingProvider>
-              </UsageProvider>
-            </RuntimeProvider>
-          </ProfileProvider>
-        </ConversationProvider>
-      </WorkspaceProvider>
-    </SessionProvider>
-  </StoreProvider>
+                            <Route
+                              path="profile/:card?"
+                              element={
+                                <Suspense>
+                                  <ProfileRoute />
+                                </Suspense>
+                              }
+                            />
+                          </Route>
+                          <Route path="*" element={<Navigate to={`/w/${app.session.defaultWorkspaceId}`} replace />} />
+                        </Routes>
+                        <KeyboardShortcuts />
+                      </PanelProvider>
+                    </BrowserRouter>
+                  </OnboardingProvider>
+                </UsageProvider>
+              </RuntimeProvider>
+            </ProfileProvider>
+          </ConversationProvider>
+        </WorkspaceProvider>
+      </SessionProvider>
+    </StoreProvider>
+  </ToastProvider>
 )

@@ -17,6 +17,7 @@ import {
   serverUrl,
   tabPanelOf,
   test,
+  toastOf,
   workingIndicatorOf,
 } from './fixtures'
 
@@ -124,7 +125,7 @@ test.describe('Pull requests', () => {
     const chatId = await devChatWithCommit(page, agentScript, 'Publish totals')
     await panelTabOf(page, 'Changes').click()
     await pushButtonOf(page).click()
-    await expect(tabPanelOf(page).getByRole('status')).toContainText(/^Pushed spyria\/publish-totals-/)
+    await expect(toastOf(page).getByRole('status')).toContainText(/^Pushed spyria\/publish-totals-/)
     expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Fix the totals'])
     await openPullRequest(page)
     const card = cardOf(page)
@@ -169,7 +170,7 @@ test.describe('Pull requests', () => {
       await panelTabOf(bobPage, 'Changes').click()
       await expect(tabPanelOf(bobPage).getByRole('button', { name: /^src\/app\.ts/ })).toBeVisible()
       await pushButtonOf(bobPage).click()
-      await expect(tabPanelOf(bobPage).getByRole('alert')).toHaveText(
+      await expect(toastOf(bobPage).getByRole('alert')).toHaveText(
         'Connect your GitHub account in your profile to push',
       )
       expect((await githubStateOf(workerStack, chatId)).commits).toEqual([])
@@ -235,7 +236,7 @@ test.describe('Pull requests', () => {
     await finished(page)
     await panelTabOf(page, 'Changes').click()
     await pushButtonOf(page).click()
-    await expect(tabPanelOf(page).getByRole('status')).toContainText('to pull request #1 (2 commits)')
+    await expect(toastOf(page).getByRole('status')).toContainText('to pull request #1 (2 commits)')
     await expect(cardOf(page)).toContainText('2 commits')
     expect((await githubStateOf(workerStack, chatId)).commits).toEqual(['Address the review', 'Fix the totals'])
   })
@@ -248,7 +249,7 @@ test.describe('Pull requests', () => {
     await devChatWithCommit(page, agentScript, 'Unconnected totals')
     await panelTabOf(page, 'Changes').click()
     await pushButtonOf(page).click()
-    await expect(tabPanelOf(page).getByRole('alert')).toHaveText('Connect your GitHub account in your profile to push')
+    await expect(toastOf(page).getByRole('alert')).toHaveText('Connect your GitHub account in your profile to push')
   })
 
   test('As a chat owner, I see a merged pull request turn the card and the header chip to merged', {

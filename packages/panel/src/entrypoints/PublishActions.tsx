@@ -1,6 +1,7 @@
 import { useQuery } from '@spyria/db/react'
 import type { ChatId, WorkspaceId } from '@spyria/kernel'
 import { useSession } from '@spyria/session'
+import type { ActionOutcome } from '@spyria/ui'
 import {
   buttonClass,
   fieldClass,
@@ -15,7 +16,6 @@ import { createPortal } from 'react-dom'
 import { type BranchStatus, hasNothingToPush } from '../domain/workspace.ts'
 import { getPublishing } from '../queries/get-publishing.ts'
 import { usePanelCommands } from './providers.tsx'
-import type { ActionOutcome } from './useActionNotice.tsx'
 
 export const PublishActions = ({
   workspaceId,

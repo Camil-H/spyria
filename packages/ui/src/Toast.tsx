@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck, Info, X } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { createContext, type ReactNode, use, useState } from 'react'
 import { iconButtonClass } from './classes.ts'
 
 type ToastTone = 'success' | 'info' | 'error'
@@ -10,7 +10,7 @@ const toneLooks = {
   error: { Icon: CircleAlert, iconClass: 'text-danger', barClass: 'bg-danger' },
 } as const
 
-export const Toast = ({
+const Toast = ({
   children,
   tone = 'info',
   dismissAfterMilliseconds,
@@ -49,4 +49,48 @@ export const Toast = ({
       </div>
     )
   )
+}
+
+export type ActionOutcome = { isRefused?: boolean; text: string }
+type Notice = ActionOutcome & { id: string }
+
+const shownMilliseconds = 5000
+
+const NotifyContext = createContext<((outcome: ActionOutcome) => void) | null>(null)
+
+export const ToastProvider = ({ children }: { children: ReactNode }) => {
+  const [notice, setNotice] = useState<Notice>()
+  const notify = (outcome: ActionOutcome) => setNotice({ ...outcome, id: crypto.randomUUID() })
+  return (
+    <NotifyContext value={notify}>
+      {children}
+      <section aria-label="Notifications">
+        {notice && (
+          <Toast
+            key={notice.id}
+            tone={notice.isRefused ? 'error' : 'success'}
+            dismissAfterMilliseconds={notice.isRefused ? undefined : shownMilliseconds}
+            onDismiss={() => setNotice(undefined)}
+          >
+            {notice.text}
+          </Toast>
+        )}
+      </section>
+    </NotifyContext>
+  )
+}
+
+export const useNotify = () => {
+  const notify = use(NotifyContext)
+  if (!notify) throw new Error('ToastProvider is missing')
+  return notify
+}
+
+export const useNotifiedRun = (run: (action: () => Promise<unknown>) => Promise<boolean>) => {
+  const notify = useNotify()
+  return async (action: () => Promise<unknown>, successText: string) => {
+    const isDone = await run(action)
+    if (isDone) notify({ text: successText })
+    return isDone
+  }
 }

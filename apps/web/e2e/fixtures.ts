@@ -97,6 +97,7 @@ export const panelOf = (page: Page) => page.getByRole('region', { name: 'Side pa
 export const panelTabOf = (page: Page, tabName: string) =>
   panelOf(page).getByRole('tablist', { name: 'Panel tabs' }).getByRole('tab', { name: tabName, exact: true })
 export const tabPanelOf = (page: Page) => panelOf(page).getByRole('tabpanel')
+export const toastOf = (page: Page) => page.getByRole('region', { name: 'Notifications' })
 
 const roleShownIn = (row: Locator) =>
   row.evaluate((item) => {
