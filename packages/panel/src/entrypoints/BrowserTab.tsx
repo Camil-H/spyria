@@ -6,6 +6,7 @@ import {
   focusRing,
   ghostButtonClass,
   iconButtonClass,
+  inlineActionClass,
   Spinner,
   smallGhostButtonClass,
 } from '@spyria/ui'
@@ -161,9 +162,9 @@ const BrowserStatus = ({ live, onReconnect }: { live: LiveBrowser; onReconnect: 
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-app/90 p-4 text-center text-sm">
       {isBusy && <Spinner />}
       <p>{text}</p>
-      {live.state.state === 'stopped' && (
+      {(live.state.state === 'stopped' || live.state.state === 'unavailable') && (
         <button type="button" className={ghostButtonClass} onClick={live.start}>
-          Start again
+          {live.state.state === 'stopped' ? 'Start again' : 'Try again'}
         </button>
       )}
       {live.state.state === 'disconnected' && (
@@ -196,7 +197,7 @@ const BrowserView = ({
     latest.current = { frame, canBrowse }
   })
   useEffect(() => {
-    if (isRunning && shownSize.current) send({ type: 'resize', ...shownSize.current })
+    if (isRunning && shownSize.current) send({ type: 'resize', ...shownSize.current, scale: devicePixelRatio })
   }, [isRunning, send])
   useEffect(() => {
     const element = area.current
@@ -208,7 +209,10 @@ const BrowserView = ({
       if (shownSize.current?.width === width && shownSize.current.height === height) return
       shownSize.current = { width, height }
       clearTimeout(timer)
-      timer = setTimeout(() => send({ type: 'resize', width, height }), resizeDelayMilliseconds)
+      timer = setTimeout(
+        () => send({ type: 'resize', width, height, scale: devicePixelRatio }),
+        resizeDelayMilliseconds,
+      )
     })
     observer.observe(element)
     const scroll = (event: WheelEvent) => {
@@ -364,6 +368,14 @@ const LiveBrowserTab = ({
       <FileRequest live={live} />
       <BrowserView live={live} canBrowse={canBrowse} onReconnect={onReconnect} />
       {live.notice && <p className="text-xs text-muted">{live.notice}</p>}
+      {live.page && isWebAddress(live.page.url) && (
+        <p className="text-xs text-muted">
+          Sound and video play only in your own browser:{' '}
+          <a href={live.page.url} target="_blank" rel="noopener noreferrer" className={inlineActionClass}>
+            open this page in a new tab
+          </a>
+        </p>
+      )}
       {actionsSlot &&
         live.page &&
         isWebAddress(live.page.url) &&

@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createBrowserSession, removeFilesOlderThan, screenshotOptionsOf } from './browser-session.mjs'
+import { createBrowserSession, removeFilesOlderThan, screenScaleOf, screenshotOptionsOf } from './browser-session.mjs'
 
 const directory = mkdtempSync(join(tmpdir(), 'spyria-browser-session-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
@@ -191,4 +191,47 @@ test('a download that finishes past the budget between two checks is not kept', 
     { type: 'notice', text: 'video.mp4 was not kept: downloads waiting in this browser are over 4 GB' },
   ])
   expect(existsSync(await fast.path())).toBe(false)
+})
+
+test("the stream follows the member's screen density up to twice, and never past 3,200 pixels across", () => {
+  expect(screenScaleOf(2, 1280)).toBe(2)
+  expect(screenScaleOf(3, 1280)).toBe(2)
+  expect(screenScaleOf(1.5, 1280)).toBe(1.5)
+  expect(screenScaleOf(2, 2560)).toBe(1.25)
+  for (const unknown of [undefined, Number.NaN, 0, 0.5, 'x']) expect(screenScaleOf(unknown, 1280)).toBe(1)
+})
+
+test('a watched page is drawn and streamed at the density of the screen the member resized it on', async () => {
+  const page = fakePage()
+  const cdpCalls = []
+  const context = {
+    on: () => {},
+    pages: () => [page],
+    newPage: async () => page,
+    newCDPSession: async () => ({
+      on: () => {},
+      detach: async () => {},
+      send: async (method, parameters) => {
+        cdpCalls.push([method, parameters])
+        return method === 'Browser.getWindowForTarget' ? { windowId: 1 } : {}
+      },
+    }),
+  }
+  const session = createBrowserSession({
+    context,
+    send: () => {},
+    settings: () => ({}),
+    filesDirectory: filesDirectoryOf(),
+  })
+  await session.start()
+  await session.receive({ type: 'watch' })
+  const sizesOf = () =>
+    cdpCalls.filter(([method]) => method === 'Page.startScreencast').map(([, parameters]) => parameters)
+  expect(sizesOf().at(-1)).toMatchObject({ maxWidth: 1280, maxHeight: 800 })
+  await session.receive({ type: 'resize', width: 1280, height: 800, scale: 2 })
+  const scales = cdpCalls
+    .filter(([method]) => method === 'Emulation.setDeviceMetricsOverride')
+    .map(([, parameters]) => parameters.deviceScaleFactor)
+  expect(scales.at(-1)).toBe(2)
+  expect(sizesOf().at(-1)).toMatchObject({ maxWidth: 2560, maxHeight: 1600 })
 })

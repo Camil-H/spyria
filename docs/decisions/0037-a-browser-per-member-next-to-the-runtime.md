@@ -1,5 +1,7 @@
 # 0037. Each member gets a real browser of their own, next to the chat's runtime
 
+Amended by [decision 0040](0040-the-browser-is-the-agents-browser.md): the browser serves the agent, streams no sound and is not tuned for video; it follows the screen's density, starts again after a failed start, and is made again from a newer runtime image.
+
 ## Context
 
 The Browser tab showed web pages read by the server, framed without their scripts, and pages on the member's own machine framed directly. Most of the web needs its scripts, many sites refuse to be framed, a framed sign-in differs from a real one, sites detect a frame (`Sec-Fetch-Dest: iframe`, `window.top`), and the agent could not act on any page: it only opened addresses for members to load. `take_screenshot` ran a throwaway Chromium inside the runtime, with nothing kept between calls.

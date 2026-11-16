@@ -523,7 +523,10 @@ export const createCommandRunner = ({
     const isExpired =
       profile !== undefined && isProfileExpired(profile.Labels?.[profileCreatedLabel], signInHours, now())
     if (isOnOtherRuntime || isExpired) await removeBrowser(name)
-    const isKept = container !== undefined && !isOnOtherRuntime && !isExpired
+    const isOnOtherImage =
+      container !== undefined && !isOnOtherRuntime && !isExpired && container.Config?.Image !== runtime.Config?.Image
+    if (isOnOtherImage) await docker('DELETE', `/containers/${name}?force=true`).catch(ignoringMissing)
+    const isKept = container !== undefined && !isOnOtherRuntime && !isExpired && !isOnOtherImage
     if (isKept && container.State?.Running) return
     if ((await freeMemoryBytes()) < minimumFreeBytesForBrowser)
       throw new Refused('no room for another browser on this host')
