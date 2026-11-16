@@ -1,4 +1,5 @@
 import { CopyButton, focusRing } from '@spyria/ui'
+import type { Element as HastElement } from 'hast'
 import { fromDom } from 'hast-util-from-dom'
 import { Children, type ClipboardEvent, memo, type ReactElement, type ReactNode, use, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -214,7 +215,7 @@ const copyAsMarkdown = (event: ClipboardEvent<HTMLElement>) => {
   }
   const copied = document.createElement('div')
   copied.appendChild(selected)
-  const { html, markdown } = copiedSelectionOf(fromDom(copied))
+  const { html, markdown } = copiedSelectionOf(fromDom(copied) as HastElement)
   event.preventDefault()
   event.clipboardData.setData('text/plain', markdown)
   event.clipboardData.setData('text/html', html)

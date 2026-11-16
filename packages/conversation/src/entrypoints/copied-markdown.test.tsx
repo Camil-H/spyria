@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test'
+import type { Element } from 'hast'
 import { fromHtml } from 'hast-util-from-html'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { copiedSelectionOf } from './copied-markdown.ts'
 import Markdown from './Markdown.tsx'
 
+const copiedHtmlOf = (html: string) => copiedSelectionOf(fromHtml(html, { fragment: true }).children[0] as Element)
 const copiedOf = (text: string, keepsLineBreaks = false) =>
-  copiedSelectionOf(fromHtml(renderToStaticMarkup(<Markdown text={text} keepsLineBreaks={keepsLineBreaks} />)))
+  copiedHtmlOf(renderToStaticMarkup(<Markdown text={text} keepsLineBreaks={keepsLineBreaks} />))
 
 test('a copied message keeps its formatting as Markdown', () => {
   const text = [
@@ -42,4 +44,14 @@ test('a copied code block keeps its language and leaves out the copy button', ()
 
 test("a member's line breaks stay plain new lines", () => {
   expect(copiedOf('first line\nsecond line', true).markdown).toBe('first line\nsecond line')
+})
+
+test('copied underlined text stays underlined', () => {
+  expect(copiedOf('__under__ text').markdown).toBe('__under__ text')
+})
+
+test('a block the selection only touches at its start is left out', () => {
+  expect(
+    copiedHtmlOf('<div><p>para</p><ol start="3"><li></li></ol><blockquote><p></p></blockquote></div>').markdown,
+  ).toBe('para')
 })
