@@ -201,7 +201,7 @@ On the **AI budgets** tab, a member with `budgets.manage` sets, in a grid of the
 
 - **Per member.** Each member gets their role's budget for themselves; it is not shared by the members who hold the role. Under each budget, the grid shows the role's total: "$5.00 × 3 members = $15.00".
 - **Workspace total.** The last row sums the roles' totals per period. It cannot be set, and shows **No limit** while a role with members has no budget for that period.
-- **Alerts** at 80% and 100%, once per threshold, member and period: the member sees a banner in **My usage** and a notice above the composer ("You have used 80% of your daily AI budget"); admins see a badge on the **Costs and AI budgets** card, a notice at the top of its page that opens the **AI budgets** tab, and the list of members above 80% with the period.
+- **Alerts** at 80% and 100%, once per threshold, member and period: the member sees a banner on their **Usage** page in Profile and a notice above the composer ("You have used 80% of your daily AI budget"); admins see a badge on the **Costs and AI budgets** card, a notice at the top of its page that opens the **AI budgets** tab, and the list of members above 80% with the period.
 - **Hard stop** at 100% of any period: the member's model calls are refused before reaching the provider, including the calls of their running sub-agents and the routing call of their next turn, until the period ends. The chat shows "<Name>'s daily AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings", naming the longest period used up.
 - Raising or removing the role's budget lets its members prompt again at once; a member given another role gets that role's budgets.
 

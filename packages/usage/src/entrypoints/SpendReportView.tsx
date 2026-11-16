@@ -161,7 +161,7 @@ export const Decomposition = ({
       </tr>
     )
   return (
-    <LabelledSection title="Spend decomposition" Heading="h3" titleClass="text-sm font-medium">
+    <LabelledSection title="Spend decomposition" titleClass="text-sm font-medium">
       <table aria-label="Spend decomposition" className="w-full text-sm">
         <thead className="text-xs text-muted">
           <tr>
@@ -249,7 +249,7 @@ const MergedPulls = ({
   isScoped: boolean
   isPersonal: boolean
 }) => (
-  <LabelledSection title="Cost per merged PR" Heading="h3" titleClass="text-sm font-medium">
+  <LabelledSection title="Cost per merged PR" titleClass="text-sm font-medium">
     {isPersonal && (
       <p className="text-sm text-muted">
         The pull requests merged from chats you prompted in, against what you spent in those chats
@@ -365,7 +365,7 @@ const ScopePicker = ({
 }
 
 export const SpendReportView = ({
-  title,
+  label,
   workspaceId,
   readReport,
   readTrend,
@@ -375,7 +375,7 @@ export const SpendReportView = ({
   isPersonal = false,
 }: {
   children?: ReactNode
-  title: string
+  label: string
   workspaceId: WorkspaceId
   readReport: (input: { workspaceId: WorkspaceId; search: Readonly<Record<string, string>> }) => Promise<SpendReport>
   readTrend: ReadTrend
@@ -409,7 +409,7 @@ export const SpendReportView = ({
   }, [readReport, workspaceId, search])
   const chart = report?.charts[stack]
   return (
-    <LabelledSection title={title}>
+    <section aria-label={label} className="flex flex-col gap-3">
       <p className={calloutClass}>
         Sessions run on a member's own machine (Claude Code, Codex) use their own subscription and are not counted here.
       </p>
@@ -520,6 +520,6 @@ export const SpendReportView = ({
           />
         </>
       )}
-    </LabelledSection>
+    </section>
   )
 }

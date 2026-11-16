@@ -15,7 +15,7 @@ const CostsSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
   const commands = useUsageCommands()
   return (
     <SpendReportView
-      title="Usage"
+      label="Usage"
       workspaceId={workspaceId}
       readReport={commands.readWorkspaceSpend}
       readTrend={commands.readWorkspaceSpendTrend}

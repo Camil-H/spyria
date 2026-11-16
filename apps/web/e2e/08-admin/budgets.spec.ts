@@ -52,7 +52,7 @@ const openBudgets = async (page: Page) => {
 }
 const saveDailyBudget = async (page: Page, role: string, dollars: string) => {
   const row = roleRowOf(page, role)
-  await row.getByRole('spinbutton', { name: `Daily budget per member of ${role}` }).fill(dollars)
+  await row.getByRole('textbox', { name: `Daily budget per member of ${role}` }).fill(dollars)
   await row.getByRole('button', { name: `Save the budgets of ${role}` }).click()
 }
 const openBobInResearch = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
@@ -83,10 +83,13 @@ test.describe('Budgets', () => {
     await expect(roleRowOf(page, 'Member')).toContainText('$1.00 × 2 members = $2.00')
     const workspaceTotal = budgetGridOf(page).getByRole('row', { name: /^Workspace total\b/ })
     await expect(workspaceTotal.getByRole('cell').nth(1)).toHaveText('No limit')
-    await expect(workspaceTotal.getByRole('spinbutton')).toHaveCount(0)
-    await saveDailyBudget(page, 'Admin', '5')
-    await expect(roleRowOf(page, 'Admin')).toContainText('$5.00 × 1 member = $5.00')
-    await expect(workspaceTotal.getByRole('cell').nth(1)).toHaveText('$7.00')
+    await expect(workspaceTotal.getByRole('textbox')).toHaveCount(0)
+    await saveDailyBudget(page, 'Admin', '1500')
+    await expect(roleRowOf(page, 'Admin')).toContainText('$1,500.00 × 1 member = $1,500.00')
+    await expect(
+      roleRowOf(page, 'Admin').getByRole('textbox', { name: 'Daily budget per member of Admin' }),
+    ).toHaveValue('1,500')
+    await expect(workspaceTotal.getByRole('cell').nth(1)).toHaveText('$1,502.00')
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openProfile(bobPage, 'Usage')
