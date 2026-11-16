@@ -202,6 +202,28 @@ test('a key the provider refuses is classified on the turn without provider text
   expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
 })
 
+test('a call with tools sets the chat’s context size and a call without tools, such as a compaction summary, leaves it', async () => {
+  const host = await fakeHost('Context host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const contextTokensOf = async () =>
+    (await database.$client`select context_tokens from chats where id = ${chatId}`)[0]?.context_tokens
+  const call = (body: object) =>
+    host.modelCall({
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...JSON.parse(completion), ...body }),
+    })
+  expect(await call({ tools: [{ type: 'function', function: { name: 'bash', parameters: {} } }] })).toMatchObject({
+    status: 200,
+  })
+  const agentCallTokens = await contextTokensOf()
+  expect(agentCallTokens).toBeGreaterThan(0)
+  await database.$client`update chats set context_tokens = 7 where id = ${chatId}`
+  expect(
+    await call({ messages: [{ role: 'user', content: 'Summarize the whole earlier conversation, please.' }] }),
+  ).toMatchObject({ status: 200 })
+  expect(await contextTokensOf()).toBe(7)
+})
+
 test('a context-window rejection reaches the agent unchanged and records no turn failure, so the agent can compact', async () => {
   const host = await fakeHost('Too long host')
   const { chatId, token } = await runtimeTurn(host, bob)
