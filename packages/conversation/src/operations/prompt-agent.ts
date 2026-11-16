@@ -13,7 +13,6 @@ import {
   type MemberId,
   type MessageId,
   signInNoticeOf,
-  systemActor,
   type WorkspaceId,
   withPricesOf,
 } from '@spyria/kernel'
@@ -43,11 +42,12 @@ import {
 } from '../domain/session-routing.ts'
 import {
   type AgentDependencies,
-  agentTurnJob,
   beginAgentTurn,
   closeAgentTurn,
   noticeWaitingPrompts,
+  pickUp,
   releaseAgentTurn,
+  requeue,
 } from './agent-turn.ts'
 import { decide, routingUnavailableOf } from './decide.ts'
 
@@ -115,30 +115,17 @@ const pickUpQueuedPrompt = async (unitOfWork: UnitOfWork, chatId: ChatId) => {
   const [queued] = (await agentTurns.waitingPrompts(chatId)).filter((prompt) => prompt.pickedUpAt === null)
   if (!queued?.authorId || !joinsRunningTurn(await messages.get(turnPromptId), queued)) return undefined
   if (!can(await chats.permissions(chatId, queued.authorId), 'chat.post')) return undefined
-  const pickedUp = { ...queued, pickedUpAt: new Date() }
-  await messages.record({
-    type: 'message.picked_up',
-    actor: systemActor(agentTurnJob, queued.authorId),
-    message: pickedUp,
-  })
-  return pickedUp
+  await pickUp(messages, queued)
+  return queued
 }
 
-const requeue = async ({ messages }: UnitOfWork, prompt: Message) => {
-  const current = await messages.lock(prompt.id)
-  if (current.pickedUpAt === null) return
-  await messages.record({
-    type: 'message.requeued',
-    actor: systemActor(agentTurnJob, prompt.authorId),
-    message: { ...current, pickedUpAt: null },
-  })
-}
-
-const handedToRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat, prompt: Message) => {
-  const { transactor, runtimes, agentClient } = dependencies
-  const endpoint = await runtimes.endpointOf(chat)
-  if (!endpoint?.conversationId) return false
-  const conversation = { ...endpoint, conversationId: endpoint.conversationId }
+const handedToRunningTurn = async (
+  dependencies: AgentDependencies,
+  chat: AgentChat,
+  conversation: AgentConversation,
+  prompt: Message,
+) => {
+  const { transactor, agentClient } = dependencies
   const quoted = await transactor.run((unitOfWork) => quotedByPrompt(unitOfWork, prompt))
   const savedPaths = await savedAttachmentsOf(dependencies, { chat, conversation, prompt, isLastAttempt: true })
   return agentClient.joinTurn(
@@ -149,12 +136,15 @@ const handedToRunningTurn = async (dependencies: AgentDependencies, chat: AgentC
   )
 }
 
-const joinRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat) => {
-  const { transactor } = dependencies
+export const joinRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat) => {
+  const { transactor, runtimes } = dependencies
+  const endpoint = await runtimes.endpointOf(chat)
+  if (!endpoint?.conversationId) return undefined
+  const conversation = { ...endpoint, conversationId: endpoint.conversationId }
   for (;;) {
     const prompt = await transactor.run((unitOfWork) => pickUpQueuedPrompt(unitOfWork, chat.chatId))
     if (!prompt) return undefined
-    const isHanded = await handedToRunningTurn(dependencies, chat, prompt).catch((error) => {
+    const isHanded = await handedToRunningTurn(dependencies, chat, conversation, prompt).catch((error) => {
       log.warn({
         event: 'agent.join_failed',
         body: 'Handing a message to the running turn failed; it waits for the next turn',
@@ -163,7 +153,7 @@ const joinRunningTurn = async (dependencies: AgentDependencies, chat: AgentChat)
       })
       return false
     })
-    if (!isHanded) return transactor.run((unitOfWork) => requeue(unitOfWork, prompt))
+    if (!isHanded) return transactor.run((unitOfWork) => requeue(unitOfWork, prompt.id))
   }
 }
 
@@ -535,7 +525,7 @@ export const promptAgent = async (
   const prompt = await transactor.run((unitOfWork) =>
     beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
   )
-  if (!prompt) return localSession ? undefined : joinRunningTurn(dependencies, chat)
+  if (!prompt) return localSession ? undefined : transactor.run(({ agentJobs }) => agentJobs.joinTurn(chatId))
   if (prompt.authorId) dependencies.onTurnPrompter?.(chat, prompt.authorId)
   let conversation: AgentConversation
   try {

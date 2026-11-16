@@ -349,9 +349,7 @@ export const getConversation =
       (message) => message.replyToId,
     )
     const isQueued = (message: MessageRow) =>
-      !isChannel &&
-      message.deletedAt === null &&
-      isQueuedPrompt(message, chat.agentTurnMessageId, repliesByPromptId.get(message.id) ?? [])
+      !isChannel && message.deletedAt === null && isQueuedPrompt(message, repliesByPromptId.get(message.id) ?? [])
     const authorNameOf = (message: MessageRow) =>
       isDevLoopPrompt(message) ? devLoopAuthorName : memberName(message.authorId)
     const quoteOf = (quotedMessageId: MessageId | null): ConversationMessage['quote'] => {
@@ -387,7 +385,7 @@ export const getConversation =
         isQueued: isQueued(message),
         isDeleted: message.deletedAt !== null,
         isEdited: message.editedAt !== null,
-        isRunning: hasActiveTurn && message.replyToId === chat.agentTurnMessageId,
+        isRunning: hasActiveTurn && message.replyToId === (chat.agentTurnReplyToId ?? chat.agentTurnMessageId),
         canReply: isThreadRoot && canPost && message.deletedAt === null,
         canQuote: canPost && message.deletedAt === null && quotableKinds.includes(message.kind),
         quote: quoteOf(message.quotedMessageId),

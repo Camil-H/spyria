@@ -54,6 +54,7 @@ export type AgentJobs = {
   prompt(message: Message): Promise<void>
   startSession(chatId: ChatId): Promise<void>
   interrupt(interrupt: AgentInterrupt): Promise<void>
+  joinTurn(chatId: ChatId): Promise<void>
   isInterruptRequested(chatId: ChatId, promptId: MessageId): Promise<boolean>
   restartSession(restart: SessionRestart): Promise<void>
   sweepLater(): Promise<void>
@@ -62,6 +63,8 @@ export type AgentJobs = {
 export type AgentTurnRepository = {
   lock(chatId: ChatId): Promise<MessageId | null>
   set(chatId: ChatId, prompt: Pick<Message, 'id' | 'authorId'> | null): Promise<void>
+  replyTarget(chatId: ChatId): Promise<MessageId | null>
+  setReplyTarget(chatId: ChatId, promptId: MessageId): Promise<void>
   modelCallTurn(chatId: ChatId): Promise<ModelCallTurn | undefined>
   toolCallTurn(chatId: ChatId): Promise<{
     ownerId: MemberId | null

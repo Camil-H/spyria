@@ -55,6 +55,7 @@ export const agentJobTypes = {
   prompt: 'agent.prompt',
   startSession: 'agent.start-session',
   interrupt: 'agent.interrupt',
+  join: 'agent.join',
   restartSession: 'agent.restart-session',
   sweep: 'agent.sweep',
 } as const

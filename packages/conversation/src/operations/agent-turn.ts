@@ -58,6 +58,23 @@ export const appendNotice = ({ messages }: UnitOfWork, prompt: Message, text: st
     }),
   })
 
+export const pickUp = (messages: UnitOfWork['messages'], prompt: Message) =>
+  messages.record({
+    type: 'message.picked_up',
+    actor: systemActor(agentTurnJob, prompt.authorId),
+    message: { ...prompt, pickedUpAt: new Date() },
+  })
+
+export const requeue = async ({ messages }: UnitOfWork, promptId: MessageId) => {
+  const prompt = await messages.get(promptId)
+  if (prompt.pickedUpAt === null) return
+  await messages.record({
+    type: 'message.requeued',
+    actor: systemActor(agentTurnJob, prompt.authorId),
+    message: { ...prompt, pickedUpAt: null },
+  })
+}
+
 const skipPrompt = async (unitOfWork: UnitOfWork, prompt: Message, notice: string) => {
   await appendNotice(unitOfWork, prompt, notice)
   await afterLoopTurn(unitOfWork, prompt.id)
@@ -96,21 +113,26 @@ export const beginAgentTurn = async (
     await skipPrompt(unitOfWork, prompt, noLlmKeyNoticeOf(await members.displayNameOf(prompt.authorId)))
     return beginAgentTurn(unitOfWork, chatId)
   }
-  if (prompt) await agentTurns.set(chatId, prompt)
+  if (!prompt) return undefined
+  await agentTurns.set(chatId, prompt)
+  if (prompt.pickedUpAt === null) await pickUp(unitOfWork.messages, prompt)
   return prompt
 }
 
-export const releaseAgentTurn = async ({ agentTurns }: UnitOfWork, chatId: ChatId, promptId: MessageId) => {
-  if ((await agentTurns.lock(chatId)) === promptId) await agentTurns.set(chatId, null)
+export const releaseAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId: MessageId) => {
+  if ((await unitOfWork.agentTurns.lock(chatId)) !== promptId) return
+  await unitOfWork.agentTurns.set(chatId, null)
+  await requeue(unitOfWork, promptId)
 }
 
 const finishAgentTurn = async (unitOfWork: UnitOfWork, chatId: ChatId, promptId: MessageId, noticeOf: NoticeOf) => {
+  const answeredPromptId = (await unitOfWork.agentTurns.replyTarget(chatId)) ?? promptId
   await unitOfWork.agentTurns.set(chatId, null)
   await unitOfWork.delegations.stopRunning(chatId, promptId)
   forgetDelegationsOf(promptId)
   cancelToolApprovalsOf(promptId)
-  const notice = noticeOf(await unitOfWork.agentTurns.hasReply(promptId))
-  if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(promptId), notice)
+  const notice = noticeOf(await unitOfWork.agentTurns.hasReply(answeredPromptId))
+  if (notice) await appendNotice(unitOfWork, await unitOfWork.messages.get(answeredPromptId), notice)
   await afterLoopTurn(unitOfWork, promptId)
   await requestNextPrompt(unitOfWork, chatId)
 }

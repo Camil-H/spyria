@@ -42,7 +42,7 @@ import {
   recordModelCallFailure,
   recordToolCall,
 } from '../operations/model-calls.ts'
-import { promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
+import { joinRunningTurn, promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { applyPullRequestEvent, publishBranch } from '../operations/publish-branch.ts'
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
 import { recordAgentEvent } from '../operations/record-agent-event.ts'
@@ -132,6 +132,8 @@ export const createAgentHandlers = ({
           isLastAttempt,
           isRetry,
         }),
+      [agentJobTypes.join]: ({ workspaceId, payload }: AgentJob) =>
+        joinRunningTurn(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
       [agentJobTypes.startSession]: ({ workspaceId, payload }: AgentJob) =>
         startAgentSession(dependenciesOf(workspaceId), { workspaceId, ...startSessionPayload.parse(payload) }),
       [agentJobTypes.interrupt]: ({ workspaceId, payload }: AgentJob) =>

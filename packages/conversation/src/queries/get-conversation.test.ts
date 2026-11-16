@@ -65,7 +65,7 @@ test('a prompt shows as queued, and only its author can edit or delete it, until
   }
   expect(promptSeenBy(alice, { turn: false })).toEqual({ isQueued: true, canEdit: true })
   expect(promptSeenBy(bob, { turn: false })).toEqual({ isQueued: true, canEdit: false })
-  expect(promptSeenBy(alice, { turn: true })).toEqual({ isQueued: false, canEdit: false })
+  expect(promptSeenBy(alice, { turn: true }, '2026-10-01T09:00:01.000Z')).toEqual({ isQueued: false, canEdit: false })
   expect(promptSeenBy(alice, { turn: false }, '2026-10-01T09:01:00.000Z')).toEqual({ isQueued: false, canEdit: false })
 })
 
