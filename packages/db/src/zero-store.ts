@@ -166,7 +166,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       createdAt: isoOf(createdAt),
       editedAt: isoOrNull(editedAt),
       deletedAt: isoOrNull(deletedAt),
-      pickedUpAt: isoOrNull(pickedUpAt),
+      pickedUpAt: isoOrNull(pickedUpAt ?? null),
       needsReply,
     }
     messageRowByZeroRow.set(row, mapped)

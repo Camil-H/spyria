@@ -11,5 +11,8 @@ test('the Zero schema sent to clients carries no secret column and no gateway ke
   for (const secret of ['api_key', 'token_hash', 'claim_code_hash', 'secret_ref', 'llm_token_hash'])
     expect(columns).not.toContain(secret)
   expect(columns.filter((column) => /secret|_hash$|api_key|token$|^encrypted_|^verification_/.test(column))).toEqual([])
-  expect(columns.filter((column) => column.startsWith('agent_turn_'))).toEqual(['agent_turn_message_id'])
+  expect(columns.filter((column) => column.startsWith('agent_turn_'))).toEqual([
+    'agent_turn_message_id',
+    'agent_turn_reply_to_id',
+  ])
 })
