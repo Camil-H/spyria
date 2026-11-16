@@ -284,6 +284,10 @@ export const createApp = async (
         createdWorkspaceIdByName.delete(input.name)
         return id
       },
+      moveChat: mutateConfirmed(workspaceMutators.workspace.moveChat),
+      reorderChats: mutateConfirmed(workspaceMutators.workspace.reorderChats),
+      archiveChat: mutateConfirmed(workspaceMutators.workspace.archiveChat),
+      archiveProject: mutateConfirmed(workspaceMutators.workspace.archiveProject),
       changeVisibility: mutateConfirmed(workspaceMutators.workspace.changeVisibility),
       inviteMember: mutateConfirmed(workspaceMutators.workspace.inviteMember),
       revokeInvite: mutateConfirmed(workspaceMutators.workspace.revokeInvite),
