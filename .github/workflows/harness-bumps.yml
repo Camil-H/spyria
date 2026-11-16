@@ -22,10 +22,12 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
+          persist-credentials: false
       - uses: ./.github/actions/setup
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh auth setup-git
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           bun scripts/bump-harnesses.ts --pull-requests

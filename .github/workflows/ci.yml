@@ -34,8 +34,8 @@ jobs:
       - uses: ./.github/actions/setup
       - id: plan
         env:
-          BASE: ${{ github.event_name == 'push' && 'HEAD' || format('origin/{0}', github.base_ref || 'develop') }}
-          SCOPE: ${{ github.event_name == 'push' && '--full' || '' }}
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.ref == 'refs/heads/develop' && 'HEAD' || 'origin/develop' }}
+          SCOPE: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && '--full' || '' }}
         run: |
           plan="$RUNNER_TEMP/plan.json"
           bun scripts/check-related.ts --plan "$plan" --base "$BASE" $SCOPE
@@ -62,6 +62,7 @@ jobs:
       - run: bun run check:locks
 
   secrets:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read

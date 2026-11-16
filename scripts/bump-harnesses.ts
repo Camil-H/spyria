@@ -158,13 +158,27 @@ const openOrUpdatePullRequest = (harness: HarnessId, title: string, bumps: Bump[
   console.log(`${openPullRequest ? `Updated #${openPullRequest}` : 'Opened a pull request'}: ${title}`)
 }
 
+const closeStalePullRequest = (harness: HarnessId) => {
+  const openPullRequest = openPullRequestOf(branchOf(harness))
+  if (!openPullRequest) return
+  run([
+    ...['gh', 'pr', 'close', openPullRequest, '--delete-branch'],
+    ...['--comment', `${baseBranch} already pins the latest versions of ${harnessNames[harness]}.`],
+  ])
+  console.log(`Closed #${openPullRequest}: ${baseBranch} already pins the latest versions`)
+}
+
 if (import.meta.main) {
   const openPullRequests = process.argv.includes('--pull-requests')
-  if (openPullRequests) run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
+  if (openPullRequests) {
+    run(['git', 'fetch', '--quiet', 'origin', baseBranch])
+    run(['git', 'checkout', '--quiet', '--force', '--detach', `origin/${baseBranch}`])
+  }
   for (const harness of harnessIds) {
     const { programPackage, bumps } = await bumpsFor(harness)
     if (bumps.length === 0) {
       console.log(`${harnessNames[harness]} is on its latest versions`)
+      if (openPullRequests) closeStalePullRequest(harness)
       continue
     }
     const title = titleOf(harness, programPackage, bumps)
