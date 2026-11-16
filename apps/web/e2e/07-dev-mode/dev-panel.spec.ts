@@ -1,4 +1,5 @@
 import {
+  boundingBoxOf,
   expect,
   messageContaining,
   type Page,
@@ -25,8 +26,8 @@ const cellsOfRow = (page: Page, path: string, row: number) =>
   diffOf(page, path).getByRole('row').nth(row).getByRole('cell')
 const expectReadableRow = async (page: Page, path: string, row: number) => {
   const cells = cellsOfRow(page, path, row)
-  const lineNumberBox = (await cells.first().boundingBox())!
-  const codeBox = (await cells.last().boundingBox())!
+  const lineNumberBox = await boundingBoxOf(cells.first())
+  const codeBox = await boundingBoxOf(cells.last())
   expect(lineNumberBox.width).toBeLessThan(40)
   expect(codeBox.height).toBeLessThan(24)
 }
@@ -91,7 +92,7 @@ test.describe('Dev panel', () => {
         '+ export const total = 2',
       ])
       await expectReadableRow(page, 'src/app.ts', 1)
-      const rightHalfStartOf = async (path: string) => (await cellsOfRow(page, path, 1).nth(2).boundingBox())!.x
+      const rightHalfStartOf = async (path: string) => (await boundingBoxOf(cellsOfRow(page, path, 1).nth(2))).x
       expect(await rightHalfStartOf('src/new.ts')).toBeCloseTo(await rightHalfStartOf('src/app.ts'), 0)
       await expect(cellsOfRow(page, 'src/new.ts', 1).nth(3)).toHaveText(`+ ${longLine}`)
       await expect(cellsOfRow(page, 'src/new.ts', 1).nth(3)).toBeInViewport()

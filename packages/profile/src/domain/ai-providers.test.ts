@@ -10,10 +10,11 @@ test('turning a provider off starts from every provider, and turning it back on 
   expect(withProvider(['openai'], 'openai', true)).toEqual(['openai'])
 })
 
-test('a saved allow-list keeps known providers once, in catalog order, and refuses an unknown one', () => {
+test('a saved allow-list keeps known providers once, in catalog order, becomes every provider once it names them all, and refuses an unknown one', () => {
   expect(checkedAllowList(null)).toBeNull()
   expect(checkedAllowList(['mistral', 'anthropic', 'mistral'])).toEqual(['anthropic', 'mistral'])
   expect(checkedAllowList([])).toEqual([])
+  expect(checkedAllowList(aiProviders.map(({ id }) => id).reverse())).toBeNull()
   expect(() => checkedAllowList(['fake'])).toThrow(UnsupportedProvider)
 })
 

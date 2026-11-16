@@ -1,4 +1,5 @@
 import {
+  boundingBoxOf,
   chipOf,
   composerOf,
   expect,
@@ -29,8 +30,7 @@ const turnsEnded = async (page: Page, count: number) => {
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 }
 const boxOf = async (locator: Locator) => {
-  const box = await locator.boundingBox()
-  if (!box) throw new Error('The element has no box')
+  const box = await boundingBoxOf(locator)
   return { top: box.y, bottom: box.y + box.height, middle: box.y + box.height / 2 }
 }
 const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
@@ -135,8 +135,8 @@ test.describe('Chat view', () => {
     await openChat(page, 'Welcome')
     const messageList = mainOf(page).getByRole('list', { name: 'Messages' })
     const scrollArea = messageList.locator('..')
-    const listBox = (await messageList.boundingBox())!
-    const scrollAreaBox = (await scrollArea.boundingBox())!
+    const listBox = await boundingBoxOf(messageList)
+    const scrollAreaBox = await boundingBoxOf(scrollArea)
     const scrollbarWidth = await scrollArea.evaluate(
       (element) => element.getBoundingClientRect().width - element.clientWidth,
     )
@@ -151,12 +151,12 @@ test.describe('Chat view', () => {
     await openChat(page, 'Invoice bug')
     await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toHaveCount(1)
     await test.step('puts the owner on the title row, aligned right, the git branch above the text box, aligned left, and the Runs on chip with the runtime status and the model chip in the bar under it, the status inside the Runs on chip', async () => {
-      const titleBox = (await mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }).boundingBox())!
-      const ownerBox = (await mainOf(page).getByText('Agent acts as Alice').boundingBox())!
-      const branchBox = (await mainOf(page).getByText('fix/invoice-tax').boundingBox())!
-      const modelBox = (await chipOf(page, 'spyria').boundingBox())!
-      const runtimeBox = (await mainOf(page).getByRole('status', { name: 'Runtime' }).boundingBox())!
-      const composerBox = (await composerOf(page).boundingBox())!
+      const titleBox = await boundingBoxOf(mainOf(page).getByRole('heading', { level: 1, name: 'Invoice bug' }))
+      const ownerBox = await boundingBoxOf(mainOf(page).getByText('Agent acts as Alice'))
+      const branchBox = await boundingBoxOf(mainOf(page).getByText('fix/invoice-tax'))
+      const modelBox = await boundingBoxOf(chipOf(page, 'spyria'))
+      const runtimeBox = await boundingBoxOf(mainOf(page).getByRole('status', { name: 'Runtime' }))
+      const composerBox = await boundingBoxOf(composerOf(page))
       expect(Math.abs(ownerBox.y + ownerBox.height / 2 - (titleBox.y + titleBox.height / 2))).toBeLessThan(16)
       expect(ownerBox.x).toBeGreaterThan(titleBox.x + titleBox.width)
       const header = mainOf(page).locator('header')

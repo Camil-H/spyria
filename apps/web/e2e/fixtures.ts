@@ -55,6 +55,16 @@ export const addParticipant = async (workerStack: WorkerStack, chatId: string, m
     values ('workspace-acme', ${chatId}, ${memberId}, ${roleId})`
 }
 
+export const boundingBoxOf = async (locator: Locator) => {
+  const box = await locator.boundingBox()
+  if (!box) throw new Error('The element has no box')
+  return box
+}
+export const viewportOf = (page: Page) => {
+  const viewport = page.viewportSize()
+  if (!viewport) throw new Error('The page has no viewport')
+  return viewport
+}
 export const sidebarOf = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' })
 export const mainOf = (page: Page) => page.getByRole('main')
 export const switcherOf = (page: Page) => page.getByRole('button', { name: 'Switch workspace' })
