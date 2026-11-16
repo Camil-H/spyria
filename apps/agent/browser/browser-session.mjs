@@ -123,22 +123,20 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
     if (existing) await activate(existing)
     return page
   }
-  const navigationFailureOf = (url, error) => {
-    const host = (() => {
-      try {
-        return new URL(url).hostname
-      } catch {
-        return ''
-      }
-    })()
+  const blockedHostOf = (url) => {
+    const host = URL.canParse(url) ? new URL(url).hostname : ''
     const block = blockOf(host)
-    return block ? `${host} ${block}` : firstLineOf(error)
+    return block && `${host} ${block}`
   }
   const goTo = async (url) => {
     const page = await pageNow()
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: commandTimeoutMilliseconds }).catch((error) => {
-      throw new Error(navigationFailureOf(url, error))
-    })
+    const response = await page
+      .goto(url, { waitUntil: 'domcontentloaded', timeout: commandTimeoutMilliseconds })
+      .catch((error) => {
+        throw new Error(blockedHostOf(url) || firstLineOf(error))
+      })
+    const blocked = response?.status() === 403 && blockedHostOf(url)
+    if (blocked) throw new Error(blocked)
     return page
   }
   const describe = async (page) => `${(await titleOf(page)) || 'Untitled'} (${page.url()})`

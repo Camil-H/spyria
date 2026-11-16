@@ -68,10 +68,13 @@ const hostOf = (host) =>
     .replace(/\.$/, '')
 export const isWithinSite = (host, site) => host === site || host.endsWith(`.${site}`)
 
+const isLoopbackName = (name) =>
+  isWithinSite(name, 'localhost') || name === '::1' || (isIP(name) === 4 && name.startsWith('127.'))
+
 export const siteVerdictOf = (settings, host) => {
   const name = hostOf(host)
   if (settings.blockedSites.some((site) => isWithinSite(name, site))) return 'blocked_site'
-  const isAllowedSite = settings.allowedSites.some((site) => isWithinSite(name, site))
+  const isAllowedSite = isLoopbackName(name) || settings.allowedSites.some((site) => isWithinSite(name, site))
   return settings.allowedSites.length > 0 && !isAllowedSite ? 'site_not_allowed' : 'allowed'
 }
 

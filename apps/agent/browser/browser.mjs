@@ -80,6 +80,7 @@ const context = await chromium
     env: { ...process.env, DISPLAY: display },
     args: [
       `--proxy-server=http://127.0.0.1:${proxy.port}`,
+      '--proxy-bypass-list=<-loopback>',
       '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
       '--window-position=0,0',
       `--window-size=${initialWindow.width},${initialWindow.height}`,

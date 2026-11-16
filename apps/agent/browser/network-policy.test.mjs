@@ -60,6 +60,8 @@ test('blocked sites win over allowed ones and include their subdomains, before a
   expect(siteVerdictOf(sites, 'Admin.Example.com.')).toBe('blocked_site')
   expect(siteVerdictOf(sites, 'notexample.com')).toBe('site_not_allowed')
   expect(siteVerdictOf(settings, 'anything.example')).toBe('allowed')
+  for (const runtime of ['localhost', 'app.localhost', '127.0.0.1', '::1'])
+    expect(siteVerdictOf(sites, runtime)).toBe('allowed')
 })
 
 const blocked = []
