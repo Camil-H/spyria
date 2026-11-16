@@ -1,5 +1,7 @@
 # 0028. A generic OIDC provider must confirm the address it returns
 
+Amended by [decision 0039](0039-known-identities-and-one-entry-per-sign-in-app.md): an identity already bound to a member or an account signs in without a confirmed address, under the address Spyria keeps.
+
 ## Context
 
 [Decision 0027](0027-join-by-invited-address.md) requires Google and generic OIDC providers to send `email_verified: true` wherever an email decides access. For a workspace joined by email domain, the address is what lets a person in: without the claim, anyone able to set an unconfirmed address at that domain on the provider (self-registration, a profile field users edit) could join the workspace. Some providers never send the claim, and their members are then refused with "Your provider did not confirm this address".
