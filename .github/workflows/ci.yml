@@ -5,6 +5,7 @@ on:
     branches: [develop]
   push:
     branches: [develop]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -33,7 +34,7 @@ jobs:
       - uses: ./.github/actions/setup
       - id: plan
         env:
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD' }}
+          BASE: ${{ github.event_name == 'push' && 'HEAD' || format('origin/{0}', github.base_ref || 'develop') }}
           SCOPE: ${{ github.event_name == 'push' && '--full' || '' }}
         run: |
           plan="$RUNNER_TEMP/plan.json"
