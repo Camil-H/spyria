@@ -939,3 +939,50 @@ test("a browser's file is read by its id from the browser's files, never by a pa
     'browser is not running',
   )
 })
+
+test("a running browser loses its sign-ins once they outlive the admin's limit, whether the host learned the limit at start or from the profile", async () => {
+  const sweepDocker = (profileLabels: Record<string, string>) => {
+    const deleted: string[] = []
+    const docker = (async (method: string, path: string) => {
+      if (path.startsWith('/containers/json')) return [{ Names: [`/${browserName}`] }]
+      if (path === '/containers/spyria-rt-runtime-1/json')
+        return {
+          Id: 'runtime-container-id',
+          Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
+          State: { Running: true },
+        }
+      if (path === `/containers/${browserName}/json`)
+        return {
+          Config: { Labels: { 'spyria.managed': '1', 'spyria.browser': 'runtime-1' } },
+          HostConfig: { NetworkMode: 'container:runtime-container-id' },
+          State: { Running: true },
+        }
+      if (path === `/volumes/${browserName}-profile` && method === 'GET') return { Labels: profileLabels }
+      if (method === 'DELETE') deleted.push(path)
+      return {}
+    }) as Docker
+    return { docker, deleted }
+  }
+  const created = { 'spyria.browser.created': '0' }
+  const labelled = sweepDocker({ ...created, 'spyria.browser.sign_in_hours': '8' })
+  await createCommandRunner({
+    docker: labelled.docker,
+    prefix: 'spyria-',
+    now: () => 9 * 3_600_000,
+  }).removeExpiredBrowsers()
+  expect(labelled.deleted).toEqual([`/containers/${browserName}?force=true`, `/volumes/${browserName}-profile`])
+
+  const unlimited = sweepDocker(created)
+  await createCommandRunner({
+    docker: unlimited.docker,
+    prefix: 'spyria-',
+    now: () => 1000 * 3_600_000,
+  }).removeExpiredBrowsers()
+  expect(unlimited.deleted).toEqual([])
+
+  const relabelled = sweepDocker({ ...created, 'spyria.browser.sign_in_hours': '8' })
+  const latest = createCommandRunner({ docker: relabelled.docker, prefix: 'spyria-', now: () => 9 * 3_600_000 })
+  await latest.run({ ...startBrowser, signInHours: 11 })
+  await latest.removeExpiredBrowsers()
+  expect(relabelled.deleted).toEqual([])
+})

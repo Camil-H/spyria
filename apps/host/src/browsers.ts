@@ -15,6 +15,7 @@ const attachHeaderBytes = 8
 const stdoutStream = 1
 export const browserLabel = 'spyria.browser'
 export const profileCreatedLabel = 'spyria.browser.created'
+export const signInHoursLabel = 'spyria.browser.sign_in_hours'
 export const minimumFreeBytesForBrowser = 768 * mebibyte
 
 export const browserContainerOf = (runtimeContainer: string, browserKey: string) =>

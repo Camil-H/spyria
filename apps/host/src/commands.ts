@@ -9,6 +9,7 @@ import {
   minimumFreeBytesForBrowser,
   profileCreatedLabel,
   profileVolumeOf,
+  signInHoursLabel,
 } from './browsers.ts'
 import { type Docker, DockerError, hostMachineMapping, type Mount } from './docker.ts'
 import {
@@ -515,6 +516,7 @@ export const createCommandRunner = ({
     const runtime = await managedContainer(runtimeId)
     if (!runtime.State?.Running || !runtime.Id) throw new Refused('runtime is not running')
     const { name, container } = await browserOf(runtimeId, browserKey)
+    signInHoursByBrowser.set(name, signInHours)
     const profileVolume = profileVolumeOf(name)
     const profile = await volumeOf(profileVolume)
     const isOnOtherRuntime = container !== undefined && container.HostConfig?.NetworkMode !== `container:${runtime.Id}`
@@ -529,7 +531,12 @@ export const createCommandRunner = ({
       if (!profile || isOnOtherRuntime || isExpired)
         await docker('POST', '/volumes/create', {
           Name: profileVolume,
-          Labels: { 'spyria.managed': '1', [browserLabel]: runtimeId, [profileCreatedLabel]: String(now()) },
+          Labels: {
+            'spyria.managed': '1',
+            [browserLabel]: runtimeId,
+            [profileCreatedLabel]: String(now()),
+            ...(signInHours !== undefined && { [signInHoursLabel]: String(signInHours) }),
+          },
         })
       await docker(
         'POST',
@@ -540,16 +547,38 @@ export const createCommandRunner = ({
     await docker('POST', `/containers/${name}/start`)
   }
   const unattachedSince = new Map<string, number>()
+  const signInHoursByBrowser = new Map<string, number | undefined>()
   const isBrowserOfDeployment = (name: string) => {
     const [runtimeName, browserKey = ''] = name.split(/-browser-(?=[a-f0-9]{32}$)/)
     return (
       runtimeName !== name && runtimeName?.startsWith(`${prefix}rt-`) === true && browserKeyPattern.test(browserKey)
     )
   }
-  const stopUnattachedBrowsers = async (isAttached: (name: string) => boolean, idleMilliseconds: number) => {
+  const browserNamesOf = async (includingStopped: boolean) => {
     const filters = encodeURIComponent(JSON.stringify({ label: [browserLabel] }))
-    const running = await docker<{ Names: string[] }[]>('GET', `/containers/json?all=false&filters=${filters}`)
-    const names = running.flatMap(({ Names }) => Names.map((name) => name.slice(1))).filter(isBrowserOfDeployment)
+    const containers = await docker<{ Names: string[] }[]>(
+      'GET',
+      `/containers/json?all=${includingStopped}&filters=${filters}`,
+    )
+    return containers.flatMap(({ Names }) => Names.map((name) => name.slice(1))).filter(isBrowserOfDeployment)
+  }
+  const removeExpiredBrowsers = async () => {
+    for (const name of await browserNamesOf(true)) {
+      const profile = await volumeOf(profileVolumeOf(name))
+      const labelledHours = profile?.Labels?.[signInHoursLabel]
+      const signInHours = signInHoursByBrowser.has(name)
+        ? signInHoursByBrowser.get(name)
+        : labelledHours === undefined
+          ? undefined
+          : Number(labelledHours)
+      if (profile && isProfileExpired(profile.Labels?.[profileCreatedLabel], signInHours, now())) {
+        await removeBrowser(name)
+        signInHoursByBrowser.delete(name)
+      }
+    }
+  }
+  const stopUnattachedBrowsers = async (isAttached: (name: string) => boolean, idleMilliseconds: number) => {
+    const names = await browserNamesOf(false)
     for (const known of unattachedSince.keys()) if (!names.includes(known)) unattachedSince.delete(known)
     for (const name of names) {
       if (isAttached(name)) {
@@ -626,6 +655,7 @@ export const createCommandRunner = ({
     },
     runningCount: async () => (await runtimeIdsOf(false)).length,
     stopUnattachedBrowsers,
+    removeExpiredBrowsers,
     browserFilePathOf: async (runtimeId: string, browserKey: string, fileId: string) => {
       if (!browserFileIdPattern.test(fileId)) throw new Refused('invalid file id')
       const { name, container } = await browserOf(runtimeId, browserKey)

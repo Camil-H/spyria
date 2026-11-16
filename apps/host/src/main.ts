@@ -146,7 +146,10 @@ const openBrowser = async (runtimeId: string, browserKey: string, listener: Brow
 setInterval(
   () =>
     void runner
-      .stopUnattachedBrowsers((name) => (attachedBrowsers.get(name)?.size ?? 0) > 0, browserIdleMilliseconds)
+      .removeExpiredBrowsers()
+      .then(() =>
+        runner.stopUnattachedBrowsers((name) => (attachedBrowsers.get(name)?.size ?? 0) > 0, browserIdleMilliseconds),
+      )
       .catch((error) =>
         log.warn({ event: 'host.browser_sweep_failed', body: 'Stopping browsers nobody uses failed', error }),
       ),
