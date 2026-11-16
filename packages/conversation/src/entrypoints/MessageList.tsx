@@ -3,6 +3,7 @@ import { ArrowDown, ChevronRight } from 'lucide-react'
 import { type Ref, use, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 import type { Conversation, ConversationItem } from '../queries/get-conversation.ts'
+import type { ForkAction } from './ForkButton.tsx'
 import { MessageItem } from './MessageItem.tsx'
 import { isFoldOpened, rememberFoldOpening } from './opened-folds.ts'
 import { LinkedMessageContext } from './providers.tsx'
@@ -52,14 +53,14 @@ export const MessageList = ({
   isComplete,
   onLoadEarlier,
   onStop,
-  onFork,
+  forkAction,
 }: {
   conversation: Conversation
   items: readonly ConversationItem[]
   isComplete: boolean
   onLoadEarlier: (() => void) | undefined
   onStop: (() => void) | undefined
-  onFork: (() => Promise<unknown>) | undefined
+  forkAction: ForkAction | undefined
 }) => {
   const previousScrollTop = useRef(0)
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -134,7 +135,7 @@ export const MessageList = ({
                   message={item.message}
                   hasMenu={!item.message.isStreamed}
                   isChannel={conversation.type === 'channel'}
-                  onFork={onFork}
+                  forkAction={forkAction}
                   ref={ref}
                 />
               )

@@ -11,7 +11,7 @@ import { Composer } from './Composer.tsx'
 import { DeleteMessageDialog } from './DeleteMessageDialog.tsx'
 import { Disclosure } from './Disclosure.tsx'
 import { EditMessageForm } from './EditMessageForm.tsx'
-import { ForkButton } from './ForkButton.tsx'
+import { type ForkAction, ForkButton } from './ForkButton.tsx'
 import { LazyMarkdown, LazyStreamedMarkdown } from './LazyMarkdown.tsx'
 import { AttachmentList } from './Media.tsx'
 import { MessageActions } from './MessageActions.tsx'
@@ -129,14 +129,14 @@ export const MessageItem = ({
   hasMenu,
   isChannel = false,
   threadRoot,
-  onFork,
+  forkAction,
   ref,
 }: {
   message: ConversationMessage
   hasMenu: boolean
   isChannel?: boolean
   threadRoot?: ThreadRoot
-  onFork?: (() => Promise<unknown>) | undefined
+  forkAction?: ForkAction | undefined
   ref?: Ref<HTMLLIElement>
 }) => {
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view')
@@ -161,7 +161,7 @@ export const MessageItem = ({
         {message.kind === 'notice' ? (
           <div className="flex flex-col gap-1">
             <p className="whitespace-pre-wrap text-sm text-muted">{message.body}</p>
-            {onFork && isUnreachableSessionNotice(message.body) && <ForkButton onFork={onFork} />}
+            {forkAction && isUnreachableSessionNotice(message.body) && <ForkButton action={forkAction} />}
           </div>
         ) : message.kind === 'step' ? (
           <AgentStep message={message} />
