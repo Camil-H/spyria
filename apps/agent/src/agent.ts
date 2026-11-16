@@ -102,7 +102,12 @@ type Conversation = {
   lastTurn: Promise<void>
   running?: RunningTurn
 }
-type RunningTurn = { promptId?: string; joinedPromptIds: string[]; steeredPromptIds: Set<string> }
+type RunningTurn = {
+  promptId?: string
+  joinedPromptIds: string[]
+  steeredPromptIds: Set<string>
+  promptSent: PromiseWithResolvers<void>
+}
 type SteeringMeta = { steering?: { supported?: unknown } }
 type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
 type TerminalMeta = {
@@ -952,7 +957,12 @@ export const startAgent = ({
         },
       })
     let hasReachedAdapter = false
-    const running: RunningTurn = { promptId, joinedPromptIds: [], steeredPromptIds: new Set() }
+    const running: RunningTurn = {
+      promptId,
+      joinedPromptIds: [],
+      steeredPromptIds: new Set(),
+      promptSent: Promise.withResolvers(),
+    }
     const endTurn = (stopReason: unknown) => {
       const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
       for (const turnPromptId of [promptId, ...running.joinedPromptIds])
@@ -996,12 +1006,15 @@ export const startAgent = ({
       const { connection } = conversation
       const promptSeq = conversation.lastSeq
       try {
-        ended(await connection.request('session/prompt', await promptParams()))
+        const answered = connection.request('session/prompt', await promptParams())
+        running.promptSent.resolve()
+        ended(await answered)
       } catch (rejection) {
         const error = (await timedOutConnections.get(connection)) ?? rejection
         if (conversation.connection !== connection) return endedByRestart()
         if (!isDeadSession(error) || conversation.launch.agent?.adapter === 'pi-rpc') return failed(error)
         const hasStreamed = conversation.lastSeq !== promptSeq
+        running.promptSent = Promise.withResolvers()
         await restart(conversation)
         const errorOutput = errorOutputOf(conversation, connection)
         reportAdapterFailure(conversation, errorOutput, error)
@@ -1029,6 +1042,7 @@ export const startAgent = ({
           })
         } finally {
           if (conversation.running === running) conversation.running = undefined
+          running.promptSent.resolve()
           thisTurn.resolve()
         }
       },
@@ -1037,7 +1051,16 @@ export const startAgent = ({
     return Response.json({})
   }
 
-  const steerOverAcp = async (conversation: Conversation, promptId: string, prompt: Json[]) => {
+  const promptSentOf = async (running: RunningTurn) => {
+    for (let sent = running.promptSent; ; sent = running.promptSent) {
+      await sent.promise
+      if (running.promptSent === sent) return
+    }
+  }
+
+  const steerOverAcp = async (conversation: Conversation, running: RunningTurn, promptId: string, prompt: Json[]) => {
+    await promptSentOf(running)
+    if (conversation.running !== running) throw new AcpError('The turn ended before the agent took the message')
     const { sessionId } = conversation
     const { outcome } = await conversation.connection.request('_session/steering', {
       sessionId,
@@ -1049,8 +1072,8 @@ export const startAgent = ({
     throw new AcpError(`The agent did not take the message: ${String(outcome)}`)
   }
 
-  const handedOverAcp = (conversation: Conversation, promptId: string, prompt: Json[]) => {
-    const handOff = steerOverAcp(conversation, promptId, prompt)
+  const handedOverAcp = (conversation: Conversation, running: RunningTurn, promptId: string, prompt: Json[]) => {
+    const handOff = steerOverAcp(conversation, running, promptId, prompt)
     conversation.lastTurn = Promise.all([conversation.lastTurn, handOff.catch(() => {})]).then(() => {})
     return handOff
   }
@@ -1068,7 +1091,7 @@ export const startAgent = ({
     try {
       const prompt = await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities)
       if (isPi) await conversation.connection.request('session/steer', { sessionId, prompt, steerId: promptId })
-      else await handedOverAcp(conversation, promptId, prompt)
+      else await handedOverAcp(conversation, running, promptId, prompt)
     } catch (error) {
       running.steeredPromptIds.delete(promptId)
       return Response.json({ error: errorUpdateOf(error).message }, { status: 409 })

@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
 import { startTelemetry } from './telemetry.ts'
@@ -197,6 +198,45 @@ test('a message the harness injects only after its turn was stopped is refused, 
     stopReason: 'end_turn',
     promptId: 'joined-1',
   })
+})
+
+test('on Codex, a message joined while the turn still prepares its prompt waits until the prompt reached Codex, so it is taken into that turn rather than starting one that would get the prompt cancelled', async () => {
+  const { call, open, create } = started()
+  const id = await create(launchOf({ acp_command: commandWith('STUB_FLAVOUR=codex', 'STUB_STEER_DELAY_MS=300') }))
+  const socket = open(id)
+  const photo = join(stateDirectory, 'attachments', 'held-1', 'photo.png')
+  mkdirSync(dirname(photo), { recursive: true })
+  expect(Bun.spawnSync(['mkfifo', photo]).exitCode).toBe(0)
+  expect(
+    (
+      await call('POST', `/api/conversations/${id}/events`, {
+        content: [
+          { type: 'text', text: 'stub:pause Look at this' },
+          { type: 'attachment', path: photo, mimeType: 'image/png' },
+        ],
+        prompt_id: 'prompt-1',
+      })
+    ).status,
+  ).toBe(200)
+  const joinOnceTheTurnRuns = async () => {
+    for (;;) {
+      const joined = await joinedBy(call, id).send('joins', 'use tabs', 'joined-1')
+      if (joined.body.error !== 'The agent has no turn running') return joined
+    }
+  }
+  const joined = joinOnceTheTurnRuns()
+  await Bun.sleep(100)
+  await writeFile(photo, 'png')
+  expect(await joined).toEqual({ status: 200, body: {} })
+
+  await socket.until(kindOf('turn_end'))
+  expect(socket.events.findLast(kindOf('turn_end'))?.update).toEqual({
+    sessionUpdate: 'turn_end',
+    stopReason: 'end_turn',
+    promptId: 'prompt-1',
+  })
+  expect(textOf(socket.events)).toContain('Took in: use tabs. Hello from the stub')
+  expect(textOf(socket.events).match(/Hello from the stub/g)).toHaveLength(1)
 })
 
 test('on Codex, the next prompt waits for a refused hand-off, so cancelling the turn Codex started for the message never cancels the prompt that follows', async () => {

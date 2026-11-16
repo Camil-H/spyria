@@ -888,6 +888,23 @@ const opened = (sessionId, { prompts, history }) => {
 }
 const fresh = () => ({ prompts: 0, history: [] })
 const savedOf = (path) => ({ ...fresh(), ...JSON.parse(readFileSync(path, 'utf8')) })
+const steer = ({ sessionId, prompt, _meta }) => {
+  const current = sessions.get(sessionId)?.current
+  if (current && !current.isOver && !current.cancelled) {
+    current.steering.push(prompt.map((block) => block.text ?? '').join('\n'))
+    return sleep(steerAnswerDelayMilliseconds).then(() => ({ outcome: 'injected' }))
+  }
+  if (!isCodex && _meta?.steering?.idleBehavior === 'promptRequired')
+    return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+  const started = Promise.withResolvers()
+  queue(sessionId, async () => {
+    await sleep(steerAnswerDelayMilliseconds)
+    const detached = turn(`steered-${randomUUID()}`, { sessionId, prompt })
+    started.resolve()
+    return detached
+  })
+  return started.promise.then(() => ({ outcome: 'startedNewTurn' }))
+}
 const handlers = {
   initialize: ({ clientCapabilities }) => {
     canElicit = Boolean(clientCapabilities?.elicitation?.form)
@@ -904,23 +921,7 @@ const handlers = {
     }
   },
   ...(!process.env.STUB_NO_STEERING && {
-    '_session/steering': ({ sessionId, prompt, _meta }) => {
-      const current = sessions.get(sessionId)?.current
-      if (current && !current.isOver && !current.cancelled) {
-        current.steering.push(prompt.map((block) => block.text ?? '').join('\n'))
-        return sleep(steerAnswerDelayMilliseconds).then(() => ({ outcome: 'injected' }))
-      }
-      if (!isCodex && _meta?.steering?.idleBehavior === 'promptRequired')
-        return { outcome: 'promptRequired', reason: 'noRunningTurn' }
-      const started = Promise.withResolvers()
-      queue(sessionId, async () => {
-        await sleep(steerAnswerDelayMilliseconds)
-        const detached = turn(`steered-${randomUUID()}`, { sessionId, prompt })
-        started.resolve()
-        return detached
-      })
-      return started.promise.then(() => ({ outcome: 'startedNewTurn' }))
-    },
+    '_session/steering': (params) => new Promise(setImmediate).then(() => steer(params)),
   }),
   'session/new': ({ _meta }) => {
     if (process.env.STUB_FAIL_START) throw { code: -32000, message: 'Authentication required' }
