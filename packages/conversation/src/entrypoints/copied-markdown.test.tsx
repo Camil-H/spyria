@@ -52,6 +52,14 @@ test('copied underlined text stays underlined', () => {
 
 test('a block the selection only touches at its start is left out', () => {
   expect(
-    copiedHtmlOf('<div><p>para</p><ol start="3"><li></li></ol><blockquote><p></p></blockquote></div>').markdown,
+    copiedHtmlOf(
+      '<div><p>para</p><ol start="3"><li></li></ol><blockquote><p></p></blockquote><table><thead><tr><th></th></tr></thead></table></div>',
+    ).markdown,
   ).toBe('para')
+})
+
+test('a copied table keeps its empty cells in place', () => {
+  expect(copiedOf('| Name | Count |\n| --- | --- |\n| a |  |').markdown).toBe(
+    '| Name | Count |\n| ---- | ----- |\n| a    |       |',
+  )
 })

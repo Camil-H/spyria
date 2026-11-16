@@ -6,7 +6,7 @@ import { toMarkdown } from 'mdast-util-to-markdown'
 
 export const copySkippedAttribute = 'data-copy-skip'
 
-const textBlockTags = new Set(['blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ol', 'p', 'pre', 'ul'])
+const textBlockTags = new Set(['blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ol', 'p', 'pre', 'table', 'ul'])
 
 const textOf = (node: Nodes): string =>
   node.type === 'text' ? node.value : 'children' in node ? node.children.map(textOf).join('') : ''
