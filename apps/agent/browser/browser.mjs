@@ -15,7 +15,15 @@ const displayWaitMilliseconds = 10_000
 const blockMemoryMilliseconds = 30_000
 const hostMachineName = 'host.docker.internal'
 
-const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`)
+const maximumLineLength = 6 * 1024 * 1024
+const send = (message) => {
+  const line = JSON.stringify(message)
+  if (line.length <= maximumLineLength) return process.stdout.write(`${line}\n`)
+  const tooLarge = 'The answer is too large to send'
+  const refusal =
+    typeof message.id === 'number' ? { id: message.id, error: tooLarge } : { type: 'notice', text: tooLarge }
+  process.stdout.write(`${JSON.stringify(refusal)}\n`)
+}
 const fail = (error) => {
   send({ type: 'failed', error: String(error?.message ?? error).split('\n')[0] })
   process.exit(1)

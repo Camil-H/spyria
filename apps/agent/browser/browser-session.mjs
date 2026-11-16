@@ -4,7 +4,8 @@ const commandTimeoutMilliseconds = 30_000
 const maximumWaitSeconds = 30
 const maximumSnapshotCharacters = 60_000
 const maximumResultCharacters = 20_000
-const maximumDownloadBytes = 8 * 1024 * 1024
+const maximumDownloadBytes = 3 * 1024 * 1024
+const maximumScreenshotHeight = 10_000
 const screencastQuality = 70
 const viewportRange = { width: [320, 2560], height: [240, 1600] }
 const mouseButtons = ['left', 'middle', 'right']
@@ -86,7 +87,7 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
     }
     const path = await download.path()
     if ((await stat(path)).size > maximumDownloadBytes) {
-      send({ type: 'notice', text: `${download.suggestedFilename()} is over 8 MB, so it was not downloaded` })
+      send({ type: 'notice', text: `${download.suggestedFilename()} is over 3 MB, so it was not downloaded` })
     } else {
       const data = (await readFile(path)).toString('base64')
       send({ type: 'download', name: download.suggestedFilename(), data })
@@ -195,7 +196,15 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
     },
     screenshot: async ({ fullPage }) => {
       const page = await pageNow()
-      const image = await page.screenshot({ type: 'jpeg', quality: 80, fullPage: fullPage === true })
+      const height = await page.evaluate(() => document.documentElement.scrollHeight)
+      const width = await page.evaluate(() => document.documentElement.scrollWidth)
+      const isCut = fullPage === true && height > maximumScreenshotHeight
+      const image = await page.screenshot({
+        type: 'jpeg',
+        quality: 70,
+        fullPage: fullPage === true,
+        ...(isCut && { clip: { x: 0, y: 0, width, height: maximumScreenshotHeight } }),
+      })
       return { text: `Screenshot of ${await describe(page)}`, image: image.toString('base64') }
     },
     would_submit: async ({ action, ref, key }) =>
