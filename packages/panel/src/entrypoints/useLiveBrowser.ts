@@ -23,10 +23,14 @@ export const useLiveBrowser = (workspaceId: WorkspaceId, chatId: ChatId) => {
   const [notice, setNotice] = useState<string>()
   const [fileChooser, setFileChooser] = useState<{ multiple: boolean }>()
   const connection = useRef<BrowserConnection>(undefined)
+  const [send] = useState(() => (message: object) => connection.current?.send(message))
   useEffect(() => {
     const receive = (message: BrowserMessage) => {
       if (message.type === 'state') return setState(message)
-      if (message.type === 'frame') return setFrame(message)
+      if (message.type === 'frame') {
+        setFrame(message)
+        return send({ type: 'frame_ack' })
+      }
       if (message.type === 'page') return setPage({ url: message.url, title: message.title })
       if (message.type === 'notice') return setNotice(message.text)
       if (message.type === 'file_chooser') return setFileChooser({ multiple: message.multiple })
@@ -35,8 +39,7 @@ export const useLiveBrowser = (workspaceId: WorkspaceId, chatId: ChatId) => {
     const opened = openBrowser({ workspaceId, chatId }, receive)
     connection.current = opened
     return () => opened.close()
-  }, [openBrowser, workspaceId, chatId])
-  const send = (message: object) => connection.current?.send(message)
+  }, [openBrowser, workspaceId, chatId, send])
   return {
     state,
     frame,

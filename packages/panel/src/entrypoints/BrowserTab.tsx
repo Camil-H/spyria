@@ -188,22 +188,35 @@ const BrowserView = ({
 }) => {
   const area = useRef<HTMLDivElement>(null)
   const isMovePending = useRef(false)
+  const shownSize = useRef<{ width: number; height: number }>(undefined)
+  const latest = useRef({ frame: live.frame, canBrowse })
   const { frame, send } = live
+  const isRunning = live.state.state === 'running'
+  useEffect(() => {
+    latest.current = { frame, canBrowse }
+  })
+  useEffect(() => {
+    if (isRunning && shownSize.current) send({ type: 'resize', ...shownSize.current })
+  }, [isRunning, send])
   useEffect(() => {
     const element = area.current
     if (!element) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const observer = new ResizeObserver(([entry]) => {
+      const width = Math.round(entry?.contentRect.width ?? 0)
+      const height = Math.round(entry?.contentRect.height ?? 0)
+      if (shownSize.current?.width === width && shownSize.current.height === height) return
+      shownSize.current = { width, height }
       clearTimeout(timer)
-      const { width = 0, height = 0 } = entry?.contentRect ?? {}
       timer = setTimeout(() => send({ type: 'resize', width, height }), resizeDelayMilliseconds)
     })
     observer.observe(element)
     const scroll = (event: WheelEvent) => {
-      if (!canBrowse || !frame) return
+      const shown = latest.current
+      if (!shown.canBrowse || !shown.frame) return
       event.preventDefault()
       const rect = element.getBoundingClientRect()
-      const point = pagePointOf({ x: event.clientX - rect.left, y: event.clientY - rect.top }, rect, frame)
+      const point = pagePointOf({ x: event.clientX - rect.left, y: event.clientY - rect.top }, rect, shown.frame)
       send({
         type: 'input',
         event: { kind: 'mouse', action: 'wheel', ...point, deltaX: event.deltaX, deltaY: event.deltaY },
@@ -215,7 +228,7 @@ const BrowserView = ({
       observer.disconnect()
       element.removeEventListener('wheel', scroll)
     }
-  }, [send, canBrowse, frame])
+  }, [send])
   const mouse = (action: 'down' | 'up' | 'move') => (event: MouseEvent<HTMLDivElement>) => {
     if (!canBrowse || !frame) return
     if (action === 'move' && isMovePending.current) return
@@ -271,7 +284,6 @@ const BrowserView = ({
           src={`data:image/jpeg;base64,${frame.data}`}
           alt={live.page?.title || 'The page in your browser'}
           draggable={false}
-          onLoad={() => send({ type: 'frame_ack' })}
           className="pointer-events-none h-full w-full select-none"
         />
       )}
