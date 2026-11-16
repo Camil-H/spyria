@@ -986,3 +986,50 @@ test("a running browser loses its sign-ins once they outlive the admin's limit, 
   await latest.removeExpiredBrowsers()
   expect(relabelled.deleted).toEqual([])
 })
+
+test('a browser started with a sign-in limit keeps it on its profile, so a host that restarts still wipes the sign-ins once they outlive it', async () => {
+  const { runner, calls } = browserDocker()
+  await runner.run({ ...startBrowser, signInHours: 8 })
+  expect(calls.find(({ path }) => path === '/volumes/create')?.body).toEqual({
+    Name: `${browserName}-profile`,
+    Labels: {
+      'spyria.managed': '1',
+      'spyria.browser': 'runtime-1',
+      'spyria.browser.created': String(36_000_000),
+      'spyria.browser.sign_in_hours': '8',
+    },
+  })
+
+  const volumes = new Map<string, Record<string, string>>()
+  const deleted: string[] = []
+  let clock = 10 * 3_600_000
+  const docker = (async (method: string, path: string, body?: unknown) => {
+    if (path === '/containers/spyria-rt-runtime-1/json')
+      return {
+        Id: 'runtime-container-id',
+        Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
+        State: { Running: true },
+      }
+    if (path === `/containers/${browserName}/json`) throw new DockerError(404, 'No such container')
+    if (path.startsWith('/containers/json')) return [{ Names: [`/${browserName}`] }]
+    if (path === '/volumes/create') {
+      const { Name, Labels } = body as { Name: string; Labels: Record<string, string> }
+      volumes.set(Name, Labels)
+    }
+    if (method === 'GET' && path.startsWith('/volumes/')) {
+      const labels = volumes.get(path.slice('/volumes/'.length))
+      if (!labels) throw new DockerError(404, 'No such volume')
+      return { Labels: labels }
+    }
+    if (method === 'DELETE') deleted.push(path)
+    return {}
+  }) as Docker
+  await createCommandRunner({ docker, prefix: 'spyria-', now: () => clock }).run({ ...startBrowser, signInHours: 8 })
+  const restartedHost = createCommandRunner({ docker, prefix: 'spyria-', now: () => clock })
+  clock += 7 * 3_600_000
+  await restartedHost.removeExpiredBrowsers()
+  expect(deleted).toEqual([])
+  clock += 3_600_000
+  await restartedHost.removeExpiredBrowsers()
+  expect(deleted).toEqual([`/containers/${browserName}?force=true`, `/volumes/${browserName}-profile`])
+})
