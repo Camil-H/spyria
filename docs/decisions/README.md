@@ -40,3 +40,4 @@ Each record states one decision: the context that called for it, what was decide
 | [0034](0034-catalogue-tools-found-not-declared.md) | Catalogue tools are found when needed instead of declared on every call: code mode for Pi, per-chat switches and the spyria command |
 | [0035](0035-domain-claims.md) | A workspace may claim its organization's email domains, proven by DNS |
 | [0036](0036-tool-access-per-role-only.md) | Tool access is set per role only |
+| [0037](0037-a-browser-per-member-next-to-the-runtime.md) | Each member gets a real browser of their own, next to the chat's runtime |
