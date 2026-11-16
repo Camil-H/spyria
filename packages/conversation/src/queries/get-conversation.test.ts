@@ -305,6 +305,30 @@ test('the error the interrupt causes is hidden in a stopped turn', () => {
   expect(itemSummaryOf(stopped)).toEqual(['member', 'step file', 'notice'])
 })
 
+test('a stop keeps the folds a hidden error split apart, under the same ids, so an opened fold stays open', () => {
+  const steps = [
+    replyRow(2, 'step', { step: command(0) }),
+    replyRow(3, 'step', { step: { type: 'error', message: 'boom' } }),
+    replyRow(4, 'step', { step: edit }),
+    replyRow(5, 'step', { step: { ...command(0), thought: undefined } }),
+  ]
+  const running = conversationWith(steps, true)
+  const stopped = conversationWith([...steps, replyRow(6, 'notice', { body: 'Stopped by Alice' })])
+  expect(itemSummaryOf(running)).toEqual([
+    'member',
+    'fold Worked for 1s · 2 steps: thought, command',
+    'step error',
+    'fold Working · 2 steps: file, command',
+  ])
+  expect(itemSummaryOf(stopped)).toEqual([
+    'member',
+    'fold Worked for 1s · 2 steps: thought, command',
+    'fold Worked for 2s · 2 steps: file, command',
+    'notice',
+  ])
+  expect(foldIdsOf(stopped)).toEqual(foldIdsOf(running))
+})
+
 test('a question stays out of the folds, answerable where it was asked, its answerer named', () => {
   const question = { type: 'question', questionId: 'q1', kind: 'question', answers: {}, answeredBy: alice } as const
   const conversation = conversationWith([

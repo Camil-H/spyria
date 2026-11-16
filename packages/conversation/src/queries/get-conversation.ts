@@ -263,15 +263,14 @@ const turnItemsOf = (messages: readonly ConversationMessage[]): ConversationItem
   const itemsById = new Map<MessageId, ConversationItem[]>()
   for (const [promptId, turnReplies] of repliesByPrompt) {
     const isStopped = turnReplies.some((reply) => reply.kind === 'notice' && reply.body.startsWith(stoppedByPrefix))
-    const replies = withDelegationsGrouped(turnReplies, isStopped).filter(
-      (reply) => !(isStopped && reply.step?.type === 'error'),
-    )
+    const groupedReplies = withDelegationsGrouped(turnReplies, isStopped)
+    const replies = groupedReplies.filter((reply) => !(isStopped && reply.step?.type === 'error'))
     for (const reply of turnReplies) if (reply.kind === 'step') itemsById.set(reply.id, [])
     for (const reply of replies) itemsById.set(reply.id, [{ type: 'message', message: reply }])
     const latestText = replies.findLast((reply) => reply.kind === 'agent')
     const isWorking = turnReplies.some((reply) => reply.isRunning)
     const turnEndsAt = isWorking ? null : (replies.at(-1)?.createdAt ?? null)
-    segmentsOf(replies, turnEndsAt).forEach((segment, index) => {
+    segmentsOf(groupedReplies, turnEndsAt).forEach((segment, index) => {
       const fold = foldOf(`${promptId}:${index}`, promptId, segment, latestText)
       if (!fold) return
       for (const step of fold.steps) itemsById.set(step.id, [])
