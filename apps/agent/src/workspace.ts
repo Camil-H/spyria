@@ -97,6 +97,12 @@ const baseRefOf = async (root: string, base: string, env: Record<string, string>
   return undefined
 }
 
+class GitReadFailed extends Error {
+  constructor(command: string) {
+    super(`git ${command} failed while reading the workspace`)
+  }
+}
+
 const cappedGit = async (cwd: string, args: string[], env: Record<string, string>) => {
   const child = Bun.spawn(['git', '-C', cwd, ...args], { env, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
   const decoder = new TextDecoder()
@@ -107,8 +113,8 @@ const cappedGit = async (cwd: string, args: string[], env: Record<string, string
   }
   const isCut = text.length > maximumPatchCharacters
   if (isCut) child.kill()
-  const isDone = (await child.exited) === 0
-  return isCut || isDone ? { text: text.slice(0, maximumPatchCharacters), isCut } : { text: '', isCut }
+  if (!isCut && (await child.exited) !== 0) throw new GitReadFailed(args[0] ?? '')
+  return { text: text.slice(0, maximumPatchCharacters), isCut }
 }
 
 const mergeBaseOf = async (root: string, base: string, env: Record<string, string>) => {

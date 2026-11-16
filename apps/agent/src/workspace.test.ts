@@ -133,6 +133,27 @@ test('changes are the diff against the base branch, and apart the files not stag
     })
 })
 
+test('a changes or commits read whose git diff or log fails answers an error, not an empty one a snapshot would keep', async () => {
+  const broken = join(directory, 'broken')
+  git(directory, 'clone', '-q', source, broken)
+  git(broken, 'checkout', '-q', '-b', 'spyria/broken')
+  write(broken, { 'src/lost.ts': 'export const lost = true\n' })
+  git(broken, 'add', 'src/lost.ts')
+  git(broken, 'commit', '-q', '-m', 'Add a file whose blob goes missing')
+  const blob = Bun.spawnSync(['git', 'rev-parse', 'HEAD:src/lost.ts'], { cwd: broken }).stdout.toString().trim()
+  rmSync(join(broken, '.git', 'objects', blob.slice(0, 2), blob.slice(2)))
+  const { call } = started({ workspaceDirectory: broken })
+  expect(await call('GET', '/api/workspace/commits?base=main')).toMatchObject({
+    status: 502,
+    body: { error: 'spyria-agent failed' },
+  })
+  writeFileSync(join(broken, '.git', 'index'), 'not an index')
+  expect(await call('GET', '/api/workspace/changes?base=main')).toMatchObject({
+    status: 502,
+    body: { error: 'spyria-agent failed' },
+  })
+})
+
 test('commits are the log since the base with each body and each patch, a merge showing only how its conflicts were resolved, all separated by a character no message or text file holds', async () => {
   const commits = join(directory, 'commits')
   git(directory, 'clone', '-q', source, commits)
