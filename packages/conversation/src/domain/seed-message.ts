@@ -83,10 +83,15 @@ const withinHistoryLimit = ([first, ...rest]: readonly string[]) => {
   return [first, ...(leftOut > 0 ? [leftOutLineOf(leftOut)] : []), ...newest]
 }
 
+const liveOf = (messages: readonly QuotedMessage[]) => messages.filter((message) => message.status === 'live')
+
+const wholeQuoteOf = (message: QuotedMessage) => `${speakerOf(message)}\n${withAttachmentsNoted(message)}`
+
+export const copiedThreadBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
+  MessageBody([header, ...liveOf(messages).map(wholeQuoteOf)].join('\n\n'))
+
 export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
-  MessageBody(
-    [header, ...withinHistoryLimit(messages.filter((message) => message.status === 'live').map(quoteOf))].join('\n\n'),
-  )
+  MessageBody([header, ...withinHistoryLimit(liveOf(messages).map(quoteOf))].join('\n\n'))
 
 const inReplyToOf = (quoted: QuotedMessage) =>
   `In reply to ${speakerOf(quoted)}:\n${withAttachmentsNoted(quoted).replace(/^/gm, '> ')}`
