@@ -88,6 +88,7 @@ type Conversation = {
   questions: Map<string, PendingQuestion>
   configOptions: Json[]
   promptCapabilities: PromptCapabilities
+  canSteer: boolean
   events: BufferedEvent[]
   bufferedBytes: number
   lastSeq: number
@@ -102,6 +103,7 @@ type Conversation = {
   running?: RunningTurn
 }
 type RunningTurn = { promptId?: string; joinedPromptIds: string[]; steeredPromptIds: Set<string> }
+type SteeringMeta = { steering?: { supported?: unknown } }
 type ToolCallState = { call: Json; isAnnounced: boolean; output: string }
 type TerminalMeta = {
   terminal_output?: { data?: unknown }
@@ -483,8 +485,7 @@ export const startAgent = ({
     )
   }
 
-  const takeJoinedPrompt = (conversation: Conversation, promptId: string) => {
-    const { running } = conversation
+  const takeJoinedPrompt = (conversation: Conversation, promptId: string, running = conversation.running) => {
     if (!running?.steeredPromptIds.delete(promptId)) return
     rememberPrompt(conversation, promptId)
     running.joinedPromptIds.push(promptId)
@@ -576,6 +577,7 @@ export const startAgent = ({
       clientCapabilities: { elicitation: { form: {} } },
     })
     conversation.promptCapabilities = promptCapabilitiesOf(initialized)
+    conversation.canSteer = (initialized._meta as SteeringMeta | undefined)?.steering?.supported === true
     const resumeSessionId = agent?.acp_resume_session_id
     const resumed = resumeSessionId && (await reopened(conversation, resumeSessionId, sessionParams, isReload))
     const session = resumed || (await request('session/new', sessionParams))
@@ -882,6 +884,7 @@ export const startAgent = ({
       questions: new Map(),
       configOptions: [],
       promptCapabilities: noPromptCapabilities,
+      canSteer: false,
       events: [],
       bufferedBytes: 0,
       lastSeq: 0,
@@ -1033,21 +1036,32 @@ export const startAgent = ({
     return Response.json({})
   }
 
+  const steerOverAcp = async (conversation: Conversation, running: RunningTurn, promptId: string, prompt: Json[]) => {
+    const { sessionId } = conversation
+    const { outcome } = await conversation.connection.request('_session/steering', {
+      sessionId,
+      prompt,
+      _meta: { steering: { idleBehavior: 'promptRequired' } },
+    })
+    if (outcome === 'injected') return takeJoinedPrompt(conversation, promptId, running)
+    if (outcome === 'startedNewTurn') conversation.connection.notify('session/cancel', { sessionId })
+    throw new AcpError(`The agent did not take the message: ${String(outcome)}`)
+  }
+
   const join = async (conversation: Conversation, body: { content?: PromptBlock[]; prompt_id?: unknown }) => {
     const promptId = typeof body.prompt_id === 'string' ? body.prompt_id : undefined
     if (!promptId) return Response.json({ error: 'prompt_id must be a string' }, { status: 400 })
     const { running, sessionId } = conversation
     if (conversation.turnEnds.has(promptId) || running?.steeredPromptIds.has(promptId)) return Response.json({})
-    if (conversation.launch.agent?.adapter !== 'pi-rpc')
+    const isPi = conversation.launch.agent?.adapter === 'pi-rpc'
+    if (!isPi && !conversation.canSteer)
       return Response.json({ error: 'This agent takes messages only between turns' }, { status: 409 })
     if (!running || !sessionId) return Response.json({ error: 'The agent has no turn running' }, { status: 409 })
     running.steeredPromptIds.add(promptId)
     try {
-      await conversation.connection.request('session/steer', {
-        sessionId,
-        prompt: await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities),
-        steerId: promptId,
-      })
+      const prompt = await promptBlocksOf(attachmentsDirectory, body.content ?? [], conversation.promptCapabilities)
+      if (isPi) await conversation.connection.request('session/steer', { sessionId, prompt, steerId: promptId })
+      else await steerOverAcp(conversation, running, promptId, prompt)
     } catch (error) {
       running.steeredPromptIds.delete(promptId)
       return Response.json({ error: errorUpdateOf(error).message }, { status: 409 })
