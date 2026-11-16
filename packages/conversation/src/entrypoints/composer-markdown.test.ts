@@ -31,3 +31,12 @@ test('text being typed stays plain until its formatting closes', () => {
   expect(shown('say **bold')).toBe('say **bold')
   expect(shown('')).toBe('')
 })
+
+test('a draft too long to style while typing is shown plain', () => {
+  const longDraft = '**bold** '.repeat(500)
+  expect(styledRunsOf(longDraft)).toEqual([{ start: 0, text: longDraft, styles: [] }])
+})
+
+test('each paragraph is styled on its own, with the blank lines between them kept', () => {
+  expect(shown('**a**\n\n- b')).toBe('[**|marker strong][a|strong][**|marker strong]\n\n[- |marker]b')
+})

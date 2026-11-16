@@ -60,18 +60,25 @@ const insertKeepingUndo = (textarea: HTMLTextAreaElement, edit: TextEdit, onUnsu
 }
 
 const composerTextClass =
-  'max-h-40 px-2 py-1.5 text-sm leading-5 wrap-break-word whitespace-pre-wrap [scrollbar-gutter:stable]'
-const classOfStyle: Record<MarkdownStyle, string> = {
-  marker: 'text-muted',
+  'max-h-40 px-2 py-1.5 text-sm leading-5 wrap-break-word whitespace-pre-wrap [font-kerning:none] [font-variant-ligatures:none] [scrollbar-gutter:stable]'
+const colourByPrecedence: readonly (readonly [MarkdownStyle, string])[] = [
+  ['marker', 'text-muted'],
+  ['code', 'text-code-title'],
+  ['link', 'text-link'],
+  ['quote', 'text-muted'],
+]
+const shapeOfStyle: Partial<Record<MarkdownStyle, string>> = {
   strong: 'font-stroked',
+  heading: 'font-stroked',
   emphasis: 'italic',
   underline: 'underline',
   strike: 'line-through',
-  code: 'text-code-title',
-  link: 'text-link',
-  heading: 'font-stroked',
-  quote: 'text-muted',
 }
+
+const classOfRun = (styles: readonly MarkdownStyle[]) =>
+  [colourByPrecedence.find(([style]) => styles.includes(style))?.[1], ...styles.map((style) => shapeOfStyle[style])]
+    .filter(Boolean)
+    .join(' ')
 
 const StyledMarkdown = ({ ref, text }: { ref: Ref<HTMLDivElement>; text: string }) => (
   <div
@@ -80,7 +87,7 @@ const StyledMarkdown = ({ ref, text }: { ref: Ref<HTMLDivElement>; text: string 
     className={`${composerTextClass} pointer-events-none absolute inset-0 overflow-hidden text-ink`}
   >
     {styledRunsOf(text).map(({ start, text: run, styles }) => (
-      <span key={start} className={styles.map((style) => classOfStyle[style]).join(' ')}>
+      <span key={start} className={classOfRun(styles)}>
         {run}
       </span>
     ))}{' '}
