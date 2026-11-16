@@ -25,21 +25,25 @@ const roleBudgetsStatement = `
 const memberSpendsStatement = `
   with periods as (
     select * from jsonb_to_recordset($2::jsonb) as period(period text, "startsAt" timestamptz)),
+  members as (
+    select member.user_id, member.display_name, member.role from memberships member
+    where member.workspace_id = $1 and member.removed_at is null
+      and (member.user_id = $3 or $3::text is null and exists (select 1 from role_budgets budget
+        where budget.workspace_id = $1 and budget.role_id = member.role))),
   spends as (
     select call.prompter_id, period.period, sum(call.cost_micros) as cost_micros
     from model_calls call
     join periods period on call.called_at >= period."startsAt"
     where call.workspace_id = $1 and call.called_at >= (select min("startsAt") from periods)
-      and ($3::text is null or call.prompter_id = $3)
+      and call.prompter_id in (select user_id from members)
     group by call.prompter_id, period.period)
   select member.user_id as "memberId", member.display_name as name, period.period,
     budget.limit_micros::float8 as "limitMicros", coalesce(spend.cost_micros, 0)::float8 as "spentMicros"
-  from memberships member
+  from members member
   cross join periods period
   left join role_budgets budget on budget.workspace_id = $1 and budget.role_id = member.role
     and budget.period = period.period
   left join spends spend on spend.prompter_id = member.user_id and spend.period = period.period
-  where member.workspace_id = $1 and member.removed_at is null and ($3::text is null or member.user_id = $3)
   order by member.display_name, member.user_id, array_position(array['day', 'week', 'month'], period.period)`
 
 const recordAlertsStatement = `
