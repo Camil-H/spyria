@@ -6,6 +6,7 @@ import {
   browserAnswerOf,
   browserAsleepRefusal,
   browserDownloadOf,
+  browserOwnerOnlyRefusal,
   browserStartFailureOf,
   imageFileOf,
   memberMessageOf,
@@ -237,7 +238,11 @@ const started = async (dependencies: Dependencies, input: Input, slot: Slot): Pr
   await slot.stopping
   const endpoint = await dependencies.runtimes.endpointOf(input.chat)
   if (!endpoint) throw new BrowserUnavailable(browserAsleepRefusal)
-  const settings = await dependencies.transactor.run(({ browser }) => browser.settings())
+  const { chat, settings } = await dependencies.transactor.run(async ({ chats, browser }) => ({
+    chat: await chats.get(input.chat.chatId),
+    settings: await browser.settings(),
+  }))
+  if (chat.localSession && chat.ownerId !== input.memberId) throw new BrowserUnavailable(browserOwnerOnlyRefusal)
   const { transport } = endpoint
   await transport
     .startBrowser(input.memberId, { signInHours: settings.signInHours ?? undefined })

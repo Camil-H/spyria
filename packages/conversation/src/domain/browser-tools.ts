@@ -171,6 +171,10 @@ export const visitedAddressOf = (url: string) => {
 }
 
 export const browserTurnedOffForAgents = 'The browser is turned off for agents in this workspace'
+export const uncheckedSubmitOf = (reason: string) =>
+  `This step was not run: the browser could not tell whether it submits anything (${reason})`
+export const browserOwnerOnlyRefusal =
+  "This chat runs on its owner's own machine, so only its owner has a browser in it"
 export const browserAsleepRefusal =
   "The chat's runtime is asleep, so the member's browser cannot start: wait for the next message to wake it"
 
