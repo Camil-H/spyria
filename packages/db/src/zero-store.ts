@@ -233,6 +233,10 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const messagesOf = memoizedOnSources((messages: ZeroRows['messages'], runtimeChatIdsKey: string) => {
     const runtimeChatIds = new Set(runtimeChatIdsKey.split('\n'))
     const answeredMessageIds = new Set(messages.map((message) => message.replyToId))
+    const lastAnsweredSeqByChat = new Map<string, number>()
+    for (const message of messages)
+      if (message.kind === 'member' && message.replyToId === null && answeredMessageIds.has(message.id))
+        lastAnsweredSeqByChat.set(message.chatId, Math.max(message.seq, lastAnsweredSeqByChat.get(message.chatId) ?? 0))
     const newChatIds = new Set<string>()
     for (const message of messages) if (!threadSeqByZeroRow.has(message)) newChatIds.add(message.chatId)
     const seqByMessageKey = new Map<string, number>()
@@ -267,7 +271,8 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
             message.kind === 'member' &&
             message.replyToId === null &&
             message.deletedAt === null &&
-            !answeredMessageIds.has(message.id),
+            !answeredMessageIds.has(message.id) &&
+            message.seq > (lastAnsweredSeqByChat.get(message.chatId) ?? 0),
         )
       })
   })
