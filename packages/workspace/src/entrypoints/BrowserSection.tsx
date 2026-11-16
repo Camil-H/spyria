@@ -37,7 +37,7 @@ const draftOf = (settings: BrowserSettings): Draft => ({
 const addressesOf = (text: string) => [
   ...new Set(
     text
-      .split(/[\s,]+/)
+      .split(/[\n,]+/)
       .map(browserAddressOf)
       .filter(Boolean),
   ),

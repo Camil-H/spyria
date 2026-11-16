@@ -2,7 +2,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 
 const cardsBySection = {
   Organization: ['Single sign-on', 'GitHub', 'Members and roles'],
-  Agents: ['Runtimes', 'AI providers', 'Tools', 'Quality gates'],
+  Agents: ['Runtimes', 'AI providers', 'Tools', 'Browser', 'Quality gates'],
   Usage: ['Costs', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
@@ -12,6 +12,7 @@ const sectionShownBy: Record<string, string> = {
   Runtimes: 'Runtime hosts',
   Tools: 'Servers',
   'AI providers': 'AI providers',
+  Browser: 'Browser',
   'Quality gates': 'Quality gates',
   Costs: 'Usage',
   'Audit log': 'Audit log',
@@ -39,6 +40,7 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'Runtimes')).toContainText('1 runtime host')
     await expect(cardOf(page, 'Tools')).toContainText('6 servers')
     await expect(cardOf(page, 'AI providers')).toContainText('Every provider allowed')
+    await expect(cardOf(page, 'Browser')).toContainText('On')
     await expect(cardOf(page, 'Quality gates')).toContainText('Off')
     await expect(cardOf(page, 'Costs')).toContainText(/\$\d+\.\d\d this month/)
 
