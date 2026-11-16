@@ -134,11 +134,16 @@ test("a member's browser runs the runtime image beside the runtime, reaches the 
   expect(unixSocketPaths.filter((path) => path.startsWith('@') && /X11|chrom/i.test(path))).toEqual([])
   expect(inRuntime('test -S /tmp/.X11-unix/X99 && echo reachable || echo unreachable')).toBe('unreachable')
   expect(inRuntime('cat /proc/[0-9]*/cmdline 2>/dev/null | tr "\\0" " "')).not.toContain('chrom')
-  const listeningPorts = inRuntime('awk \'FNR > 1 && $4 == "0A" { print $2 }\' /proc/net/tcp /proc/net/tcp6')
-    .split('\n')
-    .map((address) => Number.parseInt(address.split(':').at(-1) ?? '', 16))
-  expect(listeningPorts).toContain(8000)
-  expect(new Set(listeningPorts.filter((port) => port !== 8000)).size).toBe(1)
+  const listeners = inRuntime('awk \'FNR > 1 && $4 == "0A" { print $2 }\' /proc/net/tcp /proc/net/tcp6').split('\n')
+  const spyriaAgentPort = ':1F40'
+  const dockerEmbeddedResolver = '0B00007F:'
+  const ipv4Loopback = '0100007F:'
+  expect(listeners.some((listener) => listener.endsWith(spyriaAgentPort))).toBe(true)
+  const browserListeners = listeners.filter(
+    (listener) => !listener.endsWith(spyriaAgentPort) && !listener.startsWith(dockerEmbeddedResolver),
+  )
+  expect(browserListeners).toHaveLength(1)
+  expect(browserListeners[0]?.startsWith(ipv4Loopback)).toBe(true)
   expect(inRuntime('ls /var/lib/spyria/browser 2>&1 || true')).not.toContain('profile')
   stream.close()
 
