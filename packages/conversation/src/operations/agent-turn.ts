@@ -65,9 +65,9 @@ export const pickUp = (messages: UnitOfWork['messages'], prompt: Message) =>
     message: { ...prompt, pickedUpAt: new Date() },
   })
 
-export const requeue = async ({ messages }: UnitOfWork, promptId: MessageId) => {
+export const requeue = async ({ messages, agentTurns }: UnitOfWork, promptId: MessageId) => {
   const prompt = await messages.get(promptId)
-  if (prompt.pickedUpAt === null) return
+  if (prompt.pickedUpAt === null || (await agentTurns.lock(prompt.chatId)) === promptId) return
   await messages.record({
     type: 'message.requeued',
     actor: systemActor(agentTurnJob, prompt.authorId),

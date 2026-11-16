@@ -50,6 +50,7 @@ import {
   requeue,
 } from './agent-turn.ts'
 import { decide, routingUnavailableOf } from './decide.ts'
+import { loopOfPrompt } from './dev-loop-turns.ts'
 
 type Input = { workspaceId: WorkspaceId; messageId: MessageId; isLastAttempt: boolean; isRetry: boolean }
 type Prepared = { conversation: AgentConversation } | { refusal: string }
@@ -113,7 +114,9 @@ const pickUpQueuedPrompt = async (unitOfWork: UnitOfWork, chatId: ChatId) => {
   const turnPromptId = await agentTurns.lock(chatId)
   if (turnPromptId === null) return undefined
   const [queued] = (await agentTurns.waitingPrompts(chatId)).filter((prompt) => prompt.pickedUpAt === null)
-  if (!queued?.authorId || !joinsRunningTurn(await messages.get(turnPromptId), queued)) return undefined
+  const turnPrompt = await messages.get(turnPromptId)
+  if (!queued?.authorId || !joinsRunningTurn(turnPrompt, queued)) return undefined
+  if (await loopOfPrompt(unitOfWork, turnPrompt)) return undefined
   if (!can(await chats.permissions(chatId, queued.authorId), 'chat.post')) return undefined
   await pickUp(messages, queued)
   return queued
