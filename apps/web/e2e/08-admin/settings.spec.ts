@@ -3,7 +3,7 @@ import { expect, mainOf, type Page, sidebarOf, test } from '../fixtures'
 const cardsBySection = {
   Organization: ['Single sign-on', 'GitHub', 'Members and roles'],
   Agents: ['Runtimes', 'AI providers', 'Tools', 'Browser', 'Quality gates'],
-  Usage: ['Costs', 'Audit log'],
+  Usage: ['Costs and AI budgets', 'Audit log'],
 }
 const sectionShownBy: Record<string, string> = {
   'Single sign-on': 'Sign-in',
@@ -14,7 +14,7 @@ const sectionShownBy: Record<string, string> = {
   'AI providers': 'AI providers',
   Browser: 'Browser',
   'Quality gates': 'Quality gates',
-  Costs: 'Usage',
+  'Costs and AI budgets': 'Usage',
   'Audit log': 'Audit log',
 }
 const cardOf = (page: Page, title: string) => mainOf(page).getByRole('link', { name: title, exact: true })
@@ -42,7 +42,7 @@ test.describe('Settings', () => {
     await expect(cardOf(page, 'AI providers')).toContainText('Every provider allowed')
     await expect(cardOf(page, 'Browser')).toContainText('On')
     await expect(cardOf(page, 'Quality gates')).toContainText('Off')
-    await expect(cardOf(page, 'Costs')).toContainText(/\$\d+\.\d\d this month/)
+    await expect(cardOf(page, 'Costs and AI budgets')).toContainText(/\$\d+\.\d\d this month/)
 
     for (const [index, cardTitle] of Object.values(cardsBySection).flat().entries()) {
       await cardOf(page, cardTitle).click()

@@ -19,22 +19,19 @@ import {
 import { openPageAs, type WorkerStack } from '../stack'
 
 const bobNotice =
-  "Bob's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
-const workspaceNotice =
-  "The workspace's monthly AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
-const budgetsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Budgets' })
-const budgetRowOf = (page: Page, name: string) =>
-  budgetsOf(page)
-    .getByRole('table', { name: 'Budgets' })
-    .getByRole('row', { name: new RegExp(`^${name}\\b`) })
+  "Bob's daily AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings"
+const budgetsOf = (page: Page) => mainOf(page).getByRole('region', { name: 'AI budgets' })
+const budgetGridOf = (page: Page) => budgetsOf(page).getByRole('table', { name: 'AI budgets per role' })
+const roleRowOf = (page: Page, role: string) => budgetGridOf(page).getByRole('row', { name: new RegExp(`^${role}\\b`) })
 const myUsageOf = (page: Page) => mainOf(page).getByRole('region', { name: 'My usage' })
 const budgetAlertOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Budget alert' })
 
 const spend = (workerStack: WorkerStack, prompterId: string, costMicros: number) =>
   seedModelCall(workerStack.database, prompterId, costMicros)
-const seedBudget = (workerStack: WorkerStack, memberId: string | null, limitMicros: number) =>
+const seedDailyBudget = (workerStack: WorkerStack, roleId: string, limitMicros: number) =>
   workerStack.database.$client`
-    insert into budgets (workspace_id, member_id, limit_micros) values ('workspace-acme', ${memberId}, ${limitMicros})`
+    insert into role_budgets (workspace_id, role_id, period, limit_micros)
+    values ('workspace-acme', ${roleId}, 'day', ${limitMicros})`
 const modelCallsOf = async (workerStack: WorkerStack, prompterId: string) =>
   (
     await workerStack.database.$client`
@@ -49,10 +46,14 @@ const syncUntilAlert = (workerStack: WorkerStack, page: Page, text: string) =>
     await expect(budgetAlertOf(page)).toHaveText(text, { timeout: 1_000 })
   }).toPass({ timeout: 20_000 })
 
-const saveBudget = async (page: Page, name: string, dollars: string) => {
-  const row = budgetRowOf(page, name)
-  await row.getByRole('spinbutton', { name: `Monthly budget of ${name}` }).fill(dollars)
-  await row.getByRole('button', { name: `Save the budget of ${name}` }).click()
+const openBudgets = async (page: Page) => {
+  await openSettings(page, 'Costs and AI budgets')
+  await mainOf(page).getByRole('tab', { name: 'AI budgets' }).click()
+}
+const saveDailyBudget = async (page: Page, role: string, dollars: string) => {
+  const row = roleRowOf(page, role)
+  await row.getByRole('spinbutton', { name: `Daily budget per member of ${role}` }).fill(dollars)
+  await row.getByRole('button', { name: `Save the budgets of ${role}` }).click()
 }
 const openBobInResearch = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
   await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
@@ -72,18 +73,24 @@ test.describe('Budgets', () => {
     await page.goto('/')
   })
 
-  test('As a member who can manage budgets, I set Bob’s monthly budget to $1 while he is at $0.70: his My usage shows $0.70 of $1 (70%) and no alert', {
+  test('As a member who can manage budgets, I give the Member role a daily budget of $1 per member: each of its 2 members gets $1, the role totals $2, the workspace total adds up the roles, and Bob at $0.70 sees $0.70 of $1 (70%)', {
     tag: ['@spec-46'],
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 700_000)
-    await openSettings(page, 'Costs')
-    await expect(budgetRowOf(page, 'Bob')).toContainText('$0.70')
-    await saveBudget(page, 'Bob', '1')
-    await expect(budgetRowOf(page, 'Bob').getByRole('cell').nth(1)).toHaveText('70%')
+    await openBudgets(page)
+    await expect(budgetsOf(page)).toContainText('not shared by the members who hold it')
+    await saveDailyBudget(page, 'Member', '1')
+    await expect(roleRowOf(page, 'Member')).toContainText('$1.00 × 2 members = $2.00')
+    const workspaceTotal = budgetGridOf(page).getByRole('row', { name: /^Workspace total\b/ })
+    await expect(workspaceTotal.getByRole('cell').nth(1)).toHaveText('No limit')
+    await expect(workspaceTotal.getByRole('spinbutton')).toHaveCount(0)
+    await saveDailyBudget(page, 'Admin', '5')
+    await expect(roleRowOf(page, 'Admin')).toContainText('$5.00 × 1 member = $5.00')
+    await expect(workspaceTotal.getByRole('cell').nth(1)).toHaveText('$7.00')
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openProfile(bobPage, 'Usage')
-    const bar = myUsageOf(bobPage).getByRole('progressbar', { name: 'Monthly AI budget used' })
+    const bar = myUsageOf(bobPage).getByRole('progressbar', { name: 'Daily AI budget used' })
     await expect(bar).toHaveAttribute('aria-valuenow', '70')
     await expect(myUsageOf(bobPage)).toContainText('$0.70 of $1.00 (70%)')
     await syncUsage(workerStack)
@@ -95,37 +102,36 @@ test.describe('Budgets', () => {
     tag: ['@spec-46'],
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 799_999)
-    await seedBudget(workerStack, 'member-bob', 1_000_000)
+    await seedDailyBudget(workerStack, 'member', 1_000_000)
     const bobPage = await openBobInResearch(browser, workerStack)
     await syncUsage(workerStack)
     await expect(budgetAlertOf(bobPage)).toHaveCount(0)
     await prompt(bobPage, 'Push me past 80%')
     await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
-    await syncUntilAlert(workerStack, bobPage, 'You have used 80% of your monthly AI budget')
+    await syncUntilAlert(workerStack, bobPage, 'You have used 80% of your daily AI budget')
 
     await openProfile(bobPage, 'Usage')
     await expect(myUsageOf(bobPage).getByRole('status', { name: 'Budget alert' })).toHaveText(
-      'You have used 80% of your monthly AI budget',
+      'You have used 80% of your daily AI budget',
     )
     await bobPage.context().close()
 
+    const card = mainOf(page).getByRole('link', { name: 'Costs and AI budgets', exact: true })
     await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Workspace settings' }).click()
-    await expect(mainOf(page).getByRole('link', { name: 'Costs', exact: true })).toContainText('1 budget alert')
-    await mainOf(page).getByRole('link', { name: 'Costs', exact: true }).click()
+    await expect(card).toContainText('1 budget alert')
+    await card.click()
+    await expect(mainOf(page).getByText('1 member has a budget alert.')).toBeVisible()
+    await mainOf(page).getByRole('button', { name: 'See the AI budgets' }).click()
     await expect(budgetsOf(page).getByRole('region', { name: 'Over 80% of their budget' })).toContainText(
-      /Bob · \$0\.80 of \$1\.00 \(80%\)/,
+      /Bob · daily · \$0\.80 of \$1\.00 \(80%\)/,
     )
-    await expect(mainOf(page).getByText('1 budget alert this month.')).toBeVisible()
-    await mainOf(page).getByRole('link', { name: 'See the budgets' }).click()
-    await expect(page).toHaveURL(/#budgets$/)
-    await expect(budgetsOf(page)).toBeInViewport()
   })
 
-  test('As a member at 100% of my budget, my next prompt is refused with the budget notice and no model call reaches the gateway', {
+  test('As a member at 100% of my daily budget, my next prompt is refused with the budget notice and no model call reaches the gateway, while an admin without a budget is answered', {
     tag: ['@spec-46', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 1_000_000)
-    await seedBudget(workerStack, 'member-bob', 1_000_000)
+    await seedDailyBudget(workerStack, 'member', 1_000_000)
     const bobPage = await openBobInResearch(browser, workerStack)
     await syncUntilAlert(workerStack, bobPage, bobNotice.replace("Bob's", 'Your'))
     await prompt(bobPage, 'Over budget')
@@ -145,59 +151,28 @@ test.describe('Budgets', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage budgets, I raise Bob’s budget to $2 and his next prompt is answered', {
+  test('As a member who can manage budgets, I raise the Member role’s daily budget to $2 and Bob’s next prompt is answered', {
     tag: ['@spec-46'],
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 1_000_000)
-    await seedBudget(workerStack, 'member-bob', 1_000_000)
+    await seedDailyBudget(workerStack, 'member', 1_000_000)
     const bobPage = await openBobInResearch(browser, workerStack)
     await prompt(bobPage, 'Over budget')
     await expect(messageItemsOf(bobPage).getByRole('alert')).toContainText(bobNotice)
 
-    await openSettings(page, 'Costs')
-    await saveBudget(page, 'Bob', '2')
-    await expect(budgetRowOf(page, 'Bob').getByRole('cell').nth(1)).toHaveText('50%')
+    await openBudgets(page)
+    await saveDailyBudget(page, 'Member', '2')
+    await expect(roleRowOf(page, 'Member')).toContainText('$2.00 × 2 members = $4.00')
     await prompt(bobPage, 'Back under budget')
     await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
     await bobPage.context().close()
   })
 
-  test('As a member who can manage budgets, I set a workspace total that, once reached, refuses every member’s prompts with the workspace wording, and removing it restores them', {
-    tag: ['@spec-46'],
-  }, async ({ page, browser, workerStack }) => {
-    await spend(workerStack, 'member-alice', 1_000_000)
-    await spend(workerStack, 'member-bob', 500_000)
-    const bobPage = await openBobInResearch(browser, workerStack)
-    await openSettings(page, 'Costs')
-    await saveBudget(page, 'Workspace total', '1.5')
-    await expect(budgetRowOf(page, 'Workspace total').getByRole('cell').nth(1)).toHaveText('100%')
-
-    await prompt(bobPage, 'Bob over the workspace total')
-    await expect(messageItemsOf(bobPage).getByRole('alert')).toContainText(workspaceNotice)
-    await openChat(page, 'Research')
-    await prompt(page, 'Alice over the workspace total')
-    await expect(messageItemsOf(page).getByRole('alert')).toHaveCount(2)
-    await expect(messageItemsOf(page).getByRole('alert').last()).toContainText(workspaceNotice)
-
-    await openSettings(page, 'Costs')
-    await saveBudget(page, 'Workspace total', '')
-    await expect(budgetRowOf(page, 'Workspace total').getByRole('cell').nth(1)).toHaveText('—')
-    await openChat(page, 'Research')
-    await prompt(page, 'Alice after the removal')
-    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
-    await prompt(bobPage, 'Bob after the removal')
-    await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(2)
-    await bobPage.context().close()
-  })
-
   test('As a member with a budget, I see my own budget only and am refused the budgets page', {
     tag: ['@spec-46'],
-  }, async ({ page, browser, workerStack }) => {
+  }, async ({ browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 900_000)
-    await seedBudget(workerStack, 'member-bob', 1_000_000)
-    await openSettings(page, 'Costs')
-    await saveBudget(page, 'Lee', '3')
-    await expect(budgetRowOf(page, 'Lee').getByRole('cell').nth(1)).toHaveText('0%')
+    await seedDailyBudget(workerStack, 'member', 3_000_000)
 
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
     await openProfile(leePage, 'Usage')
@@ -206,7 +181,7 @@ test.describe('Budgets', () => {
     await expect(mainOf(leePage)).not.toContainText('$0.90')
     await leePage.goto('/w/workspace-acme/settings/costs')
     await expect(mainOf(leePage)).toContainText('Your workspace role does not give access to this page')
-    await expect(mainOf(leePage).getByRole('region', { name: 'Budgets' })).toHaveCount(0)
+    await expect(mainOf(leePage).getByRole('region', { name: 'AI budgets' })).toHaveCount(0)
     await leePage.context().close()
   })
 })
