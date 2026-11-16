@@ -139,6 +139,16 @@ test("a member's message reaches their browser only as a known action, with only
     memberMessageOf({ type: 'files', files: [{ name: 'a.txt', mimeType: 'text/plain', data: 'aGk=', path: '/etc' }] }),
   ).toEqual({ type: 'files', files: [{ name: 'a.txt', mimeType: 'text/plain', data: 'aGk=' }] })
   expect(memberMessageOf({ type: 'files', files: [{ data: 'aGk=' }] })).toBeUndefined()
+  const half = 'A'.repeat(6 * 1024 * 1024)
+  expect(
+    memberMessageOf({
+      type: 'files',
+      files: [
+        { name: 'a', data: half },
+        { name: 'b', data: half },
+      ],
+    }),
+  ).toBeUndefined()
 })
 
 test('a visited address is recorded without its query or fragment, and only for web pages', () => {

@@ -20,7 +20,7 @@ const hostAddress = /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#]\S*)?$/i
 const localAddress = /^(localhost|127\.0\.0\.1)([:/?#]|$)/i
 const htmlFile = /\.(html?|svg)$/i
 const mouseButtons = ['left', 'middle', 'right'] as const
-export const maximumUploadBytes = 25 * 1024 * 1024
+export const maximumUploadBytes = 8 * 1024 * 1024
 
 export const isWebAddress = (url: string) => webAddress.test(url)
 

@@ -4,7 +4,7 @@ const commandTimeoutMilliseconds = 30_000
 const maximumWaitSeconds = 30
 const maximumSnapshotCharacters = 60_000
 const maximumResultCharacters = 20_000
-const maximumTransferredFileBytes = 25 * 1024 * 1024
+const maximumDownloadBytes = 8 * 1024 * 1024
 const screencastQuality = 70
 const viewportRange = { width: [320, 2560], height: [240, 1600] }
 const mouseButtons = ['left', 'middle', 'right']
@@ -85,8 +85,8 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
       return send({ type: 'notice', text: 'Downloads are turned off in this workspace' })
     }
     const path = await download.path()
-    if ((await stat(path)).size > maximumTransferredFileBytes) {
-      send({ type: 'notice', text: `${download.suggestedFilename()} is over 25 MB, so it was not downloaded` })
+    if ((await stat(path)).size > maximumDownloadBytes) {
+      send({ type: 'notice', text: `${download.suggestedFilename()} is over 8 MB, so it was not downloaded` })
     } else {
       const data = (await readFile(path)).toString('base64')
       send({ type: 'download', name: download.suggestedFilename(), data })

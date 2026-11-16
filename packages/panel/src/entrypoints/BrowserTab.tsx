@@ -145,7 +145,7 @@ const FileRequest = ({ live }: { live: LiveBrowser }) => {
           }}
         />
       </label>
-      {isTooLarge && <p className="text-xs">Files over 25 MB in all are not sent</p>}
+      {isTooLarge && <p className="text-xs">Files over 8 MB in all are not sent</p>}
       <button type="button" className={smallGhostButtonClass} onClick={live.closeFileChooser}>
         Cancel
       </button>

@@ -174,7 +174,7 @@ export const browserTurnedOffForAgents = 'The browser is turned off for agents i
 export const browserAsleepRefusal =
   "The chat's runtime is asleep, so the member's browser cannot start: wait for the next message to wake it"
 
-const maximumUploadBytes = 25 * 1024 * 1024
+const maximumUploadBase64Length = Math.ceil((8 * 1024 * 1024) / 3) * 4
 const maximumUploadFiles = 10
 const inputKinds = ['mouse', 'key', 'text']
 const mouseActions = ['move', 'down', 'up', 'wheel']
@@ -219,10 +219,12 @@ const uploadsOf = (files: unknown) => {
     return {
       name: textOf(name, 255),
       mimeType: textOf(mimeType, 255) ?? '',
-      data: textOf(data, maximumUploadBytes * 2),
+      data: textOf(data, maximumUploadBase64Length),
     }
   })
-  return uploads.every(({ name, data }) => name && data !== undefined) ? uploads : undefined
+  const totalLength = uploads.reduce((total, { data }) => total + (data?.length ?? 0), 0)
+  const isEachNamed = uploads.every(({ name, data }) => name && data !== undefined)
+  return isEachNamed && totalLength <= maximumUploadBase64Length ? uploads : undefined
 }
 
 const webAddress = /^https?:\/\//i
