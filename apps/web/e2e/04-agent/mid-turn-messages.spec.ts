@@ -61,7 +61,7 @@ test.describe('Messages sent while the agent works', () => {
     await expect(messageItemsOf(page).nth(-1)).toContainText('Took in: Use tabs too.')
     await expect(messageItemsOf(page).nth(-1)).toContainText('Hello from the stub')
     await expect(messageContaining(page, '[t2]')).toHaveCount(0)
-    await expect(await messageActionOf(messageContaining(page, 'Use tabs too'), 'Edit')).toHaveCount(0)
+    await expect(await messageActionOf(messageItemsOf(page).nth(-2), 'Edit')).toHaveCount(0)
   })
 
   test("As a member, I send two messages while the agent works, and they're answered one by one in the order I sent them", {
@@ -95,7 +95,7 @@ test.describe('Messages sent while the agent works', () => {
     await sendMessage(page, 'stub:linger Rename the module')
     await expect(messageContaining(bobPage, '[t1]')).toBeVisible()
 
-    await sendMessage(bobPage, 'Also add a changelog entry')
+    await sendMessage(bobPage, 'stub:hello Also add a changelog entry')
     await expect(queuedLabelOf(bobPage, 'Also add a changelog entry')).toBeVisible()
     await expect(queuedLabelOf(page, 'Also add a changelog entry')).toBeVisible()
     await release('linger')
