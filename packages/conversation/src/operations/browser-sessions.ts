@@ -325,10 +325,7 @@ export const runBrowserCommand = async (
   const result = await sent(dependencies, session, input.command)
   const imageFile = imageFileOf(result)
   if (!imageFile) return browserAnswerOf(result)
-  const image = await bytesOf(fileStreamOf(session, imageFile), maximumImageBytes).catch((error: unknown) => {
-    releaseFile(session, imageFile)
-    throw error
-  })
+  const image = await bytesOf(fileStreamOf(session, imageFile), maximumImageBytes)
   if (image.byteLength === 0) throw new BrowserUnavailable('The screenshot could not be read')
   return { ...browserAnswerOf(result), image: image.toString('base64') }
 }

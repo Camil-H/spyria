@@ -173,7 +173,7 @@ export const createRuntimeHostGateway = ({
     connection.identifying.resolve()
     for (const { reject } of pending.values()) reject(new Error('The runtime host disconnected'))
     for (const call of modelCalls.values()) call.abort()
-    for (const listener of streams.values()) listener.onClose()
+    for (const listener of streams.values()) listener.onClose('The runtime host disconnected')
     streams.clear()
     connection.receivedStreamBytes.clear()
     connection.incomingBodies.clear()
