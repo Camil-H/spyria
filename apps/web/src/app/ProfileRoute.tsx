@@ -48,7 +48,6 @@ const profileCards: readonly ProfileCard[] = [
     path: 'usage',
     title: 'Usage',
     description: 'Your AI spend, AI budget and cost per merged PR',
-    isWide: true,
     Page: MyUsageSection,
   },
 ]

@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 
-export type PageCard = { path: string; title: string; description: string; isWide?: true }
+export type PageCard = { path: string; title: string; description: string }
 
 export type CardStatus = string | { label: string; tone: StatusTone }
 
@@ -68,7 +68,7 @@ export const CardPage = ({
   const navigate = useNavigate()
   useShortcut('escape', backLabel, () => navigate(backPath))
   return (
-    <div className={`flex flex-col gap-6 ${pagePaddingClass} ${card.isWide ? '' : 'max-w-4xl'}`}>
+    <div className={`flex max-w-6xl flex-col gap-6 ${pagePaddingClass}`}>
       <div className="flex items-center gap-2">
         <Link to={backPath} aria-label={backLabel} className={iconButtonClass}>
           <ArrowLeft aria-hidden className="size-5" />
