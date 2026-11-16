@@ -3,7 +3,7 @@ export type ModelCallFailure =
   | { reached: 'unreachable' | 'timeout' | 'refused' }
   | { reached: 'over_budget'; period: BudgetPeriod }
   | { reached: 'not_allowed' }
-type BudgetPeriod = 'day' | 'week' | 'month'
+export type BudgetPeriod = 'day' | 'week' | 'month'
 type Names = { memberName: string; model: string }
 type Fields = Record<string, unknown> | undefined
 
@@ -19,9 +19,13 @@ const unavailableStatuses = [500, 502, 503, 529]
 
 export const noLlmKeyNoticeOf = (memberName: string) => `${memberName} has no LLM key in this workspace`
 export const noLongerPromptsNoticeOf = (memberName: string) => `${memberName} can no longer prompt in this chat`
-const periodAdjectives: Readonly<Record<BudgetPeriod, string>> = { day: 'daily', week: 'weekly', month: 'monthly' }
+export const budgetPeriodAdjectives: Readonly<Record<BudgetPeriod, string>> = {
+  day: 'daily',
+  week: 'weekly',
+  month: 'monthly',
+}
 export const budgetUsedUpNoticeOf = (period: BudgetPeriod, memberName: string) =>
-  `${memberName}'s ${periodAdjectives[period]} AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings`
+  `${memberName}'s ${budgetPeriodAdjectives[period]} AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings`
 export const modelNotAllowedNoticeOf = (model: string) => `${model} is not allowed in this workspace`
 export const genericModelCallNoticeOf = (status: number) => `The model call failed (error ${status})`
 

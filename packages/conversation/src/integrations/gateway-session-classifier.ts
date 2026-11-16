@@ -1,12 +1,13 @@
 import { isDecisionModel, type ListedModel, type MemberId, type WorkspaceId } from '@spyria/kernel'
 import type { AgentChat, SessionClassifier } from '../contracts/agent.ts'
+import type { BudgetPeriod } from '../domain/model-call-failures.ts'
 
 const failureByErrorName: Record<string, string> = { TimeoutError: 'timeout', SyntaxError: 'unparseable reply' }
 
 export const createGatewaySessionClassifier = ({
   gatewayUrl,
   virtualKeyOf,
-  isBudgetUsedUp,
+  usedUpBudgetPeriodOf,
   headersOf,
   timeoutMilliseconds = 3000,
   listedModels,
@@ -17,14 +18,14 @@ export const createGatewaySessionClassifier = ({
   gatewayUrl: () => string
   timeoutMilliseconds?: number
   virtualKeyOf(workspaceId: WorkspaceId, memberId: MemberId): Promise<string | null | undefined>
-  isBudgetUsedUp?(workspaceId: WorkspaceId, memberId: MemberId): Promise<boolean>
+  usedUpBudgetPeriodOf?(workspaceId: WorkspaceId, memberId: MemberId): Promise<BudgetPeriod | null>
   headersOf?: (chat: AgentChat) => Record<string, string>
 }): SessionClassifier => ({
   listedModels,
   readsImages,
   classify: async ({ chat, prompterId, ownerId, model, request }) => {
     try {
-      if (await isBudgetUsedUp?.(chat.workspaceId, prompterId)) return { failure: 'monthly AI budget used up' }
+      if (await usedUpBudgetPeriodOf?.(chat.workspaceId, prompterId)) return { failure: 'AI budget used up' }
       const virtualKey = await virtualKeyOf(chat.workspaceId, prompterId)
       if (!virtualKey) return { failure: 'no gateway key' }
       const response = await fetch(`${gatewayUrl()}/v1/${isDecisionModel(model) ? 'decisions' : 'chat/completions'}`, {

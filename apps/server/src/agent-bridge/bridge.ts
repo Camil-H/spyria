@@ -189,7 +189,7 @@ export const createAgentBridge = ({
       spyriaAgentImage,
       checkouts: repositoryCheckoutsOf?.(database),
       deployment,
-      isBudgetUsedUp: async (workspace, member) => (await usedUpBudgetOf(workspace, member)) !== null,
+      usedUpBudgetPeriodOf: usedUpBudgetOf,
       onTurnPrompter: (chat, prompter) =>
         toolListChangesOf(database).announcePrompter(chat.workspaceId, chat.chatId, prompter),
       eventSockets: {
