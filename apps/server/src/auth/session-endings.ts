@@ -73,6 +73,8 @@ const watchSessionEndingsIn = (database: Database) => {
         watched.delete(session)
       }
     },
+    isWatching: (session: { workspaceId: string; sessionId: string }) =>
+      [...watched].some((watchedSession) => keyOf(watchedSession) === keyOf(session)),
     release: async () => {
       watched.clear()
       await (await listening)?.unlisten()

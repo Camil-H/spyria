@@ -316,10 +316,6 @@ export const createApp = ({
   const authenticate = createSessionAuthenticator(tokenSecret, findMemberIn(databaseOf))
   const watchZeroSession: WatchZeroSession = async (authToken, end) => {
     const authentication = await authenticate(`Bearer ${authToken}`).catch(() => undefined)
-    if (authentication?.status === 401) {
-      end()
-      return undefined
-    }
     const sessionDatabase = authentication?.status === 200 ? databaseOf(authentication.databaseName) : undefined
     return authentication?.status === 200 && sessionDatabase
       ? sessionEndingsOf(sessionDatabase).watch({

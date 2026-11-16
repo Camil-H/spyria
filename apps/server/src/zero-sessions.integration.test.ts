@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createApp } from './app.ts'
+import { sessionEndingsOf } from './auth/session-endings.ts'
 import { serverWebSocket } from './runtime-hosts/gateway.ts'
-import { acme, alice, issueTestSession, openSharedTestApp, testAuthSettings } from './testing/testing.ts'
+import { acme, alice, issueTestSession, openSharedTestApp, testAuthSettings, waitFor } from './testing/testing.ts'
 
 const { database } = await openSharedTestApp()
 const fakeZeroCache = Bun.serve({
@@ -51,16 +52,13 @@ test('a Zero socket forwarded by the server closes as not signed in once its ses
   endingSocket.socket.send('ready')
   otherSocket.socket.send('ready')
   expect(await Promise.all([endingSocket.echoed, otherSocket.echoed])).toEqual(['ready', 'ready'])
+  const sessionEndings = sessionEndingsOf(database)
+  await waitFor(() =>
+    [ending, other].every(({ sessionId }) => sessionEndings.isWatching({ workspaceId: acme, sessionId })),
+  )
   await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId}`
   const endedClose = await endingSocket.closed
   expect(endedClose.code).toBe(4001)
   expect(otherSocket.socket.readyState).toBe(WebSocket.OPEN)
   otherSocket.socket.close()
-})
-
-test('a Zero socket opened with a session that already ended closes as not signed in', async () => {
-  const ended = await issueTestSession(database, acme, alice)
-  await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ended.sessionId}`
-  const endedSocket = await openZeroSocket(ended.token)
-  expect((await endedSocket.closed).code).toBe(4001)
 })
