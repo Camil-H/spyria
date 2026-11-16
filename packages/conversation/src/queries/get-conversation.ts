@@ -236,7 +236,10 @@ const segmentsOf = (replies: readonly ConversationMessage[], turnEndsAt: Date | 
 }
 
 const foldOf = (id: string, promptId: MessageId, { replies, endsAt }: Segment, latestText?: ConversationMessage) => {
-  const finishedSteps = replies.filter((reply) => reply.kind === 'step' && !isStepInProgress(reply))
+  const thoughtsOfRunningSteps = new Set(replies.filter(isStepInProgress).map((reply) => `${reply.id}-thought`))
+  const finishedSteps = replies.filter(
+    (reply) => reply.kind === 'step' && !isStepInProgress(reply) && !thoughtsOfRunningSteps.has(reply.id),
+  )
   const firstStep = finishedSteps[0]
   if (!firstStep || finishedSteps.length < 2) return undefined
   const firstStepIndex = replies.indexOf(firstStep)

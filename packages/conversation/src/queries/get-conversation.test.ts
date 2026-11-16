@@ -239,6 +239,14 @@ test('a running turn folds its finished steps under Working, its running step an
     'agent',
     'step command',
   ])
+  const thinkingWhileRunning = conversationWith([...finishedSteps, replyRow(6, 'step', { step: command(null) })], true)
+  expect(itemSummaryOf(thinkingWhileRunning)).toEqual([
+    'member',
+    'fold Working · 3 steps: thought, command, , file',
+    'agent',
+    'step thought',
+    'step command',
+  ])
   const ended = conversationWith([
     ...finishedSteps,
     replyRow(6, 'step', { step: { ...command(0), thought: undefined } }),
