@@ -283,6 +283,56 @@ test.describe('Messaging', () => {
     })
   })
 
+  test('As a member, I nest a list with Tab in the composer and copy a sent message with its Markdown formatting', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await openChat(page, 'Welcome')
+    const copiedSelectionOf = async (selected: ReturnType<typeof page.locator>, from: number, to?: number) => {
+      await selected.evaluate(
+        (element, [start, end]) => {
+          const range = document.createRange()
+          const text = element.firstChild
+          if (end === undefined || !text) range.selectNodeContents(element)
+          else {
+            range.setStart(text, start ?? 0)
+            range.setEnd(text, end)
+          }
+          document.getSelection()?.removeAllRanges()
+          document.getSelection()?.addRange(range)
+        },
+        [from, to],
+      )
+      await page.keyboard.press('ControlOrMeta+c')
+      return page.evaluate(() => navigator.clipboard.readText())
+    }
+
+    await test.step('nests a list item under the one above with Tab and brings it back with Shift+Tab', async () => {
+      await composerOf(page).fill('**Bold** and *it*\n\n- first\n- nested')
+      await composerOf(page).press('Tab')
+      await expect(composerOf(page)).toHaveValue('**Bold** and *it*\n\n- first\n  - nested')
+      await composerOf(page).press('Shift+Tab')
+      await expect(composerOf(page)).toHaveValue('**Bold** and *it*\n\n- first\n- nested')
+      await composerOf(page).press('Tab')
+      await expect(composerOf(page)).toBeFocused()
+    })
+
+    await test.step('copies the whole sent message as Markdown and pastes it back into the composer', async () => {
+      await sendButtonOf(page).click()
+      const sent = messageContaining(page, 'nested')
+      await expect(sent.locator('strong')).toHaveText('Bold')
+      const markdown = sent.locator('strong').locator('xpath=ancestor::div[1]')
+      expect(await copiedSelectionOf(markdown, 0)).toBe('**Bold** and *it*\n\n- first\n  - nested')
+      await composerOf(page).focus()
+      await page.keyboard.press('ControlOrMeta+v')
+      await expect(composerOf(page)).toHaveValue('**Bold** and *it*\n\n- first\n  - nested')
+    })
+
+    await test.step('copies part of a bold word still bold', async () => {
+      expect(await copiedSelectionOf(messageContaining(page, 'nested').locator('strong'), 1, 4)).toBe('**old**')
+    })
+  })
+
   test('As a member, I bring back my last sent message with the Up arrow in an empty composer', async ({ page }) => {
     await openChat(page, 'Welcome')
     await sendMessage(page, 'Standup moved to 11')
