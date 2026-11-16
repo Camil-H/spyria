@@ -90,11 +90,13 @@ const serveGateway = (modelCall: () => ModelCall) =>
 export const createSpyriaAgentRelay = ({
   gapMilliseconds = 20,
   startFails = false,
+  advertisesSteering = true,
   holdUrl,
   modelCall,
 }: {
   gapMilliseconds?: number
   startFails?: boolean
+  advertisesSteering?: boolean
   holdUrl?: string
   modelCall?: () => ModelCall
 } = {}) => {
@@ -111,7 +113,7 @@ export const createSpyriaAgentRelay = ({
   ])
     writeFileSync(
       join(shims, command),
-      `#!/bin/sh\necho ${flavour} >> ${launches}\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}${holdUrl ? `STUB_HOLD_URL='${holdUrl}' ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
+      `#!/bin/sh\necho ${flavour} >> ${launches}\nexec env ${startFails ? 'STUB_FAIL_START=1 ' : ''}${advertisesSteering ? '' : 'STUB_NO_STEERING=1 '}${gateway ? `STUB_GATEWAY=http://localhost:${gateway.port} ` : ''}${holdUrl ? `STUB_HOLD_URL='${holdUrl}' ` : ''}STUB_FLAVOUR=${flavour} STUB_STATE=${directory}/sessions STUB_GAP_MS=${gapMilliseconds} node ${repositoryRoot}apps/agent/fixtures/stub-acp-agent.mjs "$@"\n`,
       { mode: 0o755 },
     )
   const agents = new Map<string, Promise<Agent>>()

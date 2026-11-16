@@ -528,7 +528,7 @@ export const promptAgent = async (
   const prompt = await transactor.run((unitOfWork) =>
     beginAgentTurn(unitOfWork, chatId, isRetry ? messageId : undefined),
   )
-  if (!prompt) return localSession ? undefined : transactor.run(({ agentJobs }) => agentJobs.joinTurn(chatId))
+  if (!prompt) return transactor.run(({ agentJobs }) => agentJobs.joinTurn(chatId))
   if (prompt.authorId) dependencies.onTurnPrompter?.(chat, prompt.authorId)
   let conversation: AgentConversation
   try {
