@@ -62,7 +62,6 @@ jobs:
       - run: bun run check:locks
 
   secrets:
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,10 +71,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      - if: github.event_name != 'workflow_dispatch'
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_ENABLE_COMMENTS: false
+      - if: github.event_name == 'workflow_dispatch'
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/repository" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git --redact --log-opts=origin/develop..HEAD /repository
 
   unit:
     needs: plan
