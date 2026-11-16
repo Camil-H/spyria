@@ -28,7 +28,7 @@ import { continueLoopAfterTurn, judgeLoopCi, pollLoopChecks, runLoop } from '../
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import type { BrowserViewer } from '../operations/browser-sessions.ts'
-import { callDevLoopTool, githubToolsOf } from '../operations/call-dev-loop-tool.ts'
+import { callDevLoopTool, devLoopToolsOf } from '../operations/call-dev-loop-tool.ts'
 import { callGitHubTool } from '../operations/call-github-tool.ts'
 import { callSpyriaTool } from '../operations/call-spyria-tool.ts'
 import { awaitTask, checkTask, delegateTask } from '../operations/delegate-task.ts'
@@ -198,7 +198,7 @@ export const createAgentHandlers = ({
       callSpyriaTool(dependenciesOf(input.chat.workspaceId), input),
     callDevLoopTool: (input: Parameters<typeof callDevLoopTool>[1]) =>
       callDevLoopTool(dependenciesOf(input.chat.workspaceId), input),
-    githubToolsOf: (chat: AgentChat) => githubToolsOf(dependenciesOf(chat.workspaceId), chat),
+    devLoopToolsOf: (chat: AgentChat) => devLoopToolsOf(dependenciesOf(chat.workspaceId), chat),
     callGitHubTool: (input: Parameters<typeof callGitHubTool>[1]) =>
       callGitHubTool(dependenciesOf(input.chat.workspaceId), input),
     githubToolsInChat: (chat: AgentChat, member: MemberId) =>
