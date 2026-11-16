@@ -114,10 +114,10 @@ test('Tab and Shift+Tab move every selected item and keep the selection', () => 
   expect(indented('- first\n  - {second\n    - nested}', true)).toBe('- first\n- {second\n  - nested}')
 })
 
-test('an item that cannot move keeps Tab in the message box, and a line outside a list leaves Tab alone', () => {
-  expect(indented('- fir{}st')).toBe('- fir{}st')
-  expect(indented('- fir{}st', true)).toBe('- fir{}st')
-  expect(indented('- first\n  - nested\n- sec{}ond', true)).toBe('- first\n  - nested\n- sec{}ond')
+test('Tab leaves the message box as usual on an item that cannot move and on a line outside a list', () => {
+  expect(indented('- fir{}st')).toBeUndefined()
+  expect(indented('- fir{}st', true)).toBeUndefined()
+  expect(indented('- first\n  - nested\n- sec{}ond', true)).toBeUndefined()
   expect(indented('plain {}text')).toBeUndefined()
   expect(indented('- {first\nplain} text')).toBeUndefined()
 })

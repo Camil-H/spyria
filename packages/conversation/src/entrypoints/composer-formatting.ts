@@ -151,7 +151,7 @@ export const indentedList = ({ text, start, end }: TextSelection, isOutdent: boo
   if (!first || items.length !== lines.length) return undefined
   const earlierLines = text.slice(0, firstLineStart).split('\n').slice(0, -1)
   const shift = nestedIndentOf(earlierLines, first, isOutdent) - first.indent
-  if (shift === 0) return { start, end: start, insert: '', selectStart: start, selectEnd: end }
+  if (shift === 0) return undefined
   const shifted = items.map(
     ({ text: line, indent }) => `${' '.repeat(Math.max(0, indent + shift))}${line.slice(indent)}`,
   )
