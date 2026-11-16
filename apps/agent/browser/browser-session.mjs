@@ -1,10 +1,14 @@
-import { readFile, stat } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 const commandTimeoutMilliseconds = 30_000
 const maximumWaitSeconds = 30
 const maximumSnapshotCharacters = 60_000
 const maximumResultCharacters = 20_000
-const maximumDownloadBytes = 3 * 1024 * 1024
+const maximumDownloadBytes = 4 * 1024 ** 3
+const maximumFrameCharacters = 2 * 1024 * 1024
+const fileIdPattern = /^[a-f0-9]{32}$/
 const maximumScreenshotSide = 10_000
 const maximumTitleCharacters = 300
 const screencastQuality = 70
@@ -21,6 +25,16 @@ export const screenshotOptionsOf = (fullPage, page) => {
     height: Math.min(page.height, maximumScreenshotSide),
   }
   return { type: 'jpeg', quality: 70, fullPage, ...(isCut && { clip }) }
+}
+
+const newFileId = () => randomBytes(16).toString('hex')
+
+export const removeFilesOlderThan = async (directory, maximumAgeMilliseconds, now = Date.now()) => {
+  for (const name of await readdir(directory).catch(() => [])) {
+    const path = join(directory, name)
+    const { mtimeMs } = await stat(path).catch(() => ({ mtimeMs: now }))
+    if (now - mtimeMs >= maximumAgeMilliseconds) await unlink(path).catch(() => {})
+  }
 }
 
 const firstLineOf = (error) => String(error?.message ?? error).split('\n')[0]
@@ -43,7 +57,7 @@ const wouldSubmitInPage = (element, { action, key = '', submitPattern }) => {
   return control.tagName !== 'A' && new RegExp(submitPattern, 'i').test(label)
 }
 
-export const createBrowserSession = ({ context, send, settings, blockOf }) => {
+export const createBrowserSession = ({ context, send, settings, blockOf, filesDirectory }) => {
   let activePage
   let screencast
   let isWatched = false
@@ -68,6 +82,8 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
     screencast = current
     session.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
       if (screencast !== current) return
+      if (data.length > maximumFrameCharacters)
+        return void session.send('Page.screencastFrameAck', { sessionId }).catch(() => {})
       current.pendingAcknowledgement = sessionId
       send({ type: 'frame', data, width: metadata.deviceWidth, height: metadata.deviceHeight })
     })
@@ -98,13 +114,14 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
       return send({ type: 'notice', text: 'Downloads are turned off in this workspace' })
     }
     const path = await download.path()
-    if ((await stat(path)).size > maximumDownloadBytes) {
-      send({ type: 'notice', text: `${download.suggestedFilename()} is over 3 MB, so it was not downloaded` })
-    } else {
-      const data = (await readFile(path)).toString('base64')
-      send({ type: 'download', name: download.suggestedFilename(), data })
+    const { size } = await stat(path)
+    if (size > maximumDownloadBytes) {
+      await download.delete()
+      return send({ type: 'notice', text: `${download.suggestedFilename()} is over 4 GB, so it was not downloaded` })
     }
-    await download.delete()
+    const file = newFileId()
+    await rename(path, join(filesDirectory, file))
+    send({ type: 'download', file, name: download.suggestedFilename(), size })
   }
   const watchPage = (page) => {
     page.on('framenavigated', (frame) => {
@@ -214,8 +231,12 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
             height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
           }))
         : { width: 0, height: 0 }
-      const image = await page.screenshot(screenshotOptionsOf(fullPage === true, size))
-      return { text: `Screenshot of ${await describe(page)}`, image: image.toString('base64') }
+      const imageFile = newFileId()
+      await writeFile(
+        join(filesDirectory, imageFile),
+        await page.screenshot(screenshotOptionsOf(fullPage === true, size)),
+      )
+      return { text: `Screenshot of ${await describe(page)}`, imageFile }
     },
     would_submit: async ({ action, ref, key }) =>
       (await elementOf(ref))
@@ -292,9 +313,17 @@ export const createBrowserSession = ({ context, send, settings, blockOf }) => {
       await stopScreencast()
     },
     frame_ack: acknowledgeFrame,
+    file_read: async ({ file }) => {
+      if (fileIdPattern.test(String(file))) await unlink(join(filesDirectory, String(file))).catch(() => {})
+    },
   }
   for (const page of context.pages()) watchPage(page)
   return {
+    reset: async () => {
+      isWatched = false
+      fileChooser = undefined
+      await stopScreencast()
+    },
     start: async () => {
       await activate(context.pages()[0] ?? (await context.newPage()))
     },

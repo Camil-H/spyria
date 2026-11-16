@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createBrowserSession } from './browser-session.mjs'
+import { createBrowserSession, removeFilesOlderThan } from './browser-session.mjs'
 import { blockReasons, createPolicyProxy } from './network-policy.mjs'
-import { createLineSender } from './output-lines.mjs'
+import { createLineWriter } from './output-lines.mjs'
 
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= new URL('./chromium', import.meta.url).pathname
 const { chromium } = await import('playwright-core')
@@ -11,13 +11,16 @@ const { chromium } = await import('playwright-core')
 const display = ':99'
 const screenSize = '2560x1600x24'
 const initialWindow = { width: 1280, height: 800 }
-const profileDirectory = process.env.SPYRIA_BROWSER_PROFILE ?? '/var/lib/spyria/browser/profile'
+const browserDirectory = process.env.SPYRIA_BROWSER_DIRECTORY ?? '/var/lib/spyria/browser'
+const profileDirectory = `${browserDirectory}/profile`
+const filesDirectory = `${browserDirectory}/files`
+const fileLifetimeMilliseconds = 30 * 60_000
+const fileSweepMilliseconds = 5 * 60_000
 const displayWaitMilliseconds = 10_000
 const blockMemoryMilliseconds = 30_000
 const hostMachineName = 'host.docker.internal'
 
-const lines = createLineSender({ write: (line) => process.stdout.write(`${line}\n`) })
-const { send } = lines
+const send = createLineWriter({ write: (line) => process.stdout.write(`${line}\n`) })
 const fail = (error) => {
   send({ type: 'failed', error: String(error?.message ?? error).split('\n')[0] })
   process.exit(1)
@@ -26,6 +29,7 @@ const fail = (error) => {
 const messages = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY })
 const pending = []
 let receive = (message) => pending.push(message)
+let reset = async () => {}
 let current
 let isReady = false
 const firstSettings = new Promise((resolve) => {
@@ -36,10 +40,9 @@ const firstSettings = new Promise((resolve) => {
     } catch {
       return
     }
-    if (message?.type === 'part_ack') return lines.acknowledgePart()
     if (message?.type === 'settings') {
       current = message.settings
-      if (isReady) send({ type: 'ready' })
+      if (isReady) void reset().finally(() => send({ type: 'ready' }))
       return resolve()
     }
     receive(message)
@@ -73,12 +76,15 @@ const blockOf = (host) => {
 const isHostMachineBlocked =
   current.blockInternalNetworks && !current.allowedInternalAddresses.includes(hostMachineName)
 
+mkdirSync(filesDirectory, { recursive: true })
+setInterval(() => void removeFilesOlderThan(filesDirectory, fileLifetimeMilliseconds), fileSweepMilliseconds)
 await startDisplay().catch(fail)
 const context = await chromium
   .launchPersistentContext(profileDirectory, {
     headless: false,
     viewport: null,
     acceptDownloads: true,
+    downloadsPath: filesDirectory,
     ignoreDefaultArgs: ['--enable-automation'],
     env: { ...process.env, DISPLAY: display },
     args: [
@@ -97,7 +103,8 @@ const context = await chromium
   .catch(fail)
 context.on('close', () => fail(new Error('The browser closed')))
 
-const session = createBrowserSession({ context, send, settings: () => current, blockOf })
+const session = createBrowserSession({ context, send, settings: () => current, blockOf, filesDirectory })
+reset = session.reset
 await session.start().catch(fail)
 receive = (message) => void session.receive(message)
 for (const message of pending.splice(0)) receive(message)
