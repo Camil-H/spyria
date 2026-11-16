@@ -49,14 +49,43 @@ const speakerKindOf = (message: QuotedMessage) =>
 const speakerOf = (message: QuotedMessage) =>
   `${message.authorName} (${speakerKindOf(message)}) · ${quotedTimeOf(message.createdAt)}`
 
+export const quotedMessageMaxLength = 8_000
+export const quotedHistoryMaxLength = 60_000
+
+const firstParagraphOf = (text: string) => text.split('\n\n', 1)[0] ?? text
+
+const shortenedOf = (text: string) =>
+  text.length > quotedMessageMaxLength
+    ? `${text.slice(0, quotedMessageMaxLength)}\n… (${text.length - quotedMessageMaxLength} more characters left out)`
+    : text
+
+const quoteOf = (message: QuotedMessage) =>
+  `${speakerOf(message)}\n${shortenedOf(isDevLoopPrompt(message) ? firstParagraphOf(message.body) : withAttachmentsNoted(message))}`
+
+const leftOutLineOf = (count: number) =>
+  count === 1
+    ? '1 earlier message is left out here; read it in the source chat.'
+    : `${count} earlier messages are left out here; read them in the source chat.`
+
+const newestWithin = (quotes: readonly string[], room: number) => {
+  let firstKept = quotes.length
+  for (let used = 0; firstKept > 0; firstKept -= 1) {
+    used += quotes[firstKept - 1]?.length ?? 0
+    if (used > room) break
+  }
+  return quotes.slice(firstKept)
+}
+
+const withinHistoryLimit = ([first, ...rest]: readonly string[]) => {
+  if (first === undefined) return []
+  const newest = newestWithin(rest, quotedHistoryMaxLength - first.length)
+  const leftOut = rest.length - newest.length
+  return [first, ...(leftOut > 0 ? [leftOutLineOf(leftOut)] : []), ...newest]
+}
+
 export const seedMessageBodyOf = (header: string, messages: readonly QuotedMessage[]) =>
   MessageBody(
-    [
-      header,
-      ...messages
-        .filter((message) => message.status === 'live')
-        .map((message) => `${speakerOf(message)}\n${withAttachmentsNoted(message)}`),
-    ].join('\n\n'),
+    [header, ...withinHistoryLimit(messages.filter((message) => message.status === 'live').map(quoteOf))].join('\n\n'),
   )
 
 const inReplyToOf = (quoted: QuotedMessage) =>
