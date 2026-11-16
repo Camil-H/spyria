@@ -19,7 +19,14 @@ import { mentionCandidatesOf, mentionQueryAt, mentionTextOf } from '../domain/me
 import { getDraft } from '../queries/get-draft.ts'
 import { getLastSentText } from '../queries/get-last-sent-text.ts'
 import { getMentionableNames } from '../queries/get-mentionable-names.ts'
-import { continuedList, formattedText, formattingOfKey, linkedPaste, type TextEdit } from './composer-formatting.ts'
+import {
+  continuedList,
+  formattedText,
+  formattingOfKey,
+  indentedList,
+  linkedPaste,
+  type TextEdit,
+} from './composer-formatting.ts'
 import { type ComposerQuote, useConversationCommands } from './providers.tsx'
 
 const isBlank = (text: string) => text.trim() === ''
@@ -317,6 +324,10 @@ export const Composer = ({
     }
     if (event.key === 'Enter' && !event.shiftKey && !isPrimary && !isOtherModifier && !event.nativeEvent.isComposing) {
       if (edit(textarea, continuedList(selectionOf(textarea)))) event.preventDefault()
+      return
+    }
+    if (event.key === 'Tab' && isPlainKey) {
+      if (edit(textarea, indentedList(selectionOf(textarea), event.shiftKey))) event.preventDefault()
       return
     }
     const formatting = formattingOfKey({ key: event.key, isPrimary, isShift: event.shiftKey, isOtherModifier })
