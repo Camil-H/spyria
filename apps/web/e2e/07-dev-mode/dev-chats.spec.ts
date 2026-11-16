@@ -57,7 +57,7 @@ test.describe('Dev chats', () => {
     const newBranchFork = await forkInto(`New branch from ${workingBranch}`)
     await expect(branchOf(page)).toHaveText(`spyria/fix-totals-fork-${newBranchFork.replace(/-/g, '').slice(0, 6)}`)
     await mainOf(page).getByRole('link', { name: 'Forked from Fix totals' }).click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Fix totals' })).toBeVisible()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Fix totals', exact: true })).toBeVisible()
     await forkInto(`Keep branch ${workingBranch}`)
     await expect(branchOf(page)).toHaveText(workingBranch)
   })
