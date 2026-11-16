@@ -79,7 +79,7 @@ A custom chat role always includes `chat.read`. It can be given in a chat only b
 
 ## Members and invites
 
-The **Members** tab lists the members as a table (name and address, workspace role, and a menu with **Sign out everywhere** and **Remove from workspace**), then the pending invites with **Revoke**. **Invite member** opens a dialog (email and role).
+The **Members** tab lists the members as a table (name and address, workspace role, and a menu with **Sign out everywhere** and **Remove from workspace**), then the pending invites with **Revoke**. **Invite member** opens a dialog (email and role). Inviting, revoking an invite, changing a role, removing a member, signing a member out everywhere and transferring a chat each confirm what they did in a toast that fades after 5 seconds.
 
 - Inviting is an allow-list of exact addresses: no account is created and no email is sent, so tell the person yourself. An invite works at once. The invited person signs in at that address, with their own account or, when the workspace enforces SSO, through its provider; their first sign-in accepts every open invite for that address. Nobody joins a workspace any other way.
 - An invite expires after 7 days and can be revoked. There is one pending invite per address; inviting a current member is refused. Email addresses are compared without regard to case.

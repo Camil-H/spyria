@@ -9,6 +9,7 @@ import {
   ghostButtonClass,
   labelClass,
   useGuardedAction,
+  useNotifiedRun,
 } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { getMembers } from '../queries/get-members.ts'
@@ -76,10 +77,14 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
   const view = useQuery(getMembers, workspaceId, chatId, viewerId)
   const commands = usePanelCommands()
   const { errorMessage, isPending, run } = useGuardedAction()
+  const runNotified = useNotifiedRun(run)
   const [isInviting, setIsInviting] = useState(false)
   if (!view) return null
   const target = { workspaceId, chatId }
   const roleOptions = (roles: typeof view.assignableRoles) => roles.map(({ id, name }) => ({ value: id, label: name }))
+  const roleNameOf = (roleId: string) => view.assignableRoles.find((role) => role.id === roleId)?.name ?? roleId
+  const nameOf = (memberId: MemberId) =>
+    view.invitees.find((invitee) => invitee.memberId === memberId)?.name ?? 'Member'
   const canInvite = view.invitableRoles.length > 0 && view.invitees.length > 0
   return (
     <div className="flex flex-col gap-4">
@@ -95,7 +100,10 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                   value={roleId}
                   disabled={isPending}
                   onChange={(event) =>
-                    run(() => commands.changeMemberRole({ ...target, memberId, roleId: event.target.value }))
+                    runNotified(
+                      () => commands.changeMemberRole({ ...target, memberId, roleId: event.target.value }),
+                      `${name} is now ${roleNameOf(event.target.value)}`,
+                    )
                   }
                 >
                   {optionsOf(roleOptions(view.assignableRoles))}
@@ -106,7 +114,9 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                     aria-label={`Remove ${name}`}
                     className={removeButtonClass}
                     disabled={isPending}
-                    onClick={() => run(() => commands.removeMember({ ...target, memberId }))}
+                    onClick={() =>
+                      runNotified(() => commands.removeMember({ ...target, memberId }), `${name} removed from the chat`)
+                    }
                   >
                     Remove
                   </button>
@@ -123,7 +133,12 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
           <InviteForm
             invitees={view.invitees.map(({ memberId, name }) => ({ value: memberId, label: name }))}
             roles={roleOptions(view.invitableRoles)}
-            invite={(memberId, roleId) => run(() => commands.inviteMember({ ...target, memberId, roleId }))}
+            invite={(memberId, roleId) =>
+              runNotified(
+                () => commands.inviteMember({ ...target, memberId, roleId }),
+                `${nameOf(memberId)} added to the chat`,
+              )
+            }
             isPending={isPending}
             onClose={() => setIsInviting(false)}
           />
@@ -137,7 +152,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
           type="button"
           className={`${ghostButtonClass} self-start`}
           disabled={isPending}
-          onClick={() => run(() => commands.leaveChat(target))}
+          onClick={() => runNotified(() => commands.leaveChat(target), 'You left the chat')}
         >
           Leave chat
         </button>

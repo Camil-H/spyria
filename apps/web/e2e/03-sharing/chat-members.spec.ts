@@ -20,6 +20,7 @@ import {
   sendMessage,
   tabPanelOf,
   test,
+  toastOf,
 } from './fixtures'
 
 const readerNotice = 'You can read this chat'
@@ -49,6 +50,7 @@ test.describe('Chat members', () => {
     await newRuntimeChat(page, 'Bob is invited')
     await panelTabOf(page, 'Members').click()
     await invite(page, 'Bob', 'Reader')
+    await expect(toastOf(page).getByRole('status')).toHaveText('Bob added to the chat')
     await expectMembers(page, [
       ['Alice', 'Owner'],
       ['Bob', 'Reader'],
@@ -71,6 +73,7 @@ test.describe('Chat members', () => {
 
     await panelTabOf(page, 'Members').click()
     await tabPanelOf(page).getByLabel('Role of Bob').selectOption({ label: 'Prompter' })
+    await expect(toastOf(page).getByRole('status')).toHaveText('Bob is now Prompter')
     await expect(mainOf(bobPage)).not.toContainText(readerNotice)
     await sendMessage(bobPage, 'Bob asks now')
     await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
@@ -97,6 +100,7 @@ test.describe('Chat members', () => {
 
     await panelTabOf(page, 'Members').click()
     await tabPanelOf(page).getByRole('button', { name: 'Remove Bob' }).click()
+    await expect(toastOf(page).getByRole('status')).toHaveText('Bob removed from the chat')
     await expectMembers(page, [['Alice', 'Owner']])
     await expect(chatLinkOf(bobPage, 'Bob is removed')).toHaveCount(0)
     await expect(mainOf(bobPage)).toContainText('Select a chat')
@@ -148,6 +152,7 @@ test.describe('Chat members', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openPanelTab(bobPage, 'Bob leaves', 'Members')
     await tabPanelOf(bobPage).getByRole('button', { name: 'Leave chat' }).click()
+    await expect(toastOf(bobPage).getByRole('status')).toHaveText('You left the chat')
     await expect(chatLinkOf(bobPage, 'Bob leaves')).toHaveCount(0)
     await expect(mainOf(bobPage)).toContainText('Select a chat')
     await expectMembers(page, [['Alice', 'Owner']])

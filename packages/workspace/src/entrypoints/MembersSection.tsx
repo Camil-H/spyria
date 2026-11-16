@@ -17,6 +17,7 @@ import {
   rowListClass,
   smallGhostButtonClass,
   useGuardedAction,
+  useNotifiedRun,
 } from '@spyria/ui'
 import { type SubmitEvent, useState } from 'react'
 import { listInvitations, listMembers, type WorkspaceMember } from '../queries/list-members.ts'
@@ -72,10 +73,15 @@ const InviteDialog = ({
   const commands = useWorkspaceCommands()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<string>(memberRoleId)
-  const { errorMessage, isPending, run } = useGuardedAction()
+  const { errorMessage, isPending, run: runGuarded } = useGuardedAction()
+  const run = useNotifiedRun(runGuarded)
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
-    if (await run(() => commands.inviteMember({ workspaceId, email, role }))) onClose()
+    const isInvited = await run(
+      () => commands.inviteMember({ workspaceId, email, role }),
+      `${email} is invited and gets in the next time they sign in`,
+    )
+    if (isInvited) onClose()
   }
   return (
     <Dialog label="Invite member" onClose={onClose}>
@@ -116,7 +122,8 @@ const PendingInvites = ({
   roleNameOf: (roleId: string) => string
 }) => {
   const commands = useWorkspaceCommands()
-  const { errorMessage, isPending, run } = useGuardedAction()
+  const { errorMessage, isPending, run: runGuarded } = useGuardedAction()
+  const run = useNotifiedRun(runGuarded)
   return (
     <LabelledSection title={`Pending invites · ${invitations.length}`} Heading="h3" titleClass="text-sm font-medium">
       <ul aria-label="Pending invites" className={rowListClass}>
@@ -130,7 +137,12 @@ const PendingInvites = ({
               aria-label={`Revoke the invite of ${invitation.email}`}
               className={smallGhostButtonClass}
               disabled={isPending}
-              onClick={() => run(() => commands.revokeInvite({ workspaceId, invitationId: invitation.id }))}
+              onClick={() =>
+                run(
+                  () => commands.revokeInvite({ workspaceId, invitationId: invitation.id }),
+                  `Invite of ${invitation.email} revoked`,
+                )
+              }
             >
               Revoke
             </button>
@@ -158,12 +170,21 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
   const [isInviting, setIsInviting] = useState(false)
   const [removing, setRemoving] = useState<WorkspaceMember | null>(null)
   const [signingOut, setSigningOut] = useState<WorkspaceMember | null>(null)
-  const { errorMessage, isPending, run } = useGuardedAction()
+  const { errorMessage, isPending, run: runGuarded } = useGuardedAction()
+  const run = useNotifiedRun(runGuarded)
   const remove = async (member: WorkspaceMember) => {
-    if (await run(() => commands.removeMember({ workspaceId, memberId: member.id }))) setRemoving(null)
+    const isRemoved = await run(
+      () => commands.removeMember({ workspaceId, memberId: member.id }),
+      `${member.name} removed from the workspace`,
+    )
+    if (isRemoved) setRemoving(null)
   }
   const signOutEverywhere = async (member: WorkspaceMember) => {
-    if (await run(() => commands.endMemberSessions({ workspaceId, memberId: member.id }))) setSigningOut(null)
+    const isSignedOut = await run(
+      () => commands.endMemberSessions({ workspaceId, memberId: member.id }),
+      `${member.name} is signed out everywhere`,
+    )
+    if (isSignedOut) setSigningOut(null)
   }
   return (
     <section aria-label="Members" className="flex max-w-3xl flex-col gap-4">
@@ -199,7 +220,10 @@ export const MembersSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
                     roles={grantableRoles}
                     isDisabled={isPending}
                     onChange={(role) =>
-                      run(() => commands.changeMemberRole({ workspaceId, memberId: member.id, role }))
+                      run(
+                        () => commands.changeMemberRole({ workspaceId, memberId: member.id, role }),
+                        `${member.name} is now ${roleNameOf(role)}`,
+                      )
                     }
                   />
                 ) : (
