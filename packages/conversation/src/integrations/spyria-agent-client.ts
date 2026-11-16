@@ -8,6 +8,7 @@ import {
   type PiLaunch,
   type PiModel,
   type RepositoryCheckout,
+  type SavedAttachment,
   type SubConversation,
 } from '../contracts/agent.ts'
 import type { AgentEvent } from '../domain/agent-events.ts'
@@ -26,6 +27,7 @@ const bundleTimeoutMilliseconds = 110_000
 const attachmentTimeoutMilliseconds = 60_000
 const githubToolTimeoutSeconds = 120
 const notFoundStatus = 404
+const conflictStatus = 409
 
 const send = (
   endpoint: AgentEndpoint,
@@ -71,6 +73,11 @@ const call = async (
   if (response.status >= 300) throw new Error(`spyria-agent answered ${method} ${path} with ${response.status}`)
   return JSON.parse(response.body || '{}') as Record<string, unknown>
 }
+
+const promptContentOf = (text: string, attachments: readonly SavedAttachment[]) => [
+  { type: 'text', text },
+  ...attachments.map(({ path, mediaType }) => ({ type: 'attachment', path, mimeType: mediaType })),
+]
 
 const spyriaAgentEventOf = (data: string): AgentEvent | undefined => {
   try {
@@ -247,13 +254,19 @@ export const createSpyriaAgentClient = (): AgentClient => ({
   sendMessage: async (conversation, text, promptId, attachments = []) => {
     await call(conversation, 'POST', `/api/conversations/${conversation.conversationId}/events`, {
       role: 'user',
-      content: [
-        { type: 'text', text },
-        ...attachments.map(({ path, mediaType }) => ({ type: 'attachment', path, mimeType: mediaType })),
-      ],
+      content: promptContentOf(text, attachments),
       run: true,
       ...(promptId && { prompt_id: promptId }),
     })
+  },
+  joinTurn: async (conversation, text, promptId, attachments = []) => {
+    const response = await send(conversation, 'POST', `/api/conversations/${conversation.conversationId}/joins`, {
+      content: promptContentOf(text, attachments),
+      prompt_id: promptId,
+    })
+    if (response.status === conflictStatus) return false
+    if (response.status >= 300) throw new Error(`spyria-agent answered the join with ${response.status}`)
+    return true
   },
   saveAttachment: async (conversation, { id, name, content }) => {
     const saved = await call(

@@ -12,6 +12,7 @@ import {
   isApprovalQuestion,
   isAuthRequiredError,
   isStoredAgentEvent,
+  promptJoinedIdOf,
   type QuestionFrame,
   type RepositoryCheckouts,
   type SessionClassifier,
@@ -223,6 +224,7 @@ export const createAgentBridge = ({
           streamedSeqs.delete(keyOf(chat))
           Object.assign(socket, {
             promptId: null,
+            replyToId: null,
             streamedText: '',
             segment: undefined,
             drainingPromptId: socket.endedPromptId !== promptId ? promptId : null,
@@ -268,7 +270,7 @@ export const createAgentBridge = ({
       if (current?.conversationId === conversation.conversationId) {
         if (promptId && current.promptId !== promptId) {
           if (current.promptId) endTurn(chat, current.promptId)
-          Object.assign(current, { promptId, streamedText: '', segment: undefined })
+          Object.assign(current, { promptId, replyToId: null, streamedText: '', segment: undefined })
         }
         return current.isReady
       }
@@ -279,6 +281,7 @@ export const createAgentBridge = ({
         conversationId: conversation.conversationId,
         isReady: Promise.race([ready.promise, Bun.sleep(readyTimeoutMilliseconds)]),
         promptId: promptId as string | null,
+        replyToId: null as string | null,
         streamedText: '',
         isTextShown: false,
         segment: undefined as Segment | undefined,
@@ -305,16 +308,25 @@ export const createAgentBridge = ({
         else forgetStreamOf(chat)
       }
       sockets.set(keyOf(chat), chatSocket)
+      if (promptId)
+        void transact((tx) =>
+          tx.run(zql.chats.where('workspaceId', chat.workspaceId).where('id', chat.chatId).one()),
+        ).then((row) => {
+          const isSameTurn = row?.agentTurnMessageId === chatSocket.promptId && chatSocket.replyToId === null
+          if (isSameTurn) chatSocket.replyToId = row?.agentTurnReplyToId ?? null
+        }, logFailure(chat))
+      const shownPromptIdOf = () => chatSocket.replyToId ?? chatSocket.promptId
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
         const promptAtEvent = chatSocket.promptId
+        const shownAtEvent = turnPromptId ?? shownPromptIdOf()
         recording = recording
           .then(() => handlers.recordEvent(chat, event, turnPromptId))
           .then((recorded) => {
-            if (recorded?.isReplyStored && (turnPromptId ?? promptAtEvent))
-              broadcast(chat, { promptId: turnPromptId ?? promptAtEvent, storedId: event.id })
+            if (recorded?.isReplyStored && shownAtEvent) broadcast(chat, { promptId: shownAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
             if (recorded.promptId !== null) return
+            chatSocket.replyToId = null
             if (promptAtEvent) endTurn(chat, promptAtEvent)
             forgetStreamOf(chat)
             chatSocket.streamedText = ''
@@ -372,7 +384,7 @@ export const createAgentBridge = ({
           const update = event.update as { sessionUpdate?: string; questionId?: string } | undefined
           if (update?.sessionUpdate === 'question') {
             chatSocket.questions.set(String(update.questionId), update)
-            broadcast(chat, { promptId: chatSocket.promptId, question: update })
+            broadcast(chat, { promptId: shownPromptIdOf(), question: update })
             return
           }
           if (update?.sessionUpdate === 'events_lost')
@@ -406,6 +418,11 @@ export const createAgentBridge = ({
           }
           if (update?.sessionUpdate === 'question_answered' || update?.sessionUpdate === 'question_closed')
             chatSocket.questions.delete(String(update.questionId))
+          const joinedPromptId = promptJoinedIdOf(event)
+          if (joinedPromptId && chatSocket.promptId && !chatSocket.drainingPromptId) {
+            flushSegment(event)
+            Object.assign(chatSocket, { replyToId: joinedPromptId, streamedText: '' })
+          }
           const endedPromptId = turnEndPromptIdOf(event)
           if (endedPromptId && endedPromptId !== chatSocket.promptId && endedPromptId !== chatSocket.drainingPromptId)
             return record(event, messageId(endedPromptId))
@@ -435,7 +452,7 @@ export const createAgentBridge = ({
               const isSnapshot = !chatSocket.isTextShown
               chatSocket.isTextShown = true
               broadcast(chat, {
-                promptId: chatSocket.promptId,
+                promptId: shownPromptIdOf(),
                 text: isSnapshot ? chatSocket.streamedText : text,
                 ...(isSnapshot && { isSnapshot }),
                 ...(isReasoning && { isReasoning }),

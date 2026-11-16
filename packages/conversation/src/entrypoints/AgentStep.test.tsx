@@ -18,6 +18,7 @@ const stepMessageOf = (step: Step): ConversationMessage => ({
   step,
   replyToId: messageId('message-prompt'),
   canEdit: false,
+  isQueued: false,
   isDeleted: false,
   isEdited: false,
   isRunning: true,

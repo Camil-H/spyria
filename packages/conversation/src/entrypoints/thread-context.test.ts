@@ -14,6 +14,7 @@ const messageOf = (message: Partial<ConversationMessage>): ConversationMessage =
   step: null,
   replyToId: null,
   canEdit: false,
+  isQueued: false,
   isDeleted: false,
   isEdited: false,
   isRunning: false,

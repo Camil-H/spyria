@@ -119,6 +119,7 @@ export type ChatRow = {
   baseBranch: string | null
   originChatId: ChatId | null
   agentTurnMessageId: MessageId | null
+  agentTurnReplyToId: MessageId | null
   contextTokens: number | null
   contextWindow: number | null
   toolServersOff: readonly string[]
@@ -139,6 +140,7 @@ export type MessageRow = {
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
+  pickedUpAt: string | null
   needsReply: boolean
 }
 export type DraftRow = { workspaceId: WorkspaceId; chatId: ChatId; memberId: MemberId; text: string }

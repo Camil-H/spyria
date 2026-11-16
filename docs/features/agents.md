@@ -6,7 +6,12 @@ This page explains what happens in a runtime chat: which agent (harness) runs, h
 
 A runtime chat pairs a conversation with an agent running in its own sandboxed **runtime**. The first prompt starts the runtime if needed (the header shows **Starting…**, then **Ready**), and the agent's reply streams into the chat as it is written. An idle runtime goes to sleep and wakes on the next prompt; its files stay.
 
-Prompts are handled one turn at a time. A prompt sent while the agent works waits and runs after the current turn, in order. A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs. In a dev chat with quality gates on, the server also sends prompts on the owner's behalf, marked as sent by quality gates; see [Dev mode](./dev-mode.md#quality-gates).
+Prompts are handled one turn at a time. A prompt sent while the agent works shows dimmed and marked **Queued**; its author can edit or delete it until the agent picks it up, and no longer after that. Queued prompts are picked up one by one, in the order they were sent, each kept as its own message:
+
+- **Joined to the running turn:** on Pi, a message from the member who prompted the running turn is handed to that turn, and the agent reads it at its next step (after the command or tool call in progress), before the turn ends. From there the agent's output shows under that message, and the turn goes on as one turn: its model calls stay on the same member's key, and **Stop** ends it. Only the turn's own prompter can join it, because the rest of the turn runs on that member's key, and a quality gates prompt never joins or is joined.
+- **Run as the next turn:** a message from another member, a message on Claude Code or Codex (whose harness takes messages only between turns), and a message sent while the runtime is asleep or the machine offline wait for the current turn to end and start the next one. So does a message the runtime refused, or that the agent had not read yet when its turn ended with an error or was stopped; it is never lost or sent twice.
+
+A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs. In a dev chat with quality gates on, the server also sends prompts on the owner's behalf, marked as sent by quality gates; see [Dev mode](./dev-mode.md#quality-gates).
 
 The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt ([decision 0033](../decisions/0033-tools-on-the-prompters-account.md)). Every model call and tool call records both.
 
@@ -111,7 +116,7 @@ Live text streams to viewers over a WebSocket; only completed events are stored 
 
 ## Stop
 
-**Stop** interrupts the current turn, its running subagents and any pending tool approval, and closes the turn with "Stopped by *name*". It needs `session.configure` (Owner and Editor). Prompts waiting behind the turn run next.
+**Stop** interrupts the current turn, its running subagents and any pending tool approval, and closes the turn with "Stopped by *name*". It needs `session.configure` (Owner and Editor). Prompts waiting behind the turn run next, including a message handed to the turn that the agent had not read yet.
 
 ## Long conversations
 

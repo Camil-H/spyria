@@ -84,6 +84,12 @@ export const MessageActions = ({
     icon: link.feedback === 'copied' ? Check : Link,
     onClick: () => link.copy(messageLinkOf(window.location.origin, workspaceId, chatId, messageId)),
   }
+  const changeActions: Action[] = canEdit
+    ? [
+        { id: 'edit', label: 'Edit', icon: Pencil, onClick: onEdit },
+        { id: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete },
+      ]
+    : []
   const quoteActions: Action[] = onQuote ? [{ id: 'quote', label: 'Reply', icon: Reply, onClick: onQuote }] : []
   const channelActions: Action[] = [
     ...(onReplyInThread && canReply
@@ -104,14 +110,9 @@ export const MessageActions = ({
       onClick: () => copy(contextText()),
     },
     copyLinkAction,
-    ...(canEdit
-      ? [
-          { id: 'edit', label: 'Edit', icon: Pencil, onClick: onEdit },
-          { id: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete },
-        ]
-      : []),
+    ...changeActions,
   ]
-  const actions = isChannel ? channelActions : [...quoteActions, copyLinkAction]
+  const actions = isChannel ? channelActions : [...quoteActions, copyLinkAction, ...changeActions]
   const tabStopIndex = Math.min(focusedIndex, actions.length - 1)
   const buttonsOf = (toolbar: HTMLDivElement) => [...toolbar.querySelectorAll('button')]
   const followFocus = (event: FocusEvent<HTMLDivElement>) => {

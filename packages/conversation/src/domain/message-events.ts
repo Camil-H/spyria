@@ -31,6 +31,7 @@ export type ProjectedMessage = Readonly<{
   createdAt: Date
   editedAt: Date | null
   deletedAt: Date | null
+  pickedUpAt: Date | null
 }>
 
 export type PostedPayload = Pick<ProjectedMessage, 'body' | 'replyToId'> & {
@@ -69,6 +70,7 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
         createdAt,
         editedAt: null,
         deletedAt: null,
+        pickedUpAt: null,
       })
     if (type === 'message.posted' || type === 'message.replied') {
       const {
@@ -117,6 +119,15 @@ export const messagesFromEvents = (events: readonly StoredEvent[]): ProjectedMes
       const { messageId, step } = payload as StepChangedPayload
       const message = messageByKey.get(`${workspaceId}/${messageId}`)
       if (message) messageByKey.set(`${workspaceId}/${messageId}`, { ...message, step })
+    }
+    if (type === 'message.picked_up' || type === 'message.requeued') {
+      const { messageId } = payload as Pick<ChangedPayload, 'messageId'>
+      const message = messageByKey.get(`${workspaceId}/${messageId}`)
+      if (message)
+        messageByKey.set(`${workspaceId}/${messageId}`, {
+          ...message,
+          pickedUpAt: type === 'message.picked_up' ? createdAt : null,
+        })
     }
     if (type !== 'message.edited' && type !== 'message.deleted') continue
     const { messageId, body } = payload as ChangedPayload

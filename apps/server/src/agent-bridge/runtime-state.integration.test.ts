@@ -229,14 +229,14 @@ test('a Stop whose interrupt arrives after the turn already finished ends the tu
   first = await prompt(chat, 'stub:linger Almost done')
   await turnIs(chat, first)
   await delivered(relay, 1)
-  const second = await prompt(chat, 'Next one')
 
   expect(await command(aliceInAcme, 'stopAgent', chat)).toEqual(succeeded)
   await interruptSent.promise
   await holds.release('linger')
+  await jobDone('agent.interrupt', { chatId: chat })
+  const second = await prompt(chat, 'Next one')
   await answered(second)
   await turnIs(chat, null)
-  await jobDone('agent.interrupt', { chatId: chat })
   const firstReplies = (await repliesTo(first)).map((reply) => reply.body)
   expect(firstReplies.length).toBeGreaterThan(0)
   expect(firstReplies.filter((body) => body === 'Stopped by Alice').length).toBeLessThanOrEqual(1)

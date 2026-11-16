@@ -37,6 +37,7 @@ const messageByAlice: Message = {
   step: null,
   createdAt: new Date('2026-10-01T09:00:00Z'),
   editedAt: null,
+  pickedUpAt: null,
   status: 'live',
   replyToId: null,
   threadRootId: null,

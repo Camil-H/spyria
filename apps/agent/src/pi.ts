@@ -47,6 +47,16 @@ const toolOutputOf = (toolName: string, result: Json, isError: boolean, input: J
     : { content: [{ type: 'content', content: { type: 'text', text: textOf(result) } }], rawOutput: result }
 }
 
+const piMessageOf = (blocks: Json[]) => ({
+  message: blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n'),
+  images: blocks
+    .filter((block) => block.type === 'image')
+    .map(({ mimeType, data }) => ({ type: 'image', mimeType, data })),
+})
+
 export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }: AdapterHandlers) => {
   const pending = new Map<string, PromiseWithResolvers<Json>>()
   const toolInputs = new Map<string, Json>()
@@ -112,6 +122,14 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
 
   let turn: PromiseWithResolvers<Json> | undefined
   let turnsEnded: Promise<unknown> = Promise.resolve()
+  let runStarted: Promise<unknown> | undefined
+  let isPromptTakenIn = false
+  let steeredIds: string[] = []
+  const dropUntakenSteers = async () => {
+    if (steeredIds.length === 0) return
+    await send('clear_queue').catch(() => {})
+    steeredIds = []
+  }
   const onRecord = (record: Json) => {
     const { type } = record
     if (type === 'response') {
@@ -132,6 +150,12 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
         content: { type: 'text', text: event.delta },
       })
     const message = (record.message ?? {}) as Json
+    if (type === 'message_start' && message.role === 'user') {
+      const takenId = isPromptTakenIn ? steeredIds.shift() : undefined
+      isPromptTakenIn = true
+      if (takenId) update({ sessionUpdate: 'steer_taken', steerId: takenId })
+      return
+    }
     if (type === 'message_end' && message.role === 'assistant')
       providerError =
         message.stopReason === 'error' ? String(message.errorMessage ?? 'The model call failed') : undefined
@@ -174,7 +198,9 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     const isCancelled = record.aborted || isAborting
     if (providerError && !isCancelled) update({ sessionUpdate: 'error', message: providerError })
     providerError = undefined
-    turn?.resolve({ stopReason: isCancelled ? 'cancelled' : 'end_turn' })
+    runStarted = undefined
+    const settled = turn
+    void dropUntakenSteers().then(() => settled?.resolve({ stopReason: isCancelled ? 'cancelled' : 'end_turn' }))
   }
 
   const pi = spawnJsonLines(launch, onRecord, (code) => {
@@ -228,20 +254,31 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
       const ended = turnsEnded.then(async () => {
         isAborting = false
         turn = Promise.withResolvers()
-        const blocks = prompt as Json[]
-        const { disposition } = await send('prompt', {
-          message: blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join('\n'),
-          images: blocks
-            .filter((block) => block.type === 'image')
-            .map(({ mimeType, data }) => ({ type: 'image', mimeType, data })),
+        isPromptTakenIn = false
+        const started = send('prompt', piMessageOf(prompt as Json[]))
+        runStarted = started
+        const { disposition } = await started.catch((error) => {
+          runStarted = undefined
+          throw error
         })
-        return disposition === 'handled' ? { stopReason: 'end_turn' } : turn.promise
+        if (disposition !== 'handled') return turn.promise
+        runStarted = undefined
+        return { stopReason: 'end_turn' }
       })
       turnsEnded = ended.catch(() => {})
       return ended
+    },
+    'session/steer': async ({ prompt, steerId }) => {
+      const run = runStarted
+      if (!run) throw new AcpError('Pi has no run to take the message')
+      await run
+      if (runStarted !== run || isAborting) throw new AcpError('The Pi run ended before taking the message')
+      const id = String(steerId)
+      steeredIds.push(id)
+      const { disposition } = await send('steer', piMessageOf(prompt as Json[])).catch((): Json => ({}))
+      if (disposition === 'queued') return {}
+      steeredIds = steeredIds.filter((steered) => steered !== id)
+      throw new AcpError('Pi did not queue the message')
     },
     'session/set_config_option': async ({ configId, value }) => {
       const [provider, ...modelId] = String(value).split('/')
@@ -257,7 +294,7 @@ export const connectPi = (launch: AdapterLaunch, { onUpdate, onExit, onRequest }
     notify: (method: string) => {
       if (method !== 'session/cancel') return
       isAborting = true
-      void send('abort').catch(() => {})
+      void dropUntakenSteers().then(() => send('abort').catch(() => {}))
     },
     errorOutput: pi.errorOutput,
     closed: pi.closed,
