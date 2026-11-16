@@ -895,3 +895,28 @@ test("stopping, recreating or removing a runtime removes its browsers and their 
     ])
   }
 })
+
+test('a browser nobody has been attached to for the idle time is stopped, an attached one never, and nothing of another deployment', async () => {
+  let clock = 0
+  const stopped: string[] = []
+  const running = [
+    { Names: [`/${browserName}`] },
+    { Names: [`/spyria-rt-runtime-2-browser-${'c'.repeat(32)}`] },
+    { Names: [`/other-rt-runtime-1-browser-${'d'.repeat(32)}`] },
+    { Names: ['/spyria-rt-runtime-1-browser-short'] },
+  ]
+  const docker = (async (method: string, path: string) => {
+    if (path.startsWith('/containers/json?all=false')) return running
+    if (method === 'POST' && path.endsWith('/stop?t=5')) stopped.push(path)
+    return {}
+  }) as Docker
+  const runner = createCommandRunner({ docker, prefix: 'spyria-', now: () => clock })
+  const isAttached = (name: string) => name === `spyria-rt-runtime-2-browser-${'c'.repeat(32)}`
+  await runner.stopUnattachedBrowsers(isAttached, 600_000)
+  clock = 599_999
+  await runner.stopUnattachedBrowsers(isAttached, 600_000)
+  expect(stopped).toEqual([])
+  clock = 600_000
+  await runner.stopUnattachedBrowsers(isAttached, 600_000)
+  expect(stopped).toEqual([`/containers/${browserName}/stop?t=5`])
+})

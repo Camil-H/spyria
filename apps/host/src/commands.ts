@@ -537,6 +537,30 @@ export const createCommandRunner = ({
     }
     await docker('POST', `/containers/${name}/start`)
   }
+  const unattachedSince = new Map<string, number>()
+  const isBrowserOfDeployment = (name: string) => {
+    const [runtimeName, browserKey = ''] = name.split(/-browser-(?=[a-f0-9]{32}$)/)
+    return (
+      runtimeName !== name && runtimeName?.startsWith(`${prefix}rt-`) === true && browserKeyPattern.test(browserKey)
+    )
+  }
+  const stopUnattachedBrowsers = async (isAttached: (name: string) => boolean, idleMilliseconds: number) => {
+    const filters = encodeURIComponent(JSON.stringify({ label: [browserLabel] }))
+    const running = await docker<{ Names: string[] }[]>('GET', `/containers/json?all=false&filters=${filters}`)
+    const names = running.flatMap(({ Names }) => Names.map((name) => name.slice(1))).filter(isBrowserOfDeployment)
+    for (const known of unattachedSince.keys()) if (!names.includes(known)) unattachedSince.delete(known)
+    for (const name of names) {
+      if (isAttached(name)) {
+        unattachedSince.delete(name)
+        continue
+      }
+      const since = unattachedSince.get(name) ?? now()
+      unattachedSince.set(name, since)
+      if (now() - since < idleMilliseconds) continue
+      await docker('POST', `/containers/${name}/stop?t=5`).catch(ignoring(304, 404))
+      unattachedSince.delete(name)
+    }
+  }
   const stopBrowser = async (runtimeId: string, browserKey: string) => {
     const { name, container } = await browserOf(runtimeId, browserKey)
     if (container?.State?.Running) await docker('POST', `/containers/${name}/stop?t=5`)
@@ -599,6 +623,7 @@ export const createCommandRunner = ({
       return `http://${address}:${spyriaAgentPort}`
     },
     runningCount: async () => (await runtimeIdsOf(false)).length,
+    stopUnattachedBrowsers,
     browserNameOf: async (runtimeId: string, browserKey: string) => {
       const { name, container } = await browserOf(runtimeId, browserKey)
       if (!container?.State?.Running) throw new Refused('browser is not running')

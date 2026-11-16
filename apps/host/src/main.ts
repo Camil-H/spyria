@@ -1,7 +1,7 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { attachToBrowser } from './browsers.ts'
+import { attachToBrowser, type BrowserStreamListener } from './browsers.ts'
 import { createCommandRunner, gatewayRelayAlias, parseCommand } from './commands.ts'
 import { createDocker } from './docker.ts'
 import { harnessNames } from './harnesses.ts'
@@ -124,6 +124,33 @@ const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.in
 const heartbeatMilliseconds = Number(process.env.SPYRIA_HOST_HEARTBEAT_MS ?? 30_000)
 const maximumBufferedBytes = 16 * 1024 * 1024
 const maximumReconnectDelayMilliseconds = 30_000
+const browserIdleMilliseconds = 10 * 60_000
+const browserSweepMilliseconds = 60_000
+const attachedBrowsers = new Map<string, Set<symbol>>()
+const openBrowser = async (runtimeId: string, browserKey: string, listener: BrowserStreamListener) => {
+  const name = await runner.browserNameOf(runtimeId, browserKey)
+  const attachment = Symbol(name)
+  let isClosed = false
+  const stream = await attachToBrowser(dockerSocket, name, {
+    onLine: listener.onLine,
+    onClose: () => {
+      isClosed = true
+      attachedBrowsers.get(name)?.delete(attachment)
+      listener.onClose()
+    },
+  })
+  if (!isClosed) attachedBrowsers.set(name, (attachedBrowsers.get(name) ?? new Set()).add(attachment))
+  return stream
+}
+setInterval(
+  () =>
+    void runner
+      .stopUnattachedBrowsers((name) => (attachedBrowsers.get(name)?.size ?? 0) > 0, browserIdleMilliseconds)
+      .catch((error) =>
+        log.warn({ event: 'host.browser_sweep_failed', body: 'Stopping browsers nobody uses failed', error }),
+      ),
+  browserSweepMilliseconds,
+)
 const relayedFrameTypes = ['http', 'http_body', 'http_end', 'ws_connect', 'ws_msg', 'ws_ack', 'ws_close']
 let reconnectDelayMilliseconds = 1000
 
@@ -181,8 +208,7 @@ const connect = () => {
     send,
     isBackedUp: () => socket.bufferedAmount > maximumBufferedBytes,
     personal: isPersonal ? { secrets } : undefined,
-    openBrowser: async (runtimeId, browserKey, listener) =>
-      attachToBrowser(dockerSocket, await runner.browserNameOf(runtimeId, browserKey), listener),
+    openBrowser,
   })
   const failHello = (error: unknown) => {
     logHelloFailure(error)
