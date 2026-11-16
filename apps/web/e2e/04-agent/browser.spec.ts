@@ -57,4 +57,24 @@ test.describe('Browser', () => {
     await expect(tabPanelOf(page).getByRole('application', { name: 'Your browser' })).toBeVisible()
     await expect(tabPanelOf(page).getByText('what it reads can end up in the chat')).toHaveCount(0)
   })
+
+  test('As a prompter, I am told when a file my browser downloaded can no longer be saved', {
+    tag: ['@spec-10'],
+  }, async ({ page, agentScript }) => {
+    const browserSockets: { send(message: string): void }[] = []
+    await page.routeWebSocket(/\/api\/browser$/, (pageSocket) => {
+      pageSocket.connectToServer()
+      browserSockets.push(pageSocket)
+    })
+    const chatId = await newRuntimeChat(page, 'Expired download')
+    await agentScript(chatId, { steps: [], text: 'Ready.' })
+    await sendMessage(page, 'Get ready')
+    await expect(messageContaining(page, 'Ready.')).toHaveCount(1)
+    await panelTabOf(page, 'Browser').click()
+    await expect(tabPanelOf(page).getByRole('application', { name: 'Your browser' })).toBeVisible()
+    await expect.poll(() => browserSockets.length).toBeGreaterThan(0)
+    browserSockets.at(-1)?.send(JSON.stringify({ type: 'download', token: '0'.repeat(64), name: 'clip.mp4', size: 10 }))
+    await expect(tabPanelOf(page)).toContainText('clip.mp4 was not downloaded: This download is no longer available')
+    await expect(page).toHaveURL(new RegExp(chatId))
+  })
 })

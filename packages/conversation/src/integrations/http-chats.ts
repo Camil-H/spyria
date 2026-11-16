@@ -21,7 +21,7 @@ type GetAsMember = (workspaceId: WorkspaceId, path: string) => Promise<Response>
 type SessionTokenOf = (workspaceId: WorkspaceId) => string
 type ChatInput = { workspaceId: WorkspaceId; chatId: ChatId }
 
-const downloadFrameName = 'spyria-browser-downloads'
+const downloadFrameMilliseconds = 60_000
 const hiddenFieldOf = (name: string, value: string) => {
   const field = document.createElement('input')
   field.type = 'hidden'
@@ -29,14 +29,18 @@ const hiddenFieldOf = (name: string, value: string) => {
   field.value = value
   return field
 }
-const downloadFrame = () => {
-  const existing = document.querySelector<HTMLIFrameElement>(`iframe[name="${downloadFrameName}"]`)
-  if (existing) return existing
+const downloadFrameOf = (onRefused: (reason: string) => void) => {
   const frame = document.createElement('iframe')
-  frame.name = downloadFrameName
-  frame.title = 'Browser downloads'
+  frame.name = `spyria-browser-download-${crypto.randomUUID()}`
+  frame.title = 'Browser download'
   frame.hidden = true
+  frame.addEventListener('load', () => {
+    if (frame.contentWindow?.location.href === 'about:blank') return
+    onRefused(frame.contentDocument?.body?.textContent?.trim() || 'The download could not start')
+    frame.remove()
+  })
   document.body.append(frame)
+  setTimeout(() => frame.remove(), downloadFrameMilliseconds)
   return frame
 }
 
@@ -45,11 +49,19 @@ export const createHttpChatCommands = (
   getAsMember: GetAsMember,
   sessionTokenOf: SessionTokenOf,
 ) => ({
-  saveBrowserDownload: ({ workspaceId, token }: { workspaceId: WorkspaceId; token: string }) => {
+  saveBrowserDownload: ({
+    workspaceId,
+    token,
+    onRefused,
+  }: {
+    workspaceId: WorkspaceId
+    token: string
+    onRefused: (reason: string) => void
+  }) => {
     const form = document.createElement('form')
     form.method = 'post'
     form.action = browserDownloadsPath
-    form.target = downloadFrame().name
+    form.target = downloadFrameOf(onRefused).name
     form.hidden = true
     form.append(hiddenFieldOf('token', token), hiddenFieldOf('session', sessionTokenOf(workspaceId)))
     document.body.append(form)

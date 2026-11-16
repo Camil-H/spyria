@@ -61,7 +61,7 @@ export type ConversationCommands = {
   answerQuestion: Command<{ chatId: ChatId; questionId: string; answer: QuestionAnswer }, number>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }, void>
-  saveBrowserDownload: (input: { workspaceId: WorkspaceId; token: string }) => void
+  saveBrowserDownload: (input: { workspaceId: WorkspaceId; token: string; onRefused: (reason: string) => void }) => void
   publishBranch: Command<
     { chatId: ChatId; action: PublishAction; draft: PullRequestDraft },
     { isRefused: boolean; text: string }

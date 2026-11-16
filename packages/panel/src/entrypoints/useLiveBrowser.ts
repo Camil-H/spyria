@@ -27,7 +27,11 @@ export const useLiveBrowser = (workspaceId: WorkspaceId, chatId: ChatId) => {
       if (message.type === 'file_chooser') return setFileChooser({ multiple: message.multiple })
       if (message.type !== 'download') return
       setNotice(`Downloading ${message.name}`)
-      saveBrowserDownload({ workspaceId, token: message.token })
+      saveBrowserDownload({
+        workspaceId,
+        token: message.token,
+        onRefused: (reason) => setNotice(`${message.name} was not downloaded: ${reason}`),
+      })
     }
     const opened = openBrowser({ workspaceId, chatId }, receive)
     connection.current = opened

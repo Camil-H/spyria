@@ -14,7 +14,7 @@ export type PanelCommands = {
   switchChatToolServer: Command<{ chatId: ChatId; connectionId: string; isOn: boolean }>
   readWorkspace: Command<{ chatId: ChatId; read: WorkspaceRead; path: string }, WorkspaceReading>
   wakeWorkspace: Command<{ chatId: ChatId }>
-  saveBrowserDownload: (input: { workspaceId: WorkspaceId; token: string }) => void
+  saveBrowserDownload: (input: { workspaceId: WorkspaceId; token: string; onRefused: (reason: string) => void }) => void
   openBrowser: (
     input: { workspaceId: WorkspaceId; chatId: ChatId },
     onMessage: (message: BrowserMessage) => void,
