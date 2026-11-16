@@ -188,6 +188,8 @@ test('prompts the prompter sends while their turn runs join that turn in order, 
   const second = await prompt(chat, 'Second question')
   const third = await prompt(chat, 'Third question')
   for (const waiting of [second, third]) await jobDone('agent.prompt', { messageId: waiting })
+  await jobDone('agent.join', { chatId: chat })
+  expect(relay.joins).toEqual(['Second question', 'Third question'])
   expect(relay.prompts).toEqual(['stub:linger First question'])
   expect(await turnOf(chat)).toBe(first)
 
@@ -298,6 +300,7 @@ test('starting a runtime from a runtime chat message is refused and that chat’
   const first = await prompt(chat, 'stub:linger First question')
   await waitFor(() => relay.prompts.length === 1)
   const queued = await prompt(chat, 'Queued question')
+  await jobDone('agent.join', { chatId: chat })
   const started = `chat-${crypto.randomUUID()}`
   expect(
     await mutate(bobInAcme, 'conversation.startRuntimeFromMessage', {

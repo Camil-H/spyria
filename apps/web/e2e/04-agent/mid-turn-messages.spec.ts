@@ -1,4 +1,4 @@
-import { openPageAs } from '../stack'
+import { openPageAs, type WorkerStack } from '../stack'
 import {
   addLlmKey,
   addParticipant,
@@ -18,6 +18,24 @@ import {
   workingIndicatorOf,
 } from './fixtures'
 
+const handedToTheTurn = async (workerStack: WorkerStack, chatId: string, count = 1) => {
+  const { $client: sql } = workerStack.database
+  await expect
+    .poll(async () => {
+      const [row] = await sql`
+        select count(*)::int as handed from messages
+        where chat_id = ${chatId} and kind = 'member' and picked_up_at is not null`
+      return row?.handed
+    })
+    .toBe(count + 1)
+  await expect
+    .poll(async () =>
+      (await sql`select state from jobs where type = 'agent.join' and payload->>'chatId' = ${chatId}`).every(
+        ({ state }) => state === 'done',
+      ),
+    )
+    .toBe(true)
+}
 const queuedLabelOf = (page: Page, text: string) => messageContaining(page, text).getByText('Queued', { exact: true })
 
 test.describe('Messages sent while the agent works', () => {
@@ -27,14 +45,15 @@ test.describe('Messages sent while the agent works', () => {
 
   test('As a member, I send a message while the agent runs a command, and the agent acts on it before its turn ends', {
     tag: ['@spec-60'],
-  }, async ({ page, release }) => {
-    await newRuntimeChat(page, 'Mid-turn command')
+  }, async ({ page, workerStack, release }) => {
+    const chatId = await newRuntimeChat(page, 'Mid-turn command')
     await sendMessage(page, 'stub:command stub:linger Rename the module')
     await expect(messageContaining(page, 'sleep 2 && echo checked').getByRole('img', { name: 'Running' })).toBeVisible()
     await sendMessage(page, 'Use tabs too')
     await expect(messageContaining(page, 'Use tabs too')).toHaveCount(1)
     await expect(queuedLabelOf(page, 'Use tabs too')).toHaveCount(0)
 
+    await handedToTheTurn(workerStack, chatId)
     await release('linger')
     await turnEnded(page, 1)
     await expect(messageItemsOf(page).nth(0)).toContainText('Rename the module')
@@ -47,8 +66,8 @@ test.describe('Messages sent while the agent works', () => {
 
   test("As a member, I send two messages while the agent works, and they're answered one by one in the order I sent them", {
     tag: ['@spec-60'],
-  }, async ({ page, release }) => {
-    await newRuntimeChat(page, 'Mid-turn pair')
+  }, async ({ page, workerStack, release }) => {
+    const chatId = await newRuntimeChat(page, 'Mid-turn pair')
     await sendMessage(page, 'stub:linger Rename the module')
     await expect(messageContaining(page, '[t1]')).toBeVisible()
     await sendMessage(page, 'First, use tabs')
@@ -56,6 +75,7 @@ test.describe('Messages sent while the agent works', () => {
     await sendMessage(page, 'Then fix the imports')
     await expect(messageContaining(page, 'Then fix the imports')).toHaveCount(1)
 
+    await handedToTheTurn(workerStack, chatId, 2)
     await release('linger')
     await turnEnded(page, 1)
     await expect(messageItemsOf(page).nth(-4)).toContainText('First, use tabs')
