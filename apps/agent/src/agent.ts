@@ -488,7 +488,6 @@ export const startAgent = ({
     if (!running?.steeredPromptIds.delete(promptId)) return
     rememberPrompt(conversation, promptId)
     running.joinedPromptIds.push(promptId)
-    running.promptId = promptId
     emit(conversation, { sessionUpdate: 'prompt_joined', promptId })
   }
 
@@ -951,8 +950,7 @@ export const startAgent = ({
     let hasReachedAdapter = false
     const running: RunningTurn = { promptId, joinedPromptIds: [], steeredPromptIds: new Set() }
     const endTurn = (stopReason: unknown) => {
-      const endedPromptId = running.promptId
-      const update = { sessionUpdate: 'turn_end', stopReason, ...(endedPromptId && { promptId: endedPromptId }) }
+      const update = { sessionUpdate: 'turn_end', stopReason, ...(promptId && { promptId }) }
       for (const turnPromptId of [promptId, ...running.joinedPromptIds])
         if (turnPromptId) conversation.turnEnds.set(turnPromptId, update)
       if (hasReachedAdapter) {

@@ -318,7 +318,7 @@ test('Stop while a Pi question waits closes it as stopped and cancels the dialog
   expect(subSocket.events.filter(kindOf('question'))).toEqual([])
 })
 
-test('a message joined while a Pi turn runs is taken in before the turn ends, and the turn then ends as that prompt, which is never run twice', async () => {
+test('a message joined while a Pi turn runs is taken in before the turn ends, which still ends as the first prompt, and none is run twice', async () => {
   const { call, open, create } = started()
   const id = await create(piLaunchOf())
   const socket = open(id)
@@ -337,7 +337,7 @@ test('a message joined while a Pi turn runs is taken in before the turn ends, an
   ).toEqual([
     { sessionUpdate: 'prompt_joined', promptId: 'joined-1' },
     { sessionUpdate: 'prompt_joined', promptId: 'joined-2' },
-    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'joined-2' },
+    { sessionUpdate: 'turn_end', stopReason: 'end_turn', promptId: 'prompt-1' },
   ])
   expect(textOf(socket.events)).toBe(
     `[t1] Before the pause. Took in: use tabs. Took in: and keep tests. ${piHello(1).slice(5)}`,
@@ -348,7 +348,7 @@ test('a message joined while a Pi turn runs is taken in before the turn ends, an
   expect(socket.events.at(-1)?.update).toEqual({
     sessionUpdate: 'turn_end',
     stopReason: 'end_turn',
-    promptId: 'joined-2',
+    promptId: 'prompt-1',
   })
   expect(textOf(socket.events)).not.toContain('[t2]')
 })
