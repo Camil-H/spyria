@@ -306,12 +306,13 @@ export const createRuntimeHostGateway = ({
     if (frame.type === 'ws_msg' && listener) {
       const data = String(frame.data)
       const handled = listener.onMessage(data)
-      if (handled instanceof Promise) void handled.then(() => acknowledgeStream(connection, requestId, data))
+      if (handled instanceof Promise)
+        void handled.then(() => connection.streams.has(requestId) && acknowledgeStream(connection, requestId, data))
       else acknowledgeStream(connection, requestId, data)
     }
     if (frame.type === 'ws_close' && connection.streams.delete(requestId)) {
       connection.receivedStreamBytes.delete(requestId)
-      listener?.onClose()
+      listener?.onClose(typeof frame.error === 'string' ? frame.error : undefined)
     }
   }
 

@@ -27,7 +27,7 @@ export type AgentHost = Readonly<{ workspaceId: WorkspaceId; hostId: RuntimeHost
 export type AgentInterrupt = Readonly<{ chatId: ChatId; promptId: MessageId; memberId: MemberId }>
 export type SessionRestart = Readonly<{ chatId: ChatId; memberId: MemberId; promptId: MessageId | null }>
 type AgentSocket = { send(data: string): void; close(): void }
-type AgentSocketListener = { onOpen(): void; onMessage(data: string): unknown; onClose(): void }
+type AgentSocketListener = { onOpen(): void; onMessage(data: string): unknown; onClose(error?: string): void }
 export type AgentTransport = {
   gatewayUrl: string
   fetch(request: {

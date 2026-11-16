@@ -23,7 +23,7 @@ export type SandboxResponse = { status: number; headers: Record<string, string>;
 export type SandboxSocketListener = {
   onOpen(): void
   onMessage(data: string): unknown
-  onClose(): void
+  onClose(error?: string): void
 }
 type SandboxSocket = { send(data: string): void; close(): void }
 
