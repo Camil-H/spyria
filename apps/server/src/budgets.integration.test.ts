@@ -26,6 +26,7 @@ const { database, fakeLlmCalls, fakeHost, setFakeLlmScript, holds, prompt, turnO
 })
 await addLlmKey(bob, 'Mistral')
 const lee = 'member-lee'
+await addLlmKey(lee, 'Mistral')
 const zeroDatabase = zeroDrizzle(schema, database)
 const sync = () =>
   syncUsageNow(
