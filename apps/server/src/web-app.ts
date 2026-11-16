@@ -4,7 +4,6 @@ const serverPaths = /^\/(api|auth|host|health|mcp|test|fake-llm|gateway-oauth|ze
 const hashedAssetsPath = '/assets/'
 const immutable = 'public, max-age=31536000, immutable'
 const reportFramePath = '/report-frame.html'
-const pageFramePath = '/page-frame.html'
 const appPolicy = [
   "default-src 'self'",
   "script-src 'self'",
@@ -13,7 +12,7 @@ const appPolicy = [
   "media-src 'self' blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "frame-src 'self' http: https:",
+  "frame-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
@@ -23,13 +22,7 @@ const reportFramePolicy = [
   "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'",
   "frame-ancestors 'self'",
 ].join('; ')
-const pageFramePolicy = [
-  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox',
-  "default-src * data: blob: 'unsafe-inline'",
-  "script-src 'self'",
-  "frame-ancestors 'self'",
-].join('; ')
-const policyByPath: Record<string, string> = { [reportFramePath]: reportFramePolicy, [pageFramePath]: pageFramePolicy }
+const policyByPath: Record<string, string> = { [reportFramePath]: reportFramePolicy }
 const precompressedVariants = [
   { encoding: 'br', extension: '.br' },
   { encoding: 'gzip', extension: '.gz' },

@@ -26,7 +26,6 @@ import {
   type PublishAction,
   questionAnswerOf,
   uploadAttachmentFromRequest,
-  webPagePath,
 } from '@spyria/conversation/server'
 import type { Database } from '@spyria/db/postgres'
 import { schema } from '@spyria/db/zero'
@@ -161,7 +160,6 @@ import { securityTxtOf, securityTxtPath } from './security-txt.ts'
 import { contextOf, withSpan } from './telemetry.ts'
 import { toolListChangesOf } from './tool-list-changes.ts'
 import { webAppResponse } from './web-app.ts'
-import { createWebPageReader } from './web-pages.ts'
 import { createZeroForwarding, isWebSocketUpgrade, type WatchZeroSession, zeroPathPrefix } from './zero-forwarding.ts'
 
 const healthCheckMilliseconds = 2000
@@ -205,8 +203,6 @@ export const sessionClassifierOf =
       timeoutMilliseconds,
     })
   }
-
-const readWebPage = createWebPageReader()
 
 const statusByErrorCode: Record<string, number> = {
   missing_workspace_permission: 403,
@@ -620,11 +616,6 @@ export const createApp = ({
           )),
           isImmutable: true,
         }),
-      ),
-    )
-    .get(webPagePath, rateLimited('webPageReads'), (context) =>
-      endpointResponse('Reading a web page', 200, () =>
-        readWebPage(context.req.query('url') ?? '', context.req.header('accept-language')),
       ),
     )
     .get(chatMediaPathOf(':chatId'), rateLimited('runtimeMediaReads'), (context) => {

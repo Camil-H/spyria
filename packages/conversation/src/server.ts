@@ -24,12 +24,6 @@ export {
   chatAttachmentsPathOf,
   chatMediaPathOf,
 } from './domain/attachments.ts'
-export {
-  isPrivateNetworkAddress,
-  maximumWebPageBytes,
-  type WebPage,
-  webPagePath,
-} from './domain/browser-pages.ts'
 export { switchedToolServersOf, toolServerOffNoticeOf } from './domain/chat-tool-servers.ts'
 export { logExcerptOf } from './domain/ci-logs.ts'
 export {
@@ -41,7 +35,6 @@ export {
   unknownTaskOf,
 } from './domain/delegation.ts'
 export { isDevLoopTool } from './domain/dev-loop.ts'
-export { WebPageNotPublic, WebPageTooLarge, WebPageUnreachable } from './domain/errors.ts'
 export { type GitAction, isGitAction } from './domain/git-actions.ts'
 export {
   githubToolsPath,
