@@ -15,6 +15,6 @@ Decision 0014 had a monthly budget per member and a monthly total for the worksp
 
 ## Consequences
 
-- The per-member and workspace budgets are deleted by the migration, with this period's alerts.
+- The per-member and workspace budgets are deleted by the migration, with their alerts.
 - Changing a member's role changes their budget at once; the alerts already recorded stay until the period ends or the role's budget changes.
 - Giving one member a different budget takes a custom role.
