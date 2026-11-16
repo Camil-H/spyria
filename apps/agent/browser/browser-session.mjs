@@ -133,6 +133,13 @@ export const createBrowserSession = ({
     activeDownloads.delete(download)
     if (!path) return
     const { size } = await stat(path)
+    if ((await bytesIn(filesDirectory)) > filesBudgetBytes) {
+      await download.delete().catch(() => {})
+      return send({
+        type: 'notice',
+        text: `${download.suggestedFilename()} was not kept: downloads waiting in this browser are over 4 GB`,
+      })
+    }
     const file = newFileId()
     await rename(path, join(filesDirectory, file))
     send({ type: 'download', file, name: download.suggestedFilename(), size })

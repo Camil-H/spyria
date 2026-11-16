@@ -170,3 +170,25 @@ test('downloads under way are stopped once the files waiting in the browser pass
     { type: 'notice', text: 'endless.bin was stopped: downloads waiting in this browser are over 4 GB' },
   ])
 })
+
+test('a download that finishes past the budget between two checks is not kept', async () => {
+  const page = fakePage()
+  const filesDirectory = filesDirectoryOf()
+  writeFileSync(join(filesDirectory, 'waiting'), Buffer.alloc(2000))
+  const sent = []
+  const context = { on: () => {}, pages: () => [page], newPage: async () => page }
+  createBrowserSession({
+    context,
+    send: (message) => sent.push(message),
+    settings: () => ({ downloads: true, uploads: true }),
+    filesDirectory,
+    filesBudgetBytes: 1000,
+  })
+  const fast = downloadOf(10)
+  page.handlers.get('download')(fast)
+  await settled()
+  expect(sent).toEqual([
+    { type: 'notice', text: 'video.mp4 was not kept: downloads waiting in this browser are over 4 GB' },
+  ])
+  expect(existsSync(await fast.path())).toBe(false)
+})
