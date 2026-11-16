@@ -1,4 +1,14 @@
-export const Switch = ({ label, isOn, onToggle }: { label: string; isOn: boolean; onToggle: () => void }) => (
+export const Switch = ({
+  label,
+  isOn,
+  onToggle,
+  isLabelVisible = true,
+}: {
+  label: string
+  isOn: boolean
+  onToggle: () => void
+  isLabelVisible?: boolean
+}) => (
   <label className="flex w-fit items-center gap-3 text-sm">
     <button
       type="button"
@@ -10,6 +20,6 @@ export const Switch = ({ label, isOn, onToggle }: { label: string; isOn: boolean
     >
       <span className={`block size-4 rounded-full bg-raised transition ${isOn ? 'translate-x-4' : ''}`} />
     </button>
-    {label}
+    {isLabelVisible && label}
   </label>
 )

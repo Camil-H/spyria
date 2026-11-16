@@ -10,7 +10,6 @@ import {
   buttonClass,
   ErrorMessage,
   fieldClass,
-  LabelledSection,
   labelClass,
   rowListClass,
   SettingRow,
@@ -138,8 +137,8 @@ export const BrowserSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
     })
   }
   return (
-    <LabelledSection title="Browser">
-      <p className="-mt-2 text-sm text-muted">
+    <section aria-label="Browser" className="flex flex-col gap-3">
+      <p className="text-sm text-muted">
         Each member gets their own browser in each AI chat, next to the chat's runtime, with their own sign-ins. Only
         they watch it; others see the agent's steps.
       </p>
@@ -153,7 +152,12 @@ export const BrowserSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         <div className={rowListClass}>
           {switchRows.map(({ name, title, description }) => (
             <SettingRow key={name} title={title} description={description}>
-              <Switch label={title} isOn={draft[name]} onToggle={() => edit({ [name]: !draft[name] })} />
+              <Switch
+                label={title}
+                isLabelVisible={false}
+                isOn={draft[name]}
+                onToggle={() => edit({ [name]: !draft[name] })}
+              />
             </SettingRow>
           ))}
         </div>
@@ -201,6 +205,6 @@ export const BrowserSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =>
         {invalidAddress && <ErrorMessage message={`${invalidAddress} is not a host name or an IP address`} />}
       </form>
       <ErrorMessage message={errorMessage} />
-    </LabelledSection>
+    </section>
   )
 }
