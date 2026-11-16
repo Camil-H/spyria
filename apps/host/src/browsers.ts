@@ -60,9 +60,17 @@ export const browserBodyOf = ({
 export const isProfileExpired = (createdAt: string | undefined, signInHours: number | undefined, now: number) =>
   signInHours !== undefined && now - Number(createdAt ?? 0) >= signInHours * 3_600_000
 
+const newline = 0x0a
+
 export const createAttachReader = (onLine: (line: string) => void) => {
   let pending = Buffer.alloc(0)
-  let text = ''
+  let output = Buffer.alloc(0)
+  const readLines = () => {
+    for (let end = output.indexOf(newline); end >= 0; end = output.indexOf(newline)) {
+      if (end > 0) onLine(output.subarray(0, end).toString('utf8'))
+      output = output.subarray(end + 1)
+    }
+  }
   return (chunk: Uint8Array) => {
     pending = Buffer.concat([pending, chunk])
     while (pending.length >= attachHeaderBytes) {
@@ -72,10 +80,8 @@ export const createAttachReader = (onLine: (line: string) => void) => {
       const payload = pending.subarray(attachHeaderBytes, attachHeaderBytes + size)
       pending = pending.subarray(attachHeaderBytes + size)
       if (stream !== stdoutStream) continue
-      text += payload.toString('utf8')
-      const lines = text.split('\n')
-      text = lines.pop() ?? ''
-      for (const line of lines) if (line) onLine(line)
+      output = Buffer.concat([output, payload])
+      readLines()
     }
   }
 }

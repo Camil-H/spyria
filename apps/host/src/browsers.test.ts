@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { attachToBrowser, createAttachReader, isProfileExpired } from './browsers.ts'
 import { waitFor } from './testing.ts'
 
-const attachFrameOf = (stream: number, text: string) => {
+const attachFrameOf = (stream: number, text: string | Buffer) => {
   const payload = Buffer.from(text)
   const header = Buffer.alloc(8)
   header[0] = stream
@@ -20,6 +20,15 @@ test("the attach reader keeps the browser's output lines whole across frames and
   ])
   for (let offset = 0; offset < bytes.length; offset += 5) read(bytes.subarray(offset, offset + 5))
   expect(lines).toEqual(['{"type":"ready"}', '{"type":"frame"}'])
+})
+
+test('a character Docker splits between two frames reads whole', () => {
+  const lines: string[] = []
+  const read = createAttachReader((line) => lines.push(line))
+  const title = Buffer.from('{"title":"Café 日本"}\n')
+  const cut = title.indexOf(Buffer.from('日')) + 1
+  read(Buffer.concat([attachFrameOf(1, title.subarray(0, cut)), attachFrameOf(1, title.subarray(cut))]))
+  expect(lines).toEqual(['{"title":"Café 日本"}'])
 })
 
 test('sign-ins expire after the lifetime, and never without one', () => {
