@@ -1,9 +1,7 @@
 import { createHmac } from 'node:crypto'
-import { openPageAs, type WorkerStack } from '../stack'
+import type { WorkerStack } from '../stack'
 import {
   type AgentScript,
-  addLlmKey,
-  addParticipant,
   commitCommand,
   configureGitHubApp,
   connectGitHub,
@@ -13,7 +11,7 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
-  openChat,
+  openPrompterWithKey,
   type Page,
   panelTabOf,
   sendMessage,
@@ -123,10 +121,7 @@ test.describe('Pull requests', () => {
     await configureGitHubApp(page)
     await connectGitHub(page)
     const chatId = await devChatWithCommit(page, agentScript, 'Guest push')
-    await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Mistral')
-    await openChat(bobPage, 'Guest push')
+    const bobPage = await openPrompterWithKey(browser, workerStack, chatId)
     await agentScript(chatId, { steps: [{ tool: 'push_branch' }], text: 'Connect GitHub first.' })
     await sendMessage(bobPage, 'Push the branch')
     await expect(messageContaining(bobPage, 'Connect GitHub first.')).toHaveCount(1)

@@ -1,7 +1,5 @@
 import { seedModelCall } from '@spyria/db/testing'
 import {
-  addLlmKey,
-  addParticipant,
   agentReplyText,
   composerOf,
   expect,
@@ -10,6 +8,7 @@ import {
   messageItemsOf,
   openChat,
   openProfile,
+  openPrompterWithKey,
   openSettings,
   type Page,
   sendMessage,
@@ -55,13 +54,6 @@ const saveDailyBudget = async (page: Page, role: string, dollars: string) => {
   await row.getByRole('textbox', { name: `Daily budget per member of ${role}` }).fill(dollars)
   await row.getByRole('button', { name: `Save the budgets of ${role}` }).click()
 }
-const openBobInResearch = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
-  await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Mistral')
-  await openChat(bobPage, 'Research')
-  return bobPage
-}
 const prompt = async (page: Page, text: string) => {
   await expect(composerOf(page)).toBeEditable()
   await sendMessage(page, text)
@@ -106,7 +98,7 @@ test.describe('Budgets', () => {
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 799_999)
     await seedDailyBudget(workerStack, 'member', 1_000_000)
-    const bobPage = await openBobInResearch(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, 'chat-research')
     await syncUsage(workerStack)
     await expect(budgetAlertOf(bobPage)).toHaveCount(0)
     await prompt(bobPage, 'Push me past 80%')
@@ -135,7 +127,7 @@ test.describe('Budgets', () => {
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 1_000_000)
     await seedDailyBudget(workerStack, 'member', 1_000_000)
-    const bobPage = await openBobInResearch(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, 'chat-research')
     await syncUntilAlert(workerStack, bobPage, bobNotice.replace("Bob's", 'Your'))
     await prompt(bobPage, 'Over budget')
     await expect(messageItemsOf(bobPage).getByRole('alert')).toContainText(bobNotice)
@@ -159,7 +151,7 @@ test.describe('Budgets', () => {
   }, async ({ page, browser, workerStack }) => {
     await spend(workerStack, 'member-bob', 1_000_000)
     await seedDailyBudget(workerStack, 'member', 1_000_000)
-    const bobPage = await openBobInResearch(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, 'chat-research')
     await prompt(bobPage, 'Over budget')
     await expect(messageItemsOf(bobPage).getByRole('alert')).toContainText(bobNotice)
 
