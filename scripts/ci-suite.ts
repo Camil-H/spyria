@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { failuresSummaryOf, type Suite } from './e2e-summary.ts'
 
 type Selection = 'all' | string[]
 type Plan = { unit: Selection; integration: Selection; e2e: Selection; e2eRepeat: string[] }
@@ -12,6 +13,7 @@ const integrationPreload = './apps/server/src/testing/integration-setup.ts'
 const junitFile = join(tmpdir(), `spyria-ci-${suite}.xml`)
 const junitReporter = ['--reporter=junit', `--reporter-outfile=${junitFile}`]
 const annotationLines = 20
+const e2eReportFile = join(repositoryRoot, '.check/e2e-results.json')
 const fromRoot = (files: string[]) => files.map((file) => `./${file}`)
 
 const commandOf = (suite: string | undefined) => {
@@ -61,8 +63,17 @@ const annotateFailures = () => {
   }
 }
 
+const summarizeE2eFailures = () => {
+  const summaryFile = process.env.GITHUB_STEP_SUMMARY
+  if (!summaryFile) return
+  const report = existsSync(e2eReportFile) ? (JSON.parse(readFileSync(e2eReportFile, 'utf8')) as Suite) : undefined
+  const heading = suite === 'e2e' ? `e2e shard ${shard}` : 'e2e repeated tests'
+  appendFileSync(summaryFile, failuresSummaryOf(heading, report))
+}
+
 const command = commandOf(suite)
 console.log(`▶ ${command.join(' ')}`)
 const { exitCode } = Bun.spawnSync(command, { cwd: repositoryRoot, stdout: 'inherit', stderr: 'inherit' })
+if (exitCode !== 0 && suite?.startsWith('e2e')) summarizeE2eFailures()
 if (exitCode !== 0) annotateFailures()
 process.exit(exitCode)
