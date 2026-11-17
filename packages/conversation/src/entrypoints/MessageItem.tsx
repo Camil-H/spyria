@@ -109,7 +109,17 @@ const Thread = ({ root, isInitiallyOpen }: { root: ThreadRoot; isInitiallyOpen: 
   return (
     <li className="px-3">
       <Disclosure
-        label={`${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}${newCount > 0 ? ` · ${newCount} new` : ''}`}
+        label={
+          <>
+            {`${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+            {newCount > 0 && (
+              <>
+                <span className="sr-only"> · </span>
+                <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink">{`${newCount} new`}</span>
+              </>
+            )}
+          </>
+        }
         isInitiallyOpen={isInitiallyOpen}
       >
         <OpenThread root={root} />

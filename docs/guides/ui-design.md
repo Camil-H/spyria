@@ -39,7 +39,7 @@ Components use semantic colours only. A token that differs between themes resolv
 | Surfaces | `app`, `sidebar`, `raised`, `hover`, `selected` | Page background, the sidebar, cards, menus and dialogs above the page, hover and selected rows |
 | Text | `ink`, `muted`, `link` | Main text, secondary text, links |
 | Lines | `line`, `focus` | Borders and dividers; the focus outline (through `focusRing`) |
-| Accent | `accent`, `accent-hover`, `accent-ink` | The primary button and selected markers; `accent-ink` is the text on `accent` |
+| Accent | `accent`, `accent-hover`, `accent-ink` | The primary button, selected markers and the new-replies badge of a thread; `accent-ink` is the text on `accent` |
 | Callout | `callout`, `callout-hover`, `callout-edge` | A notice that needs attention (`calloutClass`) |
 | Status | `success`, `warning`, `danger`, `info` | Done, waiting or attention, failed or over budget, working; status dots, icons, bars |
 | Diff | `added`, `removed` | Added and removed lines; `removed` is also the danger button's background |
