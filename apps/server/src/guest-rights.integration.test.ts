@@ -379,18 +379,19 @@ test('a pending approval is cancelled when its request aborts or its turn ends, 
   ])
 })
 
+const chooseApproval = async (
+  member: typeof aliceInAcme,
+  connectionId: string,
+  tool: string | null,
+  approval: string | null,
+) =>
+  expect(
+    await approvals.mutate(member, 'profile.setToolApproval', { workspaceId: acme, connectionId, tool, approval }),
+  ).toEqual(succeeded)
+
 test('on a shared login the owner’s approval choices decide which calls wait: Always asks on their own prompt, and Never lets a guest’s write run', async () => {
-  const chooseApproval = async (tool: string | null, approval: string | null) =>
-    expect(
-      await approvals.mutate(aliceInAcme, 'profile.setToolApproval', {
-        workspaceId: acme,
-        connectionId: testCrmConnection.id,
-        tool,
-        approval,
-      }),
-    ).toEqual(succeeded)
   try {
-    await chooseApproval('update', 'always')
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', 'always')
     const host = await approvals.fakeHost('Approval choices host')
     const ownerTurn = await runtimeTurn(host, alice)
     const { frames } = await approvals.openStream(toChatId(ownerTurn.chatId))
@@ -402,8 +403,8 @@ test('on a shared login the owner’s approval choices decide which calls wait: 
     expect(await answerAs(alice, ownerTurn.chatId, asked.questionId, true)).toBe(200)
     expect(textOf((await ownerCall).result)).toBe('ran update')
 
-    await chooseApproval('update', null)
-    await chooseApproval(null, 'never')
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, null, 'never')
     const guestTurn = await runtimeTurn(host, bob)
     expect(textOf((await mcpCall(host, guestTurn.token, update)).result)).toBe('ran update')
     const audited = { owner_id: alice, server: sharedToolServer, tool: 'update', read_only: false, status: 'succeeded' }
@@ -414,24 +415,15 @@ test('on a shared login the owner’s approval choices decide which calls wait: 
       { ...audited, prompter_id: bob, decision: 'not_needed', decided_by: null },
     ])
   } finally {
-    await chooseApproval('update', null)
-    await chooseApproval(null, null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, null, null)
   }
 })
 
 test('on a server each member signs in to, the prompter’s approval choices apply and the prompter answers, not the owner', async () => {
-  const chooseApproval = async (context: typeof aliceInAcme, approval: string | null) =>
-    expect(
-      await approvals.mutate(context, 'profile.setToolApproval', {
-        workspaceId: acme,
-        connectionId: 'connection-fake',
-        tool: 'whoami',
-        approval,
-      }),
-    ).toEqual(succeeded)
   await connectMember(bob, bobCookie)
   try {
-    await chooseApproval(bobInAcme, 'always')
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', 'always')
     const { host, chatId, token, frames } = await guestTurnWithApprovals('Prompter approvals host')
     await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
     const bobCall = mcpCall(host, token, whoami)
@@ -443,8 +435,8 @@ test('on a server each member signs in to, the prompter’s approval choices app
     expect(await answerAs(bob, chatId, asked.questionId, true)).toBe(200)
     expect(textOf((await bobCall).result)).toBe(`you are ${bobAccount}`)
 
-    await chooseApproval(bobInAcme, null)
-    await chooseApproval(aliceInAcme, 'always')
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', null)
+    await chooseApproval(aliceInAcme, 'connection-fake', 'whoami', 'always')
     expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${bobAccount}`)
     const audited = { prompter_id: bob, owner_id: alice, server: 'fake', tool: 'whoami', read_only: true }
     expect(await toolCallRows(chatId, 2)).toEqual([
@@ -452,8 +444,8 @@ test('on a server each member signs in to, the prompter’s approval choices app
       { ...audited, decision: 'not_needed', decided_by: null, status: 'succeeded' },
     ])
   } finally {
-    await chooseApproval(bobInAcme, null)
-    await chooseApproval(aliceInAcme, null)
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', null)
+    await chooseApproval(aliceInAcme, 'connection-fake', 'whoami', null)
     await asMember(bob, 'POST', connectionPath('disconnect'))
     await toolConnectionSyncsSettled()
   }
