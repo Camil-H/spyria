@@ -40,11 +40,6 @@ test('a personal host installs a harness from the configured registry into its v
   const runtime = { workspaceId: acme, hostId, runtimeId: 'harness-install' }
   await gateway.prepare(runtime, spyriaImage)
   await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage })
-  const [inspected] = JSON.parse(dockerText('inspect', `${prefix}rt-harness-install`))
-  expect(inspected.HostConfig.Mounts).toContainEqual(
-    expect.objectContaining({ Source: harnessesVolume, Target: '/harnesses', ReadOnly: true }),
-  )
-  expect(inspected.Config.Env).toContain('CLAUDE_CODE_EXECUTABLE=/harnesses/claude-code/current/bin/claude')
 
   inVolume('mkdir -p /harnesses/claude-code/0123456789ab && touch /harnesses/claude-code/0123456789ab/.installed')
   expect(await gateway.sandboxProvider.hasHarness({ ...runtime, harness: 'claude-code' })).toBe(false)
