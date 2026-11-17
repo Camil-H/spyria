@@ -1,0 +1,78 @@
+name: Test baseline
+
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: test-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'spyria/eng-health-tests')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun run test --coverage --coverage-reporter=lcov --coverage-dir=.check/coverage-unit --reporter=junit --reporter-outfile=.check/unit.xml
+      - if: always()
+        run: bun run test:integration --coverage --coverage-reporter=lcov --coverage-dir=.check/coverage-integration
+      - if: always()
+        run: |
+          notice() {
+            split --line-bytes=3000 - "$RUNNER_TEMP/notice."
+            for chunk in "$RUNNER_TEMP"/notice.*; do
+              body=$(sed 's/%/%25/g' "$chunk" | sed ':a;N;$!ba;s/\n/%0A/g')
+              echo "::notice title=$1 $(basename "$chunk")::$body"
+              rm "$chunk"
+            done
+          }
+          bun scripts/test-timings.ts unit.xml integration.xml | notice timings
+          for layer in unit integration; do
+            lcov=".check/coverage-$layer/lcov.info"
+            [ -f "$lcov" ] || continue
+            { bun scripts/test-coverage.ts compare "$layer" "$lcov" || true; } | notice "$layer coverage"
+            bun scripts/test-coverage.ts save "$layer" "$lcov"
+            gzip -9c "tests/baseline/$layer.coverage.txt" | base64 -w0 | fold -w 3000 | notice "$layer covered lines"
+          done
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: |
+            .check/coverage-*/lcov.info
+            .check/*.xml
+          retention-days: 30
+      - if: failure()
+        uses: ./.github/actions/test-stack-logs
+
+  e2e-timings:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'spyria/eng-health-tests')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/playwright
+      - run: bun run test:e2e -- --shard=${{ matrix.shard }}/4
+        env:
+          WORKERS: 2
+      - if: always()
+        run: |
+          bun scripts/test-timings.ts e2e-results.json > "$RUNNER_TEMP/timings.txt"
+          split --line-bytes=3000 "$RUNNER_TEMP/timings.txt" "$RUNNER_TEMP/notice."
+          for chunk in "$RUNNER_TEMP"/notice.*; do
+            echo "::notice title=e2e timings ${{ matrix.shard }} $(basename "$chunk")::$(sed 's/%/%25/g' "$chunk" | sed ':a;N;$!ba;s/\n/%0A/g')"
+          done
