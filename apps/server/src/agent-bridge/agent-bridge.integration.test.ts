@@ -409,11 +409,13 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   }
 })
 
-test('a viewer more than 4 MiB behind is closed so its browser reconnects and catches up; other viewers stream on', async () => {
+test('a viewer more than 4 MiB behind is closed so its browser reconnects and catches up; other viewers stream on, and one that left and reopened the chat on the same socket gets each word once', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const steadyViewer = await openStream(chat)
   await steadyViewer.subscribed
+  await steadyViewer.resubscribe()
+  await steadyViewer.resubscribe()
   const slowFrames: Record<string, unknown>[] = []
   const closes: unknown[][] = []
   let bufferedBytes = 0
@@ -440,21 +442,6 @@ test('a viewer more than 4 MiB behind is closed so its browser reconnects and ca
   expect(closes).toEqual([[4008, 'Too slow; reconnect to catch up']])
   const steadyText = steadyViewer.frames.flatMap((frame) => JSON.parse(frame).text ?? []).join('')
   expect(steadyText).toBe(replyOf(1).body)
-})
-
-test('a browser that leaves and reopens a chat on the same socket gets each streamed word once', async () => {
-  await agentHost()
-  const chat = await newRuntimeChat()
-  const viewer = await openStream(chat)
-  await viewer.subscribed
-  await viewer.resubscribe()
-  await viewer.resubscribe()
-  const question = await prompt(chat, 'Stream once')
-  await answered(question)
-  await turnEnded(chat)
-
-  const texts = viewer.frames.map((frame) => JSON.parse(frame)).flatMap((frame) => frame.text ?? [])
-  expect(texts.join('')).toBe(replyOf(1).body)
 })
 
 test('a started agent session reaches viewers live as sessionStarted and is still stored', async () => {
