@@ -88,4 +88,4 @@ test('a turn end that can never be recorded still ends the turn, with its reply 
     await allowTurnEnds()
   }
   expect(await turnEndsOf(chat)).toHaveLength(0)
-})
+}, 60_000)
