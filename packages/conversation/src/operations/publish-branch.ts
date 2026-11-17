@@ -34,7 +34,13 @@ const refused = (text: string): Publication => ({ isRefused: true, text })
 
 const recordPullRequest = (
   { transactor }: { transactor: ConversationTransactor },
-  { chat, actor, step, cardId }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId },
+  {
+    chat,
+    actor,
+    step,
+    cardId,
+    head,
+  }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId; head?: string },
 ) =>
   transactor.run(async ({ messages }) => {
     if (cardId) {
@@ -42,7 +48,10 @@ const recordPullRequest = (
       return messages.record({
         type: 'message.step_changed',
         actor,
-        message: { ...card, step: card.step?.type === 'pull_request' ? withRecordedReviews(step, card.step) : step },
+        message: {
+          ...card,
+          step: card.step?.type === 'pull_request' ? withRecordedReviews(step, card.step, head) : step,
+        },
       })
     }
     await messages.record({
@@ -105,7 +114,10 @@ const pushAndRecord = async (
   const step = openPullRequest
     ? await checkouts.refreshPullRequest(chat, publisherId, openPullRequest)
     : await checkouts.openPullRequest(chat, publisherId, draft)
-  await recordPullRequest({ transactor }, { chat, actor, step, cardId: openPullRequest && card?.id })
+  await recordPullRequest(
+    { transactor },
+    { chat, actor, step, cardId: openPullRequest && card?.id, head: pushed.head ?? undefined },
+  )
   return {
     isRefused: false,
     head: pushed.head ?? null,

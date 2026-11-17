@@ -81,4 +81,10 @@ test('a pull request read back after a push keeps the reviews, comments and chec
     'check_run:1': 'pending',
     'check_run:2': 'passing',
   })
+  const readBeforeGitHubCaughtUp = { ...read, headSha: 'first', checks: { 'check_run:0': 'failing' as const } }
+  const caughtUp = withRecordedReviews(readBeforeGitHubCaughtUp, checkedMeanwhile, 'second')
+  expect({ headSha: caughtUp.headSha, checks: caughtUp.checks }).toEqual({
+    headSha: 'second',
+    checks: { 'check_run:2': 'passing' },
+  })
 })
