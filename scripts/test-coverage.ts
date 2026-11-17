@@ -99,7 +99,8 @@ export const compareCoverage = (
   }
 }
 
-const baselineFileOf = (layer: string) => new URL(`../.check/coverage-baseline/${layer}.coverage.txt`, import.meta.url).pathname
+const baselineFileOf = (layer: string) =>
+  new URL(`../.check/coverage-baseline/${layer}.coverage.txt`, import.meta.url).pathname
 
 const run = (
   command: string | undefined,
