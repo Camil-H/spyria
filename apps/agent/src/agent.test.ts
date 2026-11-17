@@ -10,6 +10,16 @@ import { type AgentEvent, apiKey, clientOf, createAgentTestbed, kindOf, question
 
 const { stateDirectory, stubCommand, launchOf, piLaunchOf, running, started } = createAgentTestbed()
 
+const withTelemetryLines = async (run: (lines: Record<string, unknown>[]) => Promise<void>) => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    await run(lines)
+  } finally {
+    await telemetry.shutdown()
+  }
+}
+
 test('a session asks the harness to keep per-session details out of its system prompt, so the prompt prefix stays cacheable across chats', async () => {
   const { open, create, prompt } = started()
   const id = await create(launchOf())
@@ -549,9 +559,7 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
   expect((await prompt(id, 'after the crash')).status).toBe(409)
 
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const failing = await call('POST', '/api/conversations', {
       ...launchOf(),
       agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
@@ -561,9 +569,7 @@ test('the final tool call update carries the merged call; turn ends and adapter 
     for (const deadline = Date.now() + 5_000; adapterFailures().length === 0 && Date.now() < deadline; )
       await Bun.sleep(10)
     expect(adapterFailures()).toHaveLength(1)
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 
   const missing = await create({ ...launchOf(), agent: { acp_command: ['spyria-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
@@ -777,9 +783,7 @@ test('a new spyria-agent resumes the session of an earlier one, and a missing se
 })
 
 test("an ACP harness whose Claude process dies mid-turn is restarted: the turn ends with a notice, the next prompt keeps the session, and the adapter's error output is logged redacted", async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const { call, open, create, prompt } = started()
     const id = await create(
       launchOf({ acp_model: 'stub-large' }, { CLAUDE_CODE_OAUTH_TOKEN: { value: 'subscription-token-0003' } }),
@@ -812,9 +816,7 @@ test("an ACP harness whose Claude process dies mid-turn is restarted: the turn e
     expect(JSON.stringify(lines)).not.toContain('subscription-token-0003')
     expect(JSON.stringify(lines)).not.toContain('sk-ant-oat01-stubtoken')
     expect(JSON.stringify(socket.events)).not.toContain('subscription-token-0003')
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
 test('a restart notice leaves out a command the agent asked to run, which a member cannot, and asks to restart the session instead', async () => {
@@ -877,9 +879,7 @@ test.each([
 ])(
   '%s that never answers %s is stopped after the request timeout and its conversation fails with what it last reported',
   async (_, method, launch) => {
-    const lines: Record<string, unknown>[] = []
-    const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-    try {
+    await withTelemetryLines(async (lines) => {
       const { call } = started({ requestTimeoutMilliseconds: 400 })
       const silentLaunch = launch()
       silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
@@ -895,9 +895,7 @@ test.each([
       await Bun.sleep(200)
       const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
       expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/new'])
-    } finally {
-      await telemetry.shutdown()
-    }
+    })
   },
 )
 
@@ -986,9 +984,7 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
 })
 
 test('a conversation deleted while its timed-out adapter is still stopping logs no failure', async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const { call, create } = started({ requestTimeoutMilliseconds: 300 })
     const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=700'))
     const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
@@ -997,15 +993,11 @@ test('a conversation deleted while its timed-out adapter is still stopping logs 
     await switching
     await Bun.sleep(200)
     expect(lines.filter((line) => line['event.name'] === 'agent.adapter_failed')).toStrictEqual([])
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
 test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const { call, create } = started({ requestTimeoutMilliseconds: 500 })
     const id = await create(silentOn('session/set_config_option', launchOf()))
     const first = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
@@ -1021,9 +1013,7 @@ test('a request in flight when another one times out fails at once with the same
     await Bun.sleep(700)
     const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
     expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
 test('a prompt sent while a turn runs waits for it and gets its own turn end', async () => {
