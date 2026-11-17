@@ -117,6 +117,8 @@ test.describe('Channels', () => {
     await expect(composerOf(bobPage)).toHaveCount(0)
     await mainOf(bobPage).getByRole('button', { name: 'Join chat' }).click()
     await expect(chatLinkOf(bobPage, 'Forecasts')).toBeVisible()
+    await expect(composerOf(bobPage)).toBeVisible()
+    await expect(mainOf(bobPage).getByRole('button', { name: 'Join chat' })).toHaveCount(0)
     await panelTabOf(bobPage, 'Members').click()
     await expectMembers(bobPage, [
       ['Alice', 'Owner'],
