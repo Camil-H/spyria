@@ -46,7 +46,7 @@ export const setAuditRetention = (
   { memberId, retentionDays }: { memberId: MemberId; retentionDays: unknown },
 ) =>
   transactor.run(async (auditLog) => {
-    await requireWorkspacePermission(auditLog, memberId, 'audit.view')
+    await requireWorkspacePermission(auditLog, memberId, 'audit.manage')
     const days = retentionDaysFrom(retentionDays)
     if (days !== (await auditLog.retentionDays())) await auditLog.setRetentionDays(days, memberId)
     return days

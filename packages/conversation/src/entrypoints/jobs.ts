@@ -24,7 +24,13 @@ import { createRuntimeAgentRuntimes, type SandboxProvider } from '../integration
 import { type AgentLlm, createSpyriaAgentClient } from '../integrations/spyria-agent-client.ts'
 import { workspaceJobTypes } from '../integrations/workspace-jobs.ts'
 import { createTransactingZeroTransactor } from '../integrations/zero-transactor.ts'
-import { continueLoopAfterTurn, judgeLoopCi, pollLoopChecks, runLoop } from '../operations/advance-dev-loop.ts'
+import {
+  continueLoopAfterTurn,
+  judgeLoopCi,
+  pollLoopChecks,
+  runLoop,
+  stopLoopAfterLastFailure,
+} from '../operations/advance-dev-loop.ts'
 import { closeReopenedTurn, reopenAgentTurn, sweepAgentTurns } from '../operations/agent-turn-safety.ts'
 import { authorizeToolCall } from '../operations/authorize-tool-call.ts'
 import type { BrowserViewer } from '../operations/browser-sessions.ts'
@@ -47,7 +53,7 @@ import {
 import { joinRunningTurn, promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { applyPullRequestEvent, publishBranch } from '../operations/publish-branch.ts'
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
-import { recordAgentEvent } from '../operations/record-agent-event.ts'
+import { recordAgentEventEndingLostTurns } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { restartAgentSession } from '../operations/restart-session.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -147,12 +153,24 @@ export const createAgentHandlers = ({
         sweepAgentTurns(dependenciesOf(workspaceId), { workspaceId, now: now() }),
       [devLoopJobTypes.afterTurn]: ({ workspaceId, payload }: AgentJob) =>
         continueLoopAfterTurn(dependenciesOf(workspaceId), { workspaceId, ...afterTurnPayload.parse(payload) }),
-      [devLoopJobTypes.run]: ({ workspaceId, payload }: AgentJob) =>
-        runLoop(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }),
-      [devLoopJobTypes.pollChecks]: ({ workspaceId, payload }: AgentJob) =>
-        pollLoopChecks(dependenciesOf(workspaceId), { workspaceId, ...pollChecksPayload.parse(payload) }),
-      [devLoopJobTypes.ci]: ({ workspaceId, payload, isLastAttempt }: AgentJob) =>
-        judgeLoopCi(dependenciesOf(workspaceId), { workspaceId, ...loopPayload.parse(payload) }, isLastAttempt),
+      [devLoopJobTypes.run]: ({ workspaceId, payload, isLastAttempt }: AgentJob) => {
+        const job = { workspaceId, ...loopPayload.parse(payload) }
+        return stopLoopAfterLastFailure(dependenciesOf(workspaceId), job, isLastAttempt, () =>
+          runLoop(dependenciesOf(workspaceId), job),
+        )
+      },
+      [devLoopJobTypes.pollChecks]: ({ workspaceId, payload, isLastAttempt }: AgentJob) => {
+        const job = { workspaceId, ...pollChecksPayload.parse(payload) }
+        return stopLoopAfterLastFailure(dependenciesOf(workspaceId), job, isLastAttempt, () =>
+          pollLoopChecks(dependenciesOf(workspaceId), job),
+        )
+      },
+      [devLoopJobTypes.ci]: ({ workspaceId, payload, isLastAttempt }: AgentJob) => {
+        const job = { workspaceId, ...loopPayload.parse(payload) }
+        return stopLoopAfterLastFailure(dependenciesOf(workspaceId), job, isLastAttempt, () =>
+          judgeLoopCi(dependenciesOf(workspaceId), job, isLastAttempt),
+        )
+      },
       [workspaceJobTypes.memberRemoved]: ({ workspaceId, payload }: AgentJob) =>
         interruptOwnedTurns(dependenciesOf(workspaceId), { workspaceId, ...memberRemovedPayload.parse(payload) }),
     },
@@ -169,7 +187,7 @@ export const createAgentHandlers = ({
       if (contextUsage)
         await recordContextSize(dependenciesOf(chat.workspaceId), { chat, model: undefined, ...contextUsage })
       if (!isStoredAgentEvent(event)) return undefined
-      const recorded = await recordAgentEvent(
+      const recorded = await recordAgentEventEndingLostTurns(
         { transactor: transactorOf(chat.workspaceId) },
         { ...chat, event, turnPromptId },
       )

@@ -37,6 +37,7 @@ export type FakePullRequest = {
   base: string
   authorToken: string
   isConflicting?: boolean
+  laggingHead?: string
 }
 type FakeComment = { author: string; body: string }
 export type FakeIssue = {
@@ -146,6 +147,7 @@ export const startFakeGitHub = () => {
   let installationPermissions = grantedAppPermissions
   const userTokens = new Map<string, number>()
   const refreshTokens = new Set<string>()
+  let refreshFailureStatus: number | null = null
   const codes = new Set<string>()
   const gitAuthorizations: string[] = []
   const apiRequests: string[] = []
@@ -250,7 +252,7 @@ export const startFakeGitHub = () => {
     }).exitCode === 0
   const pullRequestJsonOf = (
     origin: string,
-    { repository, number, title, head, base, isConflicting }: FakePullRequest,
+    { repository, number, title, head, base, isConflicting, laggingHead }: FakePullRequest,
   ) => ({
     number,
     html_url: `${origin}/${repository}/pull/${number}`,
@@ -258,7 +260,7 @@ export const startFakeGitHub = () => {
     state: 'open',
     draft: false,
     merged: false,
-    head: { sha: branchHeadOf(repository, head), ref: head },
+    head: { sha: laggingHead ?? branchHeadOf(repository, head), ref: head },
     mergeable: isConflicting === undefined ? isMergeable(repository, head, base) : !isConflicting,
     commits: commitSubjectsOf(repository, head, base).length,
   })
@@ -601,6 +603,8 @@ export const startFakeGitHub = () => {
         const parameters = Object.fromEntries(new URLSearchParams(await request.text()))
         if (parameters.client_id !== fakeGitHubClientId || parameters.client_secret !== fakeGitHubClientSecret)
           return Response.json({ error: 'incorrect_client_credentials' })
+        if (parameters.grant_type === 'refresh_token' && refreshFailureStatus !== null)
+          return new Response('Bad gateway', { status: refreshFailureStatus })
         if (parameters.grant_type === 'refresh_token')
           return refreshTokens.delete(parameters.refresh_token ?? '')
             ? userTokensIssued()
@@ -642,6 +646,9 @@ export const startFakeGitHub = () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
     },
     revokeRefreshTokens: () => refreshTokens.clear(),
+    failRefreshesWith: (status: number | null) => {
+      refreshFailureStatus = status
+    },
     setInstallationPermissions: (permissions: Permissions = grantedAppPermissions) => {
       installationPermissions = permissions
     },

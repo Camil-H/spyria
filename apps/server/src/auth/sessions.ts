@@ -23,13 +23,15 @@ export const openSessions = (
   providerWorkspaceId: string | null = null,
   userAgent = '',
   signedInAt?: string,
+  expiresAt?: string,
 ) =>
   database.$client<LiveSession[]>`
     with opened as (
       insert into sessions (workspace_id, id, user_id, provider_workspace_id, user_agent, signed_in_at,
         created_at, expires_at)
       select workspace_id, gen_random_uuid()::text, user_id, ${providerWorkspaceId}, ${userAgent},
-        coalesce(${signedInAt ?? null}::timestamptz, now()), now(), now() + interval '7 days'
+        coalesce(${signedInAt ?? null}::timestamptz, now()), now(),
+        coalesce(${expiresAt ?? null}::timestamptz, now() + interval '7 days')
       from memberships where user_id = ${userId} and workspace_id = coalesce(${workspaceId ?? null}::text, workspace_id)
         and removed_at is null
         and provider_opens_workspace(${providerWorkspaceId}::text, memberships.workspace_id, memberships.user_id)
@@ -73,8 +75,11 @@ export const signOutMemberEverywhere = (database: Database, workspaceId: string,
     on conflict (workspace_id, user_id) do update set signed_out_at = excluded.signed_out_at`
 
 export const signInOf = async (database: Database, { workspaceId, sessionId }: SessionClaims) => {
-  const [session] = await database.$client<{ signedInAt: string; providerWorkspaceId: string | null }[]>`
-    select signed_in_at as "signedInAt", provider_workspace_id as "providerWorkspaceId" from sessions
+  const [session] = await database.$client<
+    { signedInAt: string; expiresAt: string; providerWorkspaceId: string | null }[]
+  >`
+    select signed_in_at as "signedInAt", expires_at as "expiresAt", provider_workspace_id as "providerWorkspaceId"
+    from sessions
     where workspace_id = ${workspaceId} and id = ${sessionId}`
   return session
 }

@@ -25,7 +25,6 @@ const requestTimeoutMilliseconds = 30_000
 const checkoutTimeoutMilliseconds = 120_000
 const bundleTimeoutMilliseconds = 110_000
 const attachmentTimeoutMilliseconds = 60_000
-const githubToolTimeoutSeconds = 120
 const notFoundStatus = 404
 const conflictStatus = 409
 
@@ -181,7 +180,7 @@ export const piCommandOf = (
     ...(!sub && { router: { ...piMcpServerOf(gatewayUrl, '/mcp/router'), timeout: delegateTimeoutSeconds } }),
     ...(!sub &&
       hasRepository && {
-        github: { ...piMcpServerOf(gatewayUrl, githubToolsPath), timeout: githubToolTimeoutSeconds },
+        github: { ...piMcpServerOf(gatewayUrl, githubToolsPath), timeout: spyriaToolTimeoutSeconds },
       }),
   }
   return [

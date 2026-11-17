@@ -225,10 +225,6 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
   })
   expect((await queryWith(app, aliceToken)).status).toBe(200)
   expect((await openSessionWith(app, bobInGlobex.token, acme)).status).toBe(403)
-  const relayedThroughGlobex = await openSessionWith(app, bobInGlobex.token, globex)
-  expect(relayedThroughGlobex.status).toBe(200)
-  const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
-  expect((await openSessionWith(app, relayedToken, acme)).status).toBe(403)
   expect((await queryWith(app, bobInGlobex.token)).status).toBe(200)
   expect((await queryWith(app, (await issueTestSession(database, acme, bob)).token)).status).toBe(200)
 })

@@ -100,12 +100,29 @@ test('only active admins read the audit log, its CSV and its retention; members 
       status: 403,
       body: {
         error: 'missing_workspace_permission',
-        message: 'Your workspace role does not allow this: View the audit log',
+        message: `Your workspace role does not allow this: ${method === 'POST' ? 'Change how long audit records are kept' : 'View the audit log'}`,
       },
     })
   }
   expect((await sql`select * from audit_settings`).length).toBe(0)
   expect((await asMember(alice, 'GET', '/api/audit-log/retention')).status).toBe(200)
+})
+
+test('an auditor who may only view the audit log reads its retention but cannot shorten it', async () => {
+  await sql`insert into workspace_roles (workspace_id, id, name, built_in) values (${acme}, 'auditor', 'Auditor', false)`
+  await sql`insert into workspace_role_permissions (workspace_id, role_id, permission)
+    values (${acme}, 'auditor', 'audit.view')`
+  await sql`update memberships set role = 'auditor' where workspace_id = ${acme} and user_id = ${bob}`
+  expect((await asMember(bob, 'GET', '/api/audit-log/retention')).status).toBe(200)
+  const refused = await asMember(bob, 'POST', '/api/audit-log/retention', { retentionDays: 1 })
+  expect({ status: refused.status, body: JSON.parse(refused.body) }).toEqual({
+    status: 403,
+    body: {
+      error: 'missing_workspace_permission',
+      message: 'Your workspace role does not allow this: Change how long audit records are kept',
+    },
+  })
+  expect((await sql`select * from audit_settings`).length).toBe(0)
 })
 
 test('workspace events, chat events, tool calls, pushes and pull requests merge newest first, with names and no message bodies', async () => {

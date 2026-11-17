@@ -354,7 +354,7 @@ test('a parent Pi reaches Spyria tools, web search and the router directly and t
   expect(piCommandOf('http://spyria-gateway-relay:4000/v1', piLaunch, { sub: true })).toEqual(sub.command)
 })
 
-test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does', () => {
+test('a parent Pi in a dev chat also reaches the GitHub tools, waiting past their approval window; a sub never does', () => {
   const mcpOf = (command: string[]) =>
     JSON.parse(command.find((part) => part.startsWith('SPYRIA_PI_MCP='))?.slice('SPYRIA_PI_MCP='.length) ?? '{}')
       .mcpServers
@@ -363,7 +363,7 @@ test('a parent Pi in a dev chat also reaches the GitHub tools; a sub never does'
     url: 'http://spyria-gateway-relay:4000/mcp/github',
     headers: { Authorization: `Bearer \${SPYRIA_MCP_TOKEN}` },
     exposure: 'direct',
-    timeout: 120,
+    timeout: 330,
   })
   expect(Object.keys(mcpOf(piCommandOf(gateway, piLaunch, { sub: true, hasRepository: true })))).toEqual([
     'spyria',

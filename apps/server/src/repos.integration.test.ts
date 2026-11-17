@@ -126,7 +126,7 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
   ])
 })
 
-test('a member connects GitHub through the user OAuth: tokens sealed server-side, refreshed when expired, Needs reconnection when the refresh fails', async () => {
+test('a member connects GitHub through the user OAuth: tokens sealed server-side, refreshed when expired, retried after GitHub fails, Needs reconnection when the refresh token is refused', async () => {
   await ensureGitHubApp(webhookSecret)
   for (const member of [alice, bob]) await disconnectGitHub(member)
   expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({ body: { connection: null } })
@@ -164,6 +164,21 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
     await secretBox.open(stored?.encrypted_access_token),
   )
   expect(new Date(refreshed?.access_expires_at).getTime()).toBeGreaterThan(Date.now())
+
+  fakeGitHub.failRefreshesWith(502)
+  try {
+    await database.$client`update github_connections set access_expires_at = now() - interval '1 minute'`
+    expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({
+      body: { connection: { login: fakeGitHubLogin, state: 'connected' } },
+    })
+    expect((await connectionRow())?.needs_reconnection).toBe(false)
+  } finally {
+    fakeGitHub.failRefreshesWith(null)
+  }
+  expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({
+    body: { connection: { state: 'connected' } },
+  })
+  expect(new Date((await connectionRow())?.access_expires_at).getTime()).toBeGreaterThan(Date.now())
 
   fakeGitHub.revokeRefreshTokens()
   await database.$client`update github_connections set access_expires_at = now() - interval '1 minute'`

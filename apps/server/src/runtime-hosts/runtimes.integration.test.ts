@@ -15,7 +15,7 @@ import {
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { secretsKeyringOf } from '../auth/secret-box.ts'
-import { startJobWorker } from '../job-worker.ts'
+import { maximumJobAttempts, startJobWorker } from '../job-worker.ts'
 import {
   acme,
   alice,
@@ -298,6 +298,62 @@ test('a runtime whose host drops while it starts goes back to stopped on that ho
   expect(host.commands.filter(({ runtimeId }) => runtimeId === runtime.id).map(({ op }) => op)).not.toContain('remove')
 })
 
+test('a stop or a removal that runs out of attempts while its host is disconnected stays pending and finishes once the host returns', async () => {
+  const host = await fakeHost('Disconnected Docker host')
+  const [stoppingChat, removingChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const stopping = await runningRuntime(stoppingChat)
+  const removing = await stoppedRuntime(removingChat)
+  await host.disconnect()
+  await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
+  await database.$client`update runtimes set host_online = true where host_id = ${host.id}`
+  const capturedConsole = captureConsole()
+  try {
+    await zeroDatabase.transaction((tx) =>
+      stopChatRuntime(
+        { transactor: createRuntimeTransactor(tx) },
+        { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
+      ),
+    )
+    expect(await archive(removingChat)).toEqual(succeeded)
+    await waitFor(async () => (await jobsOf('runtime.stop', stopping.id)).some((job) => job.state === 'failed'), 15_000)
+    await waitFor(
+      async () => (await jobsOf('runtime.remove', removing.id)).some((job) => job.state === 'failed'),
+      15_000,
+    )
+    expect((await runtimeOf(stoppingChat)).state).toBe('stopping')
+    expect((await runtimeOf(removingChat)).state).toBe('removing')
+  } finally {
+    capturedConsole.restore()
+    await host.connect()
+  }
+  await runtimeIn(stoppingChat, 'stopped')
+  await runtimeIn(removingChat, 'removed')
+  expect(host.containers.get(stopping.id)?.running).toBe(false)
+  expect(host.containers.has(removing.id)).toBe(false)
+})
+
+test('after a server restart, a start that runs before the host reconnects leaves a runtime that already ran stopped, and it starts there once the host returns', async () => {
+  const host = await fakeHost('Restarted server host')
+  const chat = await newRuntimeChat()
+  const runtime = await stoppedRuntime(chat)
+  await host.disconnect()
+  await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
+  await database.$client`update runtimes set host_online = true where host_id = ${host.id}`
+  const capturedConsole = captureConsole()
+  try {
+    await ensure(chat)
+    await waitFor(async () => (await jobsOf('runtime.start', runtime.id)).some((job) => job.state === 'done'), 15_000)
+    expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, state: 'stopped', failure: null })
+    expect(await jobsOf('runtime.discard', runtime.id)).toEqual([])
+  } finally {
+    capturedConsole.restore()
+    await host.connect()
+  }
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  expect((await runtimeOf(chat)).id).toBe(runtime.id)
+})
+
 test('the sweep stops runtimes idle for more than an hour only, and touchRuntime postpones it', async () => {
   const host = await fakeHost('Sweeping host')
   const [idleChat, activeChat, touchedChat] = [await newRuntimeChat(), await newRuntimeChat(), await newRuntimeChat()]
@@ -319,6 +375,26 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
   expect((await runtimeOf(touchedChat)).state).toBe('running')
   expect(host.commands.filter((command) => command.op === 'stop').map((command) => command.runtimeId)).toEqual([
     idle.id,
+  ])
+})
+
+test('a stop or a removal that keeps failing while its host stays connected records the runtime stopped, or failed for a later retry, on its last attempt', async () => {
+  const host = await fakeHost('Failing Docker host')
+  const [stoppingChat, removingChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const stopping = await runningRuntime(stoppingChat)
+  await stoppedRuntime(removingChat)
+  host.failing('stop')
+  host.failing('remove')
+  const capturedConsole = captureConsole()
+  await idleFor(stoppingChat, '2 hours')
+  await idleFor(removingChat, '8 days')
+  await sweep()
+  await runtimeIn(stoppingChat, 'stopped')
+  await runtimeIn(removingChat, 'failed')
+  capturedConsole.restore()
+  expect((await runtimeOf(removingChat)).failure).toBe('remove_failed')
+  expect((await jobsOf('runtime.stop', stopping.id)).map(({ state, attempts }) => ({ state, attempts }))).toEqual([
+    { state: 'done', attempts: maximumJobAttempts },
   ])
 })
 

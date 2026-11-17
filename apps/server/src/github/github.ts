@@ -403,6 +403,9 @@ const storeUserTokens = async (
   })
 }
 
+const isRejectedRefreshToken = (error: unknown) =>
+  error instanceof GitHubRequestFailed && error.githubMessage === 'bad_refresh_token'
+
 const connectionWithTokenOf = async (
   database: Database,
   dependencies: GitHubDependencies,
@@ -431,8 +434,18 @@ const connectionWithTokenOf = async (
           .then(async ({ clientId, clientSecret }) =>
             dependencies.api.refresh(clientId, clientSecret, await secretBox.open(row.encryptedRefreshToken ?? '')),
           )
-          .catch(loggedFailure(member.workspaceId))
+          .catch((error: unknown) =>
+            isRejectedRefreshToken(error) ? undefined : githubFailureOf(member.workspaceId, error),
+          )
       : undefined
+  if (refreshed instanceof Error)
+    return {
+      login: row.login,
+      state: 'connected',
+      accessToken: async () => {
+        throw refreshed
+      },
+    }
   if (refreshed && secretBox && row.encryptedRefreshToken)
     return (await storeRefreshedTokens(database, secretBox, member, {
       tokens: refreshed,
@@ -630,7 +643,7 @@ export const createGitHubCheckouts = (database: Database, dependencies: GitHubDe
       const memberKey = `${chat.workspaceId}:${ownerId}`
       const cached = authorsByMember.get(memberKey)
       if (cached?.login === connection.login) return cached.author
-      const token = await connection.accessToken()
+      const token = await connection.accessToken().catch(() => undefined)
       const user = token ? await api.user(token).catch(loggedFailure(chat.workspaceId)) : undefined
       if (!user) return undefined
       const author = { name: user.login, email: `${user.id}+${user.login}@users.noreply.github.com` }

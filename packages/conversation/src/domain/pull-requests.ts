@@ -51,6 +51,21 @@ export const checksOf = ({ checks }: Pick<PullRequestStep, 'checks'>): CheckStat
       : 'passing'
 }
 
+export const withRecordedReviews = (
+  read: PullRequestStep,
+  recorded: PullRequestStep,
+  headSha = read.headSha,
+): PullRequestStep => ({
+  ...read,
+  headSha,
+  review: recorded.review,
+  comments: recorded.comments,
+  checks: {
+    ...(read.headSha === headSha ? read.checks : {}),
+    ...(recorded.headSha === headSha ? recorded.checks : {}),
+  },
+})
+
 export const unresolvedCommentsOf = ({ comments }: Pick<PullRequestStep, 'comments'>) =>
   comments.filter((comment) => !comment.isResolved)
 

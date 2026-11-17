@@ -56,12 +56,15 @@ const downloadOf = (bytes) => {
   return download
 }
 const settled = () => new Promise((resolve) => setTimeout(resolve, 20))
+const untilSent = async (sent) => {
+  for (let waited = 0; sent.length === 0 && waited < 5000; waited += 20) await settled()
+}
 
 test('a download is handed over as a file of the browser, with only its id, name and size on the stream, whatever its size', async () => {
   const page = fakePage()
   const { session, sent, filesDirectory } = sessionOn(page)
   page.handlers.get('download')(downloadOf(64 * 1024 * 1024))
-  await settled()
+  await untilSent(sent)
   expect(sent).toEqual([
     { type: 'download', file: expect.stringMatching(/^[a-f0-9]{32}$/), name: 'video.mp4', size: 64 * 1024 * 1024 },
   ])

@@ -566,6 +566,7 @@ export const createAuthRoutes = ({
       asMember(context, async ({ context: member, sessionId, scope }) => {
         if (member.signedInThrough === 'workspace sso') return context.json({ error: 'forbidden' }, 403)
         const workspaceId = await workspaceIdOfBody(context)
+        if (workspaceId === member.workspaceId) return context.json({ error: 'forbidden' }, 403)
         const signIn = await signInOf(scope.database, { ...member, sessionId })
         if (!signIn) return context.json({ error: 'unauthorized' }, 401)
         if (await isSignedOutSince(scope.database, workspaceId, member.userId, signIn.signedInAt))
@@ -577,6 +578,7 @@ export const createAuthRoutes = ({
           signIn.providerWorkspaceId,
           userAgentOf(context),
           signIn.signedInAt,
+          signIn.expiresAt,
         )
         if (!session) return context.json({ error: 'forbidden' }, 403)
         setSessionCookie(context, appOrigin, session)

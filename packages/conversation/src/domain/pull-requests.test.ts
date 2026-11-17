@@ -6,6 +6,7 @@ import {
   githubAccessRefusalOf,
   publishToolOf,
   reviewPromptOf,
+  withRecordedReviews,
 } from './pull-requests.ts'
 
 test('the checks summary is failing if any check fails, pending while any is pending or none ran, else passing', () => {
@@ -45,4 +46,45 @@ test('publishing names the member whose access to GitHub refuses the tool, and t
   expect(cannotPostRefusalOf('Lee')).toBe('Lee cannot post in this chat')
   expect(publishToolOf('push')).toBe('push_branch')
   expect(publishToolOf('pull_request')).toBe('open_pull_request')
+})
+
+test('a pull request read back after a push keeps the reviews, comments and checks recorded while it was pushed', () => {
+  const read = {
+    type: 'pull_request' as const,
+    repository: 'acme/app',
+    number: 7,
+    url: 'https://github.com/acme/app/pull/7',
+    title: 'Fix the totals',
+    state: 'open' as const,
+    headSha: 'second',
+    commits: 2,
+    checks: { 'check_run:1': 'pending' as const },
+    review: null,
+    comments: [],
+  }
+  const comment = { id: 3, path: 'src/app.ts', line: 1, author: 'rita', body: 'Rename it', isResolved: false }
+  const recorded = {
+    ...read,
+    headSha: 'first',
+    commits: 1,
+    checks: { 'check_run:0': 'failing' as const },
+    review: 'changes_requested' as const,
+    comments: [comment],
+  }
+  expect(withRecordedReviews(read, recorded)).toEqual({
+    ...read,
+    review: 'changes_requested',
+    comments: [comment],
+  })
+  const checkedMeanwhile = { ...recorded, headSha: 'second', checks: { 'check_run:2': 'passing' as const } }
+  expect(withRecordedReviews(read, checkedMeanwhile).checks).toEqual({
+    'check_run:1': 'pending',
+    'check_run:2': 'passing',
+  })
+  const readBeforeGitHubCaughtUp = { ...read, headSha: 'first', checks: { 'check_run:0': 'failing' as const } }
+  const caughtUp = withRecordedReviews(readBeforeGitHubCaughtUp, checkedMeanwhile, 'second')
+  expect({ headSha: caughtUp.headSha, checks: caughtUp.checks }).toEqual({
+    headSha: 'second',
+    checks: { 'check_run:2': 'passing' },
+  })
 })

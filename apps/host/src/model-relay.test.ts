@@ -76,6 +76,29 @@ test('tells Spyria to cancel when the caller stops reading', async () => {
   relay.handle({ type: 'gw_chunk', sid, data: 'late' })
 })
 
+test('tells Spyria to cancel when the caller gives up before the answer starts, and ignores the late answer', async () => {
+  const { relay, nextOf, sent } = relayCollecting()
+  const caller = new AbortController()
+  const request = completionRequest()
+  const answer = relay.fetch(new Request(request, { signal: caller.signal }))
+  const { sid } = await nextOf('gw_req')
+  caller.abort()
+  expect(await nextOf('gw_cancel')).toEqual({ type: 'gw_cancel', sid })
+  expect((await answer).status).toBe(499)
+  relay.handle({ type: 'gw_head', sid, status: 200, headers: {} })
+  expect(sent).toEqual([])
+})
+
+test('tells Spyria to cancel a call its caller gave up on while its body was still read', async () => {
+  const { relay, nextOf } = relayCollecting()
+  const caller = new AbortController()
+  const request = new Request(completionRequest(), { signal: caller.signal })
+  caller.abort()
+  void relay.fetch(request)
+  const { sid } = await nextOf('gw_req')
+  expect(await nextOf('gw_cancel')).toEqual({ type: 'gw_cancel', sid })
+})
+
 test('relays spyria-agent’s MCP calls on /mcp with their session headers', async () => {
   const { relay, nextOf } = relayCollecting()
   void relay.fetch(

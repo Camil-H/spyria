@@ -210,6 +210,7 @@ test.describe('Roles', () => {
         'View costs',
         'Manage budgets',
         'View the audit log',
+        'Change how long audit records are kept',
       ])
     await expect.poll(() => permissionsOfRoleIn(workspaceRolesOf(page), 'Member')).toEqual([])
     for (const builtInName of ['Admin', 'Member'])

@@ -18,6 +18,7 @@ export type RuntimeFailure =
   | 'no_image'
   | 'create_failed'
   | 'start_failed'
+  | 'remove_failed'
   | 'lost'
   | 'outdated'
   | `${typeof installFailedPrefix}${string}`
@@ -83,8 +84,13 @@ export const transitioned = (
   return { ...runtime, state, failure, stateChangedAt: now }
 }
 
-export const failedBringUpOf = (runtime: Runtime, now: number, failure: RuntimeFailure) => {
-  if (runtime.hostOnline) return transitioned(runtime, 'failed', now, failure)
+export const failedBringUpOf = (
+  runtime: Runtime,
+  now: number,
+  failure: RuntimeFailure,
+  isHostOnline = runtime.hostOnline,
+) => {
+  if (isHostOnline) return transitioned(runtime, 'failed', now, failure)
   const hasRun = runtime.agentProtocolVersion !== null
   return hasRun ? transitioned(runtime, 'stopped', now) : transitioned(runtime, 'failed', now, 'no_host')
 }

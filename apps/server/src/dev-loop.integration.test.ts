@@ -150,6 +150,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   await loopStateIs(id, 'waiting_for_ci')
   const opened = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)
   const firstHead = String((await loopOf(id))?.step.pushedHead)
+  if (opened) opened.laggingHead = firstHead
   expect(opened).toMatchObject({ title: 'Fix totals', body: 'The totals add up again' })
   expect((await loopOf(id))?.step).toMatchObject({
     position: 3,
@@ -177,6 +178,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   }, 60_000)
   const secondHead = fakeGitHub.branchHeadOf('acme/app', branch)
   expect((await loopOf(id))?.step.pushedHead).toBe(secondHead)
+  if (opened) delete opened.laggingHead
   pushCheckRun(secondHead, 'unit', 'success')
   await loopStateIs(id, 'done')
   const ready = `Ready for your review on pull request #${opened?.number}: Totals, Code review and CI passed`
@@ -323,6 +325,20 @@ test('As a chat owner, Stop stops the quality gates while it runs a command, and
       await database.$client`select payload from workspace_events where type = 'dev_loop.changed' order by created_at`
     ).map(({ payload }) => payload.settings.rules[0].isOn),
   ).toContain(false)
+})
+
+test('As a chat owner, a commit made while the checks run starts the gates again instead of counting as checked', async () => {
+  const marker = join(tmpdir(), `spyria-dev-loop-commit-${crypto.randomUUID()}`)
+  const commitOnce = `[ -e ${marker} ] || (touch ${marker} && git -c user.name=Alice -c user.email=alice@example.com commit -q --allow-empty -m 'Commit during the checks')`
+  expect(await setDevLoop(alice, settingsWith([commandStep('Totals', commitOnce)]))).toEqual(succeeded)
+  await stack.agentHost('Moving head host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'done')
+  expect((await loopOf(id))?.step).toMatchObject({ round: 2, rounds: [0], outcomes: ['passed'] })
 })
 
 test('As a chat owner whose agent does not fix what the review found, the next review checks it again and sends it back, then hands over after the review’s fixes', async () => {
@@ -699,6 +715,41 @@ test('As a chat owner, the gates check they still run before updating a conflict
   const [ciJob] = await database.$client`
     select attempts, state from jobs where type = 'dev_loop.ci' and payload->>'loopId' = ${failing.loopId}`
   expect(ciJob).toMatchObject({ attempts: maximumJobAttempts, state: 'done' })
+})
+
+test('As a chat owner, quality gates whose publishing keeps failing on an unexpected error stop on its last attempt and say so', async () => {
+  const steps: Step[] = [{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]
+  expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+  await stack.agentHost('Failing publish host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  await database.$client.unsafe(
+    `create function refuse_branch_push() returns trigger language plpgsql
+     as $$ begin if new.type = 'branch.pushed' then raise exception 'The push record is refused'; end if;
+     return new; end $$`,
+  )
+  await database.$client.unsafe(
+    'create trigger refuse_branch_push before insert on events for each row execute function refuse_branch_push()',
+  )
+  try {
+    stack.setFakeLlmScript({
+      steps: [committing('export const total = 15', 'Change the totals'), finish],
+      text: 'Done.',
+    })
+    await stack.prompt(id, 'Fix the totals')
+    await loopStateIs(id, 'stopped')
+  } finally {
+    await database.$client.unsafe('drop trigger refuse_branch_push on events')
+    await database.$client.unsafe('drop function refuse_branch_push')
+  }
+  expect((await loopOf(id))?.step.outcome).toBe(
+    'Stopped: the quality gates kept failing on an unexpected error: over to you',
+  )
+  const [runJob] = await database.$client`
+    select jobs.attempts, jobs.state from jobs join messages on messages.id = jobs.payload->>'loopId'
+    where jobs.type = 'dev_loop.run' and jobs.state = 'failed' and messages.chat_id = ${id}`
+  expect(runJob).toMatchObject({ attempts: maximumJobAttempts, state: 'failed' })
 })
 
 test("the quality gates' tools come from Spyria's own tool server, to the chat's own turns only, and never from the GitHub one", async () => {

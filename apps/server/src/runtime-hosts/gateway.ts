@@ -7,6 +7,7 @@ import {
   type ConnectedHost,
   createHostSessionHandlers,
   HostMarkedOffline,
+  HostNotConnected,
   HostNotRegistered,
   HostRefused,
   type HostSessionFrame,
@@ -421,7 +422,7 @@ export const createRuntimeHostGateway = ({
 
   const connectionOf = (host: ConnectedHost) => {
     const connection = connectionByHost.get(keyOf(host))
-    if (!connection) throw new Error(`Runtime host ${host.hostId} is not connected`)
+    if (!connection) throw new HostNotConnected(host.hostId)
     return connection
   }
 

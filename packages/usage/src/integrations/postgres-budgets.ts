@@ -22,6 +22,12 @@ const roleBudgetsStatement = `
   where role.workspace_id = $1
   order by role.built_in desc, lower(role.name), role.id`
 
+const hasBudgetStatement = `
+  select 1 from memberships member join role_budgets budget
+    on budget.workspace_id = member.workspace_id and budget.role_id = member.role
+  where member.workspace_id = $1 and member.user_id = $2 and member.removed_at is null
+  limit 1`
+
 const memberSpendsStatement = `
   with periods as (
     select * from jsonb_to_recordset($2::jsonb) as period(period text, "startsAt" timestamptz)),
@@ -82,6 +88,7 @@ export const createPostgresBudgetTransactor = (transact: Transact, workspaceId: 
           (await query<Omit<RoleBudget, 'limits'> & { limits: Record<string, number> }>(roleBudgetsStatement, [])).map(
             (role) => ({ ...role, limits: limitsOf(role.limits) }),
           ),
+        hasBudget: async (memberId) => (await query(hasBudgetStatement, [memberId])).length > 0,
         memberSpends: (periodStarts, memberId) =>
           query<MemberPeriodSpend>(memberSpendsStatement, [
             JSON.stringify(budgetPeriods.map((period) => ({ period, startsAt: periodStarts[period].toISOString() }))),

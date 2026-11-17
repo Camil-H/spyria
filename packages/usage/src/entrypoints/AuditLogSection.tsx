@@ -1,5 +1,5 @@
 import { useQuery } from '@spyria/db/react'
-import type { WorkspaceId } from '@spyria/kernel'
+import type { WorkspaceId, WorkspacePermission } from '@spyria/kernel'
 import {
   buttonClass,
   cardClass,
@@ -34,7 +34,15 @@ const searchOf = ({ person, group, from, to }: Filters, cursor?: string) =>
     }).filter(([, value]) => value !== ''),
   )
 
-const RetentionForm = ({ workspaceId, onSaved }: { workspaceId: WorkspaceId; onSaved: () => void }) => {
+const RetentionForm = ({
+  workspaceId,
+  mayChange,
+  onSaved,
+}: {
+  workspaceId: WorkspaceId
+  mayChange: boolean
+  onSaved: () => void
+}) => {
   const commands = useUsageCommands()
   const [savedDays, setSavedDays] = useState<number | null | undefined>(undefined)
   const [isForever, setIsForever] = useState(true)
@@ -64,6 +72,7 @@ const RetentionForm = ({ workspaceId, onSaved }: { workspaceId: WorkspaceId; onS
   }
   if (savedDays === undefined)
     return loadError ? <ErrorMessage message={loadError} /> : <p className="text-sm text-muted">Loading…</p>
+  if (!mayChange) return <p className="text-sm text-muted">Audit records are kept: {retentionLabelOf(savedDays)}</p>
   return (
     <form aria-label="Retention" onSubmit={save} className="flex flex-wrap items-end gap-2">
       <label className={labelClass}>
@@ -171,7 +180,13 @@ const AuditRecords = ({ entries }: { entries: readonly AuditEntry[] }) => (
   </div>
 )
 
-export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) => {
+export const AuditLogSection = ({
+  workspaceId,
+  permissions,
+}: {
+  workspaceId: WorkspaceId
+  permissions: readonly WorkspacePermission[]
+}) => {
   const commands = useUsageCommands()
   const people = useQuery(listAuditPeople, workspaceId)
   const [filters, setFilters] = useState(noFilters)
@@ -217,7 +232,11 @@ export const AuditLogSection = ({ workspaceId }: { workspaceId: WorkspaceId }) =
     <section aria-label="Audit log" className="flex flex-col gap-4">
       <LabelledSection title="Retention" titleClass="text-sm font-medium" className="mb-4 flex flex-col gap-3">
         <div className={`${cardClass} p-4`}>
-          <RetentionForm workspaceId={workspaceId} onSaved={() => setFilters({ ...filters })} />
+          <RetentionForm
+            workspaceId={workspaceId}
+            mayChange={permissions.includes('audit.manage')}
+            onSaved={() => setFilters({ ...filters })}
+          />
         </div>
       </LabelledSection>
       <fieldset aria-label="Filters" className="flex flex-wrap items-end gap-3">

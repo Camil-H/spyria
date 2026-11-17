@@ -35,6 +35,7 @@ type Session = Input & {
   idleTimer?: ReturnType<typeof setTimeout>
   lastVisit?: string
   visitTimes: number[]
+  runtimeTouchedAt: number
   isClosed: boolean
 }
 type Download = { session: Session; file: string; name: string; size: number; expiresAt: number }
@@ -49,6 +50,7 @@ const defaultIdleMilliseconds = 10 * 60_000
 const defaultStartMilliseconds = 60_000
 const defaultCommandMilliseconds = 90_000
 const visitWindowMilliseconds = 60_000
+const runtimeTouchMilliseconds = 60_000
 const maximumVisitsPerWindow = 30
 const viewerMessageTypes = ['frame', 'page', 'notice', 'file_chooser']
 const downloadLifetimeMilliseconds = 10 * 60_000
@@ -130,6 +132,17 @@ const touch = (dependencies: Dependencies, session: Session) => {
   session.idleTimer = setTimeout(
     () => stopIdle(session),
     dependencies.browserIdleMilliseconds ?? defaultIdleMilliseconds,
+  )
+  const now = Date.now()
+  if (now - session.runtimeTouchedAt < runtimeTouchMilliseconds) return
+  session.runtimeTouchedAt = now
+  dependencies.runtimes.touch(session.chat).catch((error) =>
+    log.warn({
+      event: 'browser.runtime_touch_failed',
+      body: "Keeping a browser's runtime awake failed",
+      attributes: { 'workspace.id': session.chat.workspaceId, 'chat.id': session.chat.chatId },
+      error,
+    }),
   )
 }
 
@@ -259,6 +272,7 @@ const started = async (dependencies: Dependencies, input: Input, slot: Slot): Pr
     pending: new Map(),
     nextId: 1,
     visitTimes: [],
+    runtimeTouchedAt: 0,
     isClosed: false,
   }
   session.ready.promise.catch(() => {})

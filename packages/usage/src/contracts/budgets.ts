@@ -4,6 +4,7 @@ import type { BudgetAlert, BudgetPeriod, MemberPeriodSpend, RoleBudget, RoleBudg
 export type BudgetLedger = {
   permissions(memberId: MemberId): Promise<readonly WorkspacePermission[]>
   roleBudgets(): Promise<RoleBudget[]>
+  hasBudget(memberId: MemberId): Promise<boolean>
   memberSpends(
     periodStarts: Readonly<Record<BudgetPeriod, Date>>,
     memberId: MemberId | null,

@@ -21,27 +21,39 @@ import {
   type PullRequestDraft,
   type PullRequestStep,
   publishToolOf,
+  withRecordedReviews,
 } from '../domain/pull-requests.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { githubRefusalOf } from './github-access.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>
 type Input = { chat: AgentChat; actor: Actor; action: PublishAction; draft: PullRequestDraft }
-export type Publication = { isRefused: boolean; text: string }
+export type Publication = { isRefused: boolean; text: string; head?: string | null }
 
 const refused = (text: string): Publication => ({ isRefused: true, text })
 
 const recordPullRequest = (
   { transactor }: { transactor: ConversationTransactor },
-  { chat, actor, step, cardId }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId },
+  {
+    chat,
+    actor,
+    step,
+    cardId,
+    head,
+  }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId; head?: string },
 ) =>
   transactor.run(async ({ messages }) => {
-    if (cardId)
+    if (cardId) {
+      const card = await messages.lock(cardId)
       return messages.record({
         type: 'message.step_changed',
         actor,
-        message: { ...(await messages.get(cardId)), step },
+        message: {
+          ...card,
+          step: card.step?.type === 'pull_request' ? withRecordedReviews(step, card.step, head) : step,
+        },
       })
+    }
     await messages.record({
       type: 'message.posted',
       actor,
@@ -102,9 +114,13 @@ const pushAndRecord = async (
   const step = openPullRequest
     ? await checkouts.refreshPullRequest(chat, publisherId, openPullRequest)
     : await checkouts.openPullRequest(chat, publisherId, draft)
-  await recordPullRequest({ transactor }, { chat, actor, step, cardId: openPullRequest && card?.id })
+  await recordPullRequest(
+    { transactor },
+    { chat, actor, step, cardId: openPullRequest && card?.id, head: pushed.head ?? undefined },
+  )
   return {
     isRefused: false,
+    head: pushed.head ?? null,
     text: openPullRequest
       ? `Pushed ${pushed.branch} to pull request #${step.number} (${step.commits} commits): ${step.url}`
       : `Opened pull request #${step.number}: ${step.url}`,

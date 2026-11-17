@@ -1,4 +1,13 @@
-import { type ChatId, expiredNoticeOf, harnessOf, type MessageId, messageId, type WorkspaceId } from '@spyria/kernel'
+import {
+  type ChatId,
+  DomainError,
+  expiredNoticeOf,
+  harnessOf,
+  log,
+  type MessageId,
+  messageId,
+  type WorkspaceId,
+} from '@spyria/kernel'
 import type { ConversationTransactor, UnitOfWork } from '../contracts/transactor.ts'
 import {
   type AgentEvent,
@@ -18,6 +27,7 @@ import { closeAgentTurn } from './agent-turn.ts'
 
 type Dependencies = { transactor: ConversationTransactor }
 const unknownContext = { contextTokens: null, contextWindow: null }
+const recordRetryDelaysMilliseconds = [100, 500, 1500]
 type Input = {
   workspaceId: WorkspaceId
   chatId: ChatId
@@ -110,3 +120,37 @@ const recordIn = async (
 
 export const recordAgentEvent = ({ transactor }: Dependencies, input: Input) =>
   transactor.run(async (unitOfWork) => recordIn(unitOfWork, await unitOfWork.agentTurns.lock(input.chatId), input))
+
+const recordedWithRetries = async (dependencies: Dependencies, input: Input) => {
+  for (const delay of recordRetryDelaysMilliseconds) {
+    try {
+      return await recordAgentEvent(dependencies, input)
+    } catch (error) {
+      if (error instanceof DomainError) throw error
+      await Bun.sleep(delay)
+    }
+  }
+  return recordAgentEvent(dependencies, input)
+}
+
+export const recordAgentEventEndingLostTurns = (dependencies: Dependencies, input: Input) =>
+  recordedWithRetries(dependencies, input).catch(async (error: unknown) => {
+    const projected = agentProjectionOf(input.event)
+    if (error instanceof DomainError || projected?.type !== 'turn-end') throw error
+    log.error({
+      event: 'agent.turn_end.not_recorded',
+      body: 'The end of an agent turn could not be recorded: the turn is closed without it',
+      attributes: { 'workspace.id': input.workspaceId, 'chat.id': input.chatId },
+      error,
+    })
+    const stillActivePromptId = await dependencies.transactor.run(async (unitOfWork) => {
+      const activePromptId = await unitOfWork.agentTurns.lock(input.chatId)
+      const isOwnTurn = activePromptId !== null && (input.turnPromptId ?? activePromptId) === activePromptId
+      if (!isOwnTurn) return activePromptId
+      await closeAgentTurn(unitOfWork, input.chatId, activePromptId, (hasReply) =>
+        turnEndNoticeOf(projected.outcome, hasReply),
+      )
+      return null
+    })
+    return { promptId: stillActivePromptId, isReplyStored: false, expiredSignIn: undefined }
+  })
