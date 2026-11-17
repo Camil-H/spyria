@@ -91,7 +91,7 @@ test('markThreadRead never moves backwards and writes nothing for a thread witho
   await replyTo(aliceInAcme, chat, root)
   expect(await markThreadRead(bobInAcme, chat, root)).toEqual(succeeded)
   expect(await threadMarkerOf(bob, root)).toEqual({ chatId: chat, lastReadSeq: 3 })
-  await database.$client`update thread_read_markers set last_read_seq = 99 where user_id = ${bob}`
+  await database.$client`update thread_read_markers set last_read_seq = 99 where user_id = ${bob} and chat_id = ${chat}`
   expect(await markThreadRead(bobInAcme, chat, root)).toEqual(succeeded)
   expect(await threadMarkerOf(bob, root)).toEqual({ chatId: chat, lastReadSeq: 99 })
   expect(await markThreadRead(bobInAcme, chat, rootWithoutReplies)).toEqual(succeeded)
