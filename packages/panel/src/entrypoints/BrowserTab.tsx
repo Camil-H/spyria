@@ -414,37 +414,40 @@ export const BrowserTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
     setShownFile(file)
     setIsListing(false)
   }
+  const isShowingFiles = isListing || shownFile !== null
+  const filesLabel = isShowingFiles ? 'Back to your browser' : 'Files the agent opened'
   return (
     <div className="flex h-full flex-col gap-3">
-      {files.length > 0 && (
-        <div className="flex items-center gap-1">
+      {actionsSlot &&
+        files.length > 0 &&
+        createPortal(
           <button
             type="button"
-            aria-pressed={isListing || shownFile !== null}
+            aria-label={filesLabel}
+            title={filesLabel}
             onClick={() => {
-              setIsListing(!isListing && shownFile === null)
+              setIsListing(!isShowingFiles)
               setShownFile(null)
             }}
-            className={`flex items-center gap-1.5 ${smallGhostButtonClass}`}
+            className={`-order-1 ${isShowingFiles ? 'bg-selected text-ink' : ''} ${iconButtonClass}`}
           >
             <FileText aria-hidden className="size-4" />
-            {isListing || shownFile ? 'Back to your browser' : 'Files the agent opened'}
-          </button>
-          {shownFile && (
-            <p className="min-w-0 truncate text-sm font-medium" title={shownFile.url}>
-              {shownFile.title}
-            </p>
-          )}
-        </div>
+          </button>,
+          actionsSlot,
+        )}
+      {shownFile && (
+        <p className="truncate text-sm font-medium" title={shownFile.url}>
+          {shownFile.title}
+        </p>
       )}
       {shownFile && <WorkspaceFile workspaceId={workspaceId} chatId={chatId} page={shownFile} />}
       {isListing && !shownFile && <OpenedFiles pages={files} onOpen={openFile} />}
-      <div className={`flex min-h-0 flex-1 flex-col gap-3 ${shownFile || isListing ? 'hidden' : ''}`}>
+      <div className={`flex min-h-0 flex-1 flex-col gap-3 ${isShowingFiles ? 'hidden' : ''}`}>
         <LiveBrowserTab
           key={connectionCount}
           workspaceId={workspaceId}
           chatId={chatId}
-          actionsSlot={actionsSlot}
+          actionsSlot={isShowingFiles ? null : actionsSlot}
           onReconnect={() => setConnectionCount((count) => count + 1)}
         />
       </div>

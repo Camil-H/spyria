@@ -2,7 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { schema } from '@spyria/db/zero'
 import { createZeroStore } from '@spyria/db/zero-store'
-import { type ChatId, chatId, defaultHarness } from '@spyria/kernel'
+import { type ChatId, chatId, defaultHarness, runtimeHostId } from '@spyria/kernel'
 import {
   createRuntimeJobs,
   createRuntimeTransactor,
@@ -247,6 +247,31 @@ test('a stopped runtime resumes with start only; a missing container is recreate
   expect(host.lifecycleCommands()).toEqual(['create', 'start'])
   expect(host.commands.find((command) => command.op === 'create')).toMatchObject({ runtimeId: runtime.id, apiKey })
   expect(await runtimeOf(chat)).not.toHaveProperty('api_key')
+})
+
+test('a running runtime whose container its connected host reports missing is stopped at once, and the next prompt recreates it; another host cannot stop it', async () => {
+  const hosts = [await fakeHost('Host losing a container'), await fakeHost('Other host')]
+  const chat = await newRuntimeChat()
+  const runtime = await runningRuntime(chat)
+  const [host, otherHost] = runtime.host_id === hosts[0]?.id ? hosts : [...hosts].reverse()
+  if (!host || !otherHost) throw new Error('Two hosts are needed')
+  const relayedThrough = (hostId: string) =>
+    gateway.sandboxProvider
+      .connect({ workspaceId: acme, hostId: runtimeHostId(hostId), runtimeId: runtime.id })
+      .fetch({ method: 'GET', path: '/ready' })
+
+  expect((await rejectionOf(relayedThrough(otherHost.id))).message).toBe('refused: the runtime container is missing')
+  expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_id: host.id })
+
+  host.containers.delete(runtime.id)
+  expect((await rejectionOf(relayedThrough(host.id))).message).toBe('refused: the runtime container is missing')
+  expect(await runtimeOf(chat)).toMatchObject({ state: 'stopped', host_id: host.id })
+
+  host.commands.length = 0
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['create', 'start'])
+  expect(host.containers.get(runtime.id)?.running).toBe(true)
 })
 
 test('a runtime whose host drops while it starts goes back to stopped on that host and starts there again once it returns, keeping its container and volumes', async () => {

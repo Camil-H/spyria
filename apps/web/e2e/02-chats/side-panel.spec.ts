@@ -28,7 +28,7 @@ const isTabListScrollable = (page: Page) =>
   tabListOf(page).evaluate((element) => element.scrollWidth > element.clientWidth)
 
 const runtimeTabNames = ['Changes', 'Files', 'Browser', 'Usage', 'Connected tools', 'Members']
-const channelTabNames = ['Sources', 'Usage', 'Connected tools', 'Members']
+const channelTabNames = ['Members']
 
 const expectOwnerConnections = async (page: Page) => {
   await expect(tabPanelOf(page).getByRole('heading', { name: 'Connected tools' })).toBeVisible()
@@ -132,30 +132,14 @@ test.describe('Side panel', () => {
     })
   })
 
-  test('As a member, I see every tab of a channel’s panel', async ({ page }) => {
-    await test.step('shows the channel tabs in order with the first selected', async () => {
-      await openChat(page, 'Welcome')
-      expect(await tabLabelsOf(page)).toEqual(channelTabNames)
-      await expect(tabOf(page, 'Sources')).toHaveAttribute('aria-selected', 'true')
-    })
-
-    await test.step('sources: lists the sources with their origin', async () => {
-      await openPanelTab(page, 'Welcome', 'Sources')
-      const sources = tabPanelOf(page).getByRole('listitem')
-      await expect(sources).toHaveCount(2)
-      await expect(sources.nth(0)).toContainText('Employee handbook')
-      await expect(sources.nth(0)).toContainText('Onyx')
-      await expect(sources.nth(1)).toContainText('Onboarding wiki page')
-      await expect(sources.nth(1)).toContainText('Wiki')
-    })
-
-    await test.step('usage: shows zeros for every member on a channel', async () => {
-      await openPanelTab(page, 'Welcome', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
-      await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.00')
-      await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('$0.00')
-      await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
-    })
+  test('As a member, I see only the members in a channel’s panel, since a channel has no agent', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    expect(await tabLabelsOf(page)).toEqual(channelTabNames)
+    await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
+    await expectMembers(page, [
+      ['Alice', 'Owner'],
+      ['Bob', 'Prompter'],
+    ])
   })
 
   test('As a member, I see the panel’s empty states and the panel of a chat another member owns', async ({ page }) => {
@@ -176,11 +160,6 @@ test.describe('Side panel', () => {
       await expect(members).toHaveCount(1)
       await expect(members.nth(0)).toContainText('Alice')
       await expect(members.nth(0)).toContainText('Owner')
-    })
-
-    await test.step('sources: shows an empty state without data', async () => {
-      await openPanelTab(page, 'Standup', 'Sources')
-      await expect(tabPanelOf(page)).toContainText('No sources')
     })
 
     await test.step('shows my own tools, which my prompts use: a shared login with its tools, a server I have not signed in to as not connected', async () => {
@@ -220,7 +199,7 @@ test.describe('Side panel', () => {
     await test.step('selects the first tab again when another chat is opened', async () => {
       await openPanelTab(page, 'Invoice bug', 'Files')
       await openChat(page, 'Welcome')
-      await expect(tabOf(page, 'Sources')).toHaveAttribute('aria-selected', 'true')
+      await expect(tabOf(page, 'Members')).toHaveAttribute('aria-selected', 'true')
       await openChat(page, 'Invoice bug')
       await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
     })

@@ -865,6 +865,10 @@ type HostCommand = {
   signInHours?: number
   keep?: string[]
 }
+const runtimeMissingOf = ({ runtimeId }: { runtimeId?: string }) => ({
+  error: 'refused: the runtime container is missing',
+  missingRuntimeId: runtimeId,
+})
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
 
 export const asMember = async (userId: string, method: string, path: string, body?: object, workspaceId = acme) => {
@@ -1167,6 +1171,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         const incomingRequests = new Map<number, { request: HostFrame; parts: string[] }>()
         const answerHttp = (request: HostFrame) => {
           const container = containers.get(request.runtimeId ?? '')
+          if (!container) return send({ type: 'http_res', sid: request.sid, ...runtimeMissingOf(request) })
           const isReadyProbe = request.path === '/ready'
           const isReady = isReadyProbe && container?.running && container.isBooted !== false
           const answered =
@@ -1263,7 +1268,8 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
                 },
               }),
             )
-          } else if (frame.type === 'ws_connect') send({ type: 'ws_close', sid })
+          } else if (frame.type === 'ws_connect')
+            send({ type: 'ws_close', sid, ...(!container && runtimeMissingOf(frame)) })
           if (frame.type === 'ws_msg') streams.get(sid)?.onMessage(frame.data ?? '')
           if (frame.type === 'ws_close') {
             streams.get(sid)?.onClose()
