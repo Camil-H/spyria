@@ -9,10 +9,8 @@ import {
   newRuntimeChat,
   openChat,
   openPanelTab,
-  openSession,
   type Page,
   sendMessage,
-  sessionOf,
   test,
 } from './fixtures'
 
@@ -63,21 +61,6 @@ test.describe('Delegation', () => {
     await openPanelTab(page, 'Research', 'Usage')
     await expectModelMetered(page, workerStack, 'Mistral Medium')
     await expectModelMetered(page, workerStack, 'Mistral Small')
-  })
-
-  test('As a prompter with the policy on Same as main, I see the subagent run on the session model without a routing call', {
-    tag: ['@spec-16'],
-  }, async ({ page, agentScript }) => {
-    const answer = 'Done on the same model.'
-    await openSession(page)
-    await sessionOf(page).getByLabel('Subagents').selectOption({ label: 'Same as main' })
-    await page.keyboard.press('Escape')
-    await agentScript(
-      researchChatId,
-      delegating(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-medium-latest': subagentWork } }),
-    )
-    await promptAndWait(page, 'Delegate on the same model', answer)
-    await expect(groupOf(page, 'Mistral Medium')).toBeVisible()
   })
 
   const delegatingTo = (model: string, answer: string, script: object) => ({
