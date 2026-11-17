@@ -321,7 +321,7 @@ test('starting a runtime from a runtime chat message is refused and that chat’
   ])
 })
 
-test('each step is stored once and updated by its final call, the full command output stays in its workspace, and a rebuild matches', async () => {
+test('each step is stored once and updated by its final call, the started session reaches viewers live as sessionStarted and is stored, the full command output stays in its workspace, and a rebuild matches', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
@@ -343,6 +343,14 @@ test('each step is stored once and updated by its final call, the full command o
   expect(live.at(-1)?.body).toContain('Hello from the stub')
   const stored = await storedAgentEventsOf(chat)
   expect(new Set(stored.map((event) => event.id)).size).toBe(stored.length)
+  const storedUpdates = stored.map(
+    (event) => (event.payload as { event: { update?: { sessionUpdate?: string } } }).event.update?.sessionUpdate,
+  )
+  expect(storedUpdates).toContain('session_started')
+  const sessionStartsIn = (frames: string[]) =>
+    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.sessionStarted !== undefined)
+  await waitFor(() => sessionStartsIn(viewer.frames).length === 1)
+  expect(sessionStartsIn(viewer.frames)).toEqual([{ chatId: chat, sessionStarted: true }])
   expect(viewer.frames.map((frame) => JSON.parse(frame))).toContainEqual(
     expect.objectContaining({ promptId: question, text: 'Thinking ', isReasoning: true }),
   )
@@ -442,23 +450,6 @@ test('a viewer more than 4 MiB behind is closed so its browser reconnects and ca
   expect(closes).toEqual([[4008, 'Too slow; reconnect to catch up']])
   const steadyText = steadyViewer.frames.flatMap((frame) => JSON.parse(frame).text ?? []).join('')
   expect(steadyText).toBe(replyOf(1).body)
-})
-
-test('a started agent session reaches viewers live as sessionStarted and is still stored', async () => {
-  await agentHost()
-  const chat = await newRuntimeChat()
-  const viewer = await openStream(chat)
-  await viewer.subscribed
-  await answered(await prompt(chat, 'Hello'))
-  await turnEnded(chat)
-  const sessionStartsIn = (frames: string[]) =>
-    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.sessionStarted !== undefined)
-  await waitFor(() => sessionStartsIn(viewer.frames).length === 1)
-  expect(sessionStartsIn(viewer.frames)).toEqual([{ chatId: chat, sessionStarted: true }])
-  const storedUpdates = (await storedAgentEventsOf(chat)).map(
-    (event) => (event.payload as { event: { update?: { sessionUpdate?: string } } }).event.update?.sessionUpdate,
-  )
-  expect(storedUpdates).toContain('session_started')
 })
 
 test('Restart session tells viewers the session started again on an idle chat whose event socket closed, and that it starts on the next message when there is none', async () => {
