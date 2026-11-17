@@ -79,9 +79,10 @@ test.describe('Workspace hosts', () => {
     })
   })
 
-  test('As a member who can manage runtime hosts, I add a host and get one command that replaces spyria-host and picks rootless or rooted Docker itself', {
+  test('As a member who can manage runtime hosts, I add a host and get one command that replaces spyria-host and picks rootless or rooted Docker itself, and copying it reads ✓ Copied', {
     tag: ['@spec-07', '@spec-25', '@stage-g'],
-  }, async ({ page }) => {
+  }, async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await openSettings(page, 'Runtimes')
     await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
     await addDialogOf(page).getByRole('textbox', { name: 'Host name' }).fill('Home server')
@@ -103,6 +104,9 @@ test.describe('Workspace hosts', () => {
     expect(command).not.toContain('login')
     const dockerOrigin = viteUrl.replace('localhost', 'host.docker.internal')
     expect(command).toMatch(new RegExp(` spyria-host ${dockerOrigin}/h/[A-HJ-NP-Z2-9]{8}$`))
+    await addDialogOf(page).getByRole('button', { name: 'Copy' }).click()
+    await expect(addDialogOf(page).getByRole('button', { name: '✓ Copied' })).toBeVisible()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command)
 
     await addDialogOf(page).getByRole('button', { name: 'Close' }).click()
     await expect(addDialogOf(page)).toHaveCount(0)
@@ -175,6 +179,31 @@ test.describe('Workspace hosts', () => {
     await expect(page.getByRole('dialog', { name: 'New command' })).toHaveCount(0, { timeout: 10_000 })
     await expectOnline(page, 'Home server')
     await expect(hostsSectionOf(page).getByRole('listitem')).toHaveCount(1)
+  })
+
+  test('As a member who can manage runtime hosts, I see Docker runs as root or Rootless Docker badges with a tooltip, and limits that are not enforced', {
+    tag: ['@spec-07', '@spec-25', '@stage-f'],
+  }, async ({ page, hosts }) => {
+    await openSettings(page, 'Runtimes')
+    hosts.fake(await addHost(page, 'Rooted box'), { rootless: false, limitsEnforced: true })
+    hosts.fake(await addHost(page, 'Rootless box'), { rootless: true, limitsEnforced: false })
+    await expectOnline(page, 'Rooted box')
+    await expectOnline(page, 'Rootless box')
+    const rootedRow = hostRowOf(page, 'Rooted box')
+    const rootlessRow = hostRowOf(page, 'Rootless box')
+    await expect(rootedRow.getByText('Docker runs as root', { exact: true })).toHaveAttribute(
+      'title',
+      'Docker on this host runs as root: containers are isolated but the daemon has root on the host',
+    )
+    await expect(rootedRow.getByText('Limits not enforced')).toHaveCount(0)
+    await expect(rootlessRow.getByText('Rootless Docker', { exact: true })).toHaveAttribute(
+      'title',
+      'Docker runs without root on this host',
+    )
+    await expect(rootlessRow.getByText('Limits not enforced')).toBeVisible()
+    await expect(rootedRow).toContainText('4 CPUs')
+    await expect(rootedRow).toContainText('8.0 GB')
+    await expect(rootedRow).toContainText('0 / 6')
   })
 
   const addMachine = async (page: Page) => {
