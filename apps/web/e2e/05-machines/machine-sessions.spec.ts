@@ -128,6 +128,12 @@ test.describe('Machine sessions', () => {
     await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(1)
     await machine({ online: 'true' })
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
-    expect((await machine()).prompts).toEqual(['Wait for my laptop'])
+
+    await machine({ online: 'false' })
+    await sendMessage(page, 'Wait for my laptop again')
+    await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(2)
+    await machine({ online: 'true' })
+    await expect(messageContaining(page, '[t2] Hello from the stub')).toBeVisible()
+    expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
   })
 })
