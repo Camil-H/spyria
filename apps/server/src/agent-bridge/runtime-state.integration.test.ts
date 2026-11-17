@@ -30,6 +30,7 @@ const {
   answered,
   runtimeOf,
   storedAgentEventsOf,
+  sessionsStartedOf,
   holds,
   holdUrl,
   jobStatesOf,
@@ -80,7 +81,7 @@ const endsWith = async (messageId: string, body: string) => {
 }
 
 test('Stop interrupts the agent, ends the turn once with a notice naming the member, then the next prompt runs', async () => {
-  const { relay } = await agentHost()
+  const { relay, launches } = await agentHost()
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
   const first = await prompt(chat, 'stub:long Take your time')
   await commandShown(first)
@@ -99,6 +100,8 @@ test('Stop interrupts the agent, ends the turn once with a notice naming the mem
   await endsWith(first, 'Stopped by Bob')
   expect(await repliesTo(second)).toEqual([agentReply(2)])
   expect(relay.prompts).toEqual(['stub:long Take your time', 'Then this'])
+  expect(launches()).toHaveLength(1)
+  expect(await sessionsStartedOf(chat)).toHaveLength(1)
   await turnIs(chat, null)
   expect(await command(bobInAcme, 'stopAgent', chat)).toEqual(succeeded)
   expect(await interruptJobsOf(chat)).toEqual(['done'])

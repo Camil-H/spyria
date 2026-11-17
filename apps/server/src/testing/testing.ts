@@ -700,6 +700,10 @@ export const startAgentStack = async ({
     (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
       (reply) => Object.fromEntries(fields.map((field) => [field, reply[field]])) as Pick<Message, Field>,
     )
+  const storedAgentEventsOf = async (chat: ChatId) =>
+    (await database.select().from(events))
+      .filter((event) => event.chatId === chat && event.type === 'agent.event')
+      .toSorted((first, second) => first.seq - second.seq)
   const openStream = async (
     chat: ChatId,
     { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
@@ -818,10 +822,11 @@ export const startAgentStack = async ({
       waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
     jobStatesOf,
     jobDone,
-    storedAgentEventsOf: async (chat: ChatId) =>
-      (await database.select().from(events))
-        .filter((event) => event.chatId === chat && event.type === 'agent.event')
-        .toSorted((first, second) => first.seq - second.seq),
+    storedAgentEventsOf,
+    sessionsStartedOf: async (chat: ChatId) =>
+      (await storedAgentEventsOf(chat))
+        .map((event) => (event.payload as { event: { update: Record<string, unknown> } }).event.update)
+        .filter((update) => update.sessionUpdate === 'session_started'),
     runtimeOf: async (chat: ChatId) => {
       const [row] = await database.$client`select * from runtimes where chat_id = ${chat}`
       if (!row) throw new Error(`No runtime for ${chat}`)

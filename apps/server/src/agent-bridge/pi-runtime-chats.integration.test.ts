@@ -11,23 +11,18 @@ import {
   sessionTokenOf,
   startAgentStack,
   succeeded,
-  waitFor,
 } from '../testing/testing.ts'
 
 setDefaultTimeout(40_000)
-const { database, mutate, newRuntimeChat, prompt, turnOf, messagesOf, storedAgentEventsOf, ...stack } =
-  await startAgentStack({ routing: true })
+const { database, mutate, newRuntimeChat, prompt, messagesOf, sessionsStartedOf, ...stack } = await startAgentStack({
+  routing: true,
+})
 const workspaceHost = () => stack.agentHost('Workspace host')
 const keysOnly = async (...providers: string[]) => {
   await database.$client`delete from llm_credentials where user_id = ${bob}`
   for (const provider of providers) await addLlmKey(bob, provider)
 }
-const repliesTo = (messageId: string) => stack.repliesTo(messageId, ['kind', 'body', 'step'])
 const finished = (question: string, chat: ChatId) => stack.finished(question, chat, 15_000)
-const stop = async (chat: ChatId) => {
-  expect(await mutate(aliceInAcme, 'conversation.stopAgent', { workspaceId: acme, chatId: chat })).toEqual(succeeded)
-  await waitFor(async () => (await turnOf(chat)) === null)
-}
 const piFilesOf = ({ agent }: Launch) =>
   Object.fromEntries(
     agent.acp_command
@@ -35,10 +30,6 @@ const piFilesOf = ({ agent }: Launch) =>
       .map((part) => [part.slice(0, part.indexOf('=')), part.slice(part.indexOf('=') + 1)]),
   )
 const decisionsOf = (chat: ChatId) => stack.decisionsOf(chat, ['role', 'model', 'member_id', 'conversation_id'])
-const sessionsStartedOf = async (chat: ChatId) =>
-  (await storedAgentEventsOf(chat))
-    .map((event) => (event.payload as { event: { update: Record<string, unknown> } }).event.update)
-    .filter((update) => update.sessionUpdate === 'session_started')
 
 test.each([
   {
@@ -205,21 +196,6 @@ test('g2. a curated pick on a provider whose key was added after Pi launched rel
   const { providers } = JSON.parse(piFilesOf(relaunch).SPYRIA_PI_MODELS ?? '{}')
   expect(providers.spyria.models.map(({ id }: { id: string }) => id)).toContain('openai/gpt-5-mini')
   expect(relay.prompts).toEqual(['Start on Anthropic', 'Now on OpenAI'])
-})
-
-test('Stop mid-command cancels the turn without deleting the conversation, and the next prompt continues the Pi session', async () => {
-  const { launches } = await workspaceHost()
-  const chat = await newRuntimeChat()
-  const stopped = await prompt(chat, 'stub:long')
-  await stack.commandShown(stopped)
-  await stop(chat)
-  expect((await repliesTo(stopped)).at(-1)).toMatchObject({ kind: 'notice', body: 'Stopped by Alice' })
-
-  const replies = await finished(await prompt(chat, 'Carry on'), chat)
-  expect(replies.at(-1)?.body).toStartWith('[t2] Hello from the stub')
-  expect(replies.some((reply) => reply.body.includes('new session'))).toBe(false)
-  expect(launches()).toHaveLength(1)
-  expect(await sessionsStartedOf(chat)).toHaveLength(1)
 })
 
 test('a project file the agent opens with Spyria’s open_page tool is kept for the chat’s Browser, a web address opens in the prompter’s own browser, localhost included, and an address of another scheme is refused with a reason the agent sees', async () => {
