@@ -3,9 +3,9 @@ import { createRemoteJWKSet, decodeJwt, type JWTPayload, jwtVerify } from 'jose'
 import * as oauth from 'oauth4webapi'
 
 export type OidcSettings = { issuer: string; clientId: string; redirectUri: string }
-export type EmailRefusal = 'unconfirmed' | 'untrusted'
-export type EmailClaim = { email: string; refusal?: undefined } | { email?: undefined; refusal: EmailRefusal }
-export class EmailRefused extends DomainError {
+type EmailRefusal = 'unconfirmed' | 'untrusted'
+type EmailClaim = { email: string; refusal?: undefined } | { email?: undefined; refusal: EmailRefusal }
+class EmailRefused extends DomainError {
   constructor(readonly refusal: EmailRefusal) {
     super('email_refused', `The ID token carries no trusted email for this login: ${refusal}`)
   }
