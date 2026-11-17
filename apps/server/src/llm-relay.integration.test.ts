@@ -17,6 +17,7 @@ import {
   type FakeHost,
   gatewayLogsOf,
   lee,
+  llmGatewayAt,
   mcpCall,
   openSharedTestApp,
   rpcOf,
@@ -297,6 +298,23 @@ test('a context-window rejection reaches the agent unchanged and records no turn
   expect(tooLong.status).toBe(400)
   expect(tooLong.body).toContain('prompt is too long')
   expect(await failureOf(chatId)).toBeNull()
+})
+
+test('a prompter key that cannot be read from an unreachable gateway answers 502 and records Spyria’s notice', async () => {
+  const unreachableApp = createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt('http://127.0.0.1:9') })
+  const server = Bun.serve({ port: 0, fetch: unreachableApp.fetch, websocket })
+  const hosts = createFakeHosts({ port: Number(server.port), database })
+  try {
+    const host = await hosts.fakeHost('Unreachable gateway host')
+    const { chatId, token } = await runtimeTurn(host, bob)
+    const answer = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
+    expect(answer.status).toBe(502)
+    expect(answer.body).toContain('The model gateway is unreachable')
+    expect(await failureOf(chatId)).toBe('The model gateway is unreachable')
+  } finally {
+    await hosts.disconnectFakeHosts()
+    void server.stop(true)
+  }
 })
 
 test('a model call is retried once when the gateway refuses the connection, then answers 502 with Spyria’s notice recorded, and never once the gateway has answered', async () => {
