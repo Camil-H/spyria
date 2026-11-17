@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { chatLinkOf, messageActionOf, messageContaining, sidebarOf } from '../fixtures.ts'
+import { chatLinkOf, expect, messageActionOf, messageContaining, sidebarOf } from '../fixtures.ts'
 import type { WorkerStack } from '../stack.ts'
 
 export * from '../fixtures.ts'
@@ -11,6 +11,11 @@ export const draftIconOf = (page: Page, chatName: string) =>
 export const chatMenuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
 
+export const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
+export const cancelDialog = async (page: Page, dialogName: string) => {
+  await dialogOf(page, dialogName).getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialogOf(page, dialogName)).toHaveCount(0)
+}
 export const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
   (await messageActionOf(messageContaining(page, messageText), actionName)).click()
 export const deleteMessageDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })

@@ -11,13 +11,8 @@ import {
   test,
   unreadIconOf,
 } from '../fixtures'
-import { chatMenuButtonOf, chatRowIn, looseChatsOf, setChatRole } from './fixtures'
+import { cancelDialog, chatMenuButtonOf, chatRowIn, dialogOf, looseChatsOf, setChatRole } from './fixtures'
 
-const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
-const cancelDialog = async (page: Page, dialogName: string) => {
-  await dialogOf(page, dialogName).getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialogOf(page, dialogName)).toHaveCount(0)
-}
 const logoutDialogOf = (page: Page, workspaceName: string) =>
   page.getByRole('dialog', { name: `Log out of ${workspaceName}` })
 

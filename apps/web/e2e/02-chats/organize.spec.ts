@@ -1,8 +1,10 @@
 import {
   answerNewAiChat,
   answerNewChannel,
+  cancelDialog,
   chatAction,
   chatRowIn,
+  dialogOf,
   expect,
   looseChatsOf,
   mainOf,
@@ -25,12 +27,6 @@ const createProjectNamed = async (page: Page, projectName: string) => {
   await page.getByRole('button', { name: 'New project' }).click()
   await page.getByRole('textbox', { name: 'Project name' }).fill(projectName)
   await page.getByRole('button', { name: 'Confirm' }).click()
-}
-
-const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
-const cancelDialog = async (page: Page, dialogName: string) => {
-  await dialogOf(page, dialogName).getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialogOf(page, dialogName)).toHaveCount(0)
 }
 const archiveChat = async (page: Page, chatName: string) => {
   await chatAction(page, chatName, 'Archive chat')
