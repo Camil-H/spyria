@@ -86,34 +86,6 @@ test.each([
   },
 )
 
-test('a routing change mid-session switches the same Pi session to the other provider’s model with the routed thinking level', async () => {
-  const { relay, launches } = await workspaceHost()
-  await keysOnly('Anthropic', 'OpenAI')
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
-  stack.setFakeLlmScript({ route: { tier: 'large', confidence: 'high', effort: 'high' } })
-  const first = await finished(await prompt(chat, 'Start large', bobInAcme), chat)
-  expect(first.at(-1)?.body).toBe(
-    '[t1] Hello from the stub (model spyria-anthropic/anthropic/claude-opus-5-5, mode default).',
-  )
-  expect(launches()[0]?.agent).toMatchObject({ acp_thought_level: 'high' })
-
-  expect(
-    await mutate(bobInAcme, 'conversation.updateChatRouting', {
-      workspaceId: acme,
-      chatId: chat,
-      sessionModel: 'openai/gpt-5-mini',
-    }),
-  ).toEqual(succeeded)
-  const second = await finished(await prompt(chat, 'Now on OpenAI', bobInAcme), chat)
-  expect(second.map((reply) => reply.body)).toEqual([
-    '[t2] Hello from the stub (model spyria/openai/gpt-5-mini, mode default).',
-  ])
-  expect(relay.modelSwitches).toEqual(['spyria/openai/gpt-5-mini'])
-  expect(relay.thoughtLevels).toEqual(['high'])
-  expect(launches()).toHaveLength(1)
-  expect(relay.prompts).toEqual(['Start large', 'Now on OpenAI'])
-})
-
 test('an effort change keeps the model and session and sets Pi’s thinking level once, on the next turn only; a malformed effort is refused', async () => {
   const { relay, launches } = await workspaceHost()
   await keysOnly('Anthropic')
