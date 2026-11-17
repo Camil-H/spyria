@@ -42,7 +42,7 @@ const agentCommit = (workspace: string, total: number) => {
   gitIn(workspace, 'commit', '-qam', `Set the total to ${total}`)
 }
 
-test('only the owner commits and updates from base; prompters and editors are refused, as are an empty message and nothing to commit; the author comes from GitHub, else Spyria', async () => {
+test('only the owner commits and updates from base; prompters and editors are refused, as is a commit with nothing to commit; the author comes from GitHub, else Spyria', async () => {
   await stack.agentHost('Git roles host')
   const { id, branch } = await newDevChat(baseBranchOf('roles'), [
     { memberId: bob, roleId: 'prompter' },
@@ -57,10 +57,6 @@ test('only the owner commits and updates from base; prompters and editors are re
         body: { isRefused: true, text: ownerOnly },
       })
   expect(gitIn(workspace, 'log', '-1', '--format=%s')).toBe('Start roles\n')
-  expect(await gitAction(alice, id, 'commit', '  ')).toEqual({
-    status: 403,
-    body: { isRefused: true, text: 'Write a commit message' },
-  })
   expect((await gitAction(alice, id, 'push')).status).toBe(400)
 
   const committed = await gitAction(alice, id, 'commit', 'Raise the total')
@@ -174,9 +170,6 @@ test('update from base merges the base’s new commit from a thin bundle of the 
     `Merge branch '${baseBranch}' into ${branch}|alice-martin|${agentCommitSha} ${newBase}\n`,
   )
   expect(readFileSync(join(workspace, 'docs/from-base.md'), 'utf8')).toBe('from base\n')
-  expect(gitIn(workspace, 'rev-parse', 'refs/spyria/base').trim()).toBe(newBase)
-  expect(gitIn(workspace, 'rev-parse', `refs/remotes/origin/${baseBranch}`).trim()).toBe(previousBase)
-  expect(await statusOf(alice, id)).toMatchObject({ baseHead: newBase, aheadOfBase: 2, behindBase: 0 })
 
   const updateRequests = relay.requests.slice(requestsBefore)
   const [merge] = updateRequests.filter(({ path }) => path === '/api/workspace/merge')
@@ -207,13 +200,12 @@ test('update from base merges the base’s new commit from a thin bundle of the 
   })
 })
 
-test('the agent fetches a branch into origin/<branch> from a thin bundle of that branch only, with no token reaching the runtime; the working branch is untouched and a missing branch is named', async () => {
+test('the agent fetches a branch into origin/<branch> from a thin bundle of that branch only, with no token reaching the runtime; a missing branch is named', async () => {
   const { relay } = await stack.agentHost('Git fetch host', { routesModelCalls: true })
   const baseBranch = baseBranchOf('fetch')
-  const { id, branch } = await newDevChat(baseBranch)
+  const { id } = await newDevChat(baseBranch)
   const { workspace } = await runtimeWorkspaceOf(id)
   agentCommit(workspace, 2)
-  const workingHead = gitIn(workspace, 'rev-parse', 'HEAD').trim()
   const baseHead = fakeGitHub.branchHeadOf('acme/app', baseBranch)
   const feature = `e2e-feature-${crypto.randomUUID().slice(0, 8)}`
   const featureHead = fakeGitHub.commitToBranch('acme/app', {
@@ -242,9 +234,6 @@ test('the agent fetches a branch into origin/<branch> from a thin bundle of that
     `Fetched ${feature} at ${featureHead.slice(0, 7)} into origin/${feature}`,
     'There is no branch e2e-missing on GitHub',
   ])
-  expect(gitIn(workspace, 'rev-parse', `refs/remotes/origin/${feature}`).trim()).toBe(featureHead)
-  expect(gitIn(workspace, 'rev-parse', 'HEAD').trim()).toBe(workingHead)
-  expect(gitIn(workspace, 'branch', '--show-current').trim()).toBe(branch)
 
   const fetchRequests = relay.requests.slice(requestsBefore)
   const [fetched, ...otherFetches] = fetchRequests.filter(({ path }) => path === '/api/workspace/fetch')

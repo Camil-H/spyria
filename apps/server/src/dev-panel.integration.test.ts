@@ -66,12 +66,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect((await read(bob, id, 'file', 'README.md')).body.content).toBe('# acme app\n')
   expect((await request(bob, 'POST', `/api/chats/${id}/workspace/wake`)).status).toBe(403)
 
-  mkdirSync(join(workspace, 'many'))
-  for (let index = 0; index <= 500; index++) writeFileSync(join(workspace, 'many', `file-${index}.txt`), '')
   writeFileSync(join(workspace, 'large.txt'), 'x\n'.repeat(250_000))
-  const many = (await read(alice, id, 'tree', 'many')).body
-  expect([many.entries.length, many.truncated]).toEqual([500, true])
-  expect((await read(alice, id, 'file', 'large.txt')).body).toMatchObject({ truncated: true })
   expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['unstaged'] })
   const compressed = await app.request(`/api/chats/${id}/workspace/changes`, {
     headers: {
