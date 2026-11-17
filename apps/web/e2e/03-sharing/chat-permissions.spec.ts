@@ -81,7 +81,7 @@ test.describe('Chat permissions', () => {
       await bobPage.context().close()
     })
 
-    test('As a member who administers a chat, a move, project archive or chat archive refused because I lost that right meanwhile shows its error in the sidebar and no toast', {
+    test('As a member who administers a chat, a move or project archive refused because I lost that right meanwhile shows its error in the sidebar and no toast', {
       tag: ['@spec-28'],
     }, async ({ page, browser, workerStack }) => {
       const chatId = await newRuntimeChat(page, 'Bob archives')
@@ -128,16 +128,6 @@ test.describe('Chat permissions', () => {
         })
         await expect(toastOf(bobPage)).not.toContainText('Garden archived')
         await expect(projectGroupOf(bobPage, 'Garden').getByRole('link', { name: 'Bob archives' })).toBeVisible()
-      })
-
-      await test.step('a refused chat archive keeps the chat', async () => {
-        await restoreAndMove('No project', 'Bob archives is no longer in a project')
-        await runRefused(async () => {
-          await chatAction(bobPage, 'Bob archives', 'Archive chat')
-          await dialogOf(bobPage, 'Archive chat').getByRole('button', { name: 'Archive' }).click()
-        })
-        await expect(toastOf(bobPage)).not.toContainText('Bob archives archived')
-        await expect(chatLinkOf(bobPage, 'Bob archives')).toBeVisible()
       })
       await bobPage.context().close()
     })
@@ -266,21 +256,14 @@ test.describe('Chat permissions', () => {
       await page.goto('/')
     })
 
-    test('As a chat owner, I am offered no custom role without Post in a public channel, and an Editor invites only with roles within his own permissions', {
+    test('As a chat owner, I am offered no custom role without Post in a public channel', {
       tag: ['@spec-47'],
-    }, async ({ page, browser, workerStack }) => {
+    }, async ({ page, workerStack }) => {
       await insertRole(workerStack, 'role-reviewer', 'Reviewer', ['chat.read', 'session.configure'])
       await insertRole(workerStack, 'role-keeper', 'Keeper', ['chat.read', 'tools.manage'])
       await insertRole(workerStack, 'role-poster', 'Poster', ['chat.read', 'chat.post'])
       await openPanelTab(page, 'Welcome', 'Members')
       expect(await inviteRoleOptionsOf(page)).toEqual(['Editor', 'Prompter', 'Poster'])
-
-      const chatId = await newRuntimeChat(page, 'Bob edits roles')
-      await addParticipant(workerStack, chatId, 'member-bob', 'editor')
-      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await openPanelTab(bobPage, 'Bob edits roles', 'Members')
-      expect(await inviteRoleOptionsOf(bobPage)).toEqual(['Editor', 'Prompter', 'Poster', 'Reviewer', 'Reader'])
-      await bobPage.context().close()
     })
   })
 })

@@ -44,6 +44,11 @@ export const clientOf = (port: number) => {
       content: [{ type: 'text', text }],
       run: true,
     })
+  const promptWithId = (conversationId: string, text: string, promptId: string) =>
+    call('POST', `/api/conversations/${conversationId}/events`, {
+      content: [{ type: 'text', text }],
+      prompt_id: promptId,
+    })
   const attach = async (conversationId: string, id: string, name: string, content: string) => {
     const { body } = await call('POST', `/api/conversations/${conversationId}/attachments`, {
       id,
@@ -58,7 +63,7 @@ export const clientOf = (port: number) => {
       content: [{ type: 'text', text }, ...attachments.map((attachment) => ({ type: 'attachment', ...attachment }))],
       run: true,
     })
-  return { call, open, create, prompt, attach, promptWith }
+  return { call, open, create, prompt, promptWithId, attach, promptWith }
 }
 
 export const kindOf = (kind: string) => (event: AgentEvent) => event.update.sessionUpdate === kind
@@ -73,7 +78,7 @@ export const questionAt = async (socket: ReturnType<ReturnType<typeof clientOf>[
 
 export const createAgentTestbed = () => {
   const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-agent-test-'))
-  const stubCommand = ['env', `STUB_STATE=${stateDirectory}`, 'STUB_GAP_MS=5', 'node', stub]
+  const stubCommand = ['env', `STUB_STATE=${stateDirectory}`, 'STUB_GAP_MS=5', 'STUB_LINGER_MS=300', 'node', stub]
   const launchOf = (extra: Record<string, unknown> = {}, secrets = {}) => ({
     agent: { kind: 'ACPAgent', acp_command: stubCommand, ...extra },
     secrets,

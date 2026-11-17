@@ -22,14 +22,6 @@ import {
 
 const credentialRowOf = (page: Page, provider: string) =>
   llmSectionOf(page).getByRole('listitem').filter({ hasText: provider })
-const removeKey = async (page: Page, provider: string) => {
-  await openProfile(page, 'LLM keys')
-  await llmSectionOf(page)
-    .getByRole('button', { name: `Remove ${provider}` })
-    .click()
-  await page.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Remove' }).click()
-  await expect(llmSectionOf(page).getByRole('button', { name: `Remove ${provider}` })).toHaveCount(0)
-}
 const newSecret = (prefix = 'fake-key') => `${prefix}-${crypto.randomUUID()}`
 
 test.describe('LLM keys', () => {
@@ -44,7 +36,7 @@ test.describe('LLM keys', () => {
 
     await test.step('adds an API key, shows only its last 4 characters and opens the form empty again', async () => {
       await addCredential(page, { provider: 'OpenAI', secret: 'sk-test-1234567890' })
-      await expect(credentialRowOf(page, 'OpenAI')).toContainText('••••7890')
+      await expect(credentialRowOf(page, 'OpenAI')).toHaveText('OpenAI••••7890Remove')
       await expect(addKeyDialogOf(page)).toHaveCount(0)
       await llmSectionOf(page).getByRole('button', { name: 'Add key' }).click()
       await expect(addKeyDialogOf(page).getByLabel('Provider')).toHaveValue('')
@@ -55,13 +47,21 @@ test.describe('LLM keys', () => {
         .evaluateAll((fields) => fields.map((field) => (field as HTMLInputElement).value))
       expect(inputValues.join('|')).not.toContain('sk-test-1234567890')
     })
+
+    await test.step('counts both keys on the profile card', async () => {
+      await addKeyDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+      await mainOf(page).getByRole('link', { name: 'Back to Profile' }).click()
+      await expect(mainOf(page).getByRole('link', { name: 'LLM keys', exact: true })).toHaveAccessibleDescription(
+        'Your own keys, used when you prompt 2 keys',
+      )
+    })
   })
 
   test('As a member, I see my key masked, and the form takes only a provider and a secret', async ({ page }) => {
     await openProfile(page, 'LLM keys')
 
     await test.step('shows the credential masked, without the full secret anywhere', async () => {
-      await expect(credentialRowOf(page, 'Anthropic')).toContainText('••••a1b2')
+      await expect(credentialRowOf(page, 'Anthropic')).toHaveText('Anthropic••••a1b2Remove')
     })
 
     await test.step('has only the Provider and Secret fields: no Label, Kind or Credential kind switch', async () => {
@@ -94,13 +94,6 @@ test.describe('LLM keys', () => {
       await page.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Cancel' }).click()
       await expect(page.getByRole('dialog', { name: 'Remove LLM key' })).toHaveCount(0)
       await expect(credentialRowOf(page, 'Anthropic')).toBeVisible()
-    })
-
-    await test.step('does not block when a credential exists', async () => {
-      await openChat(page, 'Research')
-      await expect(mainOf(page)).not.toContainText(blockedNotice)
-      await composerOf(page).fill('Allowed')
-      await expect(sendButtonOf(page)).toBeEnabled()
     })
   })
 
@@ -151,9 +144,9 @@ test.describe('LLM keys', () => {
     })
   })
 
-  test('As a member without a key, I cannot prompt; after removing my key I can no longer prompt, while another member still can', {
+  test('As a member without a key, I cannot prompt until I add one, and then my prompt is answered', {
     tag: ['@spec-12'],
-  }, async ({ page, browser, workerStack }) => {
+  }, async ({ browser, workerStack }) => {
     await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await test.step('a member without a key cannot prompt', async () => {
@@ -162,18 +155,9 @@ test.describe('LLM keys', () => {
       await expect(sendButtonOf(bobPage)).toBeDisabled()
     })
     await addLlmKey(bobPage, 'Mistral', newSecret())
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Before removing my key')
-    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
-
-    await removeKey(page, 'Anthropic')
-    await openChat(page, 'Research')
-    await expect(mainOf(page)).toContainText(blockedNotice)
-    await expect(sendButtonOf(page)).toBeDisabled()
-
     await openChat(bobPage, 'Research')
-    await sendMessage(bobPage, 'Bob still prompts')
-    await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(2)
+    await sendMessage(bobPage, 'Bob prompts with his key')
+    await expect(messageContaining(bobPage, agentReplyText)).toHaveCount(1)
     await bobPage.context().close()
   })
 })

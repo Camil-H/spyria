@@ -10,7 +10,7 @@ export type AuditQuery = {
   limit: number
 }
 
-export type AuditLog = {
+type AuditLog = {
   permissions(memberId: MemberId): Promise<readonly WorkspacePermission[]>
   records(query: AuditQuery): Promise<AuditRecord[]>
   retentionDays(): Promise<number | null>

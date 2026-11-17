@@ -51,7 +51,7 @@ const isSpyriaEnvironmentFile = (folder: string) =>
   Boolean(parseEnvironment(readableTextOf(environmentFileOf(folder))).SPYRIA_DEPLOYMENT)
 const isSpyriaComposeFile = (folder: string) => readableTextOf(composeFileOf(folder)).includes('SPYRIA_DEPLOYMENT}')
 
-export const isSpyriaInstall = (folder: string) =>
+const isSpyriaInstall = (folder: string) =>
   existsSync(environmentFileOf(folder)) &&
   existsSync(composeFileOf(folder)) &&
   isSpyriaEnvironmentFile(folder) &&
@@ -97,7 +97,7 @@ const mustSucceed = (exitCode: number | null, what: string) => {
   if (exitCode !== 0) throw new Error(`${what} failed`)
 }
 
-export const waitForHealth = async (environment: Environment) => {
+const waitForHealth = async (environment: Environment) => {
   const url = `http://127.0.0.1:${environment.SPYRIA_LOCAL_PORT || '3300'}/health`
   for (const deadline = Date.now() + healthWaitMilliseconds; ; await Bun.sleep(2000)) {
     const answer = await fetch(url, { signal: AbortSignal.timeout(5000) }).then(
@@ -194,7 +194,7 @@ export const startStack = async (folder: string, environment: Environment) => {
   step('Spyria answers')
 }
 
-export const keptBackupsOf = (flags: Flags) => {
+const keptBackupsOf = (flags: Flags) => {
   const keep = Number(flags.values.keep ?? defaultBackupsKept)
   if (!Number.isInteger(keep) || keep < 1) throw new Error('--keep takes a whole number of backups, at least 1')
   return keep
@@ -395,7 +395,7 @@ export const doctor = (folder: string) => {
   return problems.length === 0
 }
 
-export const runOperator = (folder: string, operatorArguments: string[]) =>
+const runOperator = (folder: string, operatorArguments: string[]) =>
   mustSucceed(runCompose(folder, operatorCommandOf(operatorArguments)), `spyria ${operatorArguments[0]}`)
 
 export const printSetupLink = (folder: string) => runOperator(folder, ['setup-link'])

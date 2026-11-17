@@ -36,10 +36,11 @@ export const promptTool = async (
   await sendMessage(page, text)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
 }
-export const toolStepsOf = (page: Page) => messageItemsOf(page).getByRole('button', { name: toolStep })
-export const lastToolResultOf = async (page: Page) => {
-  await toolStepsOf(page).last().click()
+export const toolStepsOf = (page: Page, stepName = toolStep) =>
+  messageItemsOf(page).getByRole('button', { name: stepName })
+export const lastToolResultOf = async (page: Page, stepName = toolStep) => {
+  await toolStepsOf(page, stepName).last().click()
   return messageItemsOf(page)
-    .filter({ has: page.getByRole('button', { name: toolStep, expanded: true }) })
+    .filter({ has: page.getByRole('button', { name: stepName, expanded: true }) })
     .last()
 }

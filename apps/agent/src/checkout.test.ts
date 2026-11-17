@@ -275,7 +275,7 @@ test('a setup script that leaves a service running in the background ends when t
 })
 
 test('a prompt sent while the setup script runs counts as running and reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
-  const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 1\necho ready\n' })
+  const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 0.3\necho ready\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('waiting', url)
   const id = await create(launch)
@@ -305,7 +305,7 @@ test('a prompt sent while the setup script runs counts as running and reaches th
 })
 
 test('a conversation created again while the setup script runs shows the running setup, its end and its notice, and its prompt waits for it', async () => {
-  const url = bareRepository('recreated', { '.spyria/setup.sh': 'echo installing\nsleep 1\nexit 4\n' })
+  const url = bareRepository('recreated', { '.spyria/setup.sh': 'echo installing\nsleep 0.4\nexit 4\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('recreated', url)
   const first = await create({ ...launch, id: 'first' })
@@ -631,16 +631,24 @@ test('a chat’s existing clone is kept as it is, uncommitted edits included, ev
   expect(readFileSync(join(workingDirectory, 'README.md'), 'utf8')).toBe('# edited\n')
 })
 
+const snapshotOf = (name: string, cloneSource: string, change: (project: string) => void, origin = cloneSource) => {
+  const snapshot = join(directory, `${name}-snapshot`)
+  const project = join(snapshot, 'project')
+  mkdirSync(join(snapshot, 'home'), { recursive: true })
+  git(directory, 'clone', '-q', '--no-hardlinks', cloneSource, project)
+  git(project, 'remote', 'set-url', 'origin', origin)
+  change(project)
+  writeFileSync(join(snapshot, 'complete'), '')
+  return snapshot
+}
+
 test('a clone that still awaits its working branch gets it on the next try: after a failed fetch of a restored snapshot, and after spyria-agent restarts between preparing and the chat', async () => {
   const { url } = warmRepository('retried')
   const source = warmAgent('retried-source')
   await source.call('POST', '/api/prepare', { repository: { url, token } })
   await preparedOf(source.call)
-  const snapshot = join(directory, 'retried-snapshot')
-  mkdirSync(join(snapshot, 'home'), { recursive: true })
-  git(directory, 'clone', '-q', '--no-hardlinks', source.workspaceDirectory, join(snapshot, 'project'))
-  git(join(snapshot, 'project'), 'remote', 'set-url', 'origin', `file://${directory}/unreachable.git`)
-  writeFileSync(join(snapshot, 'complete'), '')
+  const unreachable = `file://${directory}/unreachable.git`
+  const snapshot = snapshotOf('retried', source.workspaceDirectory, () => {}, unreachable)
 
   const chat = warmAgent('retried-chat', snapshot)
   const chatLaunch = { ...launchIn('retried-chat', url).launch, workspace: { working_dir: chat.workspaceDirectory } }
@@ -683,15 +691,6 @@ test('a fork that takes a prepared clone starts from the base when its start bra
   expect(branchOf(cwd)).toBe('spyria/fork-4d5e6f')
   expect(existsSync(join(cwd, 'old-work.txt'))).toBe(false)
 })
-
-const snapshotOf = (name: string, url: string, change: (project: string) => void) => {
-  const snapshot = join(directory, `${name}-snapshot`)
-  mkdirSync(join(snapshot, 'home'), { recursive: true })
-  git(directory, 'clone', '-q', url, join(snapshot, 'project'))
-  change(join(snapshot, 'project'))
-  writeFileSync(join(snapshot, 'complete'), '')
-  return snapshot
-}
 
 test('a runtime prepared from a snapshot taken before the default branch was renamed follows the remote’s default branch', async () => {
   const { url } = warmRepository('renamed-default')

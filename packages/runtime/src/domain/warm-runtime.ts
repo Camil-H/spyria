@@ -1,7 +1,7 @@
 import type { ChatId, RuntimeHostId, RuntimeId, WarmPool, WorkspaceId } from '@spyria/kernel'
 import { type HostLoad, placementOf, type Runtime } from './runtime.ts'
 
-export type WarmRuntimeState = 'creating' | 'preparing' | 'ready' | 'failed'
+type WarmRuntimeState = 'creating' | 'preparing' | 'ready' | 'failed'
 export type WarmRuntime = Readonly<{
   workspaceId: WorkspaceId
   id: RuntimeId

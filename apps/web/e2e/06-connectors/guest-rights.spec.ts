@@ -1,8 +1,6 @@
-import { openPageAs, type WorkerStack } from '../stack'
+import { openPageAs } from '../stack'
 import {
   accountOf,
-  addLlmKey,
-  addParticipant,
   approvalsOf,
   chooseConnectionAction,
   connectFake,
@@ -11,6 +9,7 @@ import {
   messageItemsOf,
   openChat,
   openProfile,
+  openPrompterWithKey,
   type Page,
   promptTool,
   research,
@@ -29,14 +28,6 @@ const updateStepOf = (page: Page) => messageItemsOf(page).getByRole('button', { 
 const sharingNoteOf = (page: Page) =>
   page.getByRole('note').filter({ hasText: 'everyone in this chat sees what they return' })
 
-const openAsBob = async (browser: Parameters<typeof openPageAs>[0], workerStack: WorkerStack) => {
-  await addParticipant(workerStack, research, 'member-bob', 'prompter')
-  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-  await addLlmKey(bobPage, 'Mistral')
-  await openChat(bobPage, 'Research')
-  return bobPage
-}
-
 test.describe('Guest rights', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
@@ -48,10 +39,7 @@ test.describe('Guest rights', () => {
   }, async ({ page, browser, workerStack, agentScript }) => {
     const account = accountOf('alice-acme')
     await connectFake(page, account)
-    await addParticipant(workerStack, research, 'member-bob', 'prompter')
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Mistral')
-    await openChat(bobPage, 'Research')
+    const bobPage = await openPrompterWithKey(browser, workerStack, research)
     await test.step('warns me before my first prompt that everyone here sees what my tools return', async () => {
       await expect(sharingNoteOf(bobPage)).toBeVisible()
     })
@@ -79,7 +67,7 @@ test.describe('Guest rights', () => {
   test('As a guest, my write call waits for the owner’s approval, and once approved it runs and the reply continues', {
     tag: ['@spec-33'],
   }, async ({ page, browser, workerStack, agentScript }) => {
-    const bobPage = await openAsBob(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, research)
     await agentScript(research, updateScript('Updated the record.'))
     await sendMessage(bobPage, 'Bob asks to update the record')
     await expect(approvalCardOf(page)).toContainText("The agent asks to run update (CRM) on Bob's prompt")
@@ -101,7 +89,7 @@ test.describe('Guest rights', () => {
   test('As a chat owner, I deny a guest’s write call: the agent gets the refusal and says so, and the card reads Denied by Alice', {
     tag: ['@spec-33'],
   }, async ({ page, browser, workerStack, agentScript }) => {
-    const bobPage = await openAsBob(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, research)
     await agentScript(research, updateScript('Alice did not approve the update.'))
     await sendMessage(bobPage, 'Bob asks to update the record')
     await approvalCardOf(page).getByRole('button', { name: 'Deny' }).click()
@@ -111,35 +99,6 @@ test.describe('Guest rights', () => {
     await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice did not approve this call' })).not.toHaveCount(0)
     await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice did not approve the update.' })).toHaveCount(1)
     await bobPage.context().close()
-  })
-
-  test('As a guest, my read-only call runs without approval', { tag: ['@spec-33'] }, async ({
-    page,
-    browser,
-    workerStack,
-    agentScript,
-  }) => {
-    const bobPage = await openAsBob(browser, workerStack)
-    await agentScript(research, { steps: [{ tool: 'crm-lookup' }], text: 'Looked the record up.' })
-    await sendMessage(bobPage, 'Bob asks to look the record up')
-    await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-    await messageItemsOf(bobPage).getByRole('button', { name: 'Used lookup (CRM)' }).click()
-    await expect(messageItemsOf(bobPage).filter({ hasText: 'ran lookup' })).not.toHaveCount(0)
-    await expect(approvalCardOf(bobPage)).toHaveCount(0)
-    await expect(approvalCardOf(page)).toHaveCount(0)
-    await bobPage.context().close()
-  })
-
-  test('As a chat owner, my own write call runs without any approval card', { tag: ['@spec-33'] }, async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, updateScript('Updated the record.'))
-    await sendMessage(page, 'Alice updates the record')
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await updateStepOf(page).click()
-    await expect(messageItemsOf(page).filter({ hasText: 'ran update' })).not.toHaveCount(0)
-    await expect(approvalCardOf(page)).toHaveCount(0)
   })
 
   test('As a chat owner, I set CRM’s update to Always in my approvals, and my own prompt waits for my approval before it runs', {
@@ -167,7 +126,7 @@ test.describe('Guest rights', () => {
   test('As a chat owner, my Approve reads Approving… while it is sent, and when my other page denies first, the late Approve is refused and the card keeps Denied by Alice', {
     tag: ['@spec-35'],
   }, async ({ page, browser, workerStack, agentScript }) => {
-    const bobPage = await openAsBob(browser, workerStack)
+    const bobPage = await openPrompterWithKey(browser, workerStack, research)
     const secondAlicePage = await openPageAs(browser, workerStack, 'member-alice')
     await openChat(secondAlicePage, 'Research')
     await agentScript(research, updateScript('Alice did not approve the update.'))

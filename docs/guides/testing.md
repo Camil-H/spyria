@@ -35,7 +35,7 @@ bun run check:tofu         # OpenTofu fmt, validate and the tests with mock prov
 bun run load:websockets    # server memory under many agent-stream sockets; not in check:all
 ```
 
-`check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite.
+`check:all` runs, in order: `lint`, `typecheck`, `check:boundaries`, `check:locks`, `test`, `check:bundle`, `test:integration`, `test:e2e`. `check:docker` runs `agent:build` and `test:docker:integration`. Both stop at the first failing step and end with the 20 slowest tests of each suite. In CI, the docker job sets `SPYRIA_BUILD_CACHE=gha`: `agent:build` then builds with `docker buildx` and keeps its layers in the GitHub Actions cache, and `check:docker` reports how long `agent:build` took as a notice on the run.
 
 `check:bundle` builds the app and fails when the main chunk is over 250,000 bytes, when it contains code that belongs in a lazy chunk, when it holds more than one React version, when React, react-dom, react-router or Zero is installed more than once across the web app and the packages, or when any client asset contains server-only SQL (for example `into events` or `skip locked`).
 
@@ -77,6 +77,10 @@ With `--plan <file>`, it runs nothing but the module graph and writes the select
 ### What `check:all` records
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree and exits non-zero when they differ or the run failed, so you can tell whether a green run still applies.
+
+### Removing or merging tests
+
+A test may go only when another test still covers its behaviour and source coverage does not drop. Before the change, run the layer with `--coverage --coverage-reporter=lcov` and `bun scripts/test-coverage.ts save <layer> <lcov.info>`, which keeps the covered lines in `.check/coverage-baseline/`; after it, `bun scripts/test-coverage.ts compare <layer> <lcov.info> [<lcov.info of the other layers>...]` lists covered lines per package and per `apps/server/src` folder, every line now covered only by another layer, and exits non-zero on any line no layer covers any more. `bun scripts/test-timings.ts <report>` ranks the slowest tests and files of a JUnit or Playwright JSON report.
 
 ## CI
 

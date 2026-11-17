@@ -1,35 +1,23 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createSpyriaAgentClient } from '@spyria/conversation/server'
 import { testGatewayAdmin } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { runtimeHostId } from '@spyria/kernel'
 import { createBifrostUsageLogs, syncUsageNow } from '@spyria/usage/server'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
-import { createModelCallRelay } from '../llm-relay.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { withSpan } from '../telemetry.ts'
+import { startDockerTestHost } from '../testing/docker-runtime-host.ts'
 import { startTestTelemetry } from '../testing/telemetry.ts'
 import {
   acme,
   addLlmKey,
   alice,
-  aliceInAcme,
   bob,
   gatewayLogsOf,
   openSharedTestApp,
   runtimeTurn,
-  sessionTokenOf,
-  testAuthSettings,
-  testSecretsKeyring,
   waitFor,
 } from '../testing/testing.ts'
-import { createAgentBridge } from './bridge.ts'
 
 setDefaultTimeout(180_000)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -38,91 +26,23 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 
 const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
-const runtimeHosts = createRuntimeHostGateway({
-  secretsKeyring: testSecretsKeyring,
-  databases: () => [database],
-  spyriaAgentImage: spyriaImage,
-  relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
-})
-const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, spyriaAgentImage: spyriaImage })
-const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
-const prefix = `${deployment}-`
-const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
-const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-let hostProcess: ReturnType<typeof Bun.spawn> | undefined
-const hostOutput: string[] = []
-const listed = (...command: string[]) =>
-  docker(...command, '--filter', `name=^${prefix}`)
-    .stdout.toString()
-    .split('\n')
-    .filter(Boolean)
+const dockerHost = await startDockerTestHost({ database, spyriaAgentImage: spyriaImage, personal: true, llmGateway })
+const runtimeHosts = dockerHost.gateway
 afterAll(async () => {
   setFakeLlmScript(undefined)
-  agentBridge.release(database)
-  hostProcess?.kill()
-  await hostProcess?.exited
-  const containers = listed('ps', '-aq')
-  if (containers.length > 0) docker('rm', '-f', ...containers)
-  for (const volume of listed('volume', 'ls', '-q')) docker('volume', 'rm', '-f', volume)
-  for (const network of listed('network', 'ls', '-q')) docker('network', 'rm', network)
-  void server.stop(true)
-  rmSync(stateDirectory, { recursive: true, force: true })
+  await dockerHost.cleanup()
 })
-
-const startHost = async () => {
-  const added = await app.request('/api/runtime-hosts', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, aliceInAcme.userId)}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ personal: true }),
-  })
-  const { id, code } = (await added.json()) as { id: string; code: string }
-  const spawned = Bun.spawn(
-    [process.execPath, hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`],
-    {
-      env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
-      stdout: 'pipe',
-      stderr: 'inherit',
-    },
-  )
-  hostProcess = spawned
-  void (async () => {
-    for await (const chunk of spawned.stdout) {
-      hostOutput.push(new TextDecoder().decode(chunk))
-      process.stdout.write(chunk)
-    }
-  })()
-  await waitFor(
-    async () => (await database.$client`select status from runtime_hosts where id = ${id}`)[0]?.status === 'online',
-    30_000,
-  )
-  return id
-}
 
 const apiKey = runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: 'pi-smoke' })
 type AgentTransport = ReturnType<typeof runtimeHosts.sandboxProvider.connect>
 let runtimeStarted: Promise<{ id: string; transport: AgentTransport }> | undefined
 const startRuntime = async () => {
-  const id = await startHost()
-  const host = { workspaceId: acme, hostId: runtimeHostId(id) }
+  const host = { workspaceId: acme, hostId: dockerHost.hostId }
   await runtimeHosts.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
   await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage })
-  const [created] = JSON.parse(docker('inspect', `${prefix}rt-pi-smoke`).stdout.toString())
-  expect(created.HostConfig.ExtraHosts).toEqual(['host.docker.internal:host-gateway'])
   await runtimeHosts.sandboxProvider.start(runtime)
-  const transport = runtimeHosts.sandboxProvider.connect(runtime)
-  const isReady = () =>
-    transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-      (response) => response.status === 200,
-      () => false,
-    )
-  await waitFor(isReady, 30_000)
-  return { id, transport }
+  return { id: dockerHost.hostId, transport: await dockerHost.readyRuntime(runtime) }
 }
 const runtime = () => {
   runtimeStarted ??= startRuntime()
@@ -145,6 +65,26 @@ type Update = {
 }
 const agentClient = createSpyriaAgentClient()
 type AgentLlmChoice = Parameters<typeof agentClient.createConversation>[2]
+type PiLaunch = Extract<AgentLlmChoice, { pi: unknown }>['pi']
+type PiModel = PiLaunch['models'][number]
+const mistralMedium = {
+  id: 'mistral/mistral-medium-latest',
+  name: 'Mistral Medium',
+  reasoning: false,
+  readsImages: false,
+}
+const mistralSmall = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false }
+const haiku = {
+  id: 'anthropic/claude-haiku-5-5',
+  name: 'Haiku 5.5',
+  reasoning: false,
+  readsImages: false,
+  contextWindow: 200000,
+}
+const piLlm = (models: [PiModel, ...PiModel[]], compactionModel: PiModel, adapterModel = models[0]) => ({
+  adapterModel: `spyria/${adapterModel.id}`,
+  pi: { models, compactionModel: compactionModel.id },
+})
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
   const conversation = { transport, apiKey, conversationId: crypto.randomUUID() }
   await agentClient.createConversation(conversation, token, llm)
@@ -185,90 +125,26 @@ const modelCallsOf = async (chatId: string, minimum: number) => {
     select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
 }
 
-test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, its Anthropic prompt cached for an hour through the gateway, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
+test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, its Anthropic prompt cached for an hour through the gateway, streams its text to the events socket and ends each turn; a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns; each call is attributed to the prompter and the owner", async () => {
   await addLlmKey(bob, 'Mistral')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
-  const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [
-        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-        {
-          id: 'anthropic/claude-haiku-5-5',
-          name: 'Haiku 5.5',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 200000,
-        },
-      ],
-      compactionModel: 'mistral/mistral-small-latest',
-    },
-  })
-  expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentClient.switchModel(conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
-  expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
-  const anthropicRequest = fakeLlmBodies.findLast((body) => body.includes('Hello Pi on Anthropic')) ?? ''
-  expect(anthropicRequest).toContain('"ttl":"1h"')
-  expect(fakeLlmBodies.find((body) => body.includes('Hello Pi'))).not.toContain('prompt_cache_retention')
-  expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
-  close()
-
-  const calls = await modelCallsOf(chatId, 2)
-  expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
-    new Set([
-      JSON.stringify({
-        prompter_id: bob,
-        owner_id: alice,
-        model: 'mistral-medium-latest',
-        provider: 'mistral',
-        status: 'success',
-      }),
-      JSON.stringify({
-        prompter_id: bob,
-        owner_id: alice,
-        model: 'claude-haiku-5-5',
-        provider: 'anthropic',
-        status: 'success',
-      }),
-    ]),
-  )
-})
-
-test('a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns', async () => {
-  await addLlmKey(bob, 'Mistral')
-  await addLlmKey(bob, 'Anthropic')
-  const { id, transport } = await runtime()
-  const { token } = await runtimeTurn({ id }, bob)
-  const models = [
-    { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-    {
-      id: 'anthropic/claude-haiku-5-5',
-      name: 'Haiku 5.5',
-      reasoning: false,
-      readsImages: false,
-      contextWindow: 200000,
-    },
-  ]
-  const llm = {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: { models, compactionModel: 'mistral/mistral-medium-latest' },
-  }
   const bodiesBefore = fakeLlmBodies.length
   const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
-  const first = await piConversationOf(transport, token, llm)
-  await first.answerOf('The code word is PAPAYA')
-  await agentClient.switchModel(first.conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
-  await first.answerOf('Curated switch: what is the code word?')
+  const first = await piConversationOf(transport, token, piLlm([mistralMedium, haiku], mistralMedium))
+  expect(await first.answerOf('The code word is PAPAYA')).toBe('Understood, working on it.')
+  await agentClient.switchModel(first.conversation, `spyria-anthropic/${haiku.id}`)
+  expect(await first.answerOf('Curated switch: what is the code word?')).toContain('Understood')
+  expect(requestOf('Curated switch')).toContain('"ttl":"1h"')
+  expect(requestOf('The code word is PAPAYA')).not.toContain('prompt_cache_retention')
+  expect(first.turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
   first.close()
   await agentClient.deleteConversation(first.conversation)
 
-  const picked = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false }
   const relaunched = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-small-latest',
-    pi: { models: [...models, picked], compactionModel: 'mistral/mistral-medium-latest' },
+    ...piLlm([mistralMedium, haiku, mistralSmall], mistralMedium, mistralSmall),
     resumeSessionId: sessionId,
   })
   await relaunched.answerOf('Picked switch: what is the code word?')
@@ -282,6 +158,16 @@ test('a model switch keeps the conversation: the next request on a curated model
   expect(requestOf('Picked switch')).toContain('"model":"mistral-small-latest"')
   expect(requestOf('Picked switch')).toContain('The code word is PAPAYA')
   expect(requestOf('Picked switch')).toContain('Curated switch: what is the code word?')
+
+  const calls = await modelCallsOf(chatId, 3)
+  const attributed = { prompter_id: bob, owner_id: alice }
+  expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
+    new Set([
+      JSON.stringify({ ...attributed, model: 'mistral-medium-latest', provider: 'mistral', status: 'success' }),
+      JSON.stringify({ ...attributed, model: 'claude-haiku-5-5', provider: 'anthropic', status: 'success' }),
+      JSON.stringify({ ...attributed, model: 'mistral-small-latest', provider: 'mistral', status: 'success' }),
+    ]),
+  )
 })
 
 test('a long Pi conversation compacts on the compaction model, recorded with prompter and owner, and a new conversation loads the session without replaying it and keeps its context', async () => {
@@ -290,28 +176,16 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   setFakeLlmScript({ summary })
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
+  const smallContextLlm = piLlm(
+    [
+      { ...mistralMedium, contextWindow: 4000 },
+      { ...mistralSmall, contextWindow: 4000 },
+    ],
+    mistralSmall,
+  )
   const llm = {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [
-        {
-          id: 'mistral/mistral-medium-latest',
-          name: 'Mistral Medium',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 4000,
-        },
-        {
-          id: 'mistral/mistral-small-latest',
-          name: 'Mistral Small',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 4000,
-        },
-      ],
-      compactionModel: 'mistral/mistral-small-latest',
-      compaction: { reserveTokens: 3999, keepRecentTokens: 1 },
-    },
+    ...smallContextLlm,
+    pi: { ...smallContextLlm.pi, compaction: { reserveTokens: 3999, keepRecentTokens: 1 } },
   }
   const first = await piConversationOf(transport, token, llm)
   for (const text of ['Remember the word PAPAYA', 'Second turn', 'Third turn']) await first.answerOf(text)
@@ -352,78 +226,8 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, streams text around a command once, and reports a provider error", async () => {
+test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, streams text around a command once, and reports a provider error; its first turn carries the server’s trace into the JSON lines of the real spyria-host and spyria-agent", async () => {
   await addLlmKey(bob, 'Mistral')
-  const { id, transport } = await runtime()
-  const { token } = await runtimeTurn({ id }, bob)
-  const pi = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false }],
-      compactionModel: 'mistral/mistral-medium-latest',
-    },
-  })
-  const finalOf = (title: string) =>
-    pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
-  setFakeLlmScript({
-    steps: [
-      { command: 'echo one; echo two; exit 3' },
-      { tool: 'ask_member', arguments: { question: 'Which database?', options: ['Postgres', 'SQLite'] } },
-    ],
-    text: 'Asked.',
-  })
-  const asked = pi.answerOf('Run it, then ask me')
-  const question = await pi.questionOf('question')
-  expect(question).toMatchObject({
-    questions: [
-      {
-        id: 'answer',
-        text: 'Which database?',
-        options: [
-          { value: 'Postgres', label: 'Postgres' },
-          { value: 'SQLite', label: 'SQLite' },
-        ],
-        free: true,
-      },
-    ],
-  })
-  expect(
-    await agentClient.answerQuestion(pi.conversation, String(question.questionId), {
-      answers: {},
-      free: { answer: 'MySQL' },
-    }),
-  ).toBe(200)
-  expect(await asked).toBe('Asked.')
-  expect(finalOf('echo one; echo two; exit 3')).toMatchObject({
-    kind: 'execute',
-    status: 'failed',
-    rawOutput: { formatted_output: 'one\ntwo\n', exit_code: 3 },
-  })
-  expect(pi.updates.find((update) => update.sessionUpdate === 'question_answered')).toMatchObject({
-    free: { answer: 'MySQL' },
-  })
-  expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
-  expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({ cwd: '/workspace/project' })
-
-  setFakeLlmScript({
-    steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
-    text: 'The check passed, so every word streams once.',
-  })
-  expect(await pi.answerOf('Stream around a command')).toBe(
-    'Let me check that first. The check passed, so every word streams once.',
-  )
-  setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
-  await pi.answerOf('Fail it')
-  expect(pi.updates.slice(-2)).toMatchObject([
-    { sessionUpdate: 'error' },
-    { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
-  ])
-  pi.close()
-})
-
-test('a turn through a real spyria-host and spyria-agent carries the server’s trace into their JSON lines', async () => {
-  await addLlmKey(bob, 'Mistral')
-  setFakeLlmScript(undefined)
   const { id, transport } = await runtime()
   const { token, promptId } = await runtimeTurn({ id }, bob)
   const telemetry = startTestTelemetry({})
@@ -433,30 +237,66 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       .filter((line) => line.startsWith('{'))
       .map((line) => JSON.parse(line))
   try {
-    const traceId = await withSpan('test turn', {}, async (span) => {
-      await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'pi-smoke' })
-      const pi = await piConversationOf(transport, token, {
-        adapterModel: 'spyria/mistral/mistral-medium-latest',
-        pi: {
-          models: [
-            { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-          ],
-          compactionModel: 'mistral/mistral-medium-latest',
-        },
-      })
-      expect(await pi.answerOf('Hello traced Pi')).toBe('Understood, working on it.')
-      pi.close()
-      return span.spanContext().traceId
+    setFakeLlmScript({
+      steps: [
+        { command: 'echo one; echo two; exit 3' },
+        { tool: 'ask_member', arguments: { question: 'Which database?', options: ['Postgres', 'SQLite'] } },
+      ],
+      text: 'Asked.',
     })
+    const { pi, traceId } = await withSpan('test turn', {}, async (span) => {
+      await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: dockerHost.hostId, runtimeId: 'pi-smoke' })
+      const pi = await piConversationOf(transport, token, piLlm([mistralMedium], mistralMedium))
+      const asked = pi.answerOf('Run it, then ask me')
+      const question = await pi.questionOf('question')
+      expect(question).toMatchObject({
+        questions: [
+          {
+            id: 'answer',
+            text: 'Which database?',
+            options: [
+              { value: 'Postgres', label: 'Postgres' },
+              { value: 'SQLite', label: 'SQLite' },
+            ],
+            free: true,
+          },
+        ],
+      })
+      expect(
+        await agentClient.answerQuestion(pi.conversation, String(question.questionId), {
+          answers: {},
+          free: { answer: 'MySQL' },
+        }),
+      ).toBe(200)
+      expect(await asked).toBe('Asked.')
+      return { pi, traceId: span.spanContext().traceId }
+    })
+    const finalOf = (title: string) =>
+      pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
+    expect(finalOf('echo one; echo two; exit 3')).toMatchObject({
+      kind: 'execute',
+      status: 'failed',
+      rawOutput: { formatted_output: 'one\ntwo\n', exit_code: 3 },
+    })
+    expect(pi.updates.find((update) => update.sessionUpdate === 'question_answered')).toMatchObject({
+      free: { answer: 'MySQL' },
+    })
+    expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
+    expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({
+      cwd: '/workspace/project',
+    })
+
     await waitFor(() =>
-      linesOf(hostOutput.join('')).some((line) => line['event.name'] === 'host.command' && line.trace_id === traceId),
+      linesOf(dockerHost.hostOutput()).some(
+        (line) => line['event.name'] === 'host.command' && line.trace_id === traceId,
+      ),
     )
-    expect(linesOf(hostOutput.join('')).find((line) => line.trace_id === traceId)).toMatchObject({
+    expect(linesOf(dockerHost.hostOutput()).find((line) => line.trace_id === traceId)).toMatchObject({
       'service.name': 'spyria-host',
       'event.name': 'host.command',
       'host.command': 'status',
     })
-    const agentLines = () => linesOf(docker('logs', `${prefix}rt-pi-smoke`).stdout.toString())
+    const agentLines = () => linesOf(docker('logs', `${dockerHost.prefix}rt-pi-smoke`).stdout.toString())
     await waitFor(() => agentLines().some((line) => line['event.name'] === 'agent.turn' && line.trace_id === traceId))
     expect(agentLines().find((line) => line['event.name'] === 'agent.listening')).toMatchObject({
       'service.name': 'spyria-agent',
@@ -467,7 +307,23 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       'gen_ai.request.model': 'mistral/mistral-medium-latest',
       'http.response.status_code': 200,
     })
+
+    setFakeLlmScript({
+      steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
+      text: 'The check passed, so every word streams once.',
+    })
+    expect(await pi.answerOf('Stream around a command')).toBe(
+      'Let me check that first. The check passed, so every word streams once.',
+    )
+    setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
+    await pi.answerOf('Fail it')
+    expect(pi.updates.slice(-2)).toMatchObject([
+      { sessionUpdate: 'error' },
+      { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
+    ])
+    pi.close()
   } finally {
+    setFakeLlmScript(undefined)
     await telemetry.stop()
   }
 })

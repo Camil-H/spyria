@@ -31,12 +31,6 @@ const researchWithHistory = async (
   await sendMessage(page, 'Find the bug.')
   await expect(messageContaining(page, 'Found it.')).toHaveCount(1)
   await expect(workingIndicatorOf(page)).toHaveCount(0)
-  await workerStack.database.$client`
-    insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at, deleted_at)
-    select 'workspace-acme', ${research}, 'message-deleted-before-fork', max(seq) + 1, 'member', 'member-alice', '',
-      now(), now()
-    from messages where chat_id = ${research}`
-  await expect(messageContaining(page, 'This message was deleted')).toHaveCount(1)
   await addParticipant(workerStack, research, 'member-bob', 'reader')
 }
 
@@ -46,11 +40,13 @@ test.describe('Fork', () => {
     await openChat(page, 'Research')
   })
 
-  test('As a reader, I fork a runtime chat into a private chat of my own, seeded with its member and agent messages', {
-    tag: ['@spec-34'],
+  test('As a reader, I fork a runtime chat into a private chat of my own, seeded with its member and agent messages, choose where it runs and get a reply, while the source is unchanged and the fork stays out of the owner’s sidebar', {
+    tag: ['@spec-34', '@smoke'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     await researchWithHistory(page, workerStack, agentScript)
+    const sourceMessages = await messageItemsOf(page).allTextContents()
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await addLlmKey(bobPage, 'Mistral')
     await openChat(bobPage, 'Research')
     await forkButtonOf(bobPage).click()
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: forkName })).toBeVisible()
@@ -67,19 +63,7 @@ test.describe('Fork', () => {
       { useInnerText: true },
     )
     await expect(messageItemsOf(bobPage).nth(0)).not.toContainText('lookup')
-    await bobPage.context().close()
-  })
 
-  test('As a reader, I choose where my fork runs and get a reply, while the source is unchanged and the fork stays out of the owner’s sidebar', {
-    tag: ['@spec-34', '@smoke'],
-  }, async ({ page, browser, workerStack, agentScript }) => {
-    await researchWithHistory(page, workerStack, agentScript)
-    const sourceMessages = await messageItemsOf(page).allTextContents()
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Mistral')
-    await openChat(bobPage, 'Research')
-    await forkButtonOf(bobPage).click()
-    await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: forkName })).toBeVisible()
     await chooseRunsOn(bobPage, 'Spyria runtime')
     await agentScript(bobPage.url().split('/').at(-1) ?? '', { text: 'Fixed on Bob’s session.' })
     await sendMessage(bobPage, 'Fix it.')

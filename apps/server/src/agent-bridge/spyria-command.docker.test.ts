@@ -23,15 +23,23 @@ const gateway = Bun.serve({
     return Response.json({ jsonrpc: '2.0', id, result })
   },
 })
-afterAll(() => gateway.stop(true))
+const runtimeContainer = `spyria-test-command-${crypto.randomUUID().slice(0, 8)}`
+const startedContainer = docker(
+  ...['run', '-d', '--name', runtimeContainer, '--user', '10001:10001', '--read-only', '--cap-drop', 'ALL'],
+  ...['--add-host', 'host.docker.internal:host-gateway', '--entrypoint', 'sleep', spyriaImage, '600'],
+)
+if (startedContainer.exitCode !== 0) throw new Error(`The runtime container did not start: ${startedContainer.stderr}`)
+afterAll(() => {
+  docker('rm', '-f', runtimeContainer)
+  gateway.stop(true)
+})
 
 const inImage = async (command: string[], environment: Record<string, string> = {}) => {
   const run = Bun.spawn(
     [
-      ...['docker', 'run', '--rm', '--user', '10001:10001', '--read-only', '--cap-drop', 'ALL'],
-      ...['--add-host', 'host.docker.internal:host-gateway'],
+      ...['docker', 'exec'],
       ...Object.entries(environment).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
-      ...['--entrypoint', command[0] as string, spyriaImage, ...command.slice(1)],
+      ...[runtimeContainer, ...command],
     ],
     { stdout: 'pipe', stderr: 'pipe' },
   )

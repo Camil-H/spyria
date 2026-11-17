@@ -245,7 +245,7 @@ export const containerBodyOf = ({
   }
 }
 
-export const snapshotCopyBodyOf = ({
+const snapshotCopyBodyOf = ({
   prefix,
   runtimeId,
   image,

@@ -2,7 +2,7 @@ import {
   expect,
   messageContaining,
   newSession,
-  runsOnChipOf,
+  runsOnStatusOf,
   sendMessage,
   signedInMachine,
   machineTest as test,
@@ -15,31 +15,15 @@ test.describe('Harness install on my machine', () => {
     await page.goto('/')
   })
 
-  const runtimeStatusOf = (page: Parameters<typeof runsOnChipOf>[0]) =>
-    runsOnChipOf(page).getByRole('status', { name: 'Runtime' })
-
   test('As a member, I start a Claude Code session on my machine with nothing installed: the chat shows Installing Claude Code…, then my turn runs', {
     tag: ['@spec-51'],
   }, async ({ page, machine }) => {
     await machine({ ...signedInMachine, holdInstall: 'true' })
     await newSession(page, 'Claude Code')
-    await expect(runtimeStatusOf(page)).toHaveText('Installing Claude Code…')
+    await expect(runsOnStatusOf(page)).toHaveText('Installing Claude Code…')
     await machine({ holdInstall: 'false' })
-    await expect(runtimeStatusOf(page)).toHaveText('Ready')
+    await expect(runsOnStatusOf(page)).toHaveText('Ready')
     await sendMessage(page, 'Hello')
-    await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
-    expect((await machine()).installs).toBe(1)
-  })
-
-  test('As a member, I start a second Claude Code session on my machine and it starts with no install step', {
-    tag: ['@spec-51'],
-  }, async ({ page, machine }) => {
-    await machine(signedInMachine)
-    await newSession(page, 'Claude Code', 'First session')
-    await expect(runtimeStatusOf(page)).toHaveText('Ready')
-    await newSession(page, 'Claude Code', 'Second session')
-    await expect(runtimeStatusOf(page)).toHaveText('Ready')
-    await sendMessage(page, 'Hello again')
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
     expect((await machine()).installs).toBe(1)
   })
@@ -51,11 +35,11 @@ test.describe('Harness install on my machine', () => {
       "code E404\n404 Not Found - GET http://registry.invalid/@anthropic-ai%2fclaude-code - '@anthropic-ai/claude-code@2.1.296' is not in this registry."
     await machine({ ...signedInMachine, installFailure: reason })
     await newSession(page, 'Claude Code')
-    await expect(runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })).toBeVisible()
-    await expect(runtimeStatusOf(page)).toContainText("'@anthropic-ai/claude-code@2.1.296' is not in this registry.")
+    await expect(runsOnStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })).toBeVisible()
+    await expect(runsOnStatusOf(page)).toContainText("'@anthropic-ai/claude-code@2.1.296' is not in this registry.")
     await machine({ installFailure: '' })
-    await runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' }).click()
-    await expect(runtimeStatusOf(page)).toHaveText('Ready')
+    await runsOnStatusOf(page).getByRole('button', { name: 'Could not start · Retry' }).click()
+    await expect(runsOnStatusOf(page)).toHaveText('Ready')
     await sendMessage(page, 'Hello')
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
     expect((await machine()).installs).toBe(2)

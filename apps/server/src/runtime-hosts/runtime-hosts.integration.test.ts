@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, afterEach, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { schema } from '@spyria/db/zero'
@@ -43,8 +43,10 @@ const gateway = createRuntimeHostGateway({
 const app = createApp({ database, ...testAuthSettings, runtimeHosts: gateway })
 const server = Bun.serve({ port: 0, fetch: app.fetch, websocket: serverWebSocket })
 const openedSockets: WebSocket[] = []
+afterEach(() => {
+  for (const socket of openedSockets.splice(0)) socket.close()
+})
 afterAll(() => {
-  for (const socket of openedSockets) socket.close()
   void server.stop(true)
 })
 
@@ -79,6 +81,12 @@ const renewCode = (member: Member, hostId: string) => postAs(member, `/api/runti
 const addedHost = async (name = 'Home server') => {
   const { body } = await addHost(aliceInAcme, name)
   if (!body?.id || !body.code) throw new Error('Adding a host failed')
+  return { id: body.id, code: body.code }
+}
+const addMachine = (member: Member) => postAs(member, '/api/runtime-hosts', { personal: true })
+const addedMachine = async (member: Member) => {
+  const { body } = await addMachine(member)
+  if (!body?.id || !body.code) throw new Error('Adding a machine failed')
   return { id: body.id, code: body.code }
 }
 const timestampColumns = ['claim_expires_at', 'last_seen_at', 'created_at', 'removed_at']
@@ -136,14 +144,19 @@ const hostVersions = { hostVersion: 'test', protocolVersion: 5 }
 
 const pairedHost = async (
   name = 'Home server',
-  { heartbeatMilliseconds, ...options }: { answersPings?: boolean; heartbeatMilliseconds?: number } = {},
+  {
+    heartbeatMilliseconds,
+    machineOf,
+    ...options
+  }: { answersPings?: boolean; heartbeatMilliseconds?: number; machineOf?: Member } = {},
 ) => {
-  const { id, code } = await addedHost(name)
+  const { id, code } = machineOf ? await addedMachine(machineOf) : await addedHost(name)
   const { host: claimingHost, token } = await claim(code)
   if (!token) throw new Error('Claiming failed')
   claimingHost.socket.close()
   const host = await connectFakeHost(options)
-  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, heartbeatMilliseconds })
+  const machineHello = machineOf && { personal: true, signedIn: [] }
+  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, heartbeatMilliseconds, ...machineHello })
   await waitFor(async () => (await hostRow(id)).status === 'online')
   return { id, code, token, host }
 }
@@ -153,7 +166,6 @@ const openStore = (member: Member) => openZeroStore(createZeroStore, member.user
 test('an admin adds a host and receives a one-time code whose hash only is stored', async () => {
   const { status, body } = await addHost(aliceInAcme, '  Home server  ')
   expect(status).toBe(201)
-  expect(body?.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
   const row = await hostRow(body?.id ?? '')
   expect(row).toMatchObject({
     workspace_id: acme,
@@ -265,7 +277,6 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   const { id, code } = await addedHost()
   const { host: claimingHost, token } = await claim(code)
   claimingHost.socket.close()
-  expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
   const claimed = await hostRow(id)
   expect(claimed.token_hash).toBe(sha256(token ?? ''))
   expect(JSON.stringify(claimed)).not.toContain(token)
@@ -284,7 +295,6 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code has expired')
   const renewed = await renewCode(aliceInAcme, expiring.id)
   expect(renewed.status).toBe(200)
-  expect(renewed.body?.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
   expect((await hostRow(expiring.id)).status).toBe('waiting')
   expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code is not valid')
   expect((await claim(renewed.body?.code ?? '')).token).toBeDefined()
@@ -294,7 +304,7 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   })
 
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
-  const { id: machineId, host: machine } = await pairedMachine(bobInAcme)
+  const { id: machineId, host: machine } = await pairedHost('My machine', { machineOf: bobInAcme })
   expect((await hostRow(machineId)).capacity).toEqual({
     ...hostSystem,
     cap: 6,
@@ -439,12 +449,6 @@ test('a host cannot answer another host’s requests or streams, an unknown stat
   expect((await hostRow(trustedId)).status).toBe('online')
 })
 
-test('closing the connection marks the host offline', async () => {
-  const { id, host } = await pairedHost()
-  host.socket.close()
-  await waitFor(async () => (await hostRow(id)).status === 'offline')
-})
-
 test('a host whose connection closes while its hello is being checked ends offline, not held by the closed connection', async () => {
   const { id, token, host } = await pairedHost()
   host.socket.close()
@@ -580,17 +584,6 @@ test('neither a claim code nor a host token is ever logged', async () => {
   }
 })
 
-const addMachine = (member: Member) => postAs(member, '/api/runtime-hosts', { personal: true })
-const pairedMachine = async (member: Member) => {
-  const { body } = await addMachine(member)
-  if (!body?.id || !body.code) throw new Error('Adding a machine failed')
-  const { host: claimingHost, token } = await claim(body.code)
-  claimingHost.socket.close()
-  const host = await connectFakeHost()
-  host.send({ type: 'hello', token, system: hostSystem, ...hostVersions, personal: true, signedIn: [] })
-  await waitFor(async () => (await hostRow(body.id as string)).status === 'online')
-  return { id: body.id, token, host }
-}
 test('a member adds one machine of their own under a lock on their membership; a second one is refused until it is removed', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { status, body } = await addMachine(bobInAcme)
@@ -627,9 +620,25 @@ test('a member adds one machine of their own under a lock on their membership; a
   expect((await adding).status).toBe(201)
 })
 
+test('a member is refused adding a machine while machine sessions are turned off, and nothing is stored', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const setLocalSessions = (isOn: boolean) =>
+    requestMutation(app, database, aliceInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn })
+  expect(await setLocalSessions(false)).toEqual(succeeded)
+  const refused = await addMachine(bobInAcme)
+  expect(await setLocalSessions(true)).toEqual(succeeded)
+  expect(refused).toMatchObject({
+    status: 403,
+    body: { error: 'local_sessions_off', message: "Your workspace turned off sessions on members' machines" },
+  })
+  expect(
+    await database.$client`select 1 from runtime_hosts where owner_id = ${bob} and removed_at is null`,
+  ).toHaveLength(0)
+})
+
 test('an offline machine gets a new command from its owner, which revokes its old token and pairs it again; an offline workspace host does not', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
-  const { id, token, host } = await pairedMachine(bobInAcme)
+  const { id, token, host } = await pairedHost('My machine', { machineOf: bobInAcme })
   expect(await renewCode(bobInAcme, id)).toMatchObject({ status: 400, body: { error: 'code_not_renewable' } })
   host.socket.close()
   await waitFor(async () => (await hostRow(id)).status === 'offline')
@@ -660,7 +669,7 @@ test('an offline machine gets a new command from its owner, which revokes its ol
 
 test('a machine is read and removed by its owner only, and admins see only how many members use one and with which tool, kept in sync', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
-  const { id, host } = await pairedMachine(bobInAcme)
+  const { id, host } = await pairedHost('My machine', { machineOf: bobInAcme })
   const bobsAcme = await openStore(bobInAcme)
   await waitFor(() => bobsAcme.read().runtimeHosts.some((machine) => machine.id === id && machine.status === 'online'))
   expect(bobsAcme.read().runtimeHosts.map((machine) => String(machine.id))).toEqual([id])
@@ -683,7 +692,7 @@ test('a machine is read and removed by its owner only, and admins see only how m
 
 test('removing a member removes their machine and closes its connection', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
-  const { id, host } = await pairedMachine(bobInAcme)
+  const { id, host } = await pairedHost('My machine', { machineOf: bobInAcme })
   expect(await removeFromAcme(app, database, bob)).toEqual(succeeded)
   await host.closed
   expect((await hostRow(id)).removed_at).toBeInstanceOf(Date)

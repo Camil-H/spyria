@@ -1,8 +1,6 @@
-import { addCredential, expect, llmSectionOf, mainOf, openProfile, type Page, sidebarOf, test } from '../fixtures'
+import { expect, mainOf, openProfile, type Page, sidebarOf, test } from '../fixtures'
 
 const cardOf = (page: Page, title: string) => mainOf(page).getByRole('link', { name: title, exact: true })
-const credentialRowOf = (page: Page, provider: string) =>
-  llmSectionOf(page).getByRole('listitem').filter({ hasText: provider })
 
 test.describe('Profile', () => {
   test.beforeEach(async ({ page }) => {
@@ -35,20 +33,6 @@ test.describe('Profile', () => {
       await page.keyboard.press('Escape')
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
     })
-  })
-
-  test('As a member, I add a key from its dialog, see each key as a row with its mask and Remove, and the card counts them', async ({
-    page,
-  }) => {
-    await openProfile(page, 'LLM keys')
-    await expect(credentialRowOf(page, 'Anthropic')).toHaveText('Anthropic••••a1b2Remove')
-
-    await addCredential(page, { provider: 'OpenAI', secret: 'fake-key-7890' })
-    await expect(credentialRowOf(page, 'OpenAI')).toHaveText('OpenAI••••7890Remove')
-    await expect(page.getByRole('dialog', { name: 'Add LLM key' })).toHaveCount(0)
-
-    await mainOf(page).getByRole('link', { name: 'Back to Profile' }).click()
-    await expect(cardOf(page, 'LLM keys')).toHaveAccessibleDescription('Your own keys, used when you prompt 2 keys')
   })
 
   test('As a member, I find my display name prefilled on my Account page, and Save stays disabled while it is unchanged or blank', async ({

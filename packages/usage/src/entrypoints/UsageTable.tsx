@@ -4,7 +4,7 @@ import type { UsageTotals } from '../domain/usage.ts'
 type UsageRow = UsageTotals & { key: string; name: string; share?: number }
 
 const cellClass = 'px-2 py-1.5 text-right'
-export const formatShare = (share: number) => `${Math.round(share * 100)}%`
+const formatShare = (share: number) => `${Math.round(share * 100)}%`
 
 const Cells = ({ totals, share }: { totals: UsageTotals; share?: number }) => (
   <>

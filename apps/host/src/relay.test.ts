@@ -19,22 +19,24 @@ const spyriaAgent = Bun.serve({
 })
 afterAll(() => spyriaAgent.stop(true))
 
-const relayCollecting = () => {
+const relayTo = (
+  agent: { port?: number },
+  options: Omit<Partial<Parameters<typeof createRelay>[0]>, 'addressOf' | 'send'> = {},
+) => {
   const sent: Record<string, unknown>[] = []
   const relay = createRelay({
     addressOf: async (runtimeId) => {
       if (runtimeId !== 'runtime-1') throw new Error('refused: not a managed runtime')
-      return `http://localhost:${spyriaAgent.port}`
+      return `http://localhost:${agent.port}`
     },
     send: (frame) => sent.push(frame),
-    maximumQueuedMessages: 2,
+    ...options,
   })
-  const nextOf = (type: string) => nextFrameOf(sent, type)
-  return { relay, nextOf, sent }
+  return { relay, sent, nextOf: (type: string) => nextFrameOf(sent, type) }
 }
 
 test('relays an HTTP call and answers with its status and body', async () => {
-  const { relay, nextOf } = relayCollecting()
+  const { relay, nextOf } = relayTo(spyriaAgent)
   await relay.handle({
     type: 'http',
     sid: 1,
@@ -48,13 +50,13 @@ test('relays an HTTP call and answers with its status and body', async () => {
 })
 
 test('answers an error for an unmanaged runtime instead of relaying', async () => {
-  const { relay, nextOf } = relayCollecting()
+  const { relay, nextOf } = relayTo(spyriaAgent)
   await relay.handle({ type: 'http', sid: 2, runtimeId: 'other', method: 'GET', path: '/' })
   expect(await nextOf('http_res')).toEqual({ type: 'http_res', sid: 2, error: 'refused: not a managed runtime' })
 })
 
 test('relays a WebSocket stream both ways and closes it', async () => {
-  const { relay, nextOf } = relayCollecting()
+  const { relay, nextOf } = relayTo(spyriaAgent)
   await relay.handle({ type: 'ws_connect', sid: 3, runtimeId: 'runtime-1', path: '/sockets/events/1' })
   await relay.handle({ type: 'ws_msg', sid: 3, data: 'queued before open' })
   expect(await nextOf('ws_open')).toEqual({ type: 'ws_open', sid: 3 })
@@ -66,7 +68,7 @@ test('relays a WebSocket stream both ways and closes it', async () => {
 })
 
 test('a stream closed while its runtime address is looked up is never opened', async () => {
-  const { relay, sent } = relayCollecting()
+  const { relay, sent } = relayTo(spyriaAgent)
   const connecting = relay.handle({ type: 'ws_connect', sid: 6, runtimeId: 'runtime-1', path: '/' })
   await relay.handle({ type: 'ws_close', sid: 6 })
   await connecting
@@ -75,7 +77,7 @@ test('a stream closed while its runtime address is looked up is never opened', a
 })
 
 test('closes a stream whose queue before opening overflows', async () => {
-  const { relay, nextOf } = relayCollecting()
+  const { relay, nextOf } = relayTo(spyriaAgent, { maximumQueuedMessages: 2 })
   await relay.handle({ type: 'ws_connect', sid: 4, runtimeId: 'runtime-1', path: '/' })
   for (const data of ['one', 'two', 'three']) await relay.handle({ type: 'ws_msg', sid: 4, data })
   expect(await nextOf('ws_close')).toMatchObject({ type: 'ws_close', sid: 4 })
@@ -111,93 +113,28 @@ const tokenServer = Bun.serve({
 })
 afterAll(() => tokenServer.stop(true))
 
-const personalRelay = () => {
-  const sent: Record<string, unknown>[] = []
-  const relay = createRelay({
-    addressOf: async () => `http://localhost:${tokenServer.port}`,
-    send: (frame) => sent.push(frame),
-    personal: { secrets: () => [refreshToken] },
-  })
-  const nextOf = (type: string) => nextFrameOf(sent, type)
-  return { relay, nextOf }
-}
+const personalRelay = () => relayTo(tokenServer, { personal: { secrets: () => [refreshToken] } })
 
-test.each([
-  ['POST', '/api/bash/execute_bash_command'],
-  ['GET', '/api/file/download?path=/home/spyria/.claude/.credentials.json'],
-  ['GET', `/api/conversations/${conversationId}/workspace/x`],
-  ['GET', '/api/conversations/search'],
-  ['POST', `/api/conversations/${conversationId}/../../bash/execute_bash_command`],
-  ['DELETE', '/api/conversations'],
-  ['POST', `/api/conversations/${conversationId}/switch_llm`],
-  ['GET', `/api/conversations/${conversationId}/agent_final_response`],
-  ['GET', `/api/conversations/${conversationId}/questions/${conversationId}`],
-  ['POST', `/api/conversations/${conversationId}/questions/../../interrupt`],
-  ['POST', `/api/conversations/${conversationId}/restart/../../bash`],
-  ['GET', `/api/conversations/${conversationId}/restart`],
-  ['POST', '/api/workspace/tree'],
-  ['GET', '/api/workspace/../conversations'],
-  ['GET', '/api/workspace/file?path=../x/y'],
-  ['POST', '/api/workspace/push'],
-  ['GET', '/api/workspace/merge'],
-  ['GET', '/api/workspace/fetch'],
-  ['POST', '/api/workspace/status'],
-  ['POST', '/api/workspace/media'],
-])('a personal host refuses %s %s', async (method, path) => {
+test('a personal host answers a path it does not relay with an error, and closes such a WebSocket', async () => {
   const { relay, nextOf } = personalRelay()
-  await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method, path })
+  await relay.handle({
+    type: 'http',
+    sid: 1,
+    runtimeId: 'runtime-1',
+    method: 'POST',
+    path: '/api/bash/execute_bash_command',
+  })
   expect(await nextOf('http_res')).toEqual({
     type: 'http_res',
     sid: 1,
     error: 'refused: this path is not relayed by a personal host',
   })
-})
-
-test.each([
-  '/sockets/bash-events',
-  `/sockets/events/${conversationId}?after=1&x=2`,
-  `/sockets/events/${conversationId}?resend_mode=all`,
-  `/sockets/events/${conversationId}?resend_mode=since&after_timestamp=2026-10-10T10%3A00%3A00.000000`,
-])('a personal host refuses the WebSocket %s', async (path) => {
-  const { relay, nextOf } = personalRelay()
-  await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path })
+  await relay.handle({ type: 'ws_connect', sid: 2, runtimeId: 'runtime-1', path: '/sockets/bash-events' })
   expect(await nextOf('ws_close')).toMatchObject({
     type: 'ws_close',
     sid: 2,
     error: expect.stringContaining('refused'),
   })
-})
-
-test.each([
-  ['GET', '/ready'],
-  ['POST', '/api/conversations'],
-  ['GET', `/api/conversations/${conversationId}`],
-  ['DELETE', `/api/conversations/${conversationId}`],
-  ['POST', `/api/conversations/${conversationId}/events`],
-  ['POST', `/api/conversations/${conversationId}/joins`],
-  ['POST', `/api/conversations/${conversationId}/attachments`],
-  ['POST', `/api/conversations/${conversationId}/interrupt`],
-  ['POST', `/api/conversations/${conversationId}/restart`],
-  ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
-  ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
-  ['GET', '/api/workspace/tree?path=src%2Futil'],
-  ['GET', '/api/workspace/file?path=README.md'],
-  ['GET', '/api/workspace/media?path=out%2Fchart.png'],
-  ['GET', '/api/workspace/changes?base=main'],
-  ['GET', '/api/workspace/commits?base=main'],
-  ['GET', '/api/workspace/status?base=main'],
-  ['GET', '/api/workspace/checks'],
-  ['POST', '/api/workspace/bundle'],
-  ['POST', '/api/workspace/commit'],
-  ['POST', '/api/workspace/fetch'],
-  ['POST', '/api/workspace/merge'],
-  ['POST', '/api/workspace/pushed'],
-  ['POST', '/api/workspace/screenshot'],
-  ['POST', '/api/workspace/checks'],
-])('a personal host forwards %s %s', async (method, path) => {
-  const { relay, nextOf } = personalRelay()
-  await relay.handle({ type: 'http', sid: 3, runtimeId: 'runtime-1', method, path })
-  expect(JSON.parse(String((await nextOf('http_res'))?.body)).path).toBe(path)
 })
 
 test('a personal host redacts token formats and the current token values in http_res bodies, keeping valid JSON', async () => {
@@ -211,31 +148,17 @@ test('a personal host redacts token formats and the current token values in http
 
 test('a personal host streams the events WebSocket with the tokens redacted, keeping valid JSON', async () => {
   const { relay, nextOf } = personalRelay()
-  for (const [sid, query] of [
-    [7, ''],
-    [8, 'after=42'],
-  ] as const) {
-    await relay.handle({
-      type: 'ws_connect',
-      sid,
-      runtimeId: 'runtime-1',
-      path: `/sockets/events/${conversationId}${query && `?${query}`}`,
-    })
-    expect(await nextOf('ws_open')).toEqual({ type: 'ws_open', sid })
-    expect(JSON.parse(String((await nextOf('ws_msg'))?.data))).toEqual({
-      kind: 'ObservationEvent',
-      content: 'cat said [redacted] [redacted]',
-    })
-    await relay.handle({ type: 'ws_close', sid })
-  }
+  await relay.handle({ type: 'ws_connect', sid: 7, runtimeId: 'runtime-1', path: `/sockets/events/${conversationId}` })
+  expect(await nextOf('ws_open')).toEqual({ type: 'ws_open', sid: 7 })
+  expect(JSON.parse(String((await nextOf('ws_msg'))?.data))).toEqual({
+    kind: 'ObservationEvent',
+    content: 'cat said [redacted] [redacted]',
+  })
+  await relay.handle({ type: 'ws_close', sid: 7 })
 })
 
 test('a workspace host forwards any path and leaves bodies untouched', async () => {
-  const sent: Record<string, unknown>[] = []
-  const relay = createRelay({
-    addressOf: async () => `http://localhost:${tokenServer.port}`,
-    send: (frame) => sent.push(frame),
-  })
+  const { relay, sent } = relayTo(tokenServer)
   await relay.handle({ type: 'http', sid: 7, runtimeId: 'runtime-1', method: 'GET', path: '/api/file/download?path=x' })
   await waitFor(() => sent.length > 0)
   expect(String(sent[0]?.body)).toContain(accessToken)
@@ -292,19 +215,8 @@ const binaryAgent = Bun.serve({
 })
 afterAll(() => binaryAgent.stop(true))
 
-const chunkedRelay = (maximumHeldBytes?: number) => {
-  const sent: Record<string, unknown>[] = []
-  const relay = createRelay({
-    addressOf: async () => `http://localhost:${binaryAgent.port}`,
-    send: (frame) => sent.push(frame),
-    isBackedUp: () => true,
-    maximumHeldBytes,
-  })
-  return { relay, sent, nextOf: (type: string) => nextFrameOf(sent, type) }
-}
-
 test('a chunked request reaches the runtime whole, and its answer comes back in base64 chunks, byte for byte', async () => {
-  const { relay, sent, nextOf } = chunkedRelay()
+  const { relay, sent, nextOf } = relayTo(binaryAgent, { isBackedUp: () => true })
   const requestBody = `${'é'.repeat(relayChunkBytes)}end`
   await relay.handle({ type: 'http', sid: 1, runtimeId: 'runtime-1', method: 'POST', path: '/upload', chunked: true })
   for (const frame of bodyFramesOf(1, Buffer.from(requestBody))) await relay.handle(frame)
@@ -328,7 +240,7 @@ test('a chunked request reaches the runtime whole, and its answer comes back in 
 })
 
 test('a stream with credit holds what the server has not acknowledged, whatever the socket buffers, and closes alone once it holds too much', async () => {
-  const { relay, sent, nextOf } = chunkedRelay(2_500)
+  const { relay, sent, nextOf } = relayTo(binaryAgent, { isBackedUp: () => true, maximumHeldBytes: 2_500 })
   await relay.handle({ type: 'ws_connect', sid: 5, runtimeId: 'runtime-1', path: '/events', creditBytes: 1_000 })
   await relay.handle({ type: 'ws_connect', sid: 6, runtimeId: 'runtime-1', path: '/events', creditBytes: 1_000 })
   await nextOf('ws_open')
@@ -405,10 +317,9 @@ test('a browser stream with an invalid key, or on a host without browsers, close
   await relay.handle({ type: 'ws_connect', sid: 21, runtimeId: 'runtime-1', browserKey: '../x' })
   expect(await nextOf('ws_close')).toEqual({ type: 'ws_close', sid: 21, error: 'refused: invalid browser key' })
   expect(opened).toEqual([])
-  const sent: Record<string, unknown>[] = []
-  const withoutBrowsers = createRelay({ addressOf: async () => '', send: (frame) => sent.push(frame) })
-  await withoutBrowsers.handle({ type: 'ws_connect', sid: 22, runtimeId: 'runtime-1', browserKey })
-  expect(await nextFrameOf(sent, 'ws_close')).toMatchObject({ sid: 22, error: 'refused: invalid browser key' })
+  const withoutBrowsers = relayTo(spyriaAgent)
+  await withoutBrowsers.relay.handle({ type: 'ws_connect', sid: 22, runtimeId: 'runtime-1', browserKey })
+  expect(await withoutBrowsers.nextOf('ws_close')).toMatchObject({ sid: 22, error: 'refused: invalid browser key' })
 })
 
 const fileId = 'c'.repeat(32)

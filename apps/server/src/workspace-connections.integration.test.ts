@@ -17,6 +17,7 @@ import {
   consentThroughSpyria,
   createFakeHosts,
   everyStoredText,
+  type FakeHost,
   globex,
   lee,
   llmGatewayAt,
@@ -100,16 +101,18 @@ const sessionsOf = async (userId: string, gatewayName: string) => {
 }
 const setCrmAccess = (roleId: string, level: string | null, toolChanges = {}) =>
   setAccess('connection-crm', { roleId }, level, toolChanges)
-const removeKeysOf = async (userId: string) => {
-  for (const { id } of await database.$client<{ id: string }[]>`
-    select id from llm_credentials where workspace_id = ${acme} and user_id = ${userId}`)
+const removeCredentialsIn = async (workspaceId: string, userId: string) => {
+  const credentials = await database.$client<{ id: string }[]>`
+    select id from llm_credentials where workspace_id = ${workspaceId} and user_id = ${userId}`
+  for (const { id } of credentials)
     expect(
-      await resultOf({ workspaceId: acme, userId }, 'profile.removeLlmCredential', {
-        workspaceId: acme,
-        credentialId: id,
-      }),
+      await resultOf({ workspaceId, userId }, 'profile.removeLlmCredential', { workspaceId, credentialId: id }),
     ).toEqual(succeeded)
-  await waitFor(async () => !(await virtualKeyOf(userId)).provider_configs?.length)
+  return credentials.length
+}
+const removeKeysOf = async (userId: string) => {
+  if ((await removeCredentialsIn(acme, userId)) > 0)
+    await waitFor(async () => !(await virtualKeyOf(userId)).provider_configs?.length)
 }
 
 test('an admin registers a shared server with a secret header: Spyria lists its tools for review, the secret reaches the server only through the gateway, never a Spyria table or read, and the event is recorded', async () => {
@@ -272,55 +275,64 @@ test('a server each member signs in to is refused with a shared secret, keeps it
 })
 
 test('a member whose role is given Read is refused update on their own prompts, their key holds exactly lookup, and the key kept after the last LLM key is removed keeps that access', async () => {
+  const eventsBefore = (await workspaceEventsOf(database)).length
   expect(await setCrmAccess('member', 'read')).toBe(200)
   await addLlmKey(bob, 'Mistral')
-  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
+  try {
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
 
-  const host = await fakeHost('Read member host')
-  const { token } = await runtimeTurn(host, bob, bob)
-  expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
-  expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
-  )
+    const host = await fakeHost('Read member host')
+    const { token } = await runtimeTurn(host, bob, bob)
+    expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
+    expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
+      `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
+    )
 
-  const keyBefore = (await virtualKeyOf(bob)).id
-  await removeKeysOf(bob)
-  expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
-  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
-  expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
-  await addLlmKey(bob, 'Mistral')
-  expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
-  expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
-    `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
-  )
+    const keyBefore = (await virtualKeyOf(bob)).id
+    await removeKeysOf(bob)
+    expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup'])
+    expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'lookup'))).result)).toBe('ran lookup')
+    await addLlmKey(bob, 'Mistral')
+    expect((await virtualKeyOf(bob)).id).toBe(keyBefore)
+    expect(textOf((await mcpCall(host, token, callOf(sharedToolServer, 'update'))).result)).toBe(
+      `Bob's access to ${testCrmConnection.name} does not include update in this chat`,
+    )
 
-  expect(await setCrmAccess('member', 'none')).toBe(200)
-  expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
-  expect(await setCrmAccess('member', null)).toBe(200)
-  expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
-  expect(await setCrmAccess('member', 'write')).toBe(200)
-  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
-  expect(await setCrmAccess('member', 'read', { delete: true })).toBe(400)
-  expect(await setCrmAccess('member', 'everything')).toBe(400)
-  expect(
-    (
-      await asMember(bob, 'POST', accessPath('connection-crm'), {
-        roleId: 'member',
-        level: 'write',
-        toolChanges: {},
-      })
-    ).status,
-  ).toBe(403)
-  expect(
-    (await workspaceEventsOf(database))
-      .filter(({ type, payload }) => type === 'connection.access_changed' && payload.connectionId === 'connection-crm')
-      .map(({ payload }) => payload),
-  ).toEqual([
-    { connectionId: 'connection-crm', roleId: 'member', level: 'read', toolChanges: {} },
-    { connectionId: 'connection-crm', roleId: 'member', level: 'none', toolChanges: {} },
-    { connectionId: 'connection-crm', roleId: 'member', level: null, toolChanges: {} },
-    { connectionId: 'connection-crm', roleId: 'member', level: 'write', toolChanges: {} },
-  ])
+    expect(await setCrmAccess('member', 'none')).toBe(200)
+    expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
+    expect(await setCrmAccess('member', null)).toBe(200)
+    expect((await grantsOf(bob))[sharedToolServer]).toBeUndefined()
+    expect(await setCrmAccess('member', 'write')).toBe(200)
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+    expect(await setCrmAccess('member', 'read', { delete: true })).toBe(400)
+    expect(await setCrmAccess('member', 'everything')).toBe(400)
+    expect(
+      (
+        await asMember(bob, 'POST', accessPath('connection-crm'), {
+          roleId: 'member',
+          level: 'write',
+          toolChanges: {},
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (await workspaceEventsOf(database))
+        .slice(eventsBefore)
+        .filter(
+          ({ type, payload }) => type === 'connection.access_changed' && payload.connectionId === 'connection-crm',
+        )
+        .map(({ payload }) => payload),
+    ).toEqual([
+      { connectionId: 'connection-crm', roleId: 'member', level: 'read', toolChanges: {} },
+      { connectionId: 'connection-crm', roleId: 'member', level: 'none', toolChanges: {} },
+      { connectionId: 'connection-crm', roleId: 'member', level: null, toolChanges: {} },
+      { connectionId: 'connection-crm', roleId: 'member', level: 'write', toolChanges: {} },
+    ])
+  } finally {
+    await removeKeysOf(bob)
+    await setCrmAccess('member', 'write')
+  }
 })
 
 test('a review and level changes sent together leave every member with the tools of the last change, never an earlier snapshot', async () => {
@@ -359,6 +371,7 @@ test("a role's level and single-tool changes reach every member of the role, a l
   } finally {
     await resultOf(aliceInAcme, 'workspace.changeMemberRole', { workspaceId: acme, memberId: bob, role: 'member' })
     await setAccess('connection-crm', { roleId: 'member' }, 'write')
+    await removeKeysOf(bob)
   }
 })
 
@@ -387,6 +400,7 @@ test('a member moved to a role without access to a server they signed in to lose
 })
 
 test("every member reads the access of every role of their workspace, and a role's change syncs to each of them", async () => {
+  expect(await setCrmAccess('member', 'write')).toBe(200)
   expect(await setCrmAccess('admin', 'read', { update: true })).toBe(200)
   try {
     const adminAccess = {
@@ -451,36 +465,40 @@ test('a workspace’s connections are never granted to, listed for or callable b
     { provider: 'Mistral', secret: 'fake-globex' },
     globex,
   )
-  expect(globexKey.status).toBe(201)
-  const [row] = await database.$client`
-    select virtual_key_id from member_gateway_keys where workspace_id = ${globex} and user_id = ${alice}`
-  const key = (
-    await gateway.call<{ virtual_key: { value: string; mcp_configs: { mcp_client: { name: string } }[] } }>(
-      `/api/governance/virtual-keys/${row?.virtual_key_id}`,
-    )
-  ).virtual_key
-  expect(key.mcp_configs.map((config) => config.mcp_client.name)).not.toContain(gatewayName)
-  expect(key.mcp_configs.map((config) => config.mcp_client.name)).not.toContain(sharedToolServer)
-  const listed = await fetch(`${llmGateway.url}/mcp`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${key.value}`,
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    },
-    body: rpcOf('tools/list'),
-  })
-  expect(await listed.text()).not.toContain(gatewayName)
-  const access = createToolCallAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
-  expect(await access.toolCallPolicy(globex, alice, alice, `${gatewayName}-lookup`)).toMatchObject({
-    access: 'not_granted',
-  })
-  expect(await access.toolCallPolicy(acme, alice, alice, `${gatewayName}-lookup`)).toEqual({
-    access: 'allowed',
-    readOnly: true,
-    approval: 'never',
-    answerer: 'owner',
-  })
+  try {
+    expect(globexKey.status).toBe(201)
+    const [row] = await database.$client`
+      select virtual_key_id from member_gateway_keys where workspace_id = ${globex} and user_id = ${alice}`
+    const key = (
+      await gateway.call<{ virtual_key: { value: string; mcp_configs: { mcp_client: { name: string } }[] } }>(
+        `/api/governance/virtual-keys/${row?.virtual_key_id}`,
+      )
+    ).virtual_key
+    expect(key.mcp_configs.map((config) => config.mcp_client.name)).not.toContain(gatewayName)
+    expect(key.mcp_configs.map((config) => config.mcp_client.name)).not.toContain(sharedToolServer)
+    const listed = await fetch(`${llmGateway.url}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${key.value}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: rpcOf('tools/list'),
+    })
+    expect(await listed.text()).not.toContain(gatewayName)
+    const access = createToolCallAccess((work) => zeroDrizzle(schema, database).transaction(work), llmGateway)
+    expect(await access.toolCallPolicy(globex, alice, alice, `${gatewayName}-lookup`)).toMatchObject({
+      access: 'not_granted',
+    })
+    expect(await access.toolCallPolicy(acme, alice, alice, `${gatewayName}-lookup`)).toEqual({
+      access: 'allowed',
+      readOnly: true,
+      approval: 'never',
+      answerer: 'owner',
+    })
+  } finally {
+    await removeCredentialsIn(globex, alice)
+  }
 })
 
 test('editing replaces the secret in place, a new URL registers the server again and regrants it, and removing deletes it from the gateway and Spyria', async () => {
@@ -556,9 +574,7 @@ test('editing replaces the secret in place, a new URL registers the server again
     expect(await everyStoredText(database)).not.toContain(secret)
 })
 
-test('a running agent’s MCP stream hears that its tool list changed when a connection is added, opened, narrowed or removed, and its next listing has the change', async () => {
-  const host = await fakeHost('Tool list changes host')
-  const { token } = await runtimeTurn(host, alice)
+const listChangesOf = async (host: FakeHost, token: string) => {
   const streamed: string[] = []
   const opened = Promise.withResolvers<number | undefined>()
   const closing = new AbortController()
@@ -571,7 +587,19 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
     signal: closing.signal,
   })
   expect(await opened.promise).toBe(200)
-  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  return {
+    changeCount: () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length,
+    closeStream: async () => {
+      closing.abort()
+      await stream
+    },
+  }
+}
+
+test('a running agent’s MCP stream hears that its tool list changed when a connection is added, opened, narrowed or removed, and its next listing has the change', async () => {
+  const host = await fakeHost('Tool list changes host')
+  const { token } = await runtimeTurn(host, alice)
+  const { changeCount, closeStream } = await listChangesOf(host, token)
   const listedNames = async () =>
     ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(({ name }) => name)
 
@@ -595,8 +623,7 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
   await waitFor(() => changeCount() > beforeRemoving)
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
-  closing.abort()
-  await stream
+  await closeStream()
 })
 
 test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
@@ -607,19 +634,7 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   await openToEveryRole(billing.connectionId)
   const ledgerName = (await connectionRow(ledger.connectionId))?.gatewayName ?? ''
   const billingName = (await connectionRow(billing.connectionId))?.gatewayName ?? ''
-  const streamed: string[] = []
-  const opened = Promise.withResolvers<number | undefined>()
-  const closing = new AbortController()
-  const stream = host.modelCall({
-    method: 'GET',
-    path: '/mcp',
-    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
-    onHead: opened.resolve,
-    onChunk: (data) => streamed.push(data),
-    signal: closing.signal,
-  })
-  expect(await opened.promise).toBe(200)
-  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const { changeCount, closeStream } = await listChangesOf(host, token)
   const listedServers = async () =>
     ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(
       ({ name }) => name.split('-')[0],
@@ -656,8 +671,7 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   expect(await switchLedger(true)).toEqual(succeeded)
   await waitFor(() => changeCount() > beforeOn)
   expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
-  closing.abort()
-  await stream
+  await closeStream()
 })
 
 test('the agent lists the tools of the member who prompted, so a guest’s turn lists their own access and not the owner’s', async () => {
@@ -698,9 +712,9 @@ const grantRefusingGateway = () =>
 test("taking a role's access away while the gateway refuses grants succeeds, and a queued gateway sync removes the tools from each member's key once it answers", async () => {
   expect(await setCrmAccess('member', 'write')).toBe(200)
   await addLlmKey(bob, 'Mistral')
-  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
   const refusingGateway = grantRefusingGateway()
   try {
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
     const appWithRefusedGrants = createApp({
       database,
       ...testAuthSettings,
@@ -715,19 +729,20 @@ test("taking a role's access away while the gateway refuses grants succeeds, and
     await waitFor(async () => (await grantsOf(bob))[sharedToolServer] === undefined)
   } finally {
     void refusingGateway.stop(true)
-    await setCrmAccess('member', null)
+    await setCrmAccess('member', 'write')
+    await removeKeysOf(bob)
   }
 })
 
 test('a gateway sync whose tool grant the gateway refuses fails, so the job worker retries it instead of leaving the grant as it was', async () => {
   await addLlmKey(bob, 'Mistral')
-  expect(await setCrmAccess('member', 'write')).toBe(200)
-  expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
-  await database.$client`
-    update connection_access set level = 'none'
-    where workspace_id = ${acme} and connection_id = 'connection-crm' and role_id = 'member'`
   const refusingGateway = grantRefusingGateway()
   try {
+    expect(await setCrmAccess('member', 'write')).toBe(200)
+    expect((await grantsOf(bob))[sharedToolServer]).toEqual(['lookup', 'update'])
+    await database.$client`
+      update connection_access set level = 'none'
+      where workspace_id = ${acme} and connection_id = 'connection-crm' and role_id = 'member'`
     const jobs = createProfileJobs(llmGatewayAt(refusingGateway.url.origin))
     const sync = jobs['profile.gateway-sync']({
       workspaceId: acme,
@@ -738,6 +753,7 @@ test('a gateway sync whose tool grant the gateway refuses fails, so the job work
     expect(String(await rejectionOf(sync))).toContain('The gateway answered PUT')
   } finally {
     void refusingGateway.stop(true)
-    await setCrmAccess('member', null)
+    await setCrmAccess('member', 'write')
+    await removeKeysOf(bob)
   }
 })

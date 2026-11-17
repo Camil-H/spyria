@@ -1,27 +1,18 @@
 import {
   boundingBoxOf,
+  configureGitHubApp,
+  devChatWithCommit,
+  diffOf,
   expect,
-  messageContaining,
   type Page,
   panelOf,
   panelTabOf,
-  sendMessage,
+  runAgent,
   tabPanelOf,
   test,
-  workingIndicatorOf,
-} from '../fixtures'
-import { configureGitHubApp, newDevChat } from './fixtures'
+} from './fixtures'
 
-type AgentScript = (chatId: string, script: object) => Promise<void>
-
-const commitCommand = (subject: string) =>
-  `git add -A && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm '${subject}'`
-const appEdit = (from: number, to: number) => ({
-  edit: { path: 'src/app.ts', oldText: `export const total = ${from}\n`, newText: `export const total = ${to}\n` },
-})
 const longLine = `export const added = [${'"a long value", '.repeat(12)}]`
-const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
-const diffOf = (page: Page, path: string) => tabPanelOf(page).getByRole('table', { name: `Diff of ${path}` })
 const cellsOfRow = (page: Page, path: string, row: number) =>
   diffOf(page, path).getByRole('row').nth(row).getByRole('cell')
 const expectReadableRow = async (page: Page, path: string, row: number) => {
@@ -30,18 +21,6 @@ const expectReadableRow = async (page: Page, path: string, row: number) => {
   const codeBox = await boundingBoxOf(cells.last())
   expect(lineNumberBox.width).toBeLessThan(40)
   expect(codeBox.height).toBeLessThan(24)
-}
-const runAgent = async (page: Page, agentScript: AgentScript, chatId: string, steps: object[], text: string) => {
-  await agentScript(chatId, { steps, text })
-  await sendMessage(page, text.replace(/\.$/, ''))
-  await expect(messageContaining(page, text)).toHaveCount(1)
-  await finished(page)
-}
-const devChatWithCommit = async (page: Page, agentScript: AgentScript, name: string, baseBranch = 'main') => {
-  const chatId = await newDevChat(page, name, 'acme/app', baseBranch)
-  await runAgent(page, agentScript, chatId, [appEdit(1, 2), { command: commitCommand('Fix the totals') }], 'Fixed.')
-  await panelTabOf(page, 'Changes').click()
-  return chatId
 }
 
 test.describe('Dev panel', () => {

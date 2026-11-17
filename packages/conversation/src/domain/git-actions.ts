@@ -1,4 +1,4 @@
-export const gitActions = ['commit', 'update'] as const
+const gitActions = ['commit', 'update'] as const
 export type GitAction = (typeof gitActions)[number]
 export type GitActionOutcome = { isRefused: boolean; text: string; conflicts?: string[] }
 

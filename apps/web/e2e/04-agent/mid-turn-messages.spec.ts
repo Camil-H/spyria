@@ -44,45 +44,30 @@ test.describe('Messages sent while the agent works', () => {
     await page.goto('/')
   })
 
-  test('As a member, I send a message while the agent runs a command, and the agent acts on it before its turn ends', {
+  test('As a member, I send two messages while the agent runs a command, and the agent acts on them one by one in the order I sent them before its turn ends', {
     tag: ['@spec-60'],
   }, async ({ page, workerStack, release }) => {
     const chatId = await newRuntimeChat(page, 'Mid-turn command')
     await sendMessage(page, 'stub:command stub:linger Rename the module')
     await expect(messageContaining(page, 'sleep 2 && echo checked').getByRole('img', { name: 'Running' })).toBeVisible()
-    await sendMessage(page, 'Use tabs too')
-    await expect(messageContaining(page, 'Use tabs too')).toHaveCount(1)
-    await expect(queuedLabelOf(page, 'Use tabs too')).toHaveCount(0)
-
-    await handedToTheTurn(workerStack, chatId)
-    await release('linger')
-    await turnEnded(page, 1)
-    await expect(messageItemsOf(page).nth(0)).toContainText('Rename the module')
-    await expect(messageItemsOf(page).nth(-2)).toContainText('Use tabs too')
-    await expect(messageItemsOf(page).nth(-1)).toContainText('Took in: Use tabs too.')
-    await expect(messageItemsOf(page).nth(-1)).toContainText('Hello from the stub')
-    await expect(messageContaining(page, '[t2]')).toHaveCount(0)
-    await expect(await messageActionOf(messageItemsOf(page).nth(-2), 'Edit')).toHaveCount(0)
-  })
-
-  test("As a member, I send two messages while the agent works, and they're answered one by one in the order I sent them", {
-    tag: ['@spec-60'],
-  }, async ({ page, workerStack, release }) => {
-    const chatId = await newRuntimeChat(page, 'Mid-turn pair')
-    await sendMessage(page, 'stub:linger Rename the module')
-    await expect(messageContaining(page, '[t1]')).toBeVisible()
     await sendMessage(page, 'First, use tabs')
     await expect(messageContaining(page, 'First, use tabs')).toHaveCount(1)
+    await expect(queuedLabelOf(page, 'First, use tabs')).toHaveCount(0)
     await sendMessage(page, 'Then fix the imports')
     await expect(messageContaining(page, 'Then fix the imports')).toHaveCount(1)
 
     await handedToTheTurn(workerStack, chatId, 2)
     await release('linger')
     await turnEnded(page, 1)
+    await expect(messageItemsOf(page).nth(0)).toContainText('Rename the module')
     await expect(messageItemsOf(page).nth(-4)).toContainText('First, use tabs')
     await expect(messageItemsOf(page).nth(-3)).toContainText('Took in: First, use tabs.')
     await expect(messageItemsOf(page).nth(-2)).toContainText('Then fix the imports')
     await expect(messageItemsOf(page).nth(-1)).toContainText('Took in: Then fix the imports.')
+    await expect(messageItemsOf(page).nth(-1)).toContainText('Hello from the stub')
+    await expect(messageContaining(page, '[t2]')).toHaveCount(0)
+    await expect(await messageActionOf(messageItemsOf(page).nth(-4), 'Edit')).toHaveCount(0)
+    await expect(await messageActionOf(messageItemsOf(page).nth(-2), 'Edit')).toHaveCount(0)
   })
 
   test("As a second member, I send a message during someone else's turn, and it stays queued until that turn ends, then starts its own", {
@@ -143,7 +128,7 @@ test.describe('Messages sent while the agent works', () => {
     if (harness.name === 'Pi') return
     const lastItemOf = (page: Page) => messageItemsOf(page).last()
 
-    test(`As an owner on a machine session, I send a message while the agent runs a command, and the agent acts on it before its turn ends [${harness.name}]`, {
+    test(`As an owner on a machine session, I send two messages while the agent runs a command, and the agent acts on them one by one in the order I sent them before its turn ends [${harness.name}]`, {
       tag: ['@spec-60'],
     }, async ({ page, workerStack, release, machine }) => {
       const chatId = await newHarnessChat(page, harness, `${harness.name} mid-turn command`, { machine })
@@ -151,41 +136,24 @@ test.describe('Messages sent while the agent works', () => {
       await expect(
         messageContaining(page, 'sleep 2 && echo checked').getByRole('img', { name: 'Running' }),
       ).toBeVisible()
-      await sendMessage(page, 'Use tabs too')
-      await expect(messageContaining(page, 'Use tabs too')).toHaveCount(1)
-
-      await handedToTheTurn(workerStack, chatId)
-      await expect(queuedLabelOf(page, 'Use tabs too')).toHaveCount(0)
-      await release('linger')
-      await turnEnded(page, 1)
-      const sent = messageContaining(page, 'Use tabs too').first()
-      await expect(sent).not.toContainText('Hello from the stub')
-      await expect(lastItemOf(page)).toContainText('Took in: Use tabs too.')
-      await expect(lastItemOf(page)).toContainText('Hello from the stub')
-      await expect(messageContaining(page, '[t2]')).toHaveCount(0)
-      await expect(await messageActionOf(sent, 'Edit')).toHaveCount(0)
-      expect((await machine()).prompts).toEqual(['stub:command stub:linger Rename the module'])
-    })
-
-    test(`As an owner on a machine session, I send two messages while the agent works, and they're answered one by one in the order I sent them [${harness.name}]`, {
-      tag: ['@spec-60'],
-    }, async ({ page, workerStack, release, machine }) => {
-      const chatId = await newHarnessChat(page, harness, `${harness.name} mid-turn pair`, { machine })
-      await sendMessage(page, 'stub:linger Rename the module')
-      await expect(messageContaining(page, '[t1]')).toBeVisible()
       await sendMessage(page, 'First, use tabs')
       await expect(messageContaining(page, 'First, use tabs')).toHaveCount(1)
       await sendMessage(page, 'Then fix the imports')
       await expect(messageContaining(page, 'Then fix the imports')).toHaveCount(1)
 
       await handedToTheTurn(workerStack, chatId, 2)
+      await expect(queuedLabelOf(page, 'First, use tabs')).toHaveCount(0)
+      await expect(queuedLabelOf(page, 'Then fix the imports')).toHaveCount(0)
       await release('linger')
       await turnEnded(page, 1)
+      const sent = messageContaining(page, 'First, use tabs').first()
+      await expect(sent).not.toContainText('Hello from the stub')
       await expect(lastItemOf(page)).toContainText(
         'Took in: First, use tabs. Took in: Then fix the imports. Hello from the stub',
       )
       await expect(messageContaining(page, '[t2]')).toHaveCount(0)
-      expect((await machine()).prompts).toEqual(['stub:linger Rename the module'])
+      await expect(await messageActionOf(sent, 'Edit')).toHaveCount(0)
+      expect((await machine()).prompts).toEqual(['stub:command stub:linger Rename the module'])
     })
 
     test(`As an owner on a machine session, I stop a turn after my message joined it, and the turn ends with "Stopped by" under my message [${harness.name}]`, {

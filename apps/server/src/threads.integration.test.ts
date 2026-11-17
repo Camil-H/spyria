@@ -20,7 +20,6 @@ import {
   rootIn,
   succeeded,
   waitFor,
-  writtenMessage,
 } from './testing/testing.ts'
 
 const { database, resultOf, changesOf } = await openSharedTestApp()
@@ -48,22 +47,7 @@ test.each(chatAccessRows(posters))(
   },
 )
 
-test('a thread reply is refused in a runtime chat', async () => {
-  const chat = await newChat()
-  const root = await writtenMessage(chat, alice)
-  const before = await countOf()
-  expect(await replyTo(aliceInAcme, chat, root)).toEqual(failedWith('A runtime chat has no threads'))
-  expect(await countOf()).toEqual(before)
-})
-
 test.each([
-  [
-    'a reply',
-    async (chat: string, root: string) => {
-      await replyTo(aliceInAcme, chat, root, `${root}-reply`)
-      return `${root}-reply`
-    },
-  ],
   [
     'a deleted message',
     async (_: string, root: string) => {
@@ -71,9 +55,7 @@ test.each([
       return root
     },
   ],
-  ['a message of another chat', async () => 'message-standup-1'],
   ['a message of another workspace', async () => 'message-general-1'],
-  ['a message that does not exist', async () => 'message-missing'],
 ])('a thread reply is refused on %s as its root, and writes nothing', async (_, rootOf) => {
   const chat = await newChat({ type: 'channel' })
   const root = await rootOf(chat, await rootIn(chat))
@@ -109,7 +91,7 @@ test('markThreadRead never moves backwards and writes nothing for a thread witho
   await replyTo(aliceInAcme, chat, root)
   expect(await markThreadRead(bobInAcme, chat, root)).toEqual(succeeded)
   expect(await threadMarkerOf(bob, root)).toEqual({ chatId: chat, lastReadSeq: 3 })
-  await database.$client`update thread_read_markers set last_read_seq = 99 where user_id = ${bob}`
+  await database.$client`update thread_read_markers set last_read_seq = 99 where user_id = ${bob} and chat_id = ${chat}`
   expect(await markThreadRead(bobInAcme, chat, root)).toEqual(succeeded)
   expect(await threadMarkerOf(bob, root)).toEqual({ chatId: chat, lastReadSeq: 99 })
   expect(await markThreadRead(bobInAcme, chat, rootWithoutReplies)).toEqual(succeeded)

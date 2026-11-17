@@ -1,8 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { seedSpend } from '@spyria/db/testing'
 import {
-  addLlmKey,
-  addParticipant,
   agentReplyText,
   expect,
   type Locator,
@@ -11,6 +9,7 @@ import {
   openChat,
   openPanelTab,
   openProfile,
+  openPrompterWithKey,
   openSettings,
   type Page,
   sendMessage,
@@ -19,7 +18,7 @@ import {
   tabPanelOf,
   test,
 } from '../fixtures'
-import { openPageAs, type WorkerStack } from '../stack'
+import type { WorkerStack } from '../stack'
 
 test.describe('Spend', () => {
   test.describe(() => {
@@ -323,9 +322,7 @@ test.describe('Spend', () => {
     test('As a member who can view costs, I see each prompter’s row in a chat’s Usage tab summing to the total, and the workspace total, each member and each project in settings', {
       tag: ['@spec-13'],
     }, async ({ page, browser, workerStack }) => {
-      await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
-      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await addLlmKey(bobPage, 'Mistral')
+      const bobPage = await openPrompterWithKey(browser, workerStack, 'chat-research')
       await prompt(page, 'Alice asks', 1)
       await prompt(bobPage, 'Bob asks', 2)
       await syncUntilResearchCalls(workerStack, 3)

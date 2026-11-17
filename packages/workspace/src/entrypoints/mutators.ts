@@ -60,7 +60,7 @@ export const setupCommandsArgument = z.array(
   z.object({ repository: z.nullable(z.string()), command: z.string(), warmRuntimes: z.optional(z.number()) }),
 )
 const addressesArgument = z.array(z.string())
-export const browserSettingsArgument = z.object({
+const browserSettingsArgument = z.object({
   forAgents: z.boolean(),
   forMembers: z.boolean(),
   blockInternalNetworks: z.boolean(),

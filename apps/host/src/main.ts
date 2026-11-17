@@ -124,6 +124,7 @@ const modelRelayServer = Bun.serve({
 const gatewayUrl = `http://${isInContainer ? gatewayRelayAlias : 'host.docker.internal'}:${modelRelayServer.port}/v1`
 const heartbeatMilliseconds = Number(process.env.SPYRIA_HOST_HEARTBEAT_MS ?? 30_000)
 const maximumBufferedBytes = 16 * 1024 * 1024
+const firstReconnectDelayMilliseconds = Number(process.env.SPYRIA_HOST_RECONNECT_MS ?? 1000)
 const maximumReconnectDelayMilliseconds = 30_000
 const browserIdleMilliseconds = 10 * 60_000
 const browserSweepMilliseconds = 60_000
@@ -156,7 +157,7 @@ setInterval(
   browserSweepMilliseconds,
 )
 const relayedFrameTypes = ['http', 'http_body', 'http_end', 'ws_connect', 'ws_msg', 'ws_ack', 'ws_close']
-let reconnectDelayMilliseconds = 1000
+let reconnectDelayMilliseconds = firstReconnectDelayMilliseconds
 
 try {
   mkdirSync(stateDirectory, { recursive: true })
@@ -246,7 +247,7 @@ const connect = () => {
       ...declared,
     })
     sendToSpyria = (frame) => socket.readyState === WebSocket.OPEN && send(frame)
-    reconnectDelayMilliseconds = 1000
+    reconnectDelayMilliseconds = firstReconnectDelayMilliseconds
     heartbeatTimer = setInterval(() => sendHeartbeat().catch(() => {}), heartbeatMilliseconds)
     sendSignInsNow = sendHeartbeat
     log.info({ event: 'host.connected', body: 'Connected to Spyria', attributes: { 'server.address': socketUrl.host } })

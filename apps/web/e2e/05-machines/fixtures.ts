@@ -3,11 +3,39 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, type Page } from '@playwright/test'
-import { machineTest as base, chipOf, machineToolOf, newRuntimeChat } from '../fixtures.ts'
+import {
+  machineTest as base,
+  chipOf,
+  machineSectionOf,
+  machineToolOf,
+  newRuntimeChat,
+  openProfile,
+  runsOnChipOf,
+  runsOnOf,
+  sessionOf,
+} from '../fixtures.ts'
+import type { WorkerStack } from '../stack.ts'
 import { viteUrl } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
 
+export const openSession = async (page: Page, chipKind: Parameters<typeof chipOf>[1] = 'routed') => {
+  if (!(await sessionOf(page).isVisible())) await chipOf(page, chipKind).click()
+  await expect(sessionOf(page)).toBeVisible()
+}
+export const expectRunsOnLockedLocal = async (page: Page) => {
+  await expect(runsOnOf(page)).toBeDisabled()
+  await expect(runsOnOf(page)).toHaveText('Local')
+}
+export const runsOnStatusOf = (page: Page) => runsOnChipOf(page).getByRole('status', { name: 'Runtime' })
+export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
+  expect
+    .poll(
+      async () =>
+        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
+          ?.agent_conversation_id,
+    )
+    .toBeTruthy()
 export const setUpButtonOf = (page: Page, toolName: string) =>
   machineToolOf(page, toolName).getByRole('button', { name: `Set up ${toolName}` })
 export const newMachineSession = async (page: Page, name: string, option = 'Local · Claude Code') => {
@@ -16,6 +44,14 @@ export const newMachineSession = async (page: Page, name: string, option = 'Loca
   return chatId
 }
 export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
+export const addMachine = async (page: Page) => {
+  await openProfile(page, 'My machine')
+  await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add my machine' })
+  const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  return urlOf(command)
+}
 
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 export const gibibyte = 1024 ** 3
@@ -32,6 +68,29 @@ type Hosts = {
 
 type FakeMachine = { closed: Promise<string>; heartbeat: (signedIn: string[]) => void; disconnect: () => void }
 type PairingOptions = { personal?: boolean; signedIn?: string[]; outdated?: boolean }
+
+const connectFakeHostSocket = (
+  url: string,
+  { hello, answersCommands = false }: { hello: object; answersCommands?: boolean },
+) => {
+  const { origin, pathname } = new URL(url)
+  const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
+  const send = (frame: object) => socket.send(JSON.stringify(frame))
+  socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
+  let refusedReason: string | undefined
+  socket.onmessage = (message) => {
+    const frame = JSON.parse(String(message.data))
+    if (frame.type === 'ping') send({ type: 'pong' })
+    if (frame.type === 'refused') refusedReason = String(frame.reason)
+    if (answersCommands && frame.type === 'cmd')
+      send({ type: 'res', id: frame.id, data: { status: 'missing', list: [] }[String(frame.op)] ?? null })
+    if (frame.type === 'token') send({ type: 'hello', token: frame.token, ...hello })
+  }
+  const closed = new Promise<string>((resolve) =>
+    socket.addEventListener('close', (event) => resolve(refusedReason ?? event.reason)),
+  )
+  return { socket, send, closed }
+}
 
 export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options: PairingOptions) => FakeMachine }>({
   hosts: async ({ browserName: _ }, use) => {
@@ -69,37 +128,22 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
         }
       },
       fake: (url, system) => {
-        const { origin, pathname } = new URL(url)
-        const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
+        const { socket, closed } = connectFakeHostSocket(url, {
+          hello: {
+            ...fakeHostVersions,
+            system: {
+              cpus: 4,
+              memoryBytes: 8 * gibibyte,
+              dockerVersion: '29.0.0',
+              rootless: false,
+              cgroupDriver: 'systemd',
+              limitsEnforced: true,
+              ...system,
+            },
+          },
+        })
         sockets.push(socket)
-        const send = (frame: object) => socket.send(JSON.stringify(frame))
-        socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
-        let refusedReason: string | undefined
-        socket.onmessage = (message) => {
-          const frame = JSON.parse(String(message.data))
-          if (frame.type === 'ping') send({ type: 'pong' })
-          if (frame.type === 'refused') refusedReason = String(frame.reason)
-          if (frame.type === 'token')
-            send({
-              type: 'hello',
-              token: frame.token,
-              ...fakeHostVersions,
-              system: {
-                cpus: 4,
-                memoryBytes: 8 * gibibyte,
-                dockerVersion: '29.0.0',
-                rootless: false,
-                cgroupDriver: 'systemd',
-                limitsEnforced: true,
-                ...system,
-              },
-            })
-        }
-        return {
-          closed: new Promise((resolve) =>
-            socket.addEventListener('close', (event) => resolve(refusedReason ?? event.reason)),
-          ),
-        }
+        return { closed }
       },
     })
     for (const socket of sockets) socket.close()
@@ -109,41 +153,27 @@ export const hostTest = base.extend<{ hosts: Hosts; pair: (url: string, options:
   pair: async ({ browserName: _ }, use) => {
     const sockets: WebSocket[] = []
     await use((url, { personal, signedIn, outdated = false }) => {
-      const { origin, pathname } = new URL(url)
-      const socket = new WebSocket(`${origin.replace(/^http/, 'ws')}/host`)
+      const { socket, send, closed } = connectFakeHostSocket(url, {
+        answersCommands: true,
+        hello: {
+          personal,
+          signedIn,
+          ...(outdated ? {} : fakeHostVersions),
+          system: {
+            cpus: 8,
+            memoryBytes: 16 * gibibyte,
+            dockerVersion: '29.0.0',
+            rootless: false,
+            cgroupDriver: 'cgroupfs',
+            limitsEnforced: true,
+          },
+        },
+      })
       sockets.push(socket)
-      const send = (frame: object) => socket.send(JSON.stringify(frame))
-      socket.onopen = () => send({ type: 'claim', code: pathname.split('/').at(-1) })
-      let refusedReason: string | undefined
-      socket.onmessage = (message) => {
-        const frame = JSON.parse(String(message.data))
-        if (frame.type === 'ping') send({ type: 'pong' })
-        if (frame.type === 'refused') refusedReason = String(frame.reason)
-        if (frame.type === 'cmd')
-          send({ type: 'res', id: frame.id, data: { status: 'missing', list: [] }[String(frame.op)] ?? null })
-        if (frame.type === 'token')
-          send({
-            type: 'hello',
-            token: frame.token,
-            personal,
-            signedIn,
-            ...(outdated ? {} : fakeHostVersions),
-            system: {
-              cpus: 8,
-              memoryBytes: 16 * 1024 ** 3,
-              dockerVersion: '29.0.0',
-              rootless: false,
-              cgroupDriver: 'cgroupfs',
-              limitsEnforced: true,
-            },
-          })
-      }
       return {
         heartbeat: (heartbeatSignedIn) =>
-          send({ type: 'heartbeat', memoryFreeBytes: 8 * 1024 ** 3, running: 0, signedIn: heartbeatSignedIn }),
-        closed: new Promise((resolve) =>
-          socket.addEventListener('close', (event) => resolve(refusedReason ?? event.reason)),
-        ),
+          send({ type: 'heartbeat', memoryFreeBytes: 8 * gibibyte, running: 0, signedIn: heartbeatSignedIn }),
+        closed,
         disconnect: () => socket.close(),
       }
     })

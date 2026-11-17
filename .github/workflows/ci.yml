@@ -191,7 +191,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
       - run: bun run check:docker
+        env:
+          SPYRIA_BUILD_CACHE: gha
       - if: failure()
         uses: ./.github/actions/test-stack-logs
 

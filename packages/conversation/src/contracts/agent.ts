@@ -96,11 +96,11 @@ export type RepositoryCheckout = Readonly<{
   author?: GitAuthor
   setupCommand?: string
 }>
-export type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed' | 'screenshot' | 'checks'
-export type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
+type WorkspaceAction = 'commit' | 'fetch' | 'merge' | 'pushed' | 'screenshot' | 'checks'
+type BranchBundle = Readonly<{ bundle: string } | { failure: string }>
 export type BundleOf = (branch: string, prerequisite: string | null) => Promise<BranchBundle>
 export type GitAuthor = Readonly<{ name: string; email: string }>
-export type FetchedBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
+type FetchedBundle = Readonly<{ head: string; bundle: string } | { failure: string }>
 export type RepositoryCheckouts = {
   checkoutOf(chat: AgentChat): Promise<RepositoryCheckout | undefined>
   pushBranch(
@@ -123,7 +123,7 @@ export type RepositoryCheckouts = {
   issuesOf(chat: AgentChat, filter: IssueFilter): Promise<IssueSummary[]>
   issueOf(chat: AgentChat, number: number): Promise<Issue>
 }
-export type AgentAttachment = Readonly<{ id: string; name: string; content: Uint8Array }>
+type AgentAttachment = Readonly<{ id: string; name: string; content: Uint8Array }>
 export type SavedAttachment = Readonly<{ path: string; mediaType: string }>
 export type AgentClient = {
   createConversation(

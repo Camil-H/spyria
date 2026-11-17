@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { createHash } from 'node:crypto'
 import { testCrmConnection } from '@spyria/db/testing'
 import { chatId as toChatId } from '@spyria/kernel'
 import { startJobWorker } from './job-worker.ts'
@@ -17,6 +16,7 @@ import {
   connectionRows,
   connectMember,
   createFakeHosts,
+  delegationTokenOn,
   lookup,
   mcpCall,
   openSharedTestApp,
@@ -174,15 +174,6 @@ test('a guest’s turn answers only tool and session methods, so resources, prom
   expect(fakeMcp.records.slice(callsBefore)).toEqual([])
 })
 
-const delegationTokenOn = async (chatId: string) => {
-  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
-  const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
-  await database.$client`
-    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
-    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${tokenHash}, now()
-    from chats where id = ${chatId}`
-  return subToken
-}
 const nextPromptBy = async (chatId: string, prompterId: string) => {
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client`
@@ -330,23 +321,25 @@ test('a call approved after Stop was asked for, before its turn has stopped, is 
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
     values (${acme}, ${`job-stop-${promptId}`}, 'agent.interrupt',
       ${JSON.stringify({ chatId, promptId, memberId: alice })}::jsonb, now() + interval '1 hour', 0, 'queued')`
-
-  expect(await answerAs(alice, chatId, asked.questionId, true)).toBe(200)
-  expect(refused(await approvedCall)).toEqual({ status: 200, text: 'The turn was stopped before this call ran' })
-  expect(fakeMcp.records.slice(callsBefore)).toEqual([])
-  expect(await toolCallRows(chatId, 1)).toEqual([
-    {
-      prompter_id: bob,
-      owner_id: alice,
-      server: sharedToolServer,
-      tool: 'update',
-      read_only: false,
-      decision: 'cancelled',
-      decided_by: null,
-      status: 'refused',
-    },
-  ])
-  await database.$client`delete from jobs where id = ${`job-stop-${promptId}`}`
+  try {
+    expect(await answerAs(alice, chatId, asked.questionId, true)).toBe(200)
+    expect(refused(await approvedCall)).toEqual({ status: 200, text: 'The turn was stopped before this call ran' })
+    expect(fakeMcp.records.slice(callsBefore)).toEqual([])
+    expect(await toolCallRows(chatId, 1)).toEqual([
+      {
+        prompter_id: bob,
+        owner_id: alice,
+        server: sharedToolServer,
+        tool: 'update',
+        read_only: false,
+        decision: 'cancelled',
+        decided_by: null,
+        status: 'refused',
+      },
+    ])
+  } finally {
+    await database.$client`delete from jobs where id = ${`job-stop-${promptId}`}`
+  }
 })
 
 test('a pending approval is cancelled when its request aborts or its turn ends, and its card shows Stopped', async () => {
@@ -379,18 +372,19 @@ test('a pending approval is cancelled when its request aborts or its turn ends, 
   ])
 })
 
+const chooseApproval = async (
+  member: typeof aliceInAcme,
+  connectionId: string,
+  tool: string | null,
+  approval: string | null,
+) =>
+  expect(
+    await approvals.mutate(member, 'profile.setToolApproval', { workspaceId: acme, connectionId, tool, approval }),
+  ).toEqual(succeeded)
+
 test('on a shared login the owner’s approval choices decide which calls wait: Always asks on their own prompt, and Never lets a guest’s write run', async () => {
-  const chooseApproval = async (tool: string | null, approval: string | null) =>
-    expect(
-      await approvals.mutate(aliceInAcme, 'profile.setToolApproval', {
-        workspaceId: acme,
-        connectionId: testCrmConnection.id,
-        tool,
-        approval,
-      }),
-    ).toEqual(succeeded)
   try {
-    await chooseApproval('update', 'always')
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', 'always')
     const host = await approvals.fakeHost('Approval choices host')
     const ownerTurn = await runtimeTurn(host, alice)
     const { frames } = await approvals.openStream(toChatId(ownerTurn.chatId))
@@ -402,8 +396,8 @@ test('on a shared login the owner’s approval choices decide which calls wait: 
     expect(await answerAs(alice, ownerTurn.chatId, asked.questionId, true)).toBe(200)
     expect(textOf((await ownerCall).result)).toBe('ran update')
 
-    await chooseApproval('update', null)
-    await chooseApproval(null, 'never')
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, null, 'never')
     const guestTurn = await runtimeTurn(host, bob)
     expect(textOf((await mcpCall(host, guestTurn.token, update)).result)).toBe('ran update')
     const audited = { owner_id: alice, server: sharedToolServer, tool: 'update', read_only: false, status: 'succeeded' }
@@ -414,24 +408,15 @@ test('on a shared login the owner’s approval choices decide which calls wait: 
       { ...audited, prompter_id: bob, decision: 'not_needed', decided_by: null },
     ])
   } finally {
-    await chooseApproval('update', null)
-    await chooseApproval(null, null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, 'update', null)
+    await chooseApproval(aliceInAcme, testCrmConnection.id, null, null)
   }
 })
 
 test('on a server each member signs in to, the prompter’s approval choices apply and the prompter answers, not the owner', async () => {
-  const chooseApproval = async (context: typeof aliceInAcme, approval: string | null) =>
-    expect(
-      await approvals.mutate(context, 'profile.setToolApproval', {
-        workspaceId: acme,
-        connectionId: 'connection-fake',
-        tool: 'whoami',
-        approval,
-      }),
-    ).toEqual(succeeded)
   await connectMember(bob, bobCookie)
   try {
-    await chooseApproval(bobInAcme, 'always')
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', 'always')
     const { host, chatId, token, frames } = await guestTurnWithApprovals('Prompter approvals host')
     await mcpCall(host, token, rpcOf('initialize', { protocolVersion: '2025-06-18', capabilities: {} }))
     const bobCall = mcpCall(host, token, whoami)
@@ -443,8 +428,8 @@ test('on a server each member signs in to, the prompter’s approval choices app
     expect(await answerAs(bob, chatId, asked.questionId, true)).toBe(200)
     expect(textOf((await bobCall).result)).toBe(`you are ${bobAccount}`)
 
-    await chooseApproval(bobInAcme, null)
-    await chooseApproval(aliceInAcme, 'always')
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', null)
+    await chooseApproval(aliceInAcme, 'connection-fake', 'whoami', 'always')
     expect(textOf((await mcpCall(host, token, whoami)).result)).toBe(`you are ${bobAccount}`)
     const audited = { prompter_id: bob, owner_id: alice, server: 'fake', tool: 'whoami', read_only: true }
     expect(await toolCallRows(chatId, 2)).toEqual([
@@ -452,8 +437,8 @@ test('on a server each member signs in to, the prompter’s approval choices app
       { ...audited, decision: 'not_needed', decided_by: null, status: 'succeeded' },
     ])
   } finally {
-    await chooseApproval(bobInAcme, null)
-    await chooseApproval(aliceInAcme, null)
+    await chooseApproval(bobInAcme, 'connection-fake', 'whoami', null)
+    await chooseApproval(aliceInAcme, 'connection-fake', 'whoami', null)
     await asMember(bob, 'POST', connectionPath('disconnect'))
     await toolConnectionSyncsSettled()
   }

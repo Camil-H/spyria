@@ -5,6 +5,7 @@ import {
   credentialsContainerBodyOf,
   credentialsReaderBodyOf,
   credentialsTools,
+  isAllowedOnPersonalHost,
   readCredentials,
   redacted,
 } from './personal.ts'
@@ -216,4 +217,72 @@ test('the Codex reader mounts its volume where the image owns an empty directory
 
 test('the credentials stores are keyed by the harness ids of the registry', () => {
   expect(credentialsTools).toEqual(['claude-code', 'codex'])
+})
+
+const conversationId = '0b6f2c1e-1f8a-4c55-9f0e-6f1d2a3b4c5d'
+
+test.each([
+  ['POST', '/api/bash/execute_bash_command'],
+  ['GET', '/api/file/download?path=/home/spyria/.claude/.credentials.json'],
+  ['GET', `/api/conversations/${conversationId}/workspace/x`],
+  ['GET', '/api/conversations/search'],
+  ['POST', `/api/conversations/${conversationId}/../../bash/execute_bash_command`],
+  ['DELETE', '/api/conversations'],
+  ['POST', `/api/conversations/${conversationId}/switch_llm`],
+  ['GET', `/api/conversations/${conversationId}/agent_final_response`],
+  ['GET', `/api/conversations/${conversationId}/questions/${conversationId}`],
+  ['POST', `/api/conversations/${conversationId}/questions/../../interrupt`],
+  ['POST', `/api/conversations/${conversationId}/restart/../../bash`],
+  ['GET', `/api/conversations/${conversationId}/restart`],
+  ['POST', '/api/workspace/tree'],
+  ['GET', '/api/workspace/../conversations'],
+  ['GET', '/api/workspace/file?path=../x/y'],
+  ['POST', '/api/workspace/push'],
+  ['GET', '/api/workspace/merge'],
+  ['GET', '/api/workspace/fetch'],
+  ['POST', '/api/workspace/status'],
+  ['POST', '/api/workspace/media'],
+])('a personal host refuses %s %s', (method, path) => {
+  expect(isAllowedOnPersonalHost(method, path)).toBe(false)
+})
+
+test.each([
+  '/sockets/bash-events',
+  `/sockets/events/${conversationId}?after=1&x=2`,
+  `/sockets/events/${conversationId}?resend_mode=all`,
+  `/sockets/events/${conversationId}?resend_mode=since&after_timestamp=2026-10-10T10%3A00%3A00.000000`,
+])('a personal host refuses the WebSocket %s', (path) => {
+  expect(isAllowedOnPersonalHost('WS', path)).toBe(false)
+})
+
+test.each([
+  ['GET', '/ready'],
+  ['POST', '/api/conversations'],
+  ['GET', `/api/conversations/${conversationId}`],
+  ['DELETE', `/api/conversations/${conversationId}`],
+  ['POST', `/api/conversations/${conversationId}/events`],
+  ['POST', `/api/conversations/${conversationId}/joins`],
+  ['POST', `/api/conversations/${conversationId}/attachments`],
+  ['POST', `/api/conversations/${conversationId}/interrupt`],
+  ['POST', `/api/conversations/${conversationId}/restart`],
+  ['POST', `/api/conversations/${conversationId}/switch_acp_model`],
+  ['POST', `/api/conversations/${conversationId}/questions/${conversationId}`],
+  ['GET', '/api/workspace/tree?path=src%2Futil'],
+  ['GET', '/api/workspace/file?path=README.md'],
+  ['GET', '/api/workspace/media?path=out%2Fchart.png'],
+  ['GET', '/api/workspace/changes?base=main'],
+  ['GET', '/api/workspace/commits?base=main'],
+  ['GET', '/api/workspace/status?base=main'],
+  ['GET', '/api/workspace/checks'],
+  ['POST', '/api/workspace/bundle'],
+  ['POST', '/api/workspace/commit'],
+  ['POST', '/api/workspace/fetch'],
+  ['POST', '/api/workspace/merge'],
+  ['POST', '/api/workspace/pushed'],
+  ['POST', '/api/workspace/screenshot'],
+  ['POST', '/api/workspace/checks'],
+  ['WS', `/sockets/events/${conversationId}`],
+  ['WS', `/sockets/events/${conversationId}?after=42`],
+])('a personal host forwards %s %s', (method, path) => {
+  expect(isAllowedOnPersonalHost(method, path)).toBe(true)
 })

@@ -9,7 +9,8 @@ const gapMilliseconds = Number(process.env.STUB_GAP_MS ?? 20)
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 const holdUrl = process.env.STUB_HOLD_URL
 const steerAnswerDelayMilliseconds = Number(process.env.STUB_STEER_DELAY_MS ?? 0)
-const lingerAs = (name) => (holdUrl ? fetch(`${holdUrl}&name=${name}`, { method: 'POST' }) : sleep(1500))
+const lingerAs = (name) =>
+  holdUrl ? fetch(`${holdUrl}&name=${name}`, { method: 'POST' }) : sleep(Number(process.env.STUB_LINGER_MS ?? 1500))
 const send = (frame) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...frame })}\n`)
 const piSend = (record) => process.stdout.write(`${JSON.stringify(record)}\n`)
 const isPi = process.env.STUB_FLAVOUR === 'pi'

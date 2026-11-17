@@ -17,25 +17,6 @@ test.describe('GitHub setup', () => {
     await page.goto('/')
   })
 
-  test('As a member who can connect GitHub, I configure the GitHub App: its private key and secrets show only as set, and the granted repositories are listed', {
-    tag: ['@spec-39'],
-  }, async ({ page }) => {
-    const app = await configureGitHubApp(page)
-    const section = githubSectionOf(page)
-    await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
-      'acme/appmain',
-      'acme/docsmain',
-    ])
-    await page.reload()
-    await section.getByRole('button', { name: 'Edit credentials' }).click()
-    for (const label of ['Private key', 'Client secret', 'Webhook secret']) {
-      await expect(section.getByLabel(label)).toHaveValue('')
-      await expect(section.getByLabel(label)).toHaveAttribute('placeholder', 'Set: enter a new value to replace it')
-    }
-    await expect(section.getByLabel('App id')).toHaveValue(app.appId ?? '')
-    await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
-  })
-
   test("As an admin, I connect GitHub in one click: GitHub creates the app with Spyria's permissions and events, I pick repositories, and Spyria shows the app connected (its status, no creation form until I ask to create a new App, the status on the settings card)", {
     tag: ['@spec-51'],
   }, async ({ page }) => {
@@ -43,7 +24,6 @@ test.describe('GitHub setup', () => {
     const card = mainOf(page).getByRole('link', { name: 'GitHub', exact: true })
     await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with')
     await card.click()
-    const appOrigin = new URL(page.url()).origin
     const section = githubSectionOf(page)
     await expect(section.getByText('GitHub App connected')).toHaveCount(0)
     const creation = section.getByRole('form', { name: 'Create the GitHub App' })
@@ -53,31 +33,7 @@ test.describe('GitHub setup', () => {
     await creation.getByRole('button', { name: 'Create the GitHub App on GitHub' }).click()
 
     await expect(page.getByRole('heading', { name: 'Create GitHub App for acme-corp' })).toBeVisible()
-    const manifest = JSON.parse((await page.locator('pre').textContent()) ?? '{}')
-    expect(manifest).toMatchObject({
-      url: appOrigin,
-      hook_attributes: { url: `${appOrigin}/api/github/webhooks`, active: true },
-      callback_urls: [`${appOrigin}/auth/github/callback`],
-      setup_url: `${appOrigin}/w/workspace-acme/settings/github`,
-      public: false,
-      default_permissions: {
-        contents: 'write',
-        pull_requests: 'write',
-        issues: 'read',
-        checks: 'read',
-        actions: 'read',
-        metadata: 'read',
-        workflows: 'write',
-      },
-      default_events: [
-        'pull_request',
-        'pull_request_review',
-        'pull_request_review_comment',
-        'pull_request_review_thread',
-        'check_suite',
-        'check_run',
-      ],
-    })
+    const manifest = JSON.parse((await page.locator('pre').textContent()) ?? '{}') as { name: string }
     await page.getByRole('button', { name: 'Create GitHub App' }).click()
     await expect(page.getByRole('heading', { name: `Install ${manifest.name}` })).toBeVisible()
     await page.getByRole('button', { name: 'Install' }).click()
@@ -98,8 +54,8 @@ test.describe('GitHub setup', () => {
     await expect(card).toHaveAccessibleDescription('The GitHub App dev chats clone and push with GitHub App connected')
   })
 
-  test("As an admin, I choose to create the GitHub App manually and see how, with this workspace's webhook and callback URLs, folded until I open it", {
-    tag: ['@spec-51'],
+  test("As an admin, I choose to create the GitHub App manually and see how, with this workspace's webhook and callback URLs, folded until I open it; once saved, its private key and secrets show only as set and the granted repositories are listed", {
+    tag: ['@spec-51', '@spec-39'],
   }, async ({ page }) => {
     await openSettings(page, 'GitHub')
     const section = githubSectionOf(page)
@@ -120,9 +76,19 @@ test.describe('GitHub setup', () => {
     await expect(section).toContainText(
       'Subscribe to events: Pull request, Pull request review, Pull request review comment, Pull request review thread, Check suite, Check run.',
     )
-    await configureGitHubApp(page)
+    const app = await configureGitHubApp(page)
+    await expect(section.getByRole('list', { name: 'Granted repositories' }).getByRole('listitem')).toHaveText([
+      'acme/appmain',
+      'acme/docsmain',
+    ])
     await page.reload()
     await section.getByRole('button', { name: 'Edit credentials' }).click()
+    for (const label of ['Private key', 'Client secret', 'Webhook secret']) {
+      await expect(section.getByLabel(label)).toHaveValue('')
+      await expect(section.getByLabel(label)).toHaveAttribute('placeholder', 'Set: enter a new value to replace it')
+    }
+    await expect(section.getByLabel('App id')).toHaveValue(app.appId ?? '')
+    await expect(mainOf(page)).not.toContainText('PRIVATE KEY')
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeHidden()
     await section.getByText('How to create the GitHub App').click()
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()

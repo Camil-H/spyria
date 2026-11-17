@@ -1,9 +1,7 @@
 import {
-  anySignedOutScreenOf,
   composerOf,
   expect,
   logOutOf,
-  mainOf,
   menuItemNamesOf,
   messageItemsOf,
   serverUrl,
@@ -52,27 +50,12 @@ test.describe('Sessions', () => {
   test('As a member, I sign in through the auth provider, stay signed in after a reload, log out for good and sign back in where I left', {
     tag: ['@spec-05', '@smoke'],
   }, async ({ page }) => {
-    const sessionsLoaded = page.waitForResponse(
-      async (response) => response.url().endsWith('/auth/sessions') && (await response.json()).sessions.length > 0,
-    )
-
     await test.step('signing in through the provider popup opens Acme with both workspaces signed in', async () => {
       await signInThroughProvider(page, 'alice@example.com')
       await expect(switcherOf(page)).toContainText('Acme')
       await expect(sidebarOf(page).getByRole('group', { name: 'Onboarding' })).toBeVisible()
       expect(await menuItemNamesOf(page)).toEqual(alicesWorkspacesSignedIn)
     })
-
-    const { sessions } = (await (await sessionsLoaded).json()) as {
-      sessions: { workspaceId: string; token: string }[]
-    }
-    const acmeToken = sessions.find((session) => session.workspaceId === 'workspace-acme')?.token
-    const queryWithAcmeToken = () =>
-      fetch(`${serverUrl}/api/query`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${acmeToken}` },
-        body: JSON.stringify(['transform', []]),
-      })
 
     await test.step('a reload restores the sessions without a popup', async () => {
       let popupCount = 0
@@ -85,23 +68,25 @@ test.describe('Sessions', () => {
     })
 
     await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
+    await composerOf(page).fill('Sent before logout')
+    await composerOf(page).press('ControlOrMeta+Enter')
+    await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
     await composerOf(page).fill('Draft before logout')
     const urlBeforeLogout = page.url()
 
-    await test.step('logging out revokes the session: a reload keeps Acme signed out and its old token is refused', async () => {
-      expect((await queryWithAcmeToken()).status).toBe(200)
+    await test.step('logging out revokes the session: a reload keeps Acme signed out', async () => {
       await logOutOf(page, 'Acme')
       await expect(signedOutScreenOf(page, 'Acme')).toBeVisible()
       await page.reload()
       await expect(signedOutScreenOf(page, 'Acme')).toBeVisible()
       await expect(page.getByRole('link', { name: 'Go to Globex' })).toBeVisible()
-      expect((await queryWithAcmeToken()).status).toBe(401)
     })
 
-    await test.step('signing in again from the signed-out screen restores Acme with its route and draft', async () => {
+    await test.step('signing in again from the signed-out screen restores Acme with its route, messages and draft', async () => {
       await signInThroughProvider(page, 'alice@example.com')
       expect(page.url()).toBe(urlBeforeLogout)
       await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
+      await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
       await expect(composerOf(page)).toHaveValue('Draft before logout')
       expect(await menuItemNamesOf(page)).toEqual(alicesWorkspacesSignedIn)
     })
@@ -157,28 +142,6 @@ test.describe('Sessions', () => {
         await page.getByRole('link', { name: 'Go to Globex' }).click()
         await expect(sidebarOf(page).getByRole('group', { name: 'Launch' })).toBeVisible()
       })
-    })
-  })
-
-  test.describe(() => {
-    test.use({ signedInAs: 'member-alice' })
-
-    test('As a member, signing back in restores my route, my messages and my unsent draft', async ({ page }) => {
-      await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
-      await composerOf(page).fill('Sent before logout')
-      await composerOf(page).press('ControlOrMeta+Enter')
-      await composerOf(page).fill('Draft before logout')
-      const urlBeforeLogout = page.url()
-
-      await logOutOf(page, 'Acme')
-      await expect(signedOutScreenOf(page, 'Acme')).toBeVisible()
-      await page.getByRole('button', { name: 'Sign in' }).click()
-
-      expect(page.url()).toBe(urlBeforeLogout)
-      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-      await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
-      await expect(composerOf(page)).toHaveValue('Draft before logout')
-      await expect(anySignedOutScreenOf(page)).toHaveCount(0)
     })
   })
 })

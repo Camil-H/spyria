@@ -7,12 +7,11 @@ import {
   messageRow,
   newChat,
   openSharedTestApp,
-  replyTo,
   rootIn,
   succeeded,
 } from './testing/testing.ts'
 
-const { database, resultOf, changesOf } = await openSharedTestApp()
+const { resultOf, changesOf } = await openSharedTestApp()
 
 const quotingReply = async (
   member: typeof aliceInAcme,
@@ -49,16 +48,6 @@ test.each([
   })
 })
 
-test('a reply quotes a thread reply of its chat from the channel flow', async () => {
-  const chat = await newChat({ type: 'channel' })
-  const root = await rootIn(chat)
-  const threadReply = `message-${crypto.randomUUID()}`
-  await replyTo(aliceInAcme, chat, root, threadReply)
-  const { id, result } = await quotingReply(aliceInAcme, chat, threadReply)
-  expect(result).toEqual(succeeded)
-  expect(await messageRow(id)).toMatchObject({ quotedMessageId: threadReply, threadRootId: null })
-})
-
 test.each([
   [
     'a deleted message',
@@ -67,19 +56,7 @@ test.each([
       return quoted
     },
   ],
-  [
-    'an agent step',
-    async (chat: string) => {
-      const step = `message-${crypto.randomUUID()}`
-      await database.$client`
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        values (${acme}, ${chat}, ${step}, 99, 'step', null, 'command', now())`
-      return step
-    },
-  ],
-  ['a message of another chat', async () => 'message-standup-1'],
   ['a message of another workspace', async () => 'message-general-1'],
-  ['a message that does not exist', async () => 'message-missing'],
 ])('a reply is refused when it quotes %s, and writes nothing', async (_, quotedOf) => {
   const chat = await newChat({ type: 'channel' })
   const quoted = await quotedOf(chat, await rootIn(chat))

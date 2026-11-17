@@ -32,7 +32,7 @@ export const agentNotices = {
   newSession: 'The agent started a new session; it does not remember earlier messages',
   eventsLost: 'Spyria lost part of the agent’s work while reconnecting to it; some steps may be missing above',
 }
-export const setupFailedNoticeOf = ({ command, exitCode, timeoutMinutes, output }: Record<string, unknown> = {}) =>
+const setupFailedNoticeOf = ({ command, exitCode, timeoutMinutes, output }: Record<string, unknown> = {}) =>
   `The setup command "${command}" ${timeoutMinutes === undefined ? `failed with exit code ${exitCode}` : `did not finish within ${timeoutMinutes} minutes and was stopped`}; the session started anyway.\n${output}`
 export const unavailableNotices = [
   agentNotices.noHost,
@@ -42,7 +42,7 @@ export const unavailableNotices = [
   agentNotices.machineOffline,
 ]
 export const waitingNotices = [...unavailableNotices, agentNotices.newSession]
-export const waitingPromptLifetimeMilliseconds = 60 * 60_000
+const waitingPromptLifetimeMilliseconds = 60 * 60_000
 export const expiredPromptNotice =
   'Not sent: it waited more than an hour for the agent. Send it again if it still applies'
 export const hasOutlivedWait = (prompt: { createdAt: Date }, now: number) =>

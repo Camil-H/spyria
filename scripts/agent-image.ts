@@ -60,6 +60,19 @@ const removeReplacedImage = (previousImage: string, image: string) => {
     console.log(`Kept the previous image ${previousImage}: ${removed.stderr.toString().trim()}`)
 }
 
+const githubActionsCacheBuilder = 'spyria-agent-cache'
+const imageBuildCommand = () => {
+  const imageOutput = ['--pull', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.']
+  if (process.env.SPYRIA_BUILD_CACHE !== 'gha') return ['docker', 'build', ...imageOutput]
+  if (Bun.spawnSync(['docker', 'buildx', 'inspect', githubActionsCacheBuilder]).exitCode !== 0)
+    run(['docker', 'buildx', 'create', '--name', githubActionsCacheBuilder, '--driver', 'docker-container'])
+  return [
+    ...['docker', 'buildx', 'build', '--builder', githubActionsCacheBuilder, '--load'],
+    ...['--cache-from', 'type=gha,scope=agent', '--cache-to', 'type=gha,mode=max,scope=agent'],
+    ...imageOutput,
+  ]
+}
+
 const build = () => {
   const previousImage = existsSync(imageIdFile) ? readFileSync(imageIdFile, 'utf8').trim() : ''
   const architecture = run(['docker', 'info', '--format', '{{.Architecture}}']) === 'aarch64' ? 'arm64' : 'x64'
@@ -67,7 +80,7 @@ const build = () => {
     ...['bun', 'build', '--compile', '--minify', `--target=bun-linux-${architecture}`],
     ...['src/main.ts', '--outfile', 'dist/spyria-agent'],
   ])
-  run(['docker', 'build', '--pull', '--iidfile', 'image-id', '-t', 'spyria-agent:dev', '.'])
+  run(imageBuildCommand())
   const image = readFileSync(imageIdFile, 'utf8').trim()
   removeReplacedImage(previousImage, image)
   pruneBuildCache()

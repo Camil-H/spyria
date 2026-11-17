@@ -116,21 +116,6 @@ test.each([
   },
 )
 
-test('thinking streams as reasoning, then is stored as one thought with its duration', async () => {
-  await machine()
-  const chat = await newMachineChat()
-  const frames = await stack.subscribedFrames(chat)
-  const replies = await finished(await prompt(chat, 'stub:think'), chat)
-
-  expect(streamedText(frames, true)).toBe('Thinking about the plan.')
-  expect(replies).toHaveLength(2)
-  expect(replies[0]).toMatchObject({
-    kind: 'step',
-    step: { type: 'thought', text: 'Thinking about the plan.', durationMilliseconds: expect.any(Number) },
-  })
-  expect(replies[1]?.kind).toBe('agent')
-})
-
 test('Stop closes the turn as stopped, and the next prompt continues the same ACP session', async () => {
   const relay = await machine()
   const chat = await newMachineChat()
@@ -416,7 +401,7 @@ test('nothing starts for a signed-out tool, a non-owner or a choice of the Spyri
   expect(await startJobsOf(chat)).toHaveLength(0)
 })
 
-test('a prompt sent at once after the choice joins the one session and streams live to a viewer subscribed before the chat was stored', async () => {
+test('a prompt sent at once after the choice joins the one session and streams live to a viewer subscribed before the chat was stored, its thinking as reasoning then stored as one thought with its duration', async () => {
   const relay = await machine({ gapMilliseconds: 30 })
   const chat = chatId(`chat-${crypto.randomUUID()}`)
   const { frames, subscribed } = await stack.openStream(chat)
@@ -426,6 +411,11 @@ test('a prompt sent at once after the choice joins the one session and streams l
   expect(await chooseRunsOn(chat, defaultHarness)).toEqual(succeeded)
   const replies = await finished(await prompt(chat, 'stub:think'), chat)
   expect(replies.at(-1)?.kind).toBe('agent')
+  expect(replies).toHaveLength(2)
+  expect(replies[0]).toMatchObject({
+    kind: 'step',
+    step: { type: 'thought', text: 'Thinking about the plan.', durationMilliseconds: expect.any(Number) },
+  })
   expect(streamedText(frames, true)).toBe('Thinking about the plan.')
   expect(relay.created).toHaveLength(1)
   expect(await startedEventsOf(chat)).toHaveLength(1)

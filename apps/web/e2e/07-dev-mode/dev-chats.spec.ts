@@ -81,21 +81,8 @@ test.describe('Dev chats', () => {
     await expect(dialog.getByLabel('Base branch')).toHaveValue('main')
   })
 
-  test('As a member, I see a failing setup command as a notice with its last output lines, and the session still answers', {
-    tag: ['@spec-39'],
-  }, async ({ page }) => {
-    await configureGitHubApp(page)
-    await setSetupCommand(page, 'acme/docs', 'sh .spyria/setup.sh')
-    await newDevChat(page, 'Docs work', 'acme/docs')
-    await sendMessage(page, 'stub:ls')
-    const notice = messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127')
-    await expect(notice).toContainText('docs-tool: command not found')
-    await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-  })
-
-  test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step while the chat says it is setting up the repository, and is answered once it ends', {
-    tag: ['@spec-40', '@slow'],
+  test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step while the chat says it is setting up the repository; when it fails I see a notice with its last output lines, and the session still answers', {
+    tag: ['@spec-40', '@spec-39', '@slow'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
     await setSetupCommand(page, 'acme/docs', 'sh .spyria/setup.sh')
@@ -109,9 +96,10 @@ test.describe('Dev chats', () => {
     await expect(setup.locator('pre')).toContainText('docs-tool: command not found')
     await expect(setup).toContainText('exit 127')
     await expect(page.getByRole('status', { name: 'Setting up the repository' })).toHaveCount(0)
-    await expect(
-      messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127'),
-    ).toHaveCount(1)
+    const notice = messageContaining(page, 'The setup command "sh .spyria/setup.sh" failed with exit code 127')
+    await expect(notice).toHaveCount(1)
+    await expect(notice).toContainText('docs-tool: command not found')
     await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
   })
 })

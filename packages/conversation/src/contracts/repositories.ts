@@ -95,7 +95,7 @@ export type ToolCall = Readonly<{
   status: 'succeeded' | 'failed' | 'refused'
   calledAt: Date
 }>
-export type GitHubAccess = Readonly<{
+type GitHubAccess = Readonly<{
   holder: ToolHolder | undefined
   accessRows: readonly ToolServerAccess[]
   approvals: ToolApprovalPreference | undefined
@@ -174,7 +174,7 @@ export type ParticipantChange = Readonly<{
   actorId: MemberId
 }>
 
-export type RuntimeOrigin = Readonly<{
+type RuntimeOrigin = Readonly<{
   runtimeChatId: ChatId
   chatId: ChatId
   messageId: MessageId
@@ -221,7 +221,7 @@ type RoutingDecision = Readonly<{
   reason: string
   costMicros: number
 }>
-export type Delegation = Readonly<{
+type Delegation = Readonly<{
   chatId: ChatId
   id: string
   promptId: MessageId

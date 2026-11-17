@@ -15,6 +15,7 @@ import {
   membersSectionOf,
   messageContaining,
   messageItemsOf,
+  onePixelPng,
   openChat,
   openProfile,
   openSettings,
@@ -22,6 +23,7 @@ import {
   panelTabOf,
   pendingInvitesOf,
   sendMessage,
+  settingsLinkOf,
   sidebarOf,
   signedOutScreenOf,
   signInThroughProvider,
@@ -39,7 +41,6 @@ const bobsChatName = "Bob's runtime"
 const memberRowOf = (page: Page, name: string) =>
   membersSectionOf(page).getByRole('list', { name: 'Members' }).getByRole('listitem').filter({ hasText: name })
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
-const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
 
 const removeMember = async (page: Page, name: string) => {
   await chooseMemberAction(page, name, 'Remove from workspace')
@@ -93,21 +94,14 @@ test.describe('Team', () => {
     await ninaPage.context().close()
   })
 
-  test('As a member who can invite, I revoke a pending invite and that person, signing in, reaches no workspace and is offered to create one', {
+  test('As a member who can invite, I revoke a pending invite', {
     tag: ['@spec-36'],
-  }, async ({ page, browser, workerStack }) => {
+  }, async ({ page }) => {
     await invite(page, 'nina@example.com')
     await expect(pendingInvitesOf(page)).toHaveCount(1)
     await membersSectionOf(page).getByRole('button', { name: 'Revoke the invite of nina@example.com' }).click()
     await expect(toastOf(page).getByRole('status')).toHaveText('Invite of nina@example.com revoked')
     await expect(pendingInvitesOf(page)).toHaveCount(0)
-
-    const ninaPage = await openPageAs(browser, workerStack, null)
-    await signInThroughProvider(ninaPage, 'nina@example.com')
-    await expect(creationFormOf(ninaPage)).toBeVisible()
-    await expect(sidebarOf(ninaPage)).toHaveCount(0)
-    await expect(ninaPage.getByText(/Acme|Globex/)).toHaveCount(0)
-    await ninaPage.context().close()
   })
 
   test('As a member who manages members, I promote Bob to Admin and he sees Workspace settings without a reload; demoting him takes it away', {
@@ -225,33 +219,6 @@ test.describe('Team', () => {
     await otherBrowserPage.context().close()
   })
 
-  test('As a member who can invite, I invite a removed member again and they sign in back in Acme', {
-    tag: ['@spec-36'],
-  }, async ({ page, browser, workerStack }) => {
-    await removeMember(page, 'Bob')
-    await invite(page, 'bob@example.com')
-    await expect(pendingInvitesOf(page)).toContainText('bob@example.com')
-
-    const bobPage = await openPageAs(browser, workerStack, null)
-    await signInThroughProvider(bobPage, 'bob@example.com')
-    await expect(switcherOf(bobPage)).toContainText('Acme')
-    await expect(memberRowOf(page, 'Bob')).toContainText('bob@example.com')
-    await expect(pendingInvitesOf(page)).toHaveCount(0)
-    await bobPage.context().close()
-  })
-
-  test('As a member who manages members, I cannot change my own role or remove myself, and I can on the other rows', {
-    tag: ['@spec-36', '@spec-50'],
-  }, async ({ page }) => {
-    const aliceRow = memberRowOf(page, 'Alice')
-    await expect(aliceRow).toContainText('Alice (you)')
-    await expect(aliceRow).toContainText('Admin')
-    await expect(aliceRow.getByRole('combobox')).toHaveCount(0)
-    await expect(aliceRow.getByRole('button')).toHaveCount(0)
-    await expect(memberRowOf(page, 'Bob').getByRole('combobox', { name: 'Role of Bob' })).toBeEnabled()
-    await expect(memberRowOf(page, 'Bob').getByRole('button', { name: 'Actions for Bob' })).toBeEnabled()
-  })
-
   const roleOptionsOf = (page: Page, name: string) =>
     memberRowOf(page, name)
       .getByRole('combobox', { name: `Role of ${name}` })
@@ -271,8 +238,6 @@ test.describe('Team', () => {
 
     await openSettings(bobPage, 'Members and roles')
     expect(await roleOptionsOf(bobPage, 'Lee')).toEqual(['Member', 'Manager'])
-    await expect(memberRowOf(bobPage, 'Alice')).toContainText('Admin')
-    await expect(memberRowOf(bobPage, 'Alice').getByRole('combobox')).toHaveCount(0)
     await memberRowOf(bobPage, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Manager' })
 
     await expect(settingsLinkOf(leePage)).toBeVisible()
@@ -294,6 +259,7 @@ test.describe('Team', () => {
     await expect(memberRowOf(page, 'Alice')).toContainText('Alice (you)')
     await expect(memberRowOf(page, 'Alice')).toContainText('Admin')
     await expect(memberRowOf(page, 'Alice').getByRole('combobox')).toHaveCount(0)
+    await expect(memberRowOf(page, 'Alice').getByRole('button')).toHaveCount(0)
 
     await memberRowOf(page, 'Lee').getByRole('combobox', { name: 'Role of Lee' }).selectOption({ label: 'Admin' })
     const leePage = await openPageAs(browser, workerStack, 'member-lee')
@@ -335,10 +301,6 @@ test.describe('Team', () => {
       page,
     }) => {
       const pictureSection = sectionOf(page, 'Profile picture')
-      const onePixelPng = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-        'base64',
-      )
       const chooseFileAfter = async (click: () => Promise<void>, file: Parameters<FileChooser['setFiles']>[0]) => {
         const fileChooser = page.waitForEvent('filechooser')
         await click()

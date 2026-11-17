@@ -1,4 +1,4 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { type ChatId, reachableModelsOf, withPricesOf } from '@spyria/kernel'
 import {
   acme,
@@ -19,6 +19,13 @@ import {
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =
   await startAgentStack({ routing: true })
+const seededCredentialIds = (
+  await database.$client<{ id: string }[]>`select id from llm_credentials where workspace_id = ${acme}`
+).map(({ id }) => id)
+afterEach(async () => {
+  await database.$client`
+    delete from llm_credentials where workspace_id = ${acme} and id <> all(${seededCredentialIds}::text[])`
+})
 const newRuntimeChat = (ownerId = alice, participants: { memberId: string; roleId: string }[] = []) =>
   stack.newRuntimeChat({ ownerId, participants })
 
@@ -43,16 +50,20 @@ const decisionsOf = (chat: ChatId) =>
 const logsOf = (chat: ChatId, minimum: number) => gatewayLogsOf(gateway, `metadata_chat=${chat}`, minimum)
 const routing = (chat: ChatId, member: { workspaceId: string; userId: string }, fields: Record<string, unknown>) =>
   mutate(member, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, ...fields })
-const routerLogsOf = async (chat: ChatId) =>
-  (await logsOf(chat, 2)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
+const routerLogsOf = async (chat: ChatId, minimum = 2) =>
+  (await logsOf(chat, minimum)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
 
-test('the first prompt is classified once, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
-  const { launches } = await fakeAgent()
+test('the first prompt is classified once, while its runtime starts, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
+  const { host, launches } = await fakeAgent()
+  const releaseStart = host.hold('start')
   const chat = await newRuntimeChat()
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
-  expect(await answered(await prompt(chat, 'Refactor the whole billing architecture'))).toEqual([
-    { kind: 'agent', body: 'Understood, working on it.' },
-  ])
+  const question = await prompt(chat, 'Refactor the whole billing architecture')
+  expect(await routerLogsOf(chat, 1)).toEqual(['mistral-small-latest'])
+  expect(launches()).toHaveLength(0)
+
+  releaseStart()
+  expect(await answered(question)).toEqual([{ kind: 'agent', body: 'Understood, working on it.' }])
   expect(launches()[0]?.agent).toMatchObject({
     acp_model: 'spyria/mistral/mistral-large-latest',
     acp_thought_level: 'high',
@@ -90,26 +101,6 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
     'mistral-large-latest',
     'mistral-large-latest',
   ])
-})
-
-test('the first prompt is classified while its runtime starts, once, and the session then runs on the routed model', async () => {
-  const { host, launches } = await fakeAgent()
-  const releaseStart = host.hold('start')
-  const chat = await newRuntimeChat()
-  routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
-  const question = await prompt(chat, 'Refactor the whole billing architecture')
-  const routerCalls = (await logsOf(chat, 1)).filter((log) => log.metadata.role === 'router')
-  expect(routerCalls.map((log) => log.model)).toEqual(['mistral-small-latest'])
-  expect(launches()).toHaveLength(0)
-
-  releaseStart()
-  expect(await answered(question)).toEqual([{ kind: 'agent', body: 'Understood, working on it.' }])
-  expect(launches()[0]?.agent).toMatchObject({
-    acp_model: 'spyria/mistral/mistral-large-latest',
-    acp_thought_level: 'high',
-  })
-  expect(await routerLogsOf(chat)).toEqual(['mistral-small-latest'])
-  expect(await decisionsOf(chat)).toHaveLength(1)
 })
 
 test('a lost conversation is routed again for the new session', async () => {
@@ -243,7 +234,6 @@ test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
   },
 )
 
-let decisionModelKey: Promise<void> | undefined
 type RoutingRow = {
   title: string
   decisionModel?: boolean
@@ -296,10 +286,7 @@ test.each<RoutingRow>([
   { title: 'a timed-out decision model', decisionModel: true, route: 'slow', model: 'mistral/mistral-medium-latest' },
 ])('after $title the first prompt routes to $model', async (row) => {
   const { launches } = await fakeAgent()
-  if (row.decisionModel) {
-    decisionModelKey ??= addLlmKey(alice, 'Typesafe')
-    await decisionModelKey
-  }
+  if (row.decisionModel) await addLlmKey(alice, 'Typesafe')
   const chat = await newRuntimeChat()
   routeWith(row.route)
   const startedAt = Date.now()

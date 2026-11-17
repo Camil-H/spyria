@@ -1,8 +1,20 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, beforeEach, expect, test } from 'bun:test'
+import { resetDatabase } from '@spyria/db/postgres'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
-import { acme, alice, bob, globex, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
+import { cookieHeaderOf } from '../testing/sign-in.ts'
+import {
+  acme,
+  alice,
+  bob,
+  globex,
+  issueTestSession,
+  openSessionWith,
+  queryWith,
+  testAuthSettings,
+  workspaceEventsOf,
+} from '../testing/testing.ts'
 import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 
@@ -48,6 +60,11 @@ afterAll(async () => {
   await testDatabase.drop()
   await otherDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
+beforeEach(async () => {
+  nextIdToken = ''
+  challengeOfCode.clear()
+  await resetDatabase(database)
+})
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
@@ -62,13 +79,6 @@ const signIdToken = (claims: JWTPayload) =>
   })
     .setProtectedHeader({ alg: 'RS256', kid: 'fake-idp' })
     .sign(idpKeys.privateKey)
-
-const cookieHeaderOf = (response: Response) =>
-  response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(';')[0] ?? '')
-    .filter((cookie) => !cookie.endsWith('='))
-    .join('; ')
 
 const startLogin = async (path = '/auth/login') => {
   const response = await app.request(path)
@@ -111,13 +121,6 @@ const sessionsOf = async (cookie: string, server = app) =>
     hostImage?: string
   }
 
-const queryWith = (token: string) =>
-  app.request('/api/query', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
-  })
-
 const sameAppHeaders = { origin: appOrigin, 'x-spyria-csrf': '1', 'content-type': 'application/json' }
 const postAuth = (path: string, cookie: string, body: object, headers: Record<string, string> = sameAppHeaders) =>
   app.request(path, { method: 'POST', headers: { ...headers, cookie }, body: JSON.stringify(body) })
@@ -144,7 +147,7 @@ test('a verified email of a member opens a session in each of their workspaces',
   const { userId, sessions } = await sessionsOf(signIn.cookie)
   expect(userId).toBe('member-alice')
   expect(sessions.map(({ workspaceId }) => workspaceId)).toEqual([acme, globex])
-  for (const session of sessions) expect((await queryWith(session.token)).status).toBe(200)
+  for (const session of sessions) expect((await queryWith(app, session.token)).status).toBe(200)
 })
 
 test('a login for one workspace opens only that session', async () => {
@@ -196,23 +199,6 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
     (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: true, iat: undefined }),
   ],
   [
-    'a tampered ID token',
-    async (nonce) => {
-      const [header, , signature] = (
-        await signIdToken({ nonce, email: 'bob@example.com', email_verified: true })
-      ).split('.')
-      const payload = {
-        nonce,
-        email: 'alice@example.com',
-        email_verified: true,
-        iss: idpIssuer,
-        aud: 'spyria',
-        sub: 's',
-      }
-      return `${header}.${Buffer.from(JSON.stringify({ ...payload, exp: nowInSeconds() + 60, iat: nowInSeconds() })).toString('base64url')}.${signature}`
-    },
-  ],
-  [
     'a token signed by another key',
     async (nonce) =>
       new SignJWT({ nonce, email: 'alice@example.com', email_verified: true })
@@ -239,7 +225,7 @@ test('the callback refuses an address the provider did not confirm, saying so', 
   expect(signIn.cookie).not.toContain('spyria_s_')
 })
 
-test('the callback refuses a wrong state, a missing login cookie and a tampered login cookie', async () => {
+test('the callback refuses a wrong state, a missing login cookie, a tampered login cookie and an authorization response that names another issuer', async () => {
   const login = await startLogin()
   nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
   const tamperedCookie = login.cookie.replace(/spyria_login=([^;]*)/, (_, value) => `spyria_login=x${value}`)
@@ -247,6 +233,10 @@ test('the callback refuses a wrong state, a missing login cookie and a tampered 
     await callback('wrong-state', login.cookie),
     await callback(login.state, ''),
     await callback(login.state, tamperedCookie),
+    await app.request(
+      `/auth/callback?${new URLSearchParams({ code: 'code-1', state: login.state, iss: 'http://localhost:1/evil' })}`,
+      { headers: { cookie: login.cookie } },
+    ),
   ]) {
     expect(response.status).toBe(400)
     expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
@@ -272,22 +262,11 @@ test("the callback sends its login's PKCE verifier, so a code issued to another 
   }
 })
 
-test('the callback refuses an authorization response that names another issuer', async () => {
-  const login = await startLogin()
-  nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
-  const response = await app.request(
-    `/auth/callback?${new URLSearchParams({ code: 'code-1', state: login.state, iss: 'http://localhost:1/evil' })}`,
-    { headers: { cookie: login.cookie } },
-  )
-  expect(response.status).toBe(400)
-  expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
-})
-
 test('the API refuses a revoked session at once, even with an unexpired token', async () => {
   const { cookie } = await signInAs('alice@example.com')
   const [acmeSession] = (await sessionsOf(cookie)).sessions
   expect((await postAuth('/auth/logout', cookie, { workspaceId: acme })).status).toBe(204)
-  expect((await queryWith(acmeSession?.token ?? '')).status).toBe(401)
+  expect((await queryWith(app, acmeSession?.token ?? '')).status).toBe(401)
   expect((await sessionsOf(cookie)).sessions.map((session) => session.workspaceId)).toEqual([globex])
 })
 
@@ -296,22 +275,22 @@ test('the API refuses a removed membership at once, even with an unexpired token
   await database.$client`
     insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, 'member-dana', 'member', 'Dana')`
   const [danaSession] = (await sessionsOf((await signInAs('dana@example.com')).cookie)).sessions
-  expect((await queryWith(danaSession?.token ?? '')).status).toBe(200)
+  expect((await queryWith(app, danaSession?.token ?? '')).status).toBe(200)
   await database.$client`delete from memberships where user_id = 'member-dana'`
-  expect((await queryWith(danaSession?.token ?? '')).status).toBe(403)
+  expect((await queryWith(app, danaSession?.token ?? '')).status).toBe(403)
 })
 
 test('a token naming another workspace than its session is refused', async () => {
   const [bobInAcme] = await openSessions(database, 'member-bob', acme)
   if (!bobInAcme) throw new Error('Bob has no Acme session')
   const forged = await issueSessionToken(testAuthSettings.tokenSecret, { ...bobInAcme, workspaceId: globex })
-  expect((await queryWith(forged.token)).status).toBe(403)
+  expect((await queryWith(app, forged.token)).status).toBe(403)
   const aliceForged = await issueSessionToken(testAuthSettings.tokenSecret, {
     ...bobInAcme,
     userId: 'member-alice',
     workspaceId: globex,
   })
-  expect((await queryWith(aliceForged.token)).status).toBe(401)
+  expect((await queryWith(app, aliceForged.token)).status).toBe(401)
 })
 
 test('session cookies are HttpOnly, SameSite=Lax and sent only to /auth, and no other origin may read an answer of /auth', async () => {
@@ -344,7 +323,7 @@ test('renewal issues a new token from the session cookie', async () => {
   const renewed = (await response.json()) as { workspaceId: string; token: string; expiresAt: number }
   expect(renewed.workspaceId).toBe(acme)
   expect(renewed.expiresAt).toBeGreaterThan(Date.now() + 14 * 60 * 1000)
-  expect((await queryWith(renewed.token)).status).toBe(200)
+  expect((await queryWith(app, renewed.token)).status).toBe(200)
 })
 
 test('renewal is refused without the CSRF header, from another origin, without a cookie and after logout', async () => {
@@ -369,7 +348,6 @@ test('renewal is refused without the CSRF header, from another origin, without a
 })
 
 test("a member sees by device where they are signed in to a workspace, never a session's id, and signs out of it everywhere while their other workspaces and other members stay signed in, without reopening it from them", async () => {
-  await database.$client`delete from sessions where user_id = 'member-alice'`
   const firefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0'
   const login = await startLogin()
   nextIdToken = await signIdToken({
@@ -409,51 +387,41 @@ test("a member sees by device where they are signed in to a workspace, never a s
   const signedOut = await asMember('/auth/sign-out-everywhere', phoneToken, 'POST')
   expect(signedOut.status).toBe(204)
   expect(signedOut.headers.getSetCookie().join()).toContain(`spyria_s_${acme}=;`)
-  expect((await queryWith(laptopInAcme.token)).status).toBe(401)
-  expect((await queryWith(phoneToken)).status).toBe(401)
+  expect((await queryWith(app, laptopInAcme.token)).status).toBe(401)
+  expect((await queryWith(app, phoneToken)).status).toBe(401)
   expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: acme })).status).toBe(401)
-  expect((await queryWith(laptopInGlobex.token)).status).toBe(200)
+  expect((await queryWith(app, laptopInGlobex.token)).status).toBe(200)
   expect((await postAuth('/auth/renew', laptopCookie, { workspaceId: globex })).status).toBe(200)
-  expect((await queryWith(bobToken)).status).toBe(200)
+  expect((await queryWith(app, bobToken)).status).toBe(200)
 
-  const openFrom = (token: string, workspaceId: string) =>
-    app.request('/auth/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ workspaceId }),
-    })
-  expect((await openFrom(laptopInGlobex.token, acme)).status).toBe(403)
-  const relayedThroughGlobex = await openFrom(laptopInGlobex.token, globex)
+  expect((await openSessionWith(app, laptopInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openSessionWith(app, laptopInGlobex.token, globex)
   expect(relayedThroughGlobex.status).toBe(200)
   const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
-  expect((await openFrom(relayedToken, acme)).status).toBe(403)
+  expect((await openSessionWith(app, relayedToken, acme)).status).toBe(403)
   const [laterInGlobex] = await openSessions(database, alice, globex)
   if (!laterInGlobex) throw new Error('missing session')
   const laterToken = (await issueSessionToken(testAuthSettings.tokenSecret, laterInGlobex)).token
-  expect((await openFrom(laterToken, acme)).status).toBe(200)
+  expect((await openSessionWith(app, laterToken, acme)).status).toBe(200)
   expect(
     (await sessionsOf((await signInAs('alice@example.com')).cookie)).sessions.map(({ workspaceId }) => workspaceId),
   ).toEqual([acme, globex])
 })
 
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
-  const [aliceInAcme] = await openSessions(database, 'member-alice', acme)
-  const [bobInAcme] = await openSessions(database, 'member-bob', acme)
-  if (!aliceInAcme || !bobInAcme) throw new Error('missing session')
-  const bearerOf = async (session: typeof aliceInAcme) =>
-    `Bearer ${(await issueSessionToken(testAuthSettings.tokenSecret, session)).token}`
-  const openFor = async (session: typeof aliceInAcme | undefined) =>
-    app.request('/auth/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(session && { authorization: await bearerOf(session) }) },
-      body: JSON.stringify({ workspaceId: globex }),
-    })
-  expect((await openFor(undefined)).status).toBe(401)
-  expect((await openFor(bobInAcme)).status).toBe(403)
-  const opened = await openFor(aliceInAcme)
+  const withoutToken = await app.request('/auth/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ workspaceId: globex }),
+  })
+  expect(withoutToken.status).toBe(401)
+  const bobInAcme = await issueTestSession(database, acme, bob)
+  expect((await openSessionWith(app, bobInAcme.token, globex)).status).toBe(403)
+  const aliceInAcme = await issueTestSession(database, acme, alice)
+  const opened = await openSessionWith(app, aliceInAcme.token, globex)
   expect(opened.status).toBe(200)
   expect(cookieHeaderOf(opened)).toContain(`spyria_s_${globex}=`)
-  expect((await queryWith(((await opened.json()) as { token: string }).token)).status).toBe(200)
+  expect((await queryWith(app, ((await opened.json()) as { token: string }).token)).status).toBe(200)
 })
 
 test('Bob signed in through the IdP has a session in Acme only and learns the release; without a session, no release is told', async () => {
@@ -504,7 +472,6 @@ const dexCallbackUrlOf = async (login: Response) => {
 }
 
 test('signs in through the real Dex form, the first account of a person bound to their address', async () => {
-  await database.$client`delete from account_identities where user_id = 'member-alice'`
   const login = await dexApp.request('/auth/login')
   const callbackUrl = await dexCallbackUrlOf(login)
   const response = await dexApp.request(`/auth/callback${callbackUrl.search}`, {

@@ -18,7 +18,7 @@ const installHostTokenLength = 16
 const unbiasedByteLimit = 256 - (256 % claimCodeAlphabet.length)
 const deploymentPattern = /^[a-z0-9][a-z0-9-]{0,40}$/
 
-export const newSecret = () => randomBytes(32).toString('hex')
+const newSecret = () => randomBytes(32).toString('hex')
 
 export const newInstallHostToken = () => {
   let token = ''

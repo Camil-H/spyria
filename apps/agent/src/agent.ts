@@ -170,7 +170,6 @@ const restartedNotice = 'The agent restarted; send your message again'
 const restartCallToAction = 'If it happens again, restart the session'
 const errorSummaryCharacters = 300
 const adapterCloseWaitMilliseconds = 2_000
-const rememberedPromptCount = 50
 
 const inheritedEnvironmentOf = (): Record<string, string> =>
   Object.fromEntries(inheritedEnvironment.flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : [])))
@@ -195,11 +194,6 @@ const errorUpdateOf = (error: unknown) => ({
 const isDeadSession = (error: unknown) =>
   error instanceof AcpError &&
   (error.code === internalError || exitedUnexpectedly.test(`${error.message} ${error.details ?? ''}`))
-
-const rememberPrompt = ({ turnEnds }: Conversation, promptId: string) => {
-  turnEnds.set(promptId, undefined)
-  for (const oldest of [...turnEnds.keys()].slice(0, -rememberedPromptCount)) turnEnds.delete(oldest)
-}
 
 const secretsOf = ({ secrets }: Launch) => Object.values(secrets ?? {}).map((secret) => String(secret?.value ?? ''))
 
@@ -334,6 +328,7 @@ export const startAgent = ({
   packageCacheDirectory = '/var/cache/spyria',
   snapshotDirectory = '/var/lib/spyria/snapshot',
   attachmentsDirectory = '/workspace/attachments',
+  rememberedPromptCount = 50,
 }: {
   apiKey: string
   port: number
@@ -348,6 +343,7 @@ export const startAgent = ({
   packageCacheDirectory?: string
   snapshotDirectory?: string
   attachmentsDirectory?: string
+  rememberedPromptCount?: number
 }) => {
   const packageCacheEnvironment = packageCacheEnvironmentOf(packageCacheDirectory)
   const checkoutDirectories = { snapshot: snapshotDirectory, home: homeDirectory }
@@ -366,6 +362,10 @@ export const startAgent = ({
   const checkouts = new Map<string, ReturnType<typeof checkOut>>()
   const setups = new Map<string, Promise<void>>()
   const runningSetups = new Map<string, string>()
+  const rememberPrompt = ({ turnEnds }: Conversation, promptId: string) => {
+    turnEnds.set(promptId, undefined)
+    for (const oldest of [...turnEnds.keys()].slice(0, -rememberedPromptCount)) turnEnds.delete(oldest)
+  }
   let preparation: Preparing | undefined
   const apiKeyBytes = Buffer.from(apiKey)
   const isApiKey = (given: unknown) => {

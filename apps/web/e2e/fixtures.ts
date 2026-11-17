@@ -1,5 +1,5 @@
-import { expect, type Locator, type Page } from '@playwright/test'
-import { test, type WorkerStack } from './stack.ts'
+import { type Browser, expect, type Locator, type Page } from '@playwright/test'
+import { openPageAs, test, type WorkerStack } from './stack.ts'
 import { serverUrl } from './stack-ports.ts'
 
 export * from '@playwright/test'
@@ -37,15 +37,6 @@ export const agentReplyText = 'Understood, working on it.'
 export const research = 'chat-research'
 export const blockedNotice = 'Connect an LLM key in your profile to prompt'
 export const signedInMachine = { owner: 'member-alice', signedIn: 'claude-code' }
-
-export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
-  expect
-    .poll(
-      async () =>
-        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
-          ?.agent_conversation_id,
-    )
-    .toBeTruthy()
 
 export const addParticipant = async (workerStack: WorkerStack, chatId: string, memberId: string, roleId: string) => {
   await expect
@@ -174,6 +165,14 @@ export const addLlmKey = async (page: Page, provider: string, secret = `fake-key
       .filter({ hasText: provider })
       .filter({ hasText: `••••${secret.slice(-4)}` }),
   ).toBeVisible()
+}
+export const openPrompterWithKey = async (browser: Browser, workerStack: WorkerStack, chatId: string) => {
+  await addParticipant(workerStack, chatId, 'member-bob', 'prompter')
+  const [chat] = await workerStack.database.$client<{ name: string }[]>`select name from chats where id = ${chatId}`
+  const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+  await addLlmKey(bobPage, 'Mistral')
+  await openChat(bobPage, chat?.name ?? '')
+  return bobPage
 }
 
 export const openSettings = async (page: Page, cardTitle: string) => {

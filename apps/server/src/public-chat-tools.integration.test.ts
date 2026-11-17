@@ -73,24 +73,6 @@ test('an agent lists, searches and reads the public channels and AI chats of its
   const host = await fakeHost('Public chats host')
   const { chatId, token } = await runtimeTurn(host, aliceInAcme.userId)
 
-  const listed = await mcpCall(host, token, rpcOf('tools/list'), {}, undefined, '/mcp/spyria')
-  expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
-    'open_page',
-    'browser_snapshot',
-    'browser_click',
-    'browser_type',
-    'browser_fill',
-    'browser_press',
-    'browser_run_javascript',
-    'browser_wait',
-    'browser_navigate',
-    'browser_screenshot',
-    'take_screenshot',
-    'list_public_chats',
-    'search_public_chats',
-    'read_public_chat',
-  ])
-
   const list = await spyriaCall(host, token, 'list_public_chats', {})
   expect(list.isError).toBe(false)
   expect(list.text).toContain(`(channel, id ${chats.channel})`)

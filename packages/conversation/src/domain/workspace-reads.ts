@@ -1,4 +1,4 @@
-export const workspaceReads = ['tree', 'file', 'changes', 'commits', 'status'] as const
+const workspaceReads = ['tree', 'file', 'changes', 'commits', 'status'] as const
 export type WorkspaceRead = (typeof workspaceReads)[number]
 type WorkspaceSnapshot = { tree?: object; changes?: object; commits?: object; status?: object }
 export type WorkspaceReading = Readonly<{ isLive: boolean; [field: string]: unknown }>

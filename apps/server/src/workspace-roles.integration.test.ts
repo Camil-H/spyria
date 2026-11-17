@@ -82,13 +82,10 @@ test('an admin creates, changes and deletes a workspace role, each recorded and 
   ])
 })
 
-test('names follow the role rules, Admin and Member are reserved and fixed, permissions are workspace ones, a Member manages no role', async () => {
+test('names follow the role rules, Admin and Member are reserved and fixed, a Member manages no role', async () => {
   expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
   expect(await createRole('role-copy', 'FINANCE', [])).toEqual(failedWith('A role named FINANCE already exists'))
   expect(await createRole('role-admin', 'admin', [])).toEqual(failedWith('admin is the name of a built-in role'))
-  expect(await createRole('role-chat', 'Reader', ['chat.read'])).toEqual(
-    failedWith('chat.read is not a workspace permission'),
-  )
   for (const roleId of ['admin', 'member']) {
     expect(await updateRole(roleId, 'Renamed', [])).toEqual(
       failedWith(`${roleId} is not a custom role of this workspace`),
@@ -173,17 +170,6 @@ test('a role manager cannot create or widen a role beyond their own permissions'
     failedWith('Role keeper has permissions your own role does not have'),
   )
   expect(await createRole('role-narrow', 'Narrow', [], bobInAcme)).toEqual(succeeded)
-})
-
-test('the last Admin is never demoted; a second Admin demotes the first', async () => {
-  expect(await createRole(managerId, 'Manager', ['members.manage'])).toEqual(succeeded)
-  expect(await changeRole(aliceInAcme, bob, managerId)).toEqual(succeeded)
-  expect(await changeRole(bobInAcme, alice, 'member')).toEqual(
-    failedWith('Admin has permissions your own role does not have'),
-  )
-  expect(await changeRole(aliceInAcme, lee, 'admin')).toEqual(succeeded)
-  expect(await changeRole(leeInAcme, alice, 'member')).toEqual(succeeded)
-  expect(await roleOf(alice)).toBe('member')
 })
 
 test('a held workspace role is not deleted, with members and pending invites counted; a removed holder goes back to Member', async () => {

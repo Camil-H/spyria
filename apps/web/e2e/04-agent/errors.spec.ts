@@ -2,6 +2,7 @@ import {
   addLlmKey,
   agentReplyText,
   expect,
+  foldOf,
   llmSectionOf,
   mainOf,
   messageContaining,
@@ -58,16 +59,20 @@ test.describe('Errors', () => {
     await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
   })
 
-  test('As a prompter, I see a provider error once with the relay’s notice, and an error the relay did not see with the agent’s own message', {
-    tag: ['@spec-25', '@stage-e'],
+  test('As a prompter, I see a provider error once with the relay’s notice outside the folded steps before it, and an error the relay did not see with the agent’s own message', {
+    tag: ['@spec-10', '@spec-25', '@stage-e'],
   }, async ({ page, agentScript }) => {
     const chatId = await newRuntimeChat(page, 'Pi errors')
-    await agentScript(chatId, { steps: [{ fail: 'The model is overloaded' }] })
+    await agentScript(chatId, {
+      steps: [{ command: 'echo one' }, { command: 'echo two' }, { fail: 'The model is overloaded' }],
+    })
     await sendMessage(page, 'Try anyway')
     const errors = messageItemsOf(page).getByRole('alert')
     await expect(errors).toHaveCount(1)
     await expect(errors).toContainText('The provider is unavailable, try again shortly')
     await expect(workingIndicatorOf(page)).toHaveCount(0)
+    await expect(foldOf(page, 2)).toHaveAttribute('aria-expanded', 'false')
+    await expect(mainOf(page)).not.toContainText('$ echo one')
     await expect(mainOf(page)).not.toContainText('The agent stopped with an error')
 
     await sendMessage(page, 'stub:provider-error')

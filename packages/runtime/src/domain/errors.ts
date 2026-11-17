@@ -1,6 +1,6 @@
 import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
-export class RuntimeError extends DomainError {}
+class RuntimeError extends DomainError {}
 
 export class HostRefused extends RuntimeError {}
 

@@ -63,6 +63,8 @@ const outputOf = async (path: string, workspaceId: string, userId: string) => {
   return { status: response.status, body: await response.text() }
 }
 const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
+const removeLlmKeysOf = (userId: string) =>
+  database.$client`delete from llm_credentials where workspace_id = ${acme} and user_id = ${userId}`
 
 test('a prompt starts the runtime, creates one Pi conversation with the runtime LLM token and is answered once', async () => {
   const { relay, launches } = await agentHost()
@@ -321,7 +323,7 @@ test('starting a runtime from a runtime chat message is refused and that chat’
   ])
 })
 
-test('each step is stored once and updated by its final call, the full command output stays in its workspace, and a rebuild matches', async () => {
+test('each step is stored once and updated by its final call, the started session reaches viewers live as sessionStarted and is stored, the full command output stays in its workspace, and a rebuild matches', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const viewer = await openStream(chat)
@@ -343,6 +345,14 @@ test('each step is stored once and updated by its final call, the full command o
   expect(live.at(-1)?.body).toContain('Hello from the stub')
   const stored = await storedAgentEventsOf(chat)
   expect(new Set(stored.map((event) => event.id)).size).toBe(stored.length)
+  const storedUpdates = stored.map(
+    (event) => (event.payload as { event: { update?: { sessionUpdate?: string } } }).event.update?.sessionUpdate,
+  )
+  expect(storedUpdates).toContain('session_started')
+  const sessionStartsIn = (frames: string[]) =>
+    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.sessionStarted !== undefined)
+  await waitFor(() => sessionStartsIn(viewer.frames).length === 1)
+  expect(sessionStartsIn(viewer.frames)).toEqual([{ chatId: chat, sessionStarted: true }])
   expect(viewer.frames.map((frame) => JSON.parse(frame))).toContainEqual(
     expect.objectContaining({ promptId: question, text: 'Thinking ', isReasoning: true }),
   )
@@ -409,11 +419,13 @@ test('stream frames reach browsers of the chat workspace only, and no secret rea
   }
 })
 
-test('a viewer more than 4 MiB behind is closed so its browser reconnects and catches up; other viewers stream on', async () => {
+test('a viewer more than 4 MiB behind is closed so its browser reconnects and catches up; other viewers stream on, and one that left and reopened the chat on the same socket gets each word once', async () => {
   await agentHost()
   const chat = await newRuntimeChat()
   const steadyViewer = await openStream(chat)
   await steadyViewer.subscribed
+  await steadyViewer.resubscribe()
+  await steadyViewer.resubscribe()
   const slowFrames: Record<string, unknown>[] = []
   const closes: unknown[][] = []
   let bufferedBytes = 0
@@ -440,38 +452,6 @@ test('a viewer more than 4 MiB behind is closed so its browser reconnects and ca
   expect(closes).toEqual([[4008, 'Too slow; reconnect to catch up']])
   const steadyText = steadyViewer.frames.flatMap((frame) => JSON.parse(frame).text ?? []).join('')
   expect(steadyText).toBe(replyOf(1).body)
-})
-
-test('a browser that leaves and reopens a chat on the same socket gets each streamed word once', async () => {
-  await agentHost()
-  const chat = await newRuntimeChat()
-  const viewer = await openStream(chat)
-  await viewer.subscribed
-  await viewer.resubscribe()
-  await viewer.resubscribe()
-  const question = await prompt(chat, 'Stream once')
-  await answered(question)
-  await turnEnded(chat)
-
-  const texts = viewer.frames.map((frame) => JSON.parse(frame)).flatMap((frame) => frame.text ?? [])
-  expect(texts.join('')).toBe(replyOf(1).body)
-})
-
-test('a started agent session reaches viewers live as sessionStarted and is still stored', async () => {
-  await agentHost()
-  const chat = await newRuntimeChat()
-  const viewer = await openStream(chat)
-  await viewer.subscribed
-  await answered(await prompt(chat, 'Hello'))
-  await turnEnded(chat)
-  const sessionStartsIn = (frames: string[]) =>
-    frames.map((frame) => JSON.parse(frame)).filter((frame) => frame.sessionStarted !== undefined)
-  await waitFor(() => sessionStartsIn(viewer.frames).length === 1)
-  expect(sessionStartsIn(viewer.frames)).toEqual([{ chatId: chat, sessionStarted: true }])
-  const storedUpdates = (await storedAgentEventsOf(chat)).map(
-    (event) => (event.payload as { event: { update?: { sessionUpdate?: string } } }).event.update?.sessionUpdate,
-  )
-  expect(storedUpdates).toContain('session_started')
 })
 
 test('Restart session tells viewers the session started again on an idle chat whose event socket closed, and that it starts on the next message when there is none', async () => {
@@ -616,6 +596,7 @@ test('a failed start and a turn error each end with one notice and no endless tu
 })
 
 test('a member without an LLM key cannot prompt a runtime chat, and still posts in a channel', async () => {
+  await removeLlmKeysOf(bob)
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const send = (chatId: string) =>
     mutate(bobInAcme, 'conversation.sendMessage', {
@@ -629,11 +610,7 @@ test('a member without an LLM key cannot prompt a runtime chat, and still posts 
   expect(await send('chat-welcome')).toEqual(succeeded)
 })
 
-const queuedPrompt = async (
-  chat: string,
-  authorId: string,
-  beforeTurn: (sql: typeof database.$client) => unknown = () => undefined,
-) => {
+const queuedPrompt = async (chat: string, authorId: string, beforeTurn: (sql: typeof database.$client) => unknown) => {
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client.begin(async (sql) => {
     await sql`
@@ -650,15 +627,26 @@ const queuedPrompt = async (
   return promptId
 }
 
-test('a prompt whose author has no LLM key at turn time ends with Spyria’s notice without reaching the agent', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
-  const promptId = await queuedPrompt(chat, bob)
-  await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob has no LLM key in this workspace' }])
-  expect(relay.prompts).toEqual([])
-  expect(await turnOf(chat)).toBeNull()
-})
+test.each<[string, (sql: typeof database.$client, chat: string) => unknown, string]>([
+  ['whose author has no LLM key', () => undefined, 'Bob has no LLM key in this workspace'],
+  [
+    'whose prompter was removed after posting',
+    (sql, chat) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
+    'Bob can no longer prompt in this chat',
+  ],
+])(
+  'a prompt %s is refused at turn time with Spyria’s notice, without reaching the agent',
+  async (_, beforeTurn, notice) => {
+    await removeLlmKeysOf(bob)
+    const { relay } = await agentHost()
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
+    const promptId = await queuedPrompt(chat, bob, (sql) => beforeTurn(sql, chat))
+    await answered(promptId)
+    expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: notice }])
+    expect(relay.prompts).toEqual([])
+    expect(await turnOf(chat)).toBeNull()
+  },
+)
 
 test('a model failure recorded by the relay shows as the error at the turn end, after the agent’s text', async () => {
   const { relay } = await agentHost()
@@ -674,20 +662,6 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
     type: 'error',
     message: 'The LLM key of Alice was refused',
   })
-})
-
-test('a prompter removed after posting is refused at turn time with Spyria’s notice, without reaching the agent', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
-  const promptId = await queuedPrompt(
-    chat,
-    bob,
-    (sql) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
-  )
-  await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob can no longer prompt in this chat' }])
-  expect(relay.prompts).toEqual([])
-  expect(await turnOf(chat)).toBeNull()
 })
 
 test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
@@ -715,12 +689,11 @@ test('a command output of a chat that does not exist is refused like one the mem
 test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
   'watching the agent stream needs chat.read, a refused watch gets nothing: $name',
   async (role) => {
-    const viewer = await openStream(await chatAs(role), { token: await sessionTokenOf(database, acme, role.userId) })
-    const isSubscribed = await Promise.race([
-      viewer.subscribed.then(() => true),
-      Bun.sleep(role.isAllowed ? 5_000 : 6_000).then(() => false),
-    ])
-    expect(isSubscribed).toBe(role.isAllowed)
+    const chat = await chatAs(role)
+    const chatTheMemberOwns = await newRuntimeChat({ ownerId: role.userId })
+    const viewer = await openStream(chat, { token: await sessionTokenOf(database, acme, role.userId) })
+    await viewer.subscribeTo(chatTheMemberOwns)
+    expect(viewer.subscribedChatIds).toEqual(role.isAllowed ? [chat, chatTheMemberOwns] : [chatTheMemberOwns])
     expect(viewer.frames).toEqual([])
   },
 )
@@ -765,68 +738,69 @@ test.each([
   },
 )
 
-test('signing out closes the stream of that session at once and leaves the other sessions of the member streaming', async () => {
-  const chat = await newRuntimeChat()
-  const signedOut = await issueTestSession(database, acme, alice)
-  const signedOutViewer = await openStream(chat, { token: signedOut.token })
-  const otherViewer = await openStream(chat)
-  await Promise.all([signedOutViewer.subscribed, otherViewer.subscribed])
-  const logout = await app.request('/auth/logout', {
-    method: 'POST',
-    headers: {
-      origin: testAuthSettings.appOrigin,
-      'x-spyria-csrf': '1',
-      'content-type': 'application/json',
-      cookie: `spyria_s_${acme}=${signedOut.sessionId}`,
-    },
-    body: JSON.stringify({ workspaceId: acme }),
-  })
-  expect(logout.status).toBe(204)
-  expect(await signedOutViewer.closed).toBe(4001)
-  await otherViewer.resubscribe()
-})
-
-test('a stream closes once its session ends by any path, such as an SSO change or an operator command deleting it, and other sessions stream on', async () => {
-  const chat = await newRuntimeChat()
-  const ending = await issueTestSession(database, acme, alice)
-  const endingViewer = await openStream(chat, { token: ending.token })
-  const otherViewer = await openStream(chat)
-  await Promise.all([endingViewer.subscribed, otherViewer.subscribed])
-  await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId}`
-  expect(await endingViewer.closed).toBe(4001)
-  await otherViewer.resubscribe()
-})
-
-test.each<[string, (bobToken: string) => Promise<unknown>, unknown]>([
+type EndingSession = { sessionId: string; token: string }
+test.each<[string, (ending: EndingSession) => Promise<unknown>, unknown, boolean]>([
   [
-    'signs out everywhere',
-    async (bobToken) =>
+    'signing out',
+    async (ending) =>
       (
-        await app.request('/auth/sign-out-everywhere', {
+        await app.request('/auth/logout', {
           method: 'POST',
-          headers: { authorization: `Bearer ${bobToken}` },
+          headers: {
+            origin: testAuthSettings.appOrigin,
+            'x-spyria-csrf': '1',
+            'content-type': 'application/json',
+            cookie: `spyria_s_${acme}=${ending.sessionId}`,
+          },
+          body: JSON.stringify({ workspaceId: acme }),
         })
       ).status,
     204,
+    false,
   ],
   [
-    'is signed out everywhere by an admin',
+    'deleting the session, as an SSO change or an operator command does',
+    async (ending) =>
+      (
+        await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId} returning id`
+      ).length,
+    1,
+    false,
+  ],
+  [
+    'signing out everywhere',
+    async (ending) =>
+      (
+        await app.request('/auth/sign-out-everywhere', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${ending.token}` },
+        })
+      ).status,
+    204,
+    true,
+  ],
+  [
+    'an admin ending every session of the member',
     () => mutate(aliceInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob }),
     succeeded,
+    true,
   ],
-])('every stream of a member who %s closes at once, and other members stream on', async (_, signOut, outcome) => {
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
-  const bobToken = await sessionTokenOf(database, acme, bob)
-  const bobViewers = [
-    await openStream(chat, { token: bobToken }),
-    await openStream(chat, { token: await sessionTokenOf(database, acme, bob) }),
-  ]
-  const aliceViewer = await openStream(chat)
-  await Promise.all([...bobViewers, aliceViewer].map((viewer) => viewer.subscribed))
-  expect(await signOut(bobToken)).toEqual(outcome)
-  for (const viewer of bobViewers) expect(await viewer.closed).toBe(4001)
-  await aliceViewer.resubscribe()
-})
+])(
+  '%s closes the streams of the sessions it ends at once, and other sessions and members stream on',
+  async (_, endSession, outcome, endsEverySessionOfTheMember) => {
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+    const ending = await issueTestSession(database, acme, bob)
+    const endingViewer = await openStream(chat, { token: ending.token })
+    const otherSessionViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
+    const aliceViewer = await openStream(chat)
+    await Promise.all([endingViewer, otherSessionViewer, aliceViewer].map((viewer) => viewer.subscribed))
+    expect(await endSession(ending)).toEqual(outcome)
+    expect(await endingViewer.closed).toBe(4001)
+    if (endsEverySessionOfTheMember) expect(await otherSessionViewer.closed).toBe(4001)
+    else await otherSessionViewer.resubscribe()
+    await aliceViewer.resubscribe()
+  },
+)
 
 test('a stream closes when its token expires and stays open when a renewed token arrives first', async () => {
   const chat = await newRuntimeChat()
@@ -853,14 +827,18 @@ test.each([
 
 test('removing the owner of a runtime chat closes their stream, stops the turn and the runtime, and freezes the chat until an admin transfers it', async () => {
   await agentHost()
-  const chat = await newRuntimeChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
+  const owner = `member-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${owner}, ${`${owner}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${owner}, 'member', 'Dana')`
+  const chat = await newRuntimeChat({ ownerId: owner, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const aliceViewer = await openStream(chat)
-  const bobViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
-  await Promise.all([aliceViewer.subscribed, bobViewer.subscribed])
+  const ownerViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, owner) })
+  await Promise.all([aliceViewer.subscribed, ownerViewer.subscribed])
   const question = await prompt(chat, 'stub:linger Stream until the owner leaves')
   await holds.reached('linger')
-  expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(succeeded)
-  await bobViewer.closed
+  expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: owner })).toEqual(succeeded)
+  await ownerViewer.closed
   await turnEnded(chat)
   expect(await repliesTo(question)).toContainEqual({ kind: 'notice', body: 'Stopped by Alice' })
   await waitFor(async () => (await runtimeOf(chat)).state === 'stopped')

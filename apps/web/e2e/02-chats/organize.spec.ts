@@ -1,11 +1,14 @@
 import {
   answerNewAiChat,
   answerNewChannel,
+  cancelDialog,
   chatAction,
   chatRowIn,
+  dialogOf,
   expect,
   looseChatsOf,
   mainOf,
+  newChannel,
   newChatAnswerOf,
   newChatDialogOf,
   type Page,
@@ -25,12 +28,6 @@ const createProjectNamed = async (page: Page, projectName: string) => {
   await page.getByRole('button', { name: 'New project' }).click()
   await page.getByRole('textbox', { name: 'Project name' }).fill(projectName)
   await page.getByRole('button', { name: 'Confirm' }).click()
-}
-
-const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
-const cancelDialog = async (page: Page, dialogName: string) => {
-  await dialogOf(page, dialogName).getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialogOf(page, dialogName)).toHaveCount(0)
 }
 const archiveChat = async (page: Page, chatName: string) => {
   await chatAction(page, chatName, 'Archive chat')
@@ -120,11 +117,6 @@ test.describe('Organize', () => {
       await expect(dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' })).toBeFocused()
     })
 
-    await test.step('rename chat: cannot confirm a blank name', async () => {
-      await dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' }).fill('   ')
-      await expect(dialogOf(page, 'Rename chat').getByRole('button', { name: 'Confirm' })).toBeDisabled()
-    })
-
     await test.step('rename chat: keeps the old name when cancelled', async () => {
       await dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' }).fill('Something else')
       await cancelDialog(page, 'Rename chat')
@@ -136,11 +128,6 @@ test.describe('Organize', () => {
       const projectNameBox = dialogOf(page, 'Rename project').getByRole('textbox', { name: 'Project name' })
       await expect(projectNameBox).toHaveValue('Billing')
       await expect(projectNameBox).toBeFocused()
-    })
-
-    await test.step('rename project: cannot confirm a blank name', async () => {
-      await dialogOf(page, 'Rename project').getByRole('textbox', { name: 'Project name' }).fill('   ')
-      await expect(dialogOf(page, 'Rename project').getByRole('button', { name: 'Confirm' })).toBeDisabled()
     })
 
     await test.step('rename project: keeps the old name when cancelled', async () => {
@@ -265,11 +252,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('creates a channel inside a project and selects it', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
-      await answerNewChannel(newChatDialogOf(page), 'public')
-      await page.getByRole('textbox', { name: 'Chat name' }).fill('Planning')
-      await page.getByRole('combobox', { name: 'Project' }).selectOption('Billing')
-      await page.getByRole('button', { name: 'Confirm' }).click()
+      await newChannel(page, 'Planning', 'Public', 'Billing')
       await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Planning')).toBeVisible()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
       await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()

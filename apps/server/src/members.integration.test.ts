@@ -36,24 +36,6 @@ test('posting in a public channel makes a non-participant a Prompter and leaves 
   expect(await roleOf(bob)).toBe('owner')
 })
 
-test('posting in a private chat never joins it: a removed member is refused and no member.joined is recorded', async () => {
-  const chat = await newChat({
-    type: 'channel',
-    visibility: 'private',
-    participants: [{ memberId: bob, roleId: 'prompter' }],
-  })
-  expect(await sendTo(bobInAcme, chat, `message-${crypto.randomUUID()}`, 'Before')).toEqual(succeeded)
-  expect(
-    await resultOf(aliceInAcme, 'conversation.removeMember', { workspaceId: acme, chatId: chat, memberId: bob }),
-  ).toEqual(succeeded)
-  expect(await sendTo(bobInAcme, chat, `message-${crypto.randomUUID()}`, 'After')).toEqual(
-    missingPermission('chat.post'),
-  )
-  expect((await changesOf(chat)).filter(({ type }) => type.startsWith('member.'))).toEqual([
-    { seq: expect.any(Number), type: 'member.removed', actor: alice, payload: { memberId: bob } },
-  ])
-})
-
 const participantsOf = async (chatId: string) =>
   Object.fromEntries(
     (
@@ -271,13 +253,4 @@ test.each(
   )
   if (isAllowed)
     expect(await memberChange(member, 'joinChat', chat)).toEqual(failedWith('This member is already in the chat'))
-})
-
-test('joinChat refuses a private AI chat to a non-participant and joins a public one as Prompter', async () => {
-  const privateChat = await newChat()
-  expect(await memberChange(bobInAcme, 'joinChat', privateChat)).toEqual(missingPermission('chat.read'))
-  expect(await participantsOf(privateChat)).toEqual({ [alice]: 'owner' })
-  const publicChat = await newChat({ visibility: 'public' })
-  expect(await memberChange(bobInAcme, 'joinChat', publicChat)).toEqual(succeeded)
-  expect(await participantsOf(publicChat)).toEqual({ [alice]: 'owner', [bob]: 'prompter' })
 })

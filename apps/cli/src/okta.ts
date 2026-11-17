@@ -1,4 +1,4 @@
-export class OktaRefused extends Error {}
+class OktaRefused extends Error {}
 
 type OktaApp = {
   id: string

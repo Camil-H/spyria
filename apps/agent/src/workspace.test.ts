@@ -140,7 +140,8 @@ test('a file edited to the same size in the second its checkout wrote the index 
   write(racy, { 'src/app.ts': 'export const total = 2\n' })
   const { mtime } = statSync(join(racy, '.git', 'index'))
   utimesSync(join(racy, 'src/app.ts'), mtime, mtime)
-  await Bun.sleep(1100)
+  const justPastTheIndexSecond = Math.floor(mtime.getTime() / 1000) * 1000 + 1010
+  await Bun.sleep(justPastTheIndexSecond - Date.now())
   const { call } = started({ workspaceDirectory: racy })
   const { body } = await call('GET', '/api/workspace/changes?base=main')
   expect(body.files).toBe('M\0src/app.ts\0')

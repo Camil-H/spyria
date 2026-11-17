@@ -6,9 +6,9 @@ export type DiffLine = {
   oldNumber: number | null
   newNumber: number | null
 }
-export type DiffRow = { left: DiffLine | null; right: DiffLine | null }
+type DiffRow = { left: DiffLine | null; right: DiffLine | null }
 export type DiffLayout = 'unified' | 'split'
-export type FileStatus = 'Added' | 'Modified' | 'Deleted'
+type FileStatus = 'Added' | 'Modified' | 'Deleted'
 export type ChangedFile = { path: string; status: FileStatus }
 export type FileChange = ChangedFile & { additions: number; deletions: number; lines: DiffLine[] }
 export type TreeEntry = { name: string; path: string; isFolder: boolean }

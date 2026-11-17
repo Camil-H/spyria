@@ -1,47 +1,30 @@
 import type { WorkerStack } from '../stack'
 import {
   agentReplyText,
+  boundingBoxOf,
   chatLinkOf,
+  chatMenuButtonOf,
+  composerOf,
+  draftIconOf,
   expect,
   messageContaining,
   messageItemsOf,
   openChat,
+  postMessages,
   research,
   sendMessage,
+  setChatRole,
   sidebarOf,
   switchWorkspace,
   test,
   unreadIconOf,
 } from './fixtures'
 
-const agentStoppedWithError = async (workerStack: WorkerStack, chatId: string) => {
-  await workerStack.database.$client.begin(async (sql) => {
-    await sql`select 1 from chats where id = ${chatId} for update`
-    await sql`
-      with agent_rows as (
-        select id, kind, body, greatest(
-          (select coalesce(max(seq), 0) from events where chat_id = ${chatId}),
-          (select coalesce(max(seq), 0) from messages where chat_id = ${chatId})
-        ) + number as seq
-        from (values (1, 'reply-before-failure', 'agent', 'Looking into it.'),
-          (2, 'failure-notice', 'notice', 'The agent stopped with an error')) as row (number, id, kind, body)
-      ), posted as (
-        insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-        select 'workspace-acme', ${chatId}, id, seq, 'message.posted', null,
-          jsonb_build_object('kind', kind, 'body', body, 'replyToId', null), now()
-        from agent_rows
-      )
-      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      select 'workspace-acme', ${chatId}, id, seq, kind, null, body, now() from agent_rows`
-  })
-}
-
-const makeAliceAdminOf = async (workerStack: WorkerStack, chatId: string) => {
-  await workerStack.database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-    values ('workspace-acme', ${chatId}, 'member-alice', 'owner')
-    on conflict (workspace_id, chat_id, user_id) do update set role_id = 'owner'`
-}
+const agentStoppedWithError = (workerStack: WorkerStack, chatId: string) =>
+  postMessages(workerStack, chatId, [
+    { id: 'reply-before-failure', kind: 'agent', authorId: null, body: 'Looking into it.' },
+    { id: 'failure-notice', kind: 'notice', authorId: null, body: 'The agent stopped with an error' },
+  ])
 
 test.describe('Unread', () => {
   test.beforeEach(async ({ page }) => {
@@ -49,7 +32,7 @@ test.describe('Unread', () => {
   })
 
   test('As a member, I see which chats have unread messages, per workspace', async ({ page, workerStack }) => {
-    await makeAliceAdminOf(workerStack, 'chat-standup')
+    await setChatRole(workerStack, 'chat-standup', 'member-alice', 'owner')
     await test.step('shows the icon on chats with unread messages only', async () => {
       await expect(unreadIconOf(page, 'Standup')).toBeVisible()
       await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
@@ -115,12 +98,15 @@ test.describe('Unread', () => {
     })
   })
 
-  test('As a member, the unread icon of a runtime chat shows when its agent stopped with an error, and a channel keeps the plain icon', async ({
+  test('As a member, the unread icon of a runtime chat shows when its agent stopped with an error, beside my draft and distinct from it, and a channel keeps the plain icon', async ({
     page,
     workerStack,
   }) => {
-    await makeAliceAdminOf(workerStack, 'chat-standup')
-    await openChat(page, 'Welcome')
+    await setChatRole(workerStack, 'chat-standup', 'member-alice', 'owner')
+    await openChat(page, 'Research')
+    await composerOf(page).fill('Draft for later')
+    await chatLinkOf(page, 'Welcome').click()
+    await expect(draftIconOf(page, 'Research')).toBeVisible()
     await agentStoppedWithError(workerStack, research)
 
     await test.step('names the error in the icon and its tooltip', async () => {
@@ -139,5 +125,23 @@ test.describe('Unread', () => {
       await expect(unreadIconOf(page, 'Standup')).toHaveAccessibleName('Unread messages')
       expect(await colorOf('Research')).not.toBe(await colorOf('Standup'))
     })
+
+    await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
+      const unreadBox = await boundingBoxOf(unreadIconOf(page, 'Research'))
+      const draftBox = await boundingBoxOf(draftIconOf(page, 'Research'))
+      const menuButtonBox = await boundingBoxOf(chatMenuButtonOf(page, 'Research'))
+      expect(unreadBox.x + unreadBox.width).toBeLessThanOrEqual(draftBox.x)
+      expect(draftBox.x + draftBox.width).toBeLessThanOrEqual(menuButtonBox.x)
+    })
+
+    for (const colorScheme of ['light', 'dark'] as const)
+      await test.step(`distinguishes the agent status icon from the pencil in ${colorScheme} mode`, async () => {
+        await page.emulateMedia({ colorScheme })
+        const colorOf = (iconName: string) =>
+          chatLinkOf(page, 'Research')
+            .getByRole('img', { name: iconName })
+            .evaluate((icon) => getComputedStyle(icon).color)
+        expect(await colorOf('Unread messages')).not.toBe(await colorOf('Has unsent draft'))
+      })
   })
 })

@@ -92,7 +92,9 @@ for (const step of steps) {
     log(`\n${step} exited but a process it started still holds its output; not waiting for it\n`)
     for (const reader of readers) void reader.cancel()
   }
-  results.push({ step, exitCode, seconds: Math.round((performance.now() - started) / 100) / 10 })
+  const seconds = Math.round((performance.now() - started) / 100) / 10
+  results.push({ step, exitCode, seconds })
+  if (process.env.GITHUB_ACTIONS && step === 'agent:build') log(`::notice title=${step}::${step} took ${seconds} s\n`)
   stopLeftoverTestProcesses(step)
   if (exitCode !== 0) break
 }

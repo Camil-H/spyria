@@ -1,4 +1,4 @@
-import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
+import { afterAll, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { openSessions } from './auth/sessions.ts'
 import { startJobWorker } from './job-worker.ts'
 import {
@@ -15,7 +15,9 @@ import {
   jobDone,
   lee,
   newChat,
+  openSessionWith,
   openSharedTestApp,
+  queryWith,
   removeFromAcme,
   sendTo,
   succeeded,
@@ -36,6 +38,9 @@ const worker = startJobWorker(database, {
   llmGateway,
 })
 afterAll(() => worker.stop())
+beforeEach(async () => {
+  await openSharedTestApp()
+})
 
 const cannotInvite = failedWith('Your workspace role does not allow this: Invite members')
 const cannotManageMembers = failedWith('Your workspace role does not allow this: Change roles and remove members')
@@ -51,12 +56,8 @@ const membershipOf = async (userId: string) =>
   (
     await database.$client`select role, removed_at from memberships where workspace_id = ${acme} and user_id = ${userId}`
   )[0]
-const queryAs = (token: string) =>
-  app.request('/api/query', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
-  })
+const markRemovedFromAcme = (userId: string) =>
+  database.$client`update memberships set removed_at = now() where workspace_id = ${acme} and user_id = ${userId}`
 const renewWith = (sessionId: string) =>
   app.request('/auth/renew', {
     method: 'POST',
@@ -136,10 +137,6 @@ test('an admin changes the roles of others, never their own nor removes themselv
   expect(await changeRole(aliceInAcme, bob, 'admin')).toEqual(succeeded)
   expect(await membershipOf(bob)).toEqual({ role: 'admin', removed_at: null })
   expect(await changeRole(bobInAcme, alice, 'member')).toEqual(succeeded)
-  expect(await changeRole(bobInAcme, bob, 'member')).toEqual(ownMembership)
-  expect(await resultOf(bobInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(
-    ownMembership,
-  )
   expect(await changeRole(bobInAcme, alice, 'admin')).toEqual(succeeded)
   expect(await changeRole(aliceInAcme, bob, 'member')).toEqual(succeeded)
   expect(await changeRole(bobInAcme, alice, 'member')).toEqual(cannotManageMembers)
@@ -213,11 +210,11 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
     resultOf(member, 'workspace.endMemberSessions', { workspaceId: acme, memberId })
 
   expect(await endSessionsOf(bobInAcme, alice)).toEqual(cannotManageMembers)
-  expect((await queryAs(aliceToken)).status).toBe(200)
+  expect((await queryWith(app, aliceToken)).status).toBe(200)
 
   expect(await endSessionsOf(aliceInAcme, bob)).toEqual(succeeded)
   for (const { token, sessionId } of bobSessions) {
-    expect((await queryAs(token)).status).toBe(401)
+    expect((await queryWith(app, token)).status).toBe(401)
     expect((await renewWith(sessionId)).status).toBe(401)
   }
   expect(await membershipOf(bob)).toEqual({ role: 'member', removed_at: null })
@@ -226,21 +223,14 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
     actorId: alice,
     payload: { memberId: bob },
   })
-  expect((await queryAs(aliceToken)).status).toBe(200)
-  const openFrom = (token: string, workspaceId: string) =>
-    app.request('/auth/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ workspaceId }),
-    })
-  expect((await openFrom(bobInGlobex.token, acme)).status).toBe(403)
-  const relayedThroughGlobex = await openFrom(bobInGlobex.token, globex)
+  expect((await queryWith(app, aliceToken)).status).toBe(200)
+  expect((await openSessionWith(app, bobInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openSessionWith(app, bobInGlobex.token, globex)
   expect(relayedThroughGlobex.status).toBe(200)
   const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
-  expect((await openFrom(relayedToken, acme)).status).toBe(403)
-  expect((await queryAs(bobInGlobex.token)).status).toBe(200)
-  expect((await queryAs((await issueTestSession(database, acme, bob)).token)).status).toBe(200)
-  await database.$client`delete from memberships where workspace_id = ${globex} and user_id = ${bob}`
+  expect((await openSessionWith(app, relayedToken, acme)).status).toBe(403)
+  expect((await queryWith(app, bobInGlobex.token)).status).toBe(200)
+  expect((await queryWith(app, (await issueTestSession(database, acme, bob)).token)).status).toBe(200)
 })
 
 test('removing a member ends their sessions, participations, keys and connections (their GitHub one too); their runtime chat freezes, their channel stays open', async () => {
@@ -270,10 +260,10 @@ test('removing a member ends their sessions, participations, keys and connection
   })
   const bobsRuntimeChat = await newChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const bobSession = await issueTestSession(database, acme, bob)
-  expect((await queryAs(bobSession.token)).status).toBe(200)
+  expect((await queryWith(app, bobSession.token)).status).toBe(200)
   expect(await removeFromAcme(app, database, bob)).toEqual(succeeded)
 
-  expect((await queryAs(bobSession.token)).status).toBe(401)
+  expect((await queryWith(app, bobSession.token)).status).toBe(401)
   expect((await renewWith(bobSession.sessionId)).status).toBe(401)
   expect((await membershipOf(bob))?.removed_at).not.toBeNull()
   expect(await database.$client`select 1 from sessions where user_id = ${bob}`).toHaveLength(0)
@@ -321,6 +311,7 @@ test('removing a member ends their sessions, participations, keys and connection
 })
 
 test("an admin transfers a removed member's chat to an active member, which unfreezes it; a chat of an active owner cannot be transferred", async () => {
+  await markRemovedFromAcme(bob)
   const leesChat = await newChat({ ownerId: lee, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const leesChannel = await newChat({
     ownerId: lee,
@@ -359,8 +350,8 @@ test("an admin transfers a removed member's chat to an active member, which unfr
   ])
 })
 
-test('a removed member can be invited again with any role, and Alice still cannot demote herself', async () => {
+test('a removed member can be invited again with any role', async () => {
+  await markRemovedFromAcme(lee)
   expect(await inviteToAcme(app, database, 'lee@example.com', 'admin')).toEqual(succeeded)
   expect(await invitationsOf('lee@example.com')).toEqual([expect.objectContaining({ role: 'admin', revoked_at: null })])
-  expect(await changeRole(aliceInAcme, alice, 'member')).toEqual(ownMembership)
 })

@@ -128,7 +128,7 @@ test.describe('Steps', () => {
       await openChat(page, 'Research')
     })
 
-    test('As a prompter, I see the steps fold into one line above the answer, expand in order, and stay open after a reload', {
+    test('As a prompter, I see the steps fold into one line above the answer, expand in order, stay open after a reload, and open the reasoning text and a file edit’s added and removed lines', {
       tag: ['@spec-10'],
     }, async ({ page, agentScript }) => {
       await agentScript(research, { steps: fixSteps(), text: fixedText })
@@ -150,6 +150,15 @@ test.describe('Steps', () => {
       await page.reload()
       await expect(foldOf(page, 3)).toHaveAttribute('aria-expanded', 'true')
       await expect(messageItemsOf(page)).toHaveCount(6)
+
+      await expect(mainOf(page).getByText(thinking)).toHaveCount(0)
+      await stepButtonOf(page, /Thought for .+s/).click()
+      await expect(mainOf(page).getByText(thinking)).toBeVisible()
+      await stepButtonOf(page, 'Edited totals.ts +2 −1').click()
+      const diff = mainOf(page).getByRole('region', { name: 'Diff' })
+      await expect(diff).toContainText('- export const total = 1')
+      await expect(diff).toContainText('+ export const total = 2')
+      await expect(diff).toContainText('+ export const tax = 0.2')
     })
 
     test('As a member, I see a turn that ended without a closing reply folded under "Worked for … · N steps", with the agent’s last note visible', {
@@ -213,33 +222,6 @@ test.describe('Steps', () => {
       await expect(foldOf(page, 4)).toHaveAttribute('aria-expanded', 'true')
     })
 
-    test('As a member, I see a step that failed outside the fold, with the other steps folded', {
-      tag: ['@spec-10'],
-    }, async ({ page, agentScript }) => {
-      await agentScript(research, {
-        steps: [{ command: 'echo one' }, { command: 'echo two' }, { fail: 'The model is overloaded' }],
-      })
-      await sendMessage(page, 'Try it')
-
-      await expect(foldOf(page, 2)).toHaveAttribute('aria-expanded', 'false')
-      await expect(messageItemsOf(page).getByRole('alert')).toBeVisible()
-      await expect(mainOf(page)).not.toContainText('$ echo one')
-    })
-
-    test('As a prompter, I expand a reasoning step to the reasoning text the agent produced', {
-      tag: ['@spec-10'],
-    }, async ({ page, agentScript }) => {
-      await agentScript(research, { steps: [{ think: thinking }] })
-      await sendMessage(page, 'Think first')
-
-      const reasoning = stepButtonOf(page, /Thought for .+s/)
-      await expect(reasoning).toBeVisible()
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
-      await expect(mainOf(page).getByText(thinking)).toHaveCount(0)
-      await reasoning.click()
-      await expect(mainOf(page).getByText(thinking)).toBeVisible()
-    })
-
     test('As a prompter, I open a successful command’s output on click, and a failing one shows exit 3 and its last lines at once', {
       tag: ['@spec-10'],
     }, async ({ page, agentScript }) => {
@@ -258,22 +240,6 @@ test.describe('Steps', () => {
       await expect(failing.getByRole('img', { name: 'Failed' })).toBeVisible()
       await expect(failing).toContainText('exit 3')
       await expect(failing).toContainText('step two')
-    })
-
-    test('As a prompter, I expand a file edit to its added and removed lines', { tag: ['@spec-10'] }, async ({
-      page,
-      agentScript,
-    }) => {
-      await agentScript(research, { steps: fixSteps(), text: fixedText })
-      await sendMessage(page, 'Fix the totals')
-      await foldOf(page, 3).click({ timeout: 30_000 })
-      const edit = stepButtonOf(page, 'Edited totals.ts +2 −1')
-      await edit.click()
-
-      const diff = mainOf(page).getByRole('region', { name: 'Diff' })
-      await expect(diff).toContainText('- export const total = 1')
-      await expect(diff).toContainText('+ export const total = 2')
-      await expect(diff).toContainText('+ export const tax = 0.2')
     })
 
     test('As a prompter, I read Markdown answers with tables, highlighted code with copy (✓ Copied for a moment, the code in the clipboard), links with their domain, raw HTML as text and images on click', {

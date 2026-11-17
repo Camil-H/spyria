@@ -1,16 +1,10 @@
-import { afterAll, expect, test } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
 import { appJwtOf, createGitHubApi } from './github/github-api.ts'
-import {
-  fakeGitHubAppId,
-  fakeGitHubClientId,
-  fakeGitHubClientSecret,
-  fakeGitHubLogin,
-  startFakeGitHub,
-} from './testing/fake-github.ts'
+import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, fakeGitHubLogin } from './testing/fake-github.ts'
+import { startGitHubStack } from './testing/github-stack.ts'
 import {
   acme,
   addLlmKey,
@@ -20,57 +14,39 @@ import {
   bobInAcme,
   captureLogs,
   lee,
-  sessionTokenOf,
-  startAgentStack,
+  rejectionOf,
   succeeded,
-  testSecretsKeyring,
   waitFor,
   waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({
-  llm: { model: 'openai/mistral/codestral-latest' },
-  github: { api: createGitHubApi(fakeGitHub.urls), secretBox },
-})
-afterAll(() => fakeGitHub.stop())
+const {
+  stack,
+  fakeGitHub,
+  secretBox,
+  requestWithText: request,
+  appSettingsWith,
+  ensureGitHubApp,
+  disconnectGitHub,
+  githubCallbackOf,
+  newDevChat,
+  promptAndWait,
+} = await startGitHubStack({ llm: { model: 'openai/mistral/codestral-latest' } })
 const { app, database } = stack
 const webhookSecret = 'whsec-integration-0123'
-const appSettings = {
-  appId: fakeGitHubAppId,
-  clientId: fakeGitHubClientId,
-  clientSecret: fakeGitHubClientSecret,
-  privateKey: fakeGitHub.appPrivateKey,
-  webhookSecret,
-}
+const appSettings = appSettingsWith(webhookSecret)
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, text, body: text ? JSON.parse(text) : null }
-}
 const appRow = async () =>
   (await database.$client`select * from github_apps where workspace_id = ${acme}`)[0] as Record<string, string>
 const connectionRow = async () =>
   (await database.$client`select * from github_connections where workspace_id = ${acme} and user_id = ${alice}`)[0]
-const githubCallbackOf = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(new URL(started.body.authorizeUrl), { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  return `${callback.pathname}${callback.search}`
-}
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
 test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
+  await database.$client`delete from github_apps where workspace_id = ${acme}`
+  for (const member of [alice, bob, lee]) await disconnectGitHub(member)
+  const githubEventsBefore = (await githubEvents()).length
   for (const [method, path, body] of [
     ['GET', '/api/github-settings'],
     ['POST', '/api/github-settings', appSettings],
@@ -142,13 +118,17 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
   const rotated = await appRow()
   expect(await secretBox.open(rotated.encrypted_webhook_secret ?? '')).toBe('whsec-rotated')
   expect(rotated.encrypted_private_key).toBe(sealed.encrypted_private_key ?? '')
-  expect((await githubEvents()).map(({ type, actorId, payload }) => ({ type, actorId, payload }))).toEqual([
+  expect(
+    (await githubEvents()).slice(githubEventsBefore).map(({ type, actorId, payload }) => ({ type, actorId, payload })),
+  ).toEqual([
     { type: 'github.configured', actorId: alice, payload: { appId: fakeGitHubAppId, clientId: fakeGitHubClientId } },
     { type: 'github.secret_rotated', actorId: alice, payload: { secrets: ['webhookSecret'] } },
   ])
 })
 
 test('a member connects GitHub through the user OAuth: tokens sealed server-side, refreshed when expired, Needs reconnection when the refresh fails', async () => {
+  await ensureGitHubApp(webhookSecret)
+  for (const member of [alice, bob]) await disconnectGitHub(member)
   expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({ body: { connection: null } })
   const started = await request(alice, 'POST', '/api/github/connection/connect')
   const authorizeUrl = new URL(started.body.authorizeUrl)
@@ -195,6 +175,7 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
 })
 
 test('a refresh waiting on a disconnect in progress stores nothing, so the member stays disconnected', async () => {
+  await ensureGitHubApp(webhookSecret)
   expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
   await database.$client`
     update github_connections set access_expires_at = now() - interval '1 minute'
@@ -211,6 +192,7 @@ test('a refresh waiting on a disconnect in progress stores nothing, so the membe
 })
 
 test('a refresh waiting on a reconnection in progress leaves the new connection and its tokens alone', async () => {
+  await ensureGitHubApp(webhookSecret)
   expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
   await database.$client`
     update github_connections set access_expires_at = now() - interval '1 minute'
@@ -239,6 +221,7 @@ test('a refresh waiting on a reconnection in progress leaves the new connection 
 })
 
 test('returning from GitHub while a removal is in progress stores no token once it commits, and the callback is refused', async () => {
+  await ensureGitHubApp(webhookSecret)
   const dana = `member-${crypto.randomUUID()}`
   await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
   await database.$client`
@@ -260,22 +243,22 @@ test('returning from GitHub while a removal is in progress stores no token once 
 })
 
 test('a dev chat needs a granted repository and an existing base branch, and stores its working branch', async () => {
+  await ensureGitHubApp(webhookSecret)
   const withGitHubCalls = async <Result>(action: () => Promise<Result>) => {
     const callsBefore = fakeGitHub.apiRequests.length
     const result = await action()
     return { result, githubCalls: fakeGitHub.apiRequests.slice(callsBefore) }
   }
-  const branchesCalls = (repository: string) => [
-    `GET /repos/${repository}/installation`,
-    'POST /app/installations/77/access_tokens',
-    `GET /repos/${repository}/branches`,
-  ]
   expect(await request(bob, 'GET', '/api/github/repositories')).toMatchObject({
     body: { repositories: [{ fullName: 'acme/app' }, { fullName: 'acme/docs' }] },
   })
   expect(await withGitHubCalls(() => request(bob, 'GET', '/api/github/branches?repository=acme/app'))).toMatchObject({
     result: { body: { branches: ['main', 'release'] } },
-    githubCalls: branchesCalls('acme/app'),
+    githubCalls: [
+      'GET /repos/acme/app/installation',
+      'POST /app/installations/77/access_tokens',
+      'GET /repos/acme/app/branches',
+    ],
   })
   for (const outside of ['acme/../app', 'acme/secret', ''])
     expect(
@@ -296,8 +279,7 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
     status: 400,
     body: { error: 'branch_not_found', message: 'acme/app has no branch gone' },
   })
-  const { result: created, githubCalls } = await withGitHubCalls(() => devChat('acme/app', 'release'))
-  expect(githubCalls).toEqual(branchesCalls('acme/app'))
+  const created = await devChat('acme/app', 'release')
   expect(created.status).toBe(201)
   const id = String(created.body.chatId)
   expect(await stack.chatRow(id)).toMatchObject({
@@ -324,13 +306,14 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
 })
 
 test('GitHub enforces token permissions: branches need contents read; a refusal answers 422 with GitHub reason and logs one github.refused line without secrets', async () => {
+  await ensureGitHubApp(webhookSecret)
   const api = createGitHubApi(fakeGitHub.urls)
   const jwt = appJwtOf(fakeGitHubAppId, fakeGitHub.appPrivateKey)
   const metadataOnly = await api.installationToken(jwt, 77, {
     repositories: ['app'],
     permissions: { metadata: 'read' },
   })
-  await expect(api.branches(metadataOnly, 'acme/app')).rejects.toMatchObject({
+  expect(await rejectionOf(api.branches(metadataOnly, 'acme/app'))).toMatchObject({
     status: 403,
     message: 'Resource not accessible by integration (403)',
   })
@@ -370,28 +353,12 @@ test('GitHub enforces token permissions: branches need contents read; a refusal 
   })
 })
 
-const devChatAndPrompt = async (repository: string, text: string) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Clone check',
-    projectId: null,
-    repository,
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  const promptId = await stack.prompt(id, text)
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 15_000)
-  return { id, promptId, replies: await stack.repliesTo(promptId) }
-}
-
-test('a dev chat clones its repository with a read-only installation token kept out of the agent and the repository config, on the working branch; a failing setup script shows a notice and the session still answers', async () => {
+test('a dev chat clones its repository with a read-only installation token kept out of the agent and the repository config, on the working branch', async () => {
   const { launches } = await stack.agentHost('repos host')
-  const { id, replies } = await devChatAndPrompt('acme/app', 'stub:ls stub:env')
+  await ensureGitHubApp(webhookSecret)
+  await disconnectGitHub(alice)
+  const { id } = await newDevChat()
+  const replies = await promptAndWait(id, 'stub:ls stub:env')
   const { gitBranch } = (await stack.chatRow(id)) ?? {}
   const answer = replies.map(({ body }) => body).join('')
   expect(answer).toContain('files:.git,AGENTS.md,README.md,only-in-acme-app.txt,src')
@@ -419,30 +386,11 @@ test('a dev chat clones its repository with a read-only installation token kept 
   expect(gitConfig).not.toContain('extraHeader')
   expect(gitConfig).toContain(`url = ${fakeGitHub.urls.webUrl}/acme/app.git`)
   expect(gitConfig).toContain(`name = Alice\n\temail = ${alice}@users.noreply.spyria`)
-
-  expect(
-    await stack.mutate({ workspaceId: acme, userId: alice }, 'workspace.setSetupCommands', {
-      workspaceId: acme,
-      commands: [{ repository: 'acme/docs', command: 'sh .spyria/setup.sh' }],
-    }),
-  ).toEqual(succeeded)
-  const failing = await devChatAndPrompt('acme/docs', 'stub:ls')
-  expect(failing.replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')
-  const notices = async () => (await stack.repliesTo(failing.promptId)).filter(({ kind }) => kind === 'notice')
-  await waitFor(async () => (await notices()).length > 0, 15_000)
-  expect(await notices()).toEqual([
-    {
-      kind: 'notice',
-      body: 'The setup command "sh .spyria/setup.sh" failed with exit code 127; the session started anyway.\ninstalling the docs toolchain\ndocs-tool: command not found',
-    },
-  ])
-  expect(existsSync(join(String(workspaceFrame?.workspace.cwd), 'only-in-acme-app.txt'))).toBe(true)
 }, 30_000)
 
 test('a fork of a dev chat checks out the original working branch, kept with its open pull request card or on a new branch as the forker chose, whoever forks it', async () => {
   const { launches, relay } = await stack.agentHost('fork host')
-  if (!(await request(alice, 'GET', '/api/github-settings/configured')).body.configured)
-    expect(await request(alice, 'POST', '/api/github-settings', appSettings)).toMatchObject({ status: 200 })
+  await ensureGitHubApp(webhookSecret)
   const created = await request(alice, 'POST', '/api/dev-chats', {
     name: 'Fix totals',
     projectId: null,

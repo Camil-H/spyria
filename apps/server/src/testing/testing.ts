@@ -190,6 +190,20 @@ export const requestMutationWith = async (
   return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
 }
 
+export const queryWith = (app: RequestingApp, token: string) =>
+  app.request('/api/query', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
+  })
+
+export const openSessionWith = (app: RequestingApp, token: string, workspaceId: string) =>
+  app.request('/auth/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ workspaceId }),
+  })
+
 const integrationGatewayPort = 4880
 const integrationAppPort = 4882
 const integrationFakeMcpPort = 4883
@@ -566,6 +580,16 @@ export const rootIn = async (chatId: string) => {
   return root
 }
 
+export const delegationTokenOn = async (chatId: string) => {
+  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
+  const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
+  await (await openedTestApp()).database.$client`
+    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
+    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${tokenHash}, now()
+    from chats where id = ${chatId}`
+  return subToken
+}
+
 export const testSpyriaAgentImage = `sha256:${'0'.repeat(64)}`
 
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null, ownerId = alice) => {
@@ -686,6 +710,10 @@ export const startAgentStack = async ({
     (await database.query.messages.findMany({ where: { replyToId: messageId }, orderBy: { seq: 'asc' } })).map(
       (reply) => Object.fromEntries(fields.map((field) => [field, reply[field]])) as Pick<Message, Field>,
     )
+  const storedAgentEventsOf = async (chat: ChatId) =>
+    (await database.select().from(events))
+      .filter((event) => event.chatId === chat && event.type === 'agent.event')
+      .toSorted((first, second) => first.seq - second.seq)
   const openStream = async (
     chat: ChatId,
     { workspaceId = acme as string, token }: { workspaceId?: string; token?: string } = {},
@@ -694,11 +722,12 @@ export const startAgentStack = async ({
     browserSockets.push(socket)
     const frames: string[] = []
     const subscribed = Promise.withResolvers<void>()
-    let subscriptions = 0
+    const subscribedChatIds: string[] = []
     const closed = new Promise<number>((resolve) => socket.addEventListener('close', (event) => resolve(event.code)))
     socket.onmessage = (message) => {
-      if (!JSON.parse(String(message.data)).subscribed) return frames.push(String(message.data))
-      subscriptions += 1
+      const frame = JSON.parse(String(message.data))
+      if (!frame.subscribed) return frames.push(String(message.data))
+      subscribedChatIds.push(frame.chatId)
       subscribed.resolve()
     }
     await new Promise((resolve) => socket.addEventListener('open', resolve))
@@ -708,16 +737,23 @@ export const startAgentStack = async ({
       )
     socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
     const resubscribe = async () => {
-      const before = subscriptions
+      const before = subscribedChatIds.length
       socket.send(JSON.stringify({ type: 'unsubscribe', chatId: chat }))
       socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-      await waitFor(() => subscriptions > before)
+      await waitFor(() => subscribedChatIds.length > before)
+    }
+    const subscribeTo = async (otherChat: ChatId) => {
+      const before = subscribedChatIds.length
+      socket.send(JSON.stringify({ type: 'subscribe', chatId: otherChat }))
+      await waitFor(() => subscribedChatIds.slice(before).includes(otherChat))
     }
     return {
       frames,
       closed,
       subscribed: subscribed.promise,
+      subscribedChatIds,
       resubscribe,
+      subscribeTo,
       authenticate: (renewedToken: string) => socket.send(JSON.stringify({ type: 'auth', token: renewedToken })),
       close: () => socket.close(),
     }
@@ -796,10 +832,11 @@ export const startAgentStack = async ({
       waitFor(async () => (await repliesTo(messageId)).length >= count, 15_000),
     jobStatesOf,
     jobDone,
-    storedAgentEventsOf: async (chat: ChatId) =>
-      (await database.select().from(events))
-        .filter((event) => event.chatId === chat && event.type === 'agent.event')
-        .toSorted((first, second) => first.seq - second.seq),
+    storedAgentEventsOf,
+    sessionsStartedOf: async (chat: ChatId) =>
+      (await storedAgentEventsOf(chat))
+        .map((event) => (event.payload as { event: { update: Record<string, unknown> } }).event.update)
+        .filter((update) => update.sessionUpdate === 'session_started'),
     runtimeOf: async (chat: ChatId) => {
       const [row] = await database.$client`select * from runtimes where chat_id = ${chat}`
       if (!row) throw new Error(`No runtime for ${chat}`)

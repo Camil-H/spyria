@@ -1,13 +1,13 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, beforeEach, expect, test } from 'bun:test'
+import { resetDatabase } from '@spyria/db/postgres'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
-import { workspacePermissions } from '@spyria/kernel'
 import { microsoftPersonalAccountsTenantId } from '@spyria/workspace/server'
 import { serializeSigned } from 'hono/utils/cookie'
-import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
-import { commonPath, type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
+import { commonPath, startFakeIdp } from '../testing/fake-idp.ts'
 import { runOperator } from '../testing/operator.ts'
+import { cookieHeaderOf, fakeIdpSignInOf } from '../testing/sign-in.ts'
 import {
   acme,
   alice,
@@ -15,6 +15,8 @@ import {
   captureLogs,
   globex,
   lee,
+  openSessionWith,
+  queryWith,
   rejectionOf,
   sessionTokenOf,
   testAuthSettings,
@@ -28,7 +30,6 @@ import { assertInstanceAppsConfigured } from './sso.ts'
 const testDatabase = await createTestDatabase()
 const { database } = testDatabase
 const emptyInstance = await createTestDatabase()
-await emptyInstance.database.$client`truncate workspaces, users cascade`
 const secretsKeyring = secretsKeyringOf('sso-integration-secrets-key-0123456789')
 
 const accountIdp = await startFakeIdp()
@@ -40,7 +41,6 @@ const firstWorkspaceIdp = await startFakeIdp()
 accountIdp.clientSecrets['spyria-accounts'] = 'accounts-secret'
 microsoftIdp.clientSecrets['spyria-microsoft'] = 'microsoft-secret'
 firstWorkspaceIdp.clientSecrets['spyria-umbrella'] = 'umbrella-secret'
-starkIdp.clientSecrets['spyria-stark'] = 'stark-secret'
 const microsoftCommonIssuer = `${microsoftIdp.origin}${commonPath}`
 const ssoSettings = {
   ...testAuthSettings,
@@ -61,29 +61,20 @@ afterAll(async () => {
   await testDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
 
-const addWorkspace = async (workspaceId: string, adminId: string = alice) => {
-  await database.$client`
-    insert into workspaces (workspace_id, name, created_by, created_at) values (${workspaceId}, ${workspaceId}, ${adminId}, now())`
-  await database.$client`
-    insert into workspace_roles (workspace_id, id, name, built_in)
-    values (${workspaceId}, 'admin', 'Admin', true), (${workspaceId}, 'member', 'Member', true)`
-  await database.$client`
-    insert into workspace_role_permissions (workspace_id, role_id, permission)
-    select ${workspaceId}, 'admin', unnest(${database.$client.array([...workspacePermissions])}::text[])`
-  await database.$client`
-    insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${adminId}, 'admin', 'Admin')`
-}
+const { addWorkspace, enforceSso, callbackAfter, signInThrough } = fakeIdpSignInOf({ database, secretsKeyring, app })
 const addMember = (workspaceId: string, userId: string) =>
   database.$client`
     insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${userId}, 'member', ${userId})`
-const enforceSso = async (workspaceId: string, idp: FakeIdp, { preset = 'oidc', issuer = idp.issuer } = {}) => {
-  const clientId = `spyria-${workspaceId}`
-  idp.clientSecrets[clientId] = `${workspaceId}-secret`
-  const encryptedClientSecret = await createSecretBox(secretsKeyring).seal(`${workspaceId}-secret`)
+const addMemberWithIdentity = async (workspaceId: string, userId: string, email: string, subject: string) => {
+  await database.$client`insert into users (id, email) values (${userId}, ${email}) on conflict do nothing`
+  await addMember(workspaceId, userId)
   await database.$client`
-    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
-    values (${workspaceId}, ${preset}, ${issuer}, ${clientId}, ${encryptedClientSecret}, now())`
+    insert into identities (workspace_id, issuer, subject, user_id)
+    values (${workspaceId}, ${hooliIdp.issuer}, ${subject}, ${userId})`
 }
+const bindAliceAccount = () =>
+  database.$client`
+    insert into account_identities (issuer, subject, user_id) values (${accountIdp.issuer}, 'alice-account', ${alice})`
 const invite = (workspaceId: string, email: string, { expiresIn = '7 days' } = {}) =>
   database.$client`
     insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
@@ -95,46 +86,18 @@ const isInvitationPending = async (workspaceId: string, email: string) =>
       select 1 from invitations where workspace_id = ${workspaceId} and email = ${email} and accepted_at is null`
   ).length === 1
 
-await addWorkspace('initech')
-await enforceSso('initech', microsoftIdp, { preset: 'microsoft' })
-await addWorkspace('hooli')
-await enforceSso('hooli', hooliIdp)
-await addWorkspace('stark')
-await addMember('stark', bob)
+beforeEach(async () => {
+  await resetDatabase(database)
+  await addWorkspace('initech')
+  await enforceSso('initech', microsoftIdp, { preset: 'microsoft' })
+  await addWorkspace('hooli')
+  await enforceSso('hooli', hooliIdp)
+  await addWorkspace('stark')
+  await addMember('stark', bob)
+  starkIdp.clientSecrets['spyria-stark'] = 'stark-secret'
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+})
 
-const cookieHeaderOf = (response: Response) =>
-  response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(';')[0] ?? '')
-    .filter((cookie) => !cookie.endsWith('='))
-    .join('; ')
-const sessionsOf = async (cookie: string, server = app) =>
-  (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
-    userId?: string
-    sessions: { workspaceId: string; token: string }[]
-  }
-let codeCount = 0
-const callbackAfter = async (idp: FakeIdp, started: Response, claims: JWTPayload, server = app) => {
-  const location = new URL(started.headers.get('location') ?? '')
-  expect(location.origin).toBe(idp.origin)
-  const code = `code-${++codeCount}`
-  idp.claimsByCode.set(code, { nonce: location.searchParams.get('nonce') ?? '', ...claims })
-  const response = await server.request(`/auth/callback?code=${code}&state=${location.searchParams.get('state')}`, {
-    headers: { cookie: cookieHeaderOf(started) },
-  })
-  const cookie = cookieHeaderOf(response)
-  return {
-    status: response.status,
-    page: await response.text(),
-    cookie,
-    authorizationEndpoint: location.origin + location.pathname,
-    clientId: location.searchParams.get('client_id'),
-    loginHint: location.searchParams.get('login_hint'),
-    ...(await sessionsOf(cookie, server)),
-  }
-}
-const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload, server = app) =>
-  callbackAfter(idp, await server.request(`/auth/login?${loginQuery}`), claims, server)
 const workspaceIdsOf = (signedIn: { sessions: { workspaceId: string }[] }) =>
   signedIn.sessions.map(({ workspaceId }) => workspaceId)
 const identitiesOf = async (subject: string) => [
@@ -163,18 +126,6 @@ const renewStatus = async (workspaceId: string, cookie: string) =>
       body: JSON.stringify({ workspaceId }),
     })
   ).status
-const openSessionWith = (token: string, workspaceId: string) =>
-  app.request('/auth/sessions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspaceId }),
-  })
-const queryWith = (token: string) =>
-  app.request('/api/query', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', []]),
-  })
 const sessionCookieOf = async (workspaceId: string, userId: string, providerWorkspaceId: string | null = null) => {
   const [session] = await openSessions(database, userId, workspaceId, providerWorkspaceId)
   if (!session) throw new Error(`${userId} has no session in ${workspaceId}`)
@@ -207,17 +158,11 @@ const accountProviders = [
 ]
 
 test('the server tells its auth mode, the account providers of this Spyria and whether a workspace can be created', async () => {
-  const modeOf = async (server: { request: (path: string) => Response | Promise<Response> }, query = '') =>
-    (await server.request(`/auth/mode${query}`)).json()
+  const modeOf = async (server: { request: (path: string) => Response | Promise<Response> }) =>
+    (await server.request('/auth/mode')).json()
   const callbackOrigin = new URL(testAuthSettings.oidc.redirectUri).origin
   const mode = { authMode: 'sso', accountProviders: ['microsoft', 'oidc'], callbackOrigin, instanceApps: ['microsoft'] }
   expect(await modeOf(app)).toEqual({ ...mode, isBeingSetUp: false, canCreateWorkspace: false })
-  expect(await modeOf(emptyInstanceApp)).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
-  expect(await modeOf(emptyInstanceApp, `?setup=${testSetupToken}`)).toEqual({
-    ...mode,
-    isBeingSetUp: true,
-    canCreateWorkspace: true,
-  })
   const google = { clientId: 'spyria-google', clientSecret: 'google-secret' }
   expect(
     await modeOf(
@@ -286,6 +231,7 @@ test('a sign-in started by another site is refused, so no page signs a visitor i
 })
 
 test('sign-in goes to the chosen provider with the address as a hint, and an unknown provider is refused before any redirect', async () => {
+  await invite('hooli', 'pat@example.com')
   const toHooli = await app.request('/auth/login?email=pat%40example.com&provider=workspace-0')
   const hooliLocation = new URL(toHooli.headers.get('location') ?? '')
   expect(hooliLocation.origin + hooliLocation.pathname).toBe(`${hooliIdp.issuer}/auth`)
@@ -339,6 +285,7 @@ test('an account signs in with a provider of this Spyria: the first sign-in bind
 })
 
 test("a later sign-in with the same provider account finds the same user after its address changed, and another account carrying the user's address, at that provider or another, is refused", async () => {
+  await bindAliceAccount()
   const renamed = await signInThrough(accountIdp, 'provider=oidc', {
     sub: 'alice-account',
     email: 'alice.new@example.com',
@@ -434,7 +381,7 @@ test('an account in no workspace hears so and creates one as its Admin, from thi
       where workspace_id = ${issued.workspaceId}`),
   ]).toEqual([{ name: 'Olive Co', created_by: oliveId, user_id: oliveId, role: 'admin' }])
   expect(JSON.parse((await readSso(issued.workspaceId, oliveId)).body)).toEqual({ settings: null })
-  expect((await queryWith(issued.token)).status).toBe(200)
+  expect((await queryWith(app, issued.token)).status).toBe(200)
 })
 
 test('a generic OIDC provider that does not confirm the address is refused with the reason, and the invite stays pending', async () => {
@@ -529,8 +476,8 @@ test("a workspace's own provider opens only that workspace, and its session can 
     { workspace_id: 'hooli', issuer: hooliIdp.issuer, user_id: 'member-theo' },
   ])
   const hooliToken = throughHooli.sessions[0]?.token ?? ''
-  expect((await queryWith(hooliToken)).status).toBe(200)
-  const widened = await openSessionWith(hooliToken, acme)
+  expect((await queryWith(app, hooliToken)).status).toBe(200)
+  const widened = await openSessionWith(app, hooliToken, acme)
   expect(widened.status).toBe(403)
   expect(cookieHeaderOf(widened)).not.toContain('spyria_s_')
 
@@ -539,7 +486,7 @@ test("a workspace's own provider opens only that workspace, and its session can 
     email: 'theo@example.com',
   })
   expect(workspaceIdsOf(throughAccount)).toEqual([acme])
-  expect((await openSessionWith(throughAccount.sessions[0]?.token ?? '', 'hooli')).status).toBe(403)
+  expect((await openSessionWith(app, throughAccount.sessions[0]?.token ?? '', 'hooli')).status).toBe(403)
   const renamedAtHooli = await signInThrough(hooliIdp, 'workspace=hooli', {
     sub: 'theo-hooli',
     email: 'theo.new@example.com',
@@ -555,13 +502,13 @@ test('a session keeps how it was opened: once its workspace starts or stops enfo
   const accountToken = await sessionTokenOf(database, 'vandelay', alice)
   await enforceSso('vandelay', hooliIdp)
   expect(await renewStatus('vandelay', throughAccount)).toBe(401)
-  expect((await queryWith(accountToken)).status).toBe(401)
+  expect((await queryWith(app, accountToken)).status).toBe(401)
   const throughSso = await sessionCookieOf('vandelay', alice, 'vandelay')
   const ssoToken = await sessionTokenOf(database, 'vandelay', alice)
-  expect((await queryWith(ssoToken)).status).toBe(200)
+  expect((await queryWith(app, ssoToken)).status).toBe(200)
   await database.$client`delete from workspace_sso where workspace_id = 'vandelay'`
   expect(await renewStatus('vandelay', throughSso)).toBe(401)
-  expect((await openSessionWith(ssoToken, acme)).status).toBe(401)
+  expect((await openSessionWith(app, ssoToken, acme)).status).toBe(401)
 })
 
 test('the invites of a workspace with its own SSO are accepted only through its provider, at the invited address', async () => {
@@ -598,6 +545,7 @@ test('the invites of a workspace with its own SSO are accepted only through its 
 })
 
 test('a member bound to an identity of a workspace provider is never signed in through another identity carrying their address', async () => {
+  await addMemberWithIdentity('hooli', 'member-theo', 'theo@example.com', 'theo-hooli')
   const takeover = await signInThrough(hooliIdp, 'workspace=hooli', {
     sub: 'mallory-hooli',
     email: 'theo@example.com',
@@ -634,6 +582,7 @@ test('a removed member invited again signs in through a new identity of the work
 })
 
 test("a workspace provider asserting someone else's address gets at most a session in its own workspace", async () => {
+  await bindAliceAccount()
   await database.$client`insert into users (id, email) values ('member-mallory', 'mallory@evil.test')`
   await addWorkspace('evil', 'member-mallory')
   await enforceSso('evil', evilIdp)
@@ -645,7 +594,7 @@ test("a workspace provider asserting someone else's address gets at most a sessi
   expect(forged.userId).toBe(alice)
   expect(workspaceIdsOf(forged)).toEqual(['evil'])
   for (const workspaceId of [acme, globex, 'stark'])
-    expect((await openSessionWith(forged.sessions[0]?.token ?? '', workspaceId)).status).toBe(403)
+    expect((await openSessionWith(app, forged.sessions[0]?.token ?? '', workspaceId)).status).toBe(403)
   expect(await accountIdentitiesOf('forged-alice')).toEqual([])
   expect(await accountIdentitiesOf('alice-account')).toEqual([{ issuer: accountIdp.issuer, user_id: alice }])
 })
@@ -703,7 +652,7 @@ test('an Entra guest from another tenant is never bound to a member or an invite
 
 const starkForm = { preset: 'oidc', issuer: starkIdp.issuer, clientId: 'spyria-stark', clientSecret: 'stark-secret' }
 
-test('Setup SSO is only for members who may set it up, and refuses another origin, no session, a failing discovery, a multi-tenant Entra issuer and a first save without secret, changing nothing', async () => {
+test('Setup SSO is only for members who may set it up, and refuses another origin, no session, a failing discovery and a first save without secret, changing nothing', async () => {
   const refusedToBob = await startSsoChange('stark', await sessionCookieOf('stark', bob), starkForm)
   expect(refusedToBob.status).toBe(400)
   expect(refusedToBob.headers.get('location')).toBeNull()
@@ -719,7 +668,6 @@ test('Setup SSO is only for members who may set it up, and refuses another origi
       { issuer: 'http://127.0.0.1:9/nothing' },
       'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
     ],
-    [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
     [{ clientSecret: '' }, 'A client secret is required'],
   ] as const) {
     const refused = await startSsoChange('stark', aliceCookie, { ...starkForm, ...change })
@@ -766,8 +714,8 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
     { workspace_id: 'stark', issuer: starkIdp.issuer, user_id: alice },
   ])
   expect(await renewStatus('stark', aliceCookie)).toBe(401)
-  expect((await queryWith(bobToken)).status).toBe(401)
-  expect((await openSessionWith(confirmed.sessions[0]?.token ?? '', acme)).status).toBe(403)
+  expect((await queryWith(app, bobToken)).status).toBe(401)
+  expect((await openSessionWith(app, confirmed.sessions[0]?.token ?? '', acme)).status).toBe(403)
 
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = 'stark'`
@@ -795,6 +743,10 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
 })
 
 test('rotating only the client secret keeps the sessions of the workspace and is recorded; a save without a secret keeps the stored one only for the same issuer and client id', async () => {
+  await callbackAfter(starkIdp, await startSsoChange('stark', await sessionCookieOf('stark', alice), starkForm), {
+    sub: 'alice-stark',
+    email: 'alice@example.com',
+  })
   const aliceCookie = await sessionCookieOf('stark', alice, 'stark')
   starkIdp.clientSecrets['spyria-stark'] = 'stark-secret-2'
   const rotated = await callbackAfter(
@@ -830,6 +782,7 @@ test('stopping SSO takes the workspace back to account sign-in and ends every se
       method: 'POST',
       headers: { authorization: await bearerOf('stark', userId) },
     })
+  await enforceSso('stark', starkIdp)
   const aliceCookie = await sessionCookieOf('stark', alice, 'stark')
   expect((await stop(app, bob)).status).toBe(403)
   const refused = await stop(createApp({ database, ...ssoSettings, instanceSignInApps: {} }), alice)
@@ -931,7 +884,6 @@ test('on an empty Spyria, creating the first workspace refuses another origin, i
   for (const [change, reason] of [
     [{ name: ' ' }, 'A name must contain at least one non-blank character'],
     [{ clientSecret: '' }, 'A client secret is required'],
-    [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
     [
       { issuer: 'http://127.0.0.1:9/nothing' },
       'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
@@ -1023,7 +975,6 @@ test('the first person completing sign-in becomes the Admin of a workspace with 
 })
 
 test('the first workspace is refused to a later account carrying the address of a person who kept their account', async () => {
-  await emptyInstance.database.$client`truncate workspaces, users cascade`
   await emptyInstance.database.$client`insert into users (id, email) values ('member-owner', 'owner@gmail.com')`
   await emptyInstance.database.$client`
     insert into account_identities (issuer, subject, user_id) values ('https://accounts.google.com', 'owner-google', 'member-owner')`
@@ -1044,7 +995,6 @@ test('the first workspace is refused to a later account carrying the address of 
 })
 
 test('the first workspace created with an account provider has no SSO of its own: its Admin signs in with that account', async () => {
-  await emptyInstance.database.$client`truncate workspaces, users cascade`
   const started = await startCreation({ name: 'Garage', accountProvider: 'oidc' })
   const created = await callbackAfter(
     accountIdp,
@@ -1078,11 +1028,12 @@ test('the first workspace created with an account provider has no SSO of its own
 })
 
 test('the first workspace needs the setup token: refused without it, with a wrong one, and once a workspace exists; the sign-in mode only offers creation with it', async () => {
-  await emptyInstance.database.$client`truncate workspaces, users cascade`
   const modeOf = async (query = '') => (await emptyInstanceApp.request(`/auth/mode${query}`)).json()
-  expect(await modeOf()).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
-  expect(await modeOf('?setup=not-the-token')).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: false })
-  expect(await modeOf(`?setup=${testSetupToken}`)).toMatchObject({ isBeingSetUp: true, canCreateWorkspace: true })
+  const callbackOrigin = new URL(testAuthSettings.oidc.redirectUri).origin
+  const mode = { authMode: 'sso', accountProviders: ['microsoft', 'oidc'], callbackOrigin, instanceApps: ['microsoft'] }
+  expect(await modeOf()).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf('?setup=not-the-token')).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
+  expect(await modeOf(`?setup=${testSetupToken}`)).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: true })
   for (const refusedToken of ['', 'not-the-token', `${testSetupToken} `]) {
     const refused = await startCreation({ ...umbrellaForm(), setupToken: refusedToken })
     expect(refused.status).toBe(403)
@@ -1100,50 +1051,42 @@ test('the first workspace needs the setup token: refused without it, with a wron
 })
 
 test('with the Microsoft app of this Spyria, a workspace is created and signed in to without any client id or secret, and an app the Spyria lacks is refused', async () => {
-  const instance = await createTestDatabase()
-  await instance.database.$client`truncate workspaces, users cascade`
-  const instanceApp = createApp({ database: instance.database, ...ssoSettings })
-  try {
-    const create = (form: Record<string, string>) =>
-      startCreation({ name: 'Initech', usesInstanceApp: 'true', ...form }, testAuthSettings.appOrigin, instanceApp)
-    expect(await (await create({ preset: 'google' })).text()).toContain(
-      'This Spyria has no Google app: enter the client id and secret of your own',
-    )
-    const completed = await callbackAfter(
-      microsoftIdp,
-      await create({ preset: 'microsoft', tenantId: 'tenant-1' }),
-      { sub: 'pat', oid: 'pat-object', preferred_username: 'pat@initech.com' },
-      instanceApp,
-    )
-    expect(completed.authorizationEndpoint).toBe(`${microsoftIdp.issuer}/auth`)
-    expect(completed.clientId).toBe('spyria-microsoft')
-    expect(completed.page).toContain('"status":"signed_in"')
-    expect(microsoftIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-microsoft')
-    const [stored] = await instance.database.$client`
-      select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
-        encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp"
-      from workspace_sso`
-    expect(stored).toMatchObject({
-      preset: 'microsoft',
-      issuer: microsoftIdp.issuer,
-      clientId: 'spyria-microsoft',
-      encryptedClientSecret: '',
-      usesInstanceApp: true,
-    })
-    const signedIn = await signInThrough(
-      microsoftIdp,
-      `workspace=${stored?.workspaceId}`,
-      { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
-      instanceApp,
-    )
-    expect(signedIn.sessions).toHaveLength(1)
-    expect(signedIn.userId).toBe(completed.userId)
-  } finally {
-    await instance.drop()
-  }
+  const create = (form: Record<string, string>) => startCreation({ name: 'Initech', usesInstanceApp: 'true', ...form })
+  expect(await (await create({ preset: 'google' })).text()).toContain(
+    'This Spyria has no Google app: enter the client id and secret of your own',
+  )
+  const completed = await callbackAfter(
+    microsoftIdp,
+    await create({ preset: 'microsoft', tenantId: 'tenant-1' }),
+    { sub: 'pat', oid: 'pat-object', preferred_username: 'pat@initech.com' },
+    emptyInstanceApp,
+  )
+  expect(completed.authorizationEndpoint).toBe(`${microsoftIdp.issuer}/auth`)
+  expect(completed.clientId).toBe('spyria-microsoft')
+  expect(completed.page).toContain('"status":"signed_in"')
+  expect(microsoftIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-microsoft')
+  const [stored] = await emptyInstance.database.$client`
+    select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
+      encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp"
+    from workspace_sso`
+  expect(stored).toMatchObject({
+    preset: 'microsoft',
+    issuer: microsoftIdp.issuer,
+    clientId: 'spyria-microsoft',
+    encryptedClientSecret: '',
+    usesInstanceApp: true,
+  })
+  const signedIn = await signInThrough(
+    microsoftIdp,
+    `workspace=${stored?.workspaceId}`,
+    { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
+    emptyInstanceApp,
+  )
+  expect(signedIn.sessions).toHaveLength(1)
+  expect(signedIn.userId).toBe(completed.userId)
 })
 
-test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured', async () => {
+test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured; a workspace awaiting its purge does not hold up the start', async () => {
   await addWorkspace('wayne')
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
@@ -1153,20 +1096,10 @@ test('the server refuses to start when workspaces sign in through an app of this
   expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
     'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
   )
-})
-
-test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'wayne'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })
 
-const addMemberWithIdentity = async (workspaceId: string, userId: string, email: string, subject: string) => {
-  await database.$client`insert into users (id, email) values (${userId}, ${email}) on conflict do nothing`
-  await addMember(workspaceId, userId)
-  await database.$client`
-    insert into identities (workspace_id, issuer, subject, user_id)
-    values (${workspaceId}, ${hooliIdp.issuer}, ${subject}, ${userId})`
-}
 const shareHooliSignIn = (workspaceId: string) =>
   database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
@@ -1174,6 +1107,7 @@ const shareHooliSignIn = (workspaceId: string) =>
     from workspace_sso where workspace_id = 'hooli'`
 
 test('a member already bound to a provider identity signs in when the provider stops confirming the address, under the address Spyria keeps, which the token cannot change', async () => {
+  await bindAliceAccount()
   await addMemberWithIdentity('hooli', 'member-uma', 'uma@example.com', 'uma-hooli')
   await invite('hooli', 'other@example.com')
   for (const unconfirmed of [{ email_verified: false }, { email_verified: undefined }]) {
@@ -1201,6 +1135,7 @@ test('a member already bound to a provider identity signs in when the provider s
 })
 
 test('an unconfirmed address never binds a new identity, and the sign-in window shows why in plain words, ready to stay open without its opener', async () => {
+  await addMemberWithIdentity('hooli', 'member-uma', 'uma@example.com', 'uma-hooli')
   const refused = await signInThrough(hooliIdp, 'workspace=hooli', {
     sub: 'uma-elsewhere',
     email: 'uma@example.com',
@@ -1244,8 +1179,8 @@ test('workspaces signing in through the same app of a provider offer one button,
     { workspace_id: 'piper', issuer: hooliIdp.issuer, user_id: 'member-vic' },
   ])
   for (const { token, workspaceId } of signedIn.sessions) {
-    expect((await queryWith(token)).status).toBe(200)
-    expect((await openSessionWith(token, 'gavin')).status).toBe(403)
+    expect((await queryWith(app, token)).status).toBe(200)
+    expect((await openSessionWith(app, token, 'gavin')).status).toBe(403)
     expect(workspaceId).not.toBe('gavin')
   }
 

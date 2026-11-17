@@ -139,6 +139,8 @@ test('refuses a duplicate (chat_id, seq) on messages and on events', async () =>
 })
 
 test('rejects UPDATE and DELETE on events', async () => {
+  const allEvents = () => database.select().from(events).orderBy(events.workspaceId, events.chatId, events.seq)
+  const eventsBefore = await allEvents()
   expect(await refusalOf(database.update(events).set({ type: 'edited' }).where(eq(events.seq, 1)))).toMatchObject({
     code: 'P0001',
     message: 'events are append-only: UPDATE rejected',
@@ -147,7 +149,7 @@ test('rejects UPDATE and DELETE on events', async () => {
     code: 'P0001',
     message: 'events are append-only: DELETE rejected',
   })
-  expect(await database.$count(events)).toBe(19)
+  expect(await allEvents()).toEqual(eventsBefore)
 })
 
 test('an event changes only to blank the body and drop the attachments of a deleted message, in a transaction that names that message', async () => {

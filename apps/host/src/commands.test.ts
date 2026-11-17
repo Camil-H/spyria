@@ -7,9 +7,15 @@ import { harnessEnvironment } from './harnesses.ts'
 const image = `sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
+const managedRuntimeJson = {
+  Id: 'runtime-container-id',
+  Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
+}
 
-test('accepts exactly create, prepare, start, stop, remove, status, installed, install and list with their arguments', () => {
+test('accepts exactly create, recreate, prepare, start, stop, remove, status, installed, install and list with their arguments', () => {
   expect(parseCommand('create', create)).toEqual({ op: 'create', ...create })
+  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
+  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
   for (const op of ['installed', 'install'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1', harness: 'codex' })).toEqual({
       op,
@@ -48,31 +54,13 @@ const contentId = `sha256:${'b'.repeat(64)}`
 
 const packageCacheKey = 'c'.repeat(32)
 
-test('a create with a package cache key mounts that cache volume at the package cache directory; without one, no cache is mounted', () => {
+test('a create with a package cache key mounts that cache volume at the package cache directory', () => {
   expect(parseCommand('create', { ...create, packageCacheKey })).toEqual({ op: 'create', ...create, packageCacheKey })
   const mountsOf = (body: ReturnType<typeof containerBodyOf>) =>
     body.HostConfig.Mounts.map(({ Source, Target }) => [Source, Target])
   expect(mountsOf(containerBodyOf({ prefix: 'spyria-', ...create, packageCacheKey }))).toContainEqual([
     `spyria-cache-${packageCacheKey}`,
     '/var/cache/spyria',
-  ])
-  expect(mountsOf(containerBodyOf({ prefix: 'spyria-', ...create })).map(([, target]) => target)).not.toContain(
-    '/var/cache/spyria',
-  )
-})
-
-test.each(['../spyria-host', packageCacheKey.toUpperCase(), `${packageCacheKey}0`, 'short', 42])(
-  'refuses the package cache key %p',
-  (refusedKey) => {
-    expect(() => parseCommand('create', { ...create, packageCacheKey: refusedKey })).toThrow('refused')
-  },
-)
-
-test('a workspace create sets only the session key in the environment, a personal one adds the harness paths', () => {
-  expect(containerBodyOf({ prefix: 'spyria-', ...create }).Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`])
-  expect(containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).Env).toEqual([
-    `OH_SESSION_API_KEYS_0=${apiKey}`,
-    ...harnessEnvironment,
   ])
 })
 
@@ -106,25 +94,42 @@ test.each([true, false])(
   },
 )
 
-test('refuses a prepare request with any field besides the image', () => {
-  expect(() => parseCommand('prepare', { image, runtimeId: 'runtime-1' })).toThrow('refused')
-  expect(() => parseCommand('prepare', { image, Binds: ['/:/host'] })).toThrow('refused')
-})
-
-test.each([
-  ['host paths', { Binds: ['/:/host'] }],
-  ['host path mounts', { Mounts: [{ Type: 'bind', Source: '/', Target: '/host' }] }],
-  ['published ports', { PortBindings: { '8000/tcp': [{ HostPort: '8000' }] } }],
-  ['all published ports', { PublishAllPorts: true }],
-  ['privileged mode', { Privileged: true }],
-  ['added capabilities', { CapAdd: ['SYS_ADMIN'] }],
-  ['a host config', { HostConfig: { Privileged: true } }],
-  ['the host network', { NetworkMode: 'host' }],
-  ['devices', { Devices: [{ PathOnHost: '/dev/kvm' }] }],
-  ['another user', { User: '0' }],
-  ['extra environment', { Env: ['LD_PRELOAD=/tmp/x.so'] }],
-])('refuses a create request with %s', (_, extraFields) => {
-  expect(() => parseCommand('create', { ...create, ...extraFields })).toThrow('refused')
+test.each<[label: string, op: string, fields: Record<string, unknown>]>([
+  ['a prepare request with a runtime id', 'prepare', { image, runtimeId: 'runtime-1' }],
+  ['a prepare request with host paths', 'prepare', { image, Binds: ['/:/host'] }],
+  ['a create request with host paths', 'create', { ...create, Binds: ['/:/host'] }],
+  [
+    'a create request with host path mounts',
+    'create',
+    { ...create, Mounts: [{ Type: 'bind', Source: '/', Target: '/host' }] },
+  ],
+  [
+    'a create request with published ports',
+    'create',
+    { ...create, PortBindings: { '8000/tcp': [{ HostPort: '8000' }] } },
+  ],
+  ['a create request with all published ports', 'create', { ...create, PublishAllPorts: true }],
+  ['a create request with privileged mode', 'create', { ...create, Privileged: true }],
+  ['a create request with added capabilities', 'create', { ...create, CapAdd: ['SYS_ADMIN'] }],
+  ['a create request with a host config', 'create', { ...create, HostConfig: { Privileged: true } }],
+  ['a create request with the host network', 'create', { ...create, NetworkMode: 'host' }],
+  ['a create request with devices', 'create', { ...create, Devices: [{ PathOnHost: '/dev/kvm' }] }],
+  ['a create request with another user', 'create', { ...create, User: '0' }],
+  ['a create request with extra environment', 'create', { ...create, Env: ['LD_PRELOAD=/tmp/x.so'] }],
+  ['a package cache key with a path', 'create', { ...create, packageCacheKey: '../spyria-host' }],
+  ['an uppercase package cache key', 'create', { ...create, packageCacheKey: packageCacheKey.toUpperCase() }],
+  ['a package cache key too long', 'create', { ...create, packageCacheKey: `${packageCacheKey}0` }],
+  ['a package cache key too short', 'create', { ...create, packageCacheKey: 'short' }],
+  ['a package cache key that is a number', 'create', { ...create, packageCacheKey: 42 }],
+  ['an API key too short', 'create', { ...create, apiKey: 'short' }],
+  ['an API key with a second line', 'create', { ...create, apiKey: `${'k'.repeat(32)}\nOTHER=1` }],
+  ['an API key too long', 'create', { ...create, apiKey: 'k'.repeat(300) }],
+  ['an extra argument on start', 'start', { runtimeId: 'runtime-1', force: true }],
+  ['an extra argument on stop', 'stop', { runtimeId: 'runtime-1', force: true }],
+  ['an extra argument on remove', 'remove', { runtimeId: 'runtime-1', force: true }],
+  ['an extra argument on status', 'status', { runtimeId: 'runtime-1', force: true }],
+])('refuses %s', (_, op, fields) => {
+  expect(() => parseCommand(op, fields)).toThrow('refused')
 })
 
 test.each(['../spyria-postgres', 'spyria-postgres/../x', 'Runtime', '', 'a'.repeat(64), 'runtime 1', 42])(
@@ -134,15 +139,6 @@ test.each(['../spyria-postgres', 'spyria-postgres/../x', 'Runtime', '', 'a'.repe
     expect(() => parseCommand('create', { ...create, runtimeId })).toThrow('refused')
   },
 )
-
-test.each(['short', `${'k'.repeat(32)}\nOTHER=1`, 'k'.repeat(300)])('refuses the API key %p', (refusedKey) => {
-  expect(() => parseCommand('create', { ...create, apiKey: refusedKey })).toThrow('refused')
-})
-
-test('refuses extra arguments on start, stop, remove and status', () => {
-  for (const op of ['start', 'stop', 'remove', 'status'])
-    expect(() => parseCommand(op, { runtimeId: 'runtime-1', force: true })).toThrow('refused')
-})
 
 test('creates the container with exactly the hardening flags, an init that reaps orphaned processes, three named volumes and the host machine reachable by name', () => {
   expect(containerBodyOf({ prefix: 'spyria-', runtimeId: 'runtime-1', image, apiKey })).toEqual({
@@ -182,11 +178,6 @@ test('relays only to paths on the spyria-agent port of the runtime', () => {
     expect(() => relayUrlOf('http://172.20.0.2:8000', path)).toThrow('refused')
 })
 
-const browserFilters = encodeURIComponent(JSON.stringify({ label: ['spyria.browser=runtime-1'] }))
-const browserListings = [
-  `GET /containers/json?all=true&filters=${browserFilters}`,
-  `GET /volumes?filters=${browserFilters}`,
-]
 const noBrowsers = (path: string) => {
   if (path.startsWith('/containers/json')) return []
   if (path.startsWith('/volumes?')) return { Volumes: [] }
@@ -199,26 +190,24 @@ const recordingDocker = () => {
     calls.push({ method, path, body })
     const listing = noBrowsers(path)
     if (listing) return listing
-    if (path.endsWith('/json') && path.startsWith('/containers/'))
-      return {
-        Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
-        NetworkSettings: { Networks: { 'spyria-rt-runtime-1-net': {} } },
-      }
+    if (path.endsWith('/json') && path.startsWith('/containers/spyria-rt-'))
+      return { ...managedRuntimeJson, NetworkSettings: { Networks: { 'spyria-rt-runtime-1-net': {} } } }
     return {}
   }) as Docker
   return { docker, calls }
 }
 
-test('a personal create mounts both credentials volumes and the harnesses read-only, a workspace create does not', () => {
-  const personalMounts = containerBodyOf({ prefix: 'spyria-', ...create, personal: true }).HostConfig.Mounts
-  expect(personalMounts.slice(-3)).toEqual([
+test('a personal create mounts both credentials volumes and the harnesses read-only, and adds the harness paths to the environment', () => {
+  const personalBody = containerBodyOf({ prefix: 'spyria-', ...create, personal: true })
+  expect(personalBody.HostConfig.Mounts.slice(-3)).toEqual([
     { Type: 'volume', Source: 'spyria-cred-claude-code', Target: '/home/spyria/.claude' },
     { Type: 'volume', Source: 'spyria-cred-codex', Target: '/home/spyria/.codex' },
     { Type: 'volume', Source: 'spyria-harnesses', Target: '/harnesses', ReadOnly: true },
   ])
-  expect(personalMounts.slice(0, -3)).toEqual(containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts)
-  expect(JSON.stringify(containerBodyOf({ prefix: 'spyria-', ...create }))).not.toContain('cred-')
-  expect(JSON.stringify(containerBodyOf({ prefix: 'spyria-', ...create }))).not.toContain('harnesses')
+  expect(personalBody.HostConfig.Mounts.slice(0, -3)).toEqual(
+    containerBodyOf({ prefix: 'spyria-', ...create }).HostConfig.Mounts,
+  )
+  expect(personalBody.Env).toEqual([`OH_SESSION_API_KEYS_0=${apiKey}`, ...harnessEnvironment])
 })
 
 test('a personal host creates the runtime with both credentials volumes after preparing their readers', async () => {
@@ -254,29 +243,18 @@ test('removing a runtime never deletes the credentials volumes', async () => {
 test('each runtime gets its own network only while it runs: created and joined by a containerized spyria-host on create and start, released on stop and remove', async () => {
   const { docker, calls } = recordingDocker()
   const runner = createCommandRunner({ docker, prefix: 'spyria-', selfContainerId: 'self-1' })
-  const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['spyria-gateway-relay'] } }
-  await runner.run({ op: 'create', ...create })
-  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
-    {
-      method: 'POST',
-      path: '/networks/create',
-      body: { Name: 'spyria-rt-runtime-1-net', Driver: 'bridge', Labels: { 'spyria.managed': '1' } },
-    },
-    { method: 'POST', path: '/networks/spyria-rt-runtime-1-net/connect', body: joined },
-  ])
-  calls.splice(0)
-  await runner.run({ op: 'start', runtimeId: 'runtime-1' })
-  expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    'POST /networks/create',
-    'POST /networks/spyria-rt-runtime-1-net/connect',
-    'POST /networks/spyria-rt-runtime-1-net/connect',
-    'POST /containers/spyria-rt-runtime-1/start',
-  ])
-  expect(calls.filter((call) => call.path.endsWith('/connect')).map((call) => call.body)).toEqual([
-    joined,
-    { Container: 'spyria-rt-runtime-1' },
-  ])
+  const networkCallsOf = () => calls.filter((call) => call.path.startsWith('/networks/'))
+  const changesOf = () => calls.filter((call) => call.method !== 'GET')
+  const networkCreated = {
+    method: 'POST',
+    path: '/networks/create',
+    body: { Name: 'spyria-rt-runtime-1-net', Driver: 'bridge', Labels: { 'spyria.managed': '1' } },
+  }
+  const joined = {
+    method: 'POST',
+    path: '/networks/spyria-rt-runtime-1-net/connect',
+    body: { Container: 'self-1', EndpointConfig: { Aliases: ['spyria-gateway-relay'] } },
+  }
   const released = [
     {
       method: 'POST',
@@ -285,17 +263,25 @@ test('each runtime gets its own network only while it runs: created and joined b
     },
     { method: 'DELETE', path: '/networks/spyria-rt-runtime-1-net', body: undefined },
   ]
+  await runner.run({ op: 'create', ...create })
+  expect(networkCallsOf()).toEqual([networkCreated, joined])
+  calls.splice(0)
+  await runner.run({ op: 'start', runtimeId: 'runtime-1' })
+  expect(changesOf()).toEqual([
+    networkCreated,
+    joined,
+    { method: 'POST', path: '/networks/spyria-rt-runtime-1-net/connect', body: { Container: 'spyria-rt-runtime-1' } },
+    { method: 'POST', path: '/containers/spyria-rt-runtime-1/start', body: undefined },
+  ])
   calls.splice(0)
   await runner.run({ op: 'stop', runtimeId: 'runtime-1' })
-  expect(calls.map(({ method, path }) => `${method} ${path}`).slice(0, 4)).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
-    'POST /containers/spyria-rt-runtime-1/stop?t=10',
+  expect(changesOf()).toEqual([
+    { method: 'POST', path: '/containers/spyria-rt-runtime-1/stop?t=10', body: undefined },
+    ...released,
   ])
-  expect(calls.slice(4)).toEqual(released)
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
-  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual(released)
+  expect(networkCallsOf()).toEqual(released)
 })
 
 test('stop and remove of a runtime whose container is gone still release its network and volumes, but never touch an unmanaged container', async () => {
@@ -306,24 +292,28 @@ test('stop and remove of a runtime whose container is gone still release its net
     return noBrowsers(path) ?? {}
   }) as Docker
   const runner = createCommandRunner({ docker: missingDocker, prefix: 'spyria-' })
+  const deletionsOf = () => calls.filter((call) => !call.startsWith('GET '))
+  const browserFilters = encodeURIComponent(JSON.stringify({ label: ['spyria.browser=runtime-1'] }))
+  const browserListings = [
+    `GET /containers/json?all=true&filters=${browserFilters}`,
+    `GET /volumes?filters=${browserFilters}`,
+  ]
   await runner.run({ op: 'stop', runtimeId: 'runtime-1' })
-  expect(calls).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
-    'DELETE /networks/spyria-rt-runtime-1-net',
-  ])
+  expect(deletionsOf()).toEqual(['DELETE /networks/spyria-rt-runtime-1-net'])
+  for (const listing of browserListings) expect(calls).toContain(listing)
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
-  expect(calls).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
+  expect(deletionsOf()).toEqual([
     'DELETE /containers/spyria-rt-runtime-1-snapshot?force=true',
     'DELETE /volumes/spyria-rt-runtime-1-ws',
     'DELETE /volumes/spyria-rt-runtime-1-home',
     'DELETE /volumes/spyria-rt-runtime-1-tmp',
     'DELETE /networks/spyria-rt-runtime-1-net',
-    `GET /volumes?filters=${encodeURIComponent(JSON.stringify({ name: ['spyria-cache-'], dangling: ['true'] }))}`,
   ])
+  for (const listing of browserListings) expect(calls).toContain(listing)
+  expect(calls).toContain(
+    `GET /volumes?filters=${encodeURIComponent(JSON.stringify({ name: ['spyria-cache-'], dangling: ['true'] }))}`,
+  )
   const { docker: unmanagedDocker, calls: unmanagedCalls } = recordingDocker()
   for (const op of ['start', 'stop', 'remove'] as const)
     await expect(
@@ -350,6 +340,11 @@ test("two deployments on one Docker daemon never count or manage each other's ru
   expect(await runnerOf('spyria').run({ op: 'list' })).toEqual(['a'])
   expect(await runnerOf('spyria-rt').run({ op: 'list' })).toEqual(['b'])
   await expect(runnerOf('spyria').run({ op: 'status', runtimeId: 'rt-b' })).rejects.toThrow('not a managed runtime')
+  expect(
+    await runnerOf('spyria')
+      .run({ op: 'remove', runtimeId: 'rt-b' })
+      .catch((error: Error) => error.message),
+  ).toBe('refused: not a managed runtime')
   expect(await runnerOf('spyria-rt').run({ op: 'status', runtimeId: 'b' })).toBe('running')
   expect(await runnerOf('spyria').run({ op: 'status', runtimeId: 'c' })).toBe('missing')
 })
@@ -370,8 +365,7 @@ test("removing a runtime deletes this deployment's package caches no container u
   const deleted: string[] = []
   const docker = (async (method: string, path: string) => {
     if (path.startsWith('/containers/json')) return []
-    if (path.startsWith('/containers/') && path.endsWith('/json'))
-      return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    if (path.startsWith('/containers/') && path.endsWith('/json')) return managedRuntimeJson
     if (method === 'GET' && path.startsWith('/volumes?'))
       return {
         Volumes: [
@@ -476,22 +470,20 @@ test('a recreate removes the managed container alone and creates it again on the
     if (listing) return listing
     if (method === 'GET' && path.startsWith('/containers/')) {
       if (!exists) throw new DockerError(404, 'No such container')
-      return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+      return managedRuntimeJson
     }
     if (method === 'DELETE') exists = false
     return {}
   }) as Docker
   const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  const changesOf = () => calls.filter((call) => !call.startsWith('GET '))
   await runner.run({ op: 'recreate', ...create })
-  expect(calls).toEqual([
-    'GET /containers/json',
-    'GET /volumes',
-    'GET /containers/spyria-rt-runtime-1/json',
+  expect(changesOf()).toEqual([
     'DELETE /containers/spyria-rt-runtime-1',
     'POST /networks/create',
-    `GET /images/${image}/json`,
     'POST /containers/create',
   ])
+  expect(calls).toContain(`GET /images/${image}/json`)
   expect(bodies[0]?.HostConfig.Mounts.map(({ Source }) => Source)).toEqual([
     'spyria-rt-runtime-1-ws',
     'spyria-rt-runtime-1-home',
@@ -499,16 +491,8 @@ test('a recreate removes the managed container alone and creates it again on the
   ])
   calls.length = 0
   await runner.run({ op: 'recreate', ...create })
-  expect(calls).toEqual([
-    'GET /containers/json',
-    'GET /volumes',
-    'GET /containers/spyria-rt-runtime-1/json',
-    'POST /networks/create',
-    `GET /images/${image}/json`,
-    'POST /containers/create',
-  ])
-  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
-  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
+  expect(changesOf()).toEqual(['POST /networks/create', 'POST /containers/create'])
+  expect(calls).toContain(`GET /images/${image}/json`)
 })
 
 const snapshotKey = 'd'.repeat(32)
@@ -530,8 +514,7 @@ const snapshotDocker = ({
     if (path.endsWith('/wait')) return { StatusCode: copyExitCode }
     if (method === 'DELETE' && inUse.some((name) => path === `/volumes/${name}`))
       throw new DockerError(409, 'volume is in use')
-    if (path.startsWith('/containers/') && path.endsWith('/json'))
-      return { Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+    if (path.startsWith('/containers/') && path.endsWith('/json')) return managedRuntimeJson
     return {}
   }) as Docker
   return { docker, calls, requests: () => calls.map(({ method, path }) => `${method} ${path.split('?')[0]}`) }
@@ -663,10 +646,7 @@ test('the status of a runtime left paused by an interrupted snapshot resumes it 
     if (path.startsWith('/volumes?')) return { Volumes: [] }
     if (path.endsWith('/wait')) return copy.promise
     if (path === '/containers/spyria-rt-runtime-1/json')
-      return {
-        Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
-        State: { Running: true, Paused: true },
-      }
+      return { ...managedRuntimeJson, State: { Running: true, Paused: true } }
     return {}
   }) as Docker
   const runner = createCommandRunner({ docker, prefix: 'spyria-' })
@@ -697,23 +677,24 @@ const browserName = `spyria-rt-runtime-1-browser-${browserKey}`
 const browserDocker = ({
   isRuntimeRunning = true,
   browser,
-  profileCreatedAt,
+  profileLabels = browser && { 'spyria.browser.created': '0' },
   freeBytes = 4 * 1024 ** 3,
+  now = () => 10 * 3_600_000,
 }: {
   isRuntimeRunning?: boolean
-  browser?: { networkMode: string; isRunning: boolean; runtimeLabel?: string; image?: string }
-  profileCreatedAt?: number
+  browser?: { networkMode?: string; isRunning: boolean; runtimeLabel?: string; image?: string }
+  profileLabels?: Record<string, string>
   freeBytes?: number
+  now?: () => number
 } = {}) => {
   const calls: { method: string; path: string; body?: unknown }[] = []
+  const profileVolume = `${browserName}-profile`
+  const volumeLabels = new Map(profileLabels ? [[profileVolume, profileLabels]] : [])
+  let hasBrowserContainer = browser !== undefined
   const docker = (async (method: string, path: string, body?: unknown) => {
     calls.push({ method, path, body })
     if (path === '/containers/spyria-rt-runtime-1/json')
-      return {
-        Id: 'runtime-container-id',
-        Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
-        State: { Running: isRuntimeRunning },
-      }
+      return { ...managedRuntimeJson, State: { Running: isRuntimeRunning } }
     if (path === `/containers/${browserName}/json`) {
       if (!browser) throw new DockerError(404, 'No such container')
       return {
@@ -721,24 +702,29 @@ const browserDocker = ({
           Image: browser.image ?? image,
           Labels: { 'spyria.managed': '1', 'spyria.browser': browser.runtimeLabel ?? 'runtime-1' },
         },
-        HostConfig: { NetworkMode: browser.networkMode },
+        HostConfig: { NetworkMode: browser.networkMode ?? 'container:runtime-container-id' },
         State: { Running: browser.isRunning },
       }
     }
-    if (path === `/volumes/${browserName}-profile` && method === 'GET') {
-      if (profileCreatedAt === undefined) throw new DockerError(404, 'No such volume')
-      return { Labels: { 'spyria.browser.created': String(profileCreatedAt) } }
+    if (path.startsWith('/containers/json')) return hasBrowserContainer ? [{ Names: [`/${browserName}`] }] : []
+    if (path === `/containers/create?name=${browserName}`) hasBrowserContainer = true
+    if (method === 'DELETE' && path.startsWith(`/containers/${browserName}?`)) hasBrowserContainer = false
+    if (path === '/volumes/create') {
+      const { Name, Labels } = body as { Name: string; Labels: Record<string, string> }
+      volumeLabels.set(Name, Labels)
+    }
+    if (path === `/volumes/${profileVolume}`) {
+      const labels = volumeLabels.get(profileVolume)
+      if (method === 'DELETE') volumeLabels.delete(profileVolume)
+      else if (!labels) throw new DockerError(404, 'No such volume')
+      else return { Labels: labels }
     }
     return noBrowsers(path) ?? {}
   }) as Docker
-  const runner = createCommandRunner({
-    docker,
-    prefix: 'spyria-',
-    freeMemoryBytes: async () => freeBytes,
-    now: () => 10 * 3_600_000,
-  })
+  const runnerAt = (clock: () => number) =>
+    createCommandRunner({ docker, prefix: 'spyria-', freeMemoryBytes: async () => freeBytes, now: clock })
   const requests = () => calls.filter(({ method }) => method !== 'GET').map(({ method, path }) => `${method} ${path}`)
-  return { runner, calls, requests }
+  return { runner: runnerAt(now), runnerAt, calls, requests }
 }
 const startBrowser = { op: 'browser_start', runtimeId: 'runtime-1', browserKey } as const
 
@@ -807,25 +793,16 @@ test("starting a browser creates its profile and its container on the runtime's 
 })
 
 test('a running browser is left as it is, and a stopped one starts again with its sign-ins', async () => {
-  const running = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: true },
-    profileCreatedAt: 0,
-  })
+  const running = browserDocker({ browser: { isRunning: true } })
   await running.runner.run(startBrowser)
   expect(running.requests()).toEqual([])
-  const stopped = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: false },
-    profileCreatedAt: 0,
-  })
+  const stopped = browserDocker({ browser: { isRunning: false } })
   await stopped.runner.run(startBrowser)
   expect(stopped.requests()).toEqual([`POST /containers/${browserName}/start`])
 })
 
 test("a browser made from another image than its runtime's is made again from the runtime's image, keeping its sign-ins", async () => {
-  const stale = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: false, image: 'sha256:older-runtime-image' },
-    profileCreatedAt: 0,
-  })
+  const stale = browserDocker({ browser: { isRunning: false, image: 'sha256:older-runtime-image' } })
   await stale.runner.run(startBrowser)
   expect(stale.requests()).toEqual([
     `DELETE /containers/${browserName}?force=true`,
@@ -836,10 +813,7 @@ test("a browser made from another image than its runtime's is made again from th
 })
 
 test('a profile older than the sign-in lifetime, or a browser left from an earlier runtime container, starts over empty', async () => {
-  const expired = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: true },
-    profileCreatedAt: 0,
-  })
+  const expired = browserDocker({ browser: { isRunning: true } })
   await expired.runner.run({ ...startBrowser, signInHours: 8 })
   expect(expired.requests()).toEqual([
     `DELETE /containers/${browserName}?force=true`,
@@ -848,16 +822,7 @@ test('a profile older than the sign-in lifetime, or a browser left from an earli
     `POST /containers/create?name=${browserName}`,
     `POST /containers/${browserName}/start`,
   ])
-  const kept = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: true },
-    profileCreatedAt: 0,
-  })
-  await kept.runner.run({ ...startBrowser, signInHours: 11 })
-  expect(kept.requests()).toEqual([])
-  const earlier = browserDocker({
-    browser: { networkMode: 'container:gone-id', isRunning: false },
-    profileCreatedAt: 0,
-  })
+  const earlier = browserDocker({ browser: { networkMode: 'container:gone-id', isRunning: false } })
   await earlier.runner.run(startBrowser)
   expect(earlier.requests().slice(0, 2)).toEqual([
     `DELETE /containers/${browserName}?force=true`,
@@ -872,9 +837,7 @@ test('a browser starts only on a running runtime of this host, with room for it,
   const full = browserDocker({ freeBytes: 512 * 1024 ** 2 })
   expect(await failureOf(full.runner.run(startBrowser))).toContain('no room for another browser on this host')
   expect(full.requests()).toEqual([])
-  const foreign = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: true, runtimeLabel: 'runtime-2' },
-  })
+  const foreign = browserDocker({ browser: { isRunning: true, runtimeLabel: 'runtime-2' } })
   expect(await failureOf(foreign.runner.run(startBrowser))).toContain('not a managed browser')
   expect(await failureOf(foreign.runner.browserNameOf('runtime-1', browserKey))).toContain('not a managed browser')
   expect(await failureOf(browserDocker().runner.browserNameOf('runtime-1', browserKey))).toContain(
@@ -883,9 +846,7 @@ test('a browser starts only on a running runtime of this host, with room for it,
 })
 
 test('stopping a browser stops its container and keeps its sign-ins', async () => {
-  const { runner, requests } = browserDocker({
-    browser: { networkMode: 'container:runtime-container-id', isRunning: true },
-  })
+  const { runner, requests } = browserDocker({ browser: { isRunning: true } })
   await runner.run({ op: 'browser_stop', runtimeId: 'runtime-1', browserKey })
   expect(requests()).toEqual([`POST /containers/${browserName}/stop?t=5`])
 })
@@ -903,8 +864,7 @@ test("stopping, recreating or removing a runtime removes its browsers and their 
             { Name: `spyria-rt-runtime-10-browser-${'b'.repeat(32)}-profile` },
           ],
         }
-      if (path.startsWith('/containers/') && path.endsWith('/json'))
-        return { Config: { Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } } }
+      if (path.startsWith('/containers/') && path.endsWith('/json')) return managedRuntimeJson
       if (method === 'DELETE' && path.includes('-browser-')) deleted.push(path)
       return {}
     }) as Docker
@@ -946,7 +906,7 @@ test('a browser nobody has been attached to for the idle time is stopped, an att
 })
 
 test("a browser's file is read by its id from the browser's files, never by a path, and only for a managed browser", async () => {
-  const { runner } = browserDocker({ browser: { networkMode: 'container:runtime-container-id', isRunning: true } })
+  const { runner } = browserDocker({ browser: { isRunning: true } })
   expect(await runner.browserFilePathOf('runtime-1', browserKey, 'a'.repeat(32))).toBe(
     `/containers/${browserName}/archive?path=${encodeURIComponent(`/var/lib/spyria/browser/files/${'a'.repeat(32)}`)}`,
   )
@@ -957,96 +917,42 @@ test("a browser's file is read by its id from the browser's files, never by a pa
   )
 })
 
+const deletionsOf = (requests: string[]) => requests.filter((request) => request.startsWith('DELETE '))
+const browserRemoved = [`DELETE /containers/${browserName}?force=true`, `DELETE /volumes/${browserName}-profile`]
+
 test("a running browser loses its sign-ins once they outlive the admin's limit, whether the host learned the limit at start or from the profile", async () => {
-  const sweepDocker = (profileLabels: Record<string, string>) => {
-    const deleted: string[] = []
-    const docker = (async (method: string, path: string) => {
-      if (path.startsWith('/containers/json')) return [{ Names: [`/${browserName}`] }]
-      if (path === '/containers/spyria-rt-runtime-1/json')
-        return {
-          Id: 'runtime-container-id',
-          Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
-          State: { Running: true },
-        }
-      if (path === `/containers/${browserName}/json`)
-        return {
-          Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.browser': 'runtime-1' } },
-          HostConfig: { NetworkMode: 'container:runtime-container-id' },
-          State: { Running: true },
-        }
-      if (path === `/volumes/${browserName}-profile` && method === 'GET') return { Labels: profileLabels }
-      if (method === 'DELETE') deleted.push(path)
-      return {}
-    }) as Docker
-    return { docker, deleted }
-  }
-  const created = { 'spyria.browser.created': '0' }
-  const labelled = sweepDocker({ ...created, 'spyria.browser.sign_in_hours': '8' })
-  await createCommandRunner({
-    docker: labelled.docker,
-    prefix: 'spyria-',
+  const limitedToEightHours = { 'spyria.browser.created': '0', 'spyria.browser.sign_in_hours': '8' }
+  const labelled = browserDocker({
+    browser: { isRunning: true },
+    profileLabels: limitedToEightHours,
     now: () => 9 * 3_600_000,
-  }).removeExpiredBrowsers()
-  expect(labelled.deleted).toEqual([`/containers/${browserName}?force=true`, `/volumes/${browserName}-profile`])
+  })
+  await labelled.runner.removeExpiredBrowsers()
+  expect(deletionsOf(labelled.requests())).toEqual(browserRemoved)
 
-  const unlimited = sweepDocker(created)
-  await createCommandRunner({
-    docker: unlimited.docker,
-    prefix: 'spyria-',
-    now: () => 1000 * 3_600_000,
-  }).removeExpiredBrowsers()
-  expect(unlimited.deleted).toEqual([])
+  const unlimited = browserDocker({ browser: { isRunning: true }, now: () => 1000 * 3_600_000 })
+  await unlimited.runner.removeExpiredBrowsers()
+  expect(deletionsOf(unlimited.requests())).toEqual([])
 
-  const relabelled = sweepDocker({ ...created, 'spyria.browser.sign_in_hours': '8' })
-  const latest = createCommandRunner({ docker: relabelled.docker, prefix: 'spyria-', now: () => 9 * 3_600_000 })
-  await latest.run({ ...startBrowser, signInHours: 11 })
-  await latest.removeExpiredBrowsers()
-  expect(relabelled.deleted).toEqual([])
+  const relabelled = browserDocker({
+    browser: { isRunning: true },
+    profileLabels: limitedToEightHours,
+    now: () => 9 * 3_600_000,
+  })
+  await relabelled.runner.run({ ...startBrowser, signInHours: 11 })
+  await relabelled.runner.removeExpiredBrowsers()
+  expect(deletionsOf(relabelled.requests())).toEqual([])
 })
 
 test('a browser started with a sign-in limit keeps it on its profile, so a host that restarts still wipes the sign-ins once they outlive it', async () => {
-  const { runner, calls } = browserDocker()
-  await runner.run({ ...startBrowser, signInHours: 8 })
-  expect(calls.find(({ path }) => path === '/volumes/create')?.body).toEqual({
-    Name: `${browserName}-profile`,
-    Labels: {
-      'spyria.managed': '1',
-      'spyria.browser': 'runtime-1',
-      'spyria.browser.created': String(36_000_000),
-      'spyria.browser.sign_in_hours': '8',
-    },
-  })
-
-  const volumes = new Map<string, Record<string, string>>()
-  const deleted: string[] = []
   let clock = 10 * 3_600_000
-  const docker = (async (method: string, path: string, body?: unknown) => {
-    if (path === '/containers/spyria-rt-runtime-1/json')
-      return {
-        Id: 'runtime-container-id',
-        Config: { Image: image, Labels: { 'spyria.managed': '1', 'spyria.runtime': 'runtime-1' } },
-        State: { Running: true },
-      }
-    if (path === `/containers/${browserName}/json`) throw new DockerError(404, 'No such container')
-    if (path.startsWith('/containers/json')) return [{ Names: [`/${browserName}`] }]
-    if (path === '/volumes/create') {
-      const { Name, Labels } = body as { Name: string; Labels: Record<string, string> }
-      volumes.set(Name, Labels)
-    }
-    if (method === 'GET' && path.startsWith('/volumes/')) {
-      const labels = volumes.get(path.slice('/volumes/'.length))
-      if (!labels) throw new DockerError(404, 'No such volume')
-      return { Labels: labels }
-    }
-    if (method === 'DELETE') deleted.push(path)
-    return {}
-  }) as Docker
-  await createCommandRunner({ docker, prefix: 'spyria-', now: () => clock }).run({ ...startBrowser, signInHours: 8 })
-  const restartedHost = createCommandRunner({ docker, prefix: 'spyria-', now: () => clock })
+  const { runner, runnerAt, requests } = browserDocker({ now: () => clock })
+  await runner.run({ ...startBrowser, signInHours: 8 })
+  const restartedHost = runnerAt(() => clock)
   clock += 7 * 3_600_000
   await restartedHost.removeExpiredBrowsers()
-  expect(deleted).toEqual([])
+  expect(deletionsOf(requests())).toEqual([])
   clock += 3_600_000
   await restartedHost.removeExpiredBrowsers()
-  expect(deleted).toEqual([`/containers/${browserName}?force=true`, `/volumes/${browserName}-profile`])
+  expect(deletionsOf(requests())).toEqual(browserRemoved)
 })

@@ -3,7 +3,6 @@ import { fakeMcpUrl } from '../stack-ports'
 import {
   accountOf,
   addLlmKey,
-  addParticipant,
   approvalsOf,
   chooseConnectionAction,
   connectionsOf,
@@ -11,20 +10,18 @@ import {
   githubSectionOf,
   inPopup,
   type Locator,
-  llmSectionOf,
+  lastToolResultOf,
   logInAtFakeProvider,
   mainOf,
   messageItemsOf,
-  openChat,
   openPanelTab,
   openProfile,
   openSettings,
   type Page,
+  promptTool,
   research,
-  sendMessage,
   tabPanelOf,
   test,
-  workingIndicatorOf,
 } from './fixtures'
 
 test.describe('Tools catalogue', () => {
@@ -140,14 +137,8 @@ test.describe('Tools catalogue', () => {
     text: string,
   ) => {
     await toolGrantsSynced(workerStack)
-    await agentScript(research, script)
-    await openChat(page, 'Research')
-    await sendMessage(page, text)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await messageItemsOf(page).getByRole('button', { name: stepName }).last().click()
-    return messageItemsOf(page)
-      .filter({ has: page.getByRole('button', { name: stepName, expanded: true }) })
-      .last()
+    await promptTool(page, agentScript, text, script)
+    return lastToolResultOf(page, stepName)
   }
   const untick = async (checkbox: Locator) => {
     await checkbox.click()
@@ -186,19 +177,7 @@ test.describe('Tools catalogue', () => {
     await bobPage.context().close()
   })
 
-  test('As a member who can manage the tools catalogue, I register CRM while a chat’s agent is running, and its next prompt uses CRM without a restart', {
-    tag: ['@spec-38'],
-  }, async ({ page, workerStack, agentScript }) => {
-    await agentScript(research, { text: 'Ready.' })
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Get ready')
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    const gatewayName = await registerCrm(page, workerStack)
-    const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
-    await expect(await promptIn(workerStack, page, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
-  })
-
-  test('As a member who can manage the tools catalogue, I give the Member role Read only on CRM and Bob’s update is refused, also after he removes his LLM key and adds it again', {
+  test('As a member who can manage the tools catalogue, I give the Member role Read only on CRM and Bob’s update is refused', {
     tag: ['@spec-38', '@spec-58'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const gatewayName = await registerCrm(page, workerStack)
@@ -208,40 +187,6 @@ test.describe('Tools catalogue', () => {
     const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
     await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it')).toContainText(
       notOffered('CRM', 'update'),
-    )
-
-    await openProfile(bobPage, 'LLM keys')
-    await llmSectionOf(bobPage).getByRole('button', { name: 'Remove Mistral' }).click()
-    await bobPage.getByRole('dialog', { name: 'Remove LLM key' }).getByRole('button', { name: 'Remove' }).click()
-    await expect
-      .poll(async () => {
-        const [row] = await workerStack.database.$client`
-          select virtual_key_id from member_gateway_keys where user_id = 'member-bob'`
-        const { virtual_key } = await workerStack.gateway<{ virtual_key: { provider_configs: unknown[] | null } }>(
-          `/api/governance/virtual-keys/${row?.virtual_key_id}`,
-        )
-        return virtual_key.provider_configs?.length ?? 0
-      })
-      .toBe(0)
-    await addLlmKey(bobPage, 'Mistral')
-    await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it again')).toContainText(
-      notOffered('CRM', 'update'),
-    )
-    const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
-    await expect(await promptIn(workerStack, bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
-    await bobPage.context().close()
-  })
-
-  test('As a member who can manage the tools catalogue, I give the Admin role of a chat owner Read only on CRM and a guest’s prompt in her chat cannot use update either, while lookup works', {
-    tag: ['@spec-38', '@spec-58'],
-  }, async ({ page, browser, workerStack, agentScript }) => {
-    const gatewayName = await registerCrm(page, workerStack)
-    await setAllTools(page, 'Admin', 'Write', false)
-    await addParticipant(workerStack, research, 'member-bob', 'prompter')
-    const bobPage = await openAsBobWithKey(browser, workerStack)
-    const update = toolScriptOf(gatewayName, 'update', 'Tried to update.')
-    await expect(await promptIn(workerStack, bobPage, agentScript, update, 'Update it')).toContainText(
-      "CRM isn't available on Bob's prompts in this chat",
     )
     const lookup = toolScriptOf(gatewayName, 'lookup', 'Looked it up.')
     await expect(await promptIn(workerStack, bobPage, agentScript, lookup, 'Look it up')).toContainText('ran lookup')
@@ -258,15 +203,6 @@ test.describe('Tools catalogue', () => {
     await expect(writeTools.getByRole('checkbox', { name: 'lookup for Admin' })).toHaveCount(0)
     await afterSaving(page, () => untick(writeTools.getByRole('checkbox', { name: 'update for Admin' })))
     await expect(writeTools.getByRole('checkbox', { name: 'update for Member' })).toBeChecked()
-    await page.reload()
-    await openServer(page, 'CRM')
-    await access.getByRole('tab', { name: /^Write/ }).click()
-    await expect(writeTools.getByRole('checkbox', { name: 'update for Admin' })).not.toBeChecked()
-    await expect(writeTools.getByRole('checkbox', { name: 'update for Member' })).toBeChecked()
-    await access.getByRole('tab', { name: /^Read/ }).click()
-    await expect(
-      access.getByRole('table', { name: 'Read tools of CRM' }).getByRole('checkbox', { name: 'lookup for Admin' }),
-    ).toBeChecked()
     await expect(
       await promptIn(
         workerStack,

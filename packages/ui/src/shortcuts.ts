@@ -22,7 +22,7 @@ const isIgnored = (event: KeyboardEvent) =>
   (event.target instanceof Element && event.target.closest(typingSelector) !== null) ||
   document.querySelector(openOverlaySelector) !== null
 
-export const shortcutKeyOf = (event: Pick<KeyboardEvent, 'key'>) => event.key.toLowerCase()
+const shortcutKeyOf = (event: Pick<KeyboardEvent, 'key'>) => event.key.toLowerCase()
 
 const runDeferred = (prefix: string) => {
   pendingChord = undefined
@@ -61,7 +61,7 @@ const publish = (next: readonly Shortcut[]) => {
   for (const listener of listeners) listener()
 }
 
-export const registerShortcut = (shortcut: Shortcut) => {
+const registerShortcut = (shortcut: Shortcut) => {
   publish([...shortcuts, shortcut])
   return () => publish(shortcuts.filter((registered) => registered !== shortcut))
 }

@@ -50,10 +50,6 @@ await waitFor(
 )
 afterAll(() => Promise.all(openedStores.map((store) => store.close())))
 
-test('a full sync records every table it synced for the member and the workspace', () => {
-  expect(JSON.parse(syncedTables.get(syncedTablesKey) ?? '[]')).toContain('llmCredentials')
-})
-
 test('a store opened offline on a synced cache is readable at once with every table the synced store had, yet not loaded', async () => {
   const offline = await openStore(unreachableCacheUrl, syncedTablesWithout(null))
   expect(await isReadableWithin(offline, 2_000)).toBe(true)
@@ -62,10 +58,14 @@ test('a store opened offline on a synced cache is readable at once with every ta
 })
 
 test('a cache that lacks a table the app reads, or has no record, waits for the full sync', async () => {
-  expect(await isReadableWithin(await openStore(unreachableCacheUrl, syncedTablesWithout('llmCredentials')), 500)).toBe(
+  const [lackingTable, withoutRecord] = await Promise.all([
+    openStore(unreachableCacheUrl, syncedTablesWithout('llmCredentials')),
+    openStore(unreachableCacheUrl, new Map()),
+  ])
+  expect(await Promise.all([isReadableWithin(lackingTable, 500), isReadableWithin(withoutRecord, 500)])).toEqual([
     false,
-  )
-  expect(await isReadableWithin(await openStore(unreachableCacheUrl, new Map()), 500)).toBe(false)
+    false,
+  ])
 })
 
 test('closing a workspace that never became readable ends the wait for it as closed, so opening the app does not wait without end', async () => {

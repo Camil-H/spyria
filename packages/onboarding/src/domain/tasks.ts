@@ -11,7 +11,7 @@ export const onboardingTasks = [
 
 export type OnboardingTask = (typeof onboardingTasks)[number]
 export type TaskScope = 'workspace' | 'member'
-export type TaskState = 'done' | 'open'
+type TaskState = 'done' | 'open'
 export type TaskView = Readonly<{ task: OnboardingTask; scope: TaskScope; state: TaskState }>
 
 export type OnboardingFacts = Readonly<{

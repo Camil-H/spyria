@@ -1,6 +1,7 @@
 import {
   boundingBoxOf,
   composerOf,
+  dragBy,
   expect,
   expectMembers,
   mainOf,
@@ -12,20 +13,12 @@ import {
   tabPanelOf,
   test,
   viewportOf,
-} from '../fixtures'
+} from './fixtures'
 
 const tabListOf = (page: Page) => panelOf(page).getByRole('tablist', { name: 'Panel tabs' })
 const panelWidthOf = async (page: Page) => (await boundingBoxOf(panelOf(page))).width
 
-const dragResizeHandleBy = async (page: Page, horizontalOffset: number) => {
-  const handleBox = await boundingBoxOf(page.getByRole('separator', { name: 'Resize panel' }))
-  const handleCenterX = handleBox.x + handleBox.width / 2
-  const handleCenterY = handleBox.y + handleBox.height / 2
-  await page.mouse.move(handleCenterX, handleCenterY)
-  await page.mouse.down()
-  await page.mouse.move(handleCenterX + horizontalOffset, handleCenterY, { steps: 8 })
-  await page.mouse.up()
-}
+const resizeHandleOf = (page: Page) => page.getByRole('separator', { name: 'Resize panel' })
 
 const tabLabelsOf = (page: Page) =>
   tabListOf(page)
@@ -163,19 +156,6 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('$0.00')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
-
-    await test.step('lists the tools of the owner, who has signed in to none, on Welcome', async () => {
-      await openPanelTab(page, 'Welcome', 'Connected tools')
-      await expectOwnerConnections(page)
-    })
-
-    await test.step('lists the members with their role on Welcome', async () => {
-      await openPanelTab(page, 'Welcome', 'Members')
-      await expectMembers(page, [
-        ['Alice', 'Owner'],
-        ['Bob', 'Prompter'],
-      ])
-    })
   })
 
   test('As a member, I see the panel’s empty states and the panel of a chat another member owns', async ({ page }) => {
@@ -188,13 +168,6 @@ test.describe('Side panel', () => {
       await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
       await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: 'Changes' })).toBeVisible()
       await expect(tabPanelOf(page)).toContainText('No changes')
-    })
-
-    await test.step('usage: shows zeros for the owner of a chat without data', async () => {
-      await openPanelTab(page, 'Research', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
-      await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.00')
-      await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
 
     await test.step('lists only the owner of a chat without explicit members', async () => {
@@ -255,7 +228,7 @@ test.describe('Side panel', () => {
 
   test('As a member, I hide and show the panel, which keeps its width and tab', async ({ page }) => {
     await openPanelTab(page, 'Invoice bug', 'Changes')
-    await dragResizeHandleBy(page, -100)
+    await dragBy(page, resizeHandleOf(page), -100)
     const widthBeforeHiding = await panelWidthOf(page)
 
     await test.step('hides the panel and gives the width and the full height back to the chat view', async () => {
@@ -286,7 +259,7 @@ test.describe('Side panel', () => {
 
   test('As a member, I resize the panel within its bounds, with the mouse or the keyboard', async ({ page }) => {
     await openChat(page, 'Invoice bug')
-    const separator = page.getByRole('separator', { name: 'Resize panel' })
+    const separator = resizeHandleOf(page)
 
     await test.step('exposes the separator with its bounds and the default width', async () => {
       await expect(separator).toHaveAttribute('aria-valuemin', '280')
@@ -307,9 +280,9 @@ test.describe('Side panel', () => {
 
     await test.step('widens when dragged left and narrows when dragged right', async () => {
       const startWidth = await panelWidthOf(page)
-      await dragResizeHandleBy(page, -100)
+      await dragBy(page, separator, -100)
       expect(await panelWidthOf(page)).toBeCloseTo(startWidth + 100, 0)
-      await dragResizeHandleBy(page, 50)
+      await dragBy(page, separator, 50)
       expect(await panelWidthOf(page)).toBeCloseTo(startWidth + 50, 0)
     })
 
@@ -324,14 +297,14 @@ test.describe('Side panel', () => {
       const maximumWidth = Math.floor((await boundingBoxOf(mainOf(page))).width - 320)
       expect(maximumWidth).toBeGreaterThan(640)
       await expect(separator).toHaveAttribute('aria-valuemax', String(maximumWidth))
-      await dragResizeHandleBy(page, -1000)
+      await dragBy(page, separator, -1000)
       expect(await panelWidthOf(page)).toBeCloseTo(maximumWidth, 0)
-      await dragResizeHandleBy(page, 1000)
+      await dragBy(page, separator, 1000)
       expect(await panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 
     await test.step('narrows a wide panel when the window shrinks so it never covers the chat', async () => {
-      await dragResizeHandleBy(page, -1000)
+      await dragBy(page, separator, -1000)
       const viewport = viewportOf(page)
       await page.setViewportSize({ width: viewport.width - 200, height: viewport.height })
       const mainBox = await boundingBoxOf(mainOf(page))
@@ -341,7 +314,7 @@ test.describe('Side panel', () => {
       await page.setViewportSize(viewport)
       const restoredMaximumWidth = Math.floor((await boundingBoxOf(mainOf(page))).width - 320)
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(restoredMaximumWidth, 0)
-      await dragResizeHandleBy(page, 1000)
+      await dragBy(page, separator, 1000)
       await expect.poll(() => panelWidthOf(page)).toBeCloseTo(280, 0)
     })
 

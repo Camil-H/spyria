@@ -27,7 +27,7 @@ const githubAccessInChatOf = async (
   return { tools: mayUse && holder ? githubToolsOf(accessRows, holder) : [], approvals }
 }
 
-export const githubToolsInChatOf = async (
+const githubToolsInChatOf = async (
   unitOfWork: Pick<UnitOfWork, 'chats' | 'toolCalls'>,
   chatId: ChatId,
   memberId: MemberId,

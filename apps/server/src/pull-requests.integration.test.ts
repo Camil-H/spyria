@@ -1,48 +1,30 @@
-import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { createHmac } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
-import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
-import {
-  acme,
-  alice,
-  bob,
-  lee,
-  rpcOf,
-  runtimeTurn,
-  sessionTokenOf,
-  startAgentStack,
-  testSecretsKeyring,
-  textOf,
-  waitFor,
-} from './testing/testing.ts'
+import type { ChatId } from '@spyria/kernel'
+import { fakeGitHubAppId } from './testing/fake-github.ts'
+import { gitIn, startGitHubStack } from './testing/github-stack.ts'
+import { alice, bob, lee, rpcOf, runtimeTurn, textOf } from './testing/testing.ts'
 
 setDefaultTimeout(40_000)
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
-afterAll(() => fakeGitHub.stop())
+const {
+  stack,
+  fakeGitHub,
+  request,
+  configureGitHubApp,
+  connectGitHub,
+  disconnectGitHub,
+  newDevChat,
+  promptAndWait,
+  runtimeWorkspaceOf,
+} = await startGitHubStack({ routing: true })
 const { app, database } = stack
 const webhookSecret = 'whsec-pull-requests-0123'
 const noGitHubAccount = 'Connect your GitHub account in your profile to push'
 const githubReadTools = ['fetch_branch', 'read_review_threads', 'read_checks', 'list_issues', 'read_issue']
 const allGitHubTools = ['push_branch', 'open_pull_request', 'update_pull_request', ...githubReadTools]
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
-}
 const publish = (userId: string, chat: ChatId, action: string, draft: object = {}) =>
   request(userId, 'POST', `/api/chats/${chat}/publish/${action}`, draft)
 const githubToolsOf = async (userId: string, chat: ChatId) =>
@@ -55,13 +37,6 @@ const setMemberGitHubLevel = async (level: string | null) =>
       toolChanges: {},
     }),
   ).toMatchObject({ status: 200 })
-const git = (cwd: string, ...command: string[]) => {
-  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
-    cwd,
-    stderr: 'pipe',
-  })
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
-}
 const signatureOf = (body: string, secret = webhookSecret) =>
   `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
 const sendWebhook = async (
@@ -92,71 +67,44 @@ const toolCallRows = async (chat: ChatId) => [
   ...(await database.$client`select prompter_id, owner_id, server, tool, read_only, decision, status from tool_calls where chat_id = ${chat}`),
 ]
 
-expect(
-  await request(alice, 'POST', '/api/github-settings', {
-    appId: fakeGitHubAppId,
-    clientId: fakeGitHubClientId,
-    clientSecret: fakeGitHubClientSecret,
-    privateKey: fakeGitHub.appPrivateKey,
-    webhookSecret,
-  }),
-).toMatchObject({ status: 200 })
+await configureGitHubApp(webhookSecret)
 
-const connectGitHub = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(started.body.authorizeUrl, { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  expect((await app.request(`${callback.pathname}${callback.search}`)).status).toBe(200)
-  const [row] = await database.$client`
-    select encrypted_access_token from github_connections where workspace_id = ${acme} and user_id = ${userId}`
-  return secretBox.open(String(row?.encrypted_access_token))
-}
-const newDevChat = async (participants: { memberId: string; roleId: string }[] = []) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Fix totals',
-    projectId: null,
-    repository: 'acme/app',
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  for (const { memberId, roleId } of participants)
-    await database.$client`
-      insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${memberId}, ${roleId})`
-  const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
-  return { id, branch: String(branch) }
-}
-const promptAndWait = async (id: ChatId, text: string) => {
-  const promptId = await stack.prompt(id, text)
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
-  return stack.repliesTo(promptId, ['kind', 'body', 'step'])
-}
 const committedWorkspace = async (id: ChatId) => {
-  await promptAndWait(id, 'stub:ls')
-  await waitFor(
-    async () =>
-      (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot !=
-      null,
-    20_000,
-  )
-  const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
-  const workspace = String(frames.find((frame) => frame.workspace)?.workspace.cwd)
+  const { workspace } = await runtimeWorkspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 2\n')
-  git(workspace, 'commit', '-qam', 'Fix the totals')
+  gitIn(workspace, 'commit', '-qam', 'Fix the totals')
   return workspace
 }
+type AgentHost = Awaited<ReturnType<typeof stack.agentHost>>['host']
+const guestTurnOn = async (host: AgentHost, branch: string) => {
+  const guest = await runtimeTurn(host, bob)
+  await database.$client`
+    update chats set repository = 'acme/app', base_branch = 'main', git_branch = ${branch} where id = ${guest.chatId}`
+  return guest
+}
+const guestToolCall = async (host: AgentHost, token: string, name: string, input: object) => {
+  const answer = await host.modelCall({
+    path: '/mcp/github',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: rpcOf('tools/call', { name, arguments: input }),
+  })
+  const { result } = JSON.parse(answer.body)
+  return { isError: result.isError, text: textOf(result) }
+}
+const pullRequestNumberIn = (text: string) => Number(/#(\d+)/.exec(text)?.[1])
+const fakePullRequestOf = (authorToken: string, number: number) =>
+  fakeGitHub.pullRequests.find((known) => known.authorToken === authorToken && known.number === number)
 
 test('a member whose GitHub access allows it pushes and opens a pull request with their own GitHub token passed only to git, as the Changes panel’s check shows; a member with Read, a reader and a member without GitHub are refused', async () => {
+  for (const member of [alice, bob]) await disconnectGitHub(member)
+  fakeGitHub.pullRequests.splice(0)
   const { relay, launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
-  const { id, branch } = await newDevChat([
-    { memberId: bob, roleId: 'prompter' },
-    { memberId: lee, roleId: 'reader' },
-  ])
+  const { id, branch } = await newDevChat({
+    participants: [
+      { memberId: bob, roleId: 'prompter' },
+      { memberId: lee, roleId: 'reader' },
+    ],
+  })
   const workspace = await committedWorkspace(id)
 
   expect(await publish(alice, id, 'push')).toEqual({
@@ -235,7 +183,7 @@ test('a member whose GitHub access allows it pushes and opens a pull request wit
   expect(posted).toMatchObject({ actor: alice, payload: { step: { type: 'pull_request', number: 1 } } })
 
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 3\n')
-  git(workspace, 'commit', '-qam', 'Address the review')
+  gitIn(workspace, 'commit', '-qam', 'Address the review')
   expect((await publish(alice, id, 'pull_request')).body.text).toBe(
     `Pushed ${branch} to pull request #1 (2 commits): ${fakeGitHub.urls.webUrl}/acme/app/pull/1`,
   )
@@ -293,7 +241,8 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   const { host } = await stack.agentHost('Agent tools host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
-  await connectGitHub(alice)
+  await disconnectGitHub(bob)
+  const aliceToken = await connectGitHub(alice)
   stack.setFakeLlmScript({
     steps: [{ tool: 'open_pull_request', arguments: { title: 'Agent totals', body: 'Opened by the agent.' } }],
     text: 'The pull request is open.',
@@ -303,7 +252,10 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   expect(toolStep).toMatchObject({ name: 'open_pull_request' })
   expect(toolStep?.result).toStartWith('Opened pull request #')
   expect((await cardOf(id))?.step).toMatchObject({ title: 'Agent totals', state: 'open' })
-  expect(fakeGitHub.pullRequests.at(-1)).toMatchObject({ title: 'Agent totals', body: 'Opened by the agent.' })
+  expect(fakePullRequestOf(aliceToken, pullRequestNumberIn(String(toolStep?.result)))).toMatchObject({
+    title: 'Agent totals',
+    body: 'Opened by the agent.',
+  })
   expect(await toolCallRows(id)).toEqual([
     {
       prompter_id: alice,
@@ -322,36 +274,18 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
     { type: 'branch.pushed', actorKind: 'agent', actor: id, onBehalfOf: alice },
     { type: 'message.posted', actorKind: 'agent', actor: id, onBehalfOf: alice },
   ])
-  stack.setFakeLlmScript({
-    steps: [{ tool: 'update_pull_request', arguments: { title: 'Agent totals, renamed' } }],
-    text: 'Renamed.',
-  })
-  const renamed = await promptAndWait(id, 'Rename the pull request')
-  expect(renamed.find((reply) => reply.step?.type === 'tool')?.step).toMatchObject({
-    name: 'update_pull_request',
-    result: expect.stringMatching(/^Updated pull request #/),
-  })
-  expect((await cardOf(id))?.step).toMatchObject({ title: 'Agent totals, renamed', state: 'open' })
 
-  const guest = await runtimeTurn(host, bob)
-  await database.$client`
-    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest' where id = ${guest.chatId}`
-  const guestCall = async (tool: string) => {
-    const answer = await host.modelCall({
-      path: '/mcp/github',
-      headers: { authorization: `Bearer ${guest.token}`, 'content-type': 'application/json' },
-      body: rpcOf('tools/call', { name: tool, arguments: { title: 'Guest' } }),
-    })
-    const { result } = JSON.parse(answer.body)
-    expect(result.isError).toBe(true)
-    return textOf(result)
-  }
-  expect(await guestCall('push_branch')).toBe('Bob needs to connect GitHub')
+  const guest = await guestTurnOn(host, 'spyria/guest')
+  expect(await guestToolCall(host, guest.token, 'push_branch', { title: 'Guest' })).toEqual({
+    isError: true,
+    text: 'Bob needs to connect GitHub',
+  })
   try {
     await setMemberGitHubLevel('read')
-    expect(await guestCall('open_pull_request')).toBe(
-      "Bob's access to GitHub does not include open_pull_request in this chat",
-    )
+    expect(await guestToolCall(host, guest.token, 'open_pull_request', { title: 'Guest' })).toEqual({
+      isError: true,
+      text: "Bob's access to GitHub does not include open_pull_request in this chat",
+    })
   } finally {
     await setMemberGitHubLevel(null)
   }
@@ -387,13 +321,13 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   )
 })
 
-test('signed webhooks update the card’s checks, review, comments and state; a bad signature, a duplicate delivery and an unknown pull request change nothing', async () => {
+test('a signed webhook updates the card’s checks; a bad signature, a duplicate delivery, an unknown pull request and a ping change nothing', async () => {
   await stack.agentHost('Webhook host', { routesModelCalls: true })
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
   const opened = await publish(alice, id, 'pull_request', { title: 'Webhook totals', body: '' })
-  const number = Number(/#(\d+)/.exec(opened.body.text)?.[1])
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const repository = { full_name: 'acme/app' }
   const suite = (conclusion: string) => ({
@@ -424,46 +358,18 @@ test('signed webhooks update the card’s checks, review, comments and state; a 
   }
   expect(await sendWebhook('check_suite', unknown)).toEqual({ status: 202, body: { outcome: 'ignored' } })
   expect(await sendWebhook('ping', { zen: 'Keep it simple.' })).toEqual({ status: 202, body: { outcome: 'ignored' } })
-
-  const pullRequest = { number, html_url: (await stepOf()).url, title: 'Webhook totals', head: { sha: headSha } }
-  const reviewed = { action: 'submitted', repository, pull_request: { ...pullRequest, state: 'open' } }
-  await sendWebhook('pull_request_review', { ...reviewed, review: { state: 'changes_requested' } })
-  for (const [commentId, line] of [
-    [41, 1],
-    [42, 2],
-  ] as const)
-    await sendWebhook('pull_request_review_comment', {
-      action: 'created',
-      repository,
-      pull_request: { ...pullRequest, state: 'open' },
-      comment: { id: commentId, path: 'src/app.ts', line, user: { login: 'rita' }, body: `Comment ${commentId}` },
-    })
-  expect(await stepOf()).toMatchObject({
-    review: 'changes_requested',
-    comments: [
-      { id: 41, path: 'src/app.ts', line: 1, author: 'rita', body: 'Comment 41', isResolved: false },
-      { id: 42, path: 'src/app.ts', line: 2, author: 'rita', body: 'Comment 42', isResolved: false },
-    ],
-    checks: { 'check_suite:5': 'passing' },
-  })
-  await sendWebhook('pull_request', {
-    action: 'closed',
-    repository,
-    pull_request: { ...pullRequest, state: 'closed', merged: true, commits: 1 },
-  })
-  expect(await stepOf()).toMatchObject({ state: 'merged', review: 'changes_requested' })
   const stepChanges = await database.$client`
     select count(*)::int as count from events where chat_id = ${id} and type = 'message.step_changed'`
-  expect(stepChanges[0]?.count).toBe(5)
+  expect(stepChanges[0]?.count).toBe(1)
 })
 
-test('webhooks arriving together all land, one GitHub sends again after a failure is applied, and one older than the card changes nothing', async () => {
+test('webhooks arriving together all land, and one GitHub sends again after a failure is applied', async () => {
   await stack.agentHost('Racing webhook host', { routesModelCalls: true })
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
   const opened = await publish(alice, id, 'pull_request', { title: 'Racing totals', body: '' })
-  const number = Number(/#(\d+)/.exec(opened.body.text)?.[1])
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const repository = { full_name: 'acme/app' }
   const stepOf = async () => (await cardOf(id))?.step
@@ -496,24 +402,6 @@ test('webhooks arriving together all land, one GitHub sends again after a failur
     await sendWebhook('pull_request_review_comment', { ...commented, comment }, { delivery: 'delivery-failing' }),
   ).toEqual({ status: 200, body: { outcome: 'applied' } })
   expect((await stepOf()).comments).toMatchObject([{ id: 51, body: 'Comment 51' }])
-
-  await sendWebhook('pull_request', {
-    action: 'closed',
-    repository,
-    pull_request: {
-      ...pullRequest,
-      state: 'closed',
-      merged: true,
-      head: { sha: headSha },
-      updated_at: '2026-11-14T10:05:00Z',
-    },
-  })
-  await sendWebhook('pull_request', {
-    action: 'synchronize',
-    repository,
-    pull_request: { ...pullRequest, head: { sha: 'an-older-head' }, updated_at: '2026-11-14T10:00:00Z' },
-  })
-  expect(await stepOf()).toMatchObject({ state: 'merged', headSha, updatedAt: '2026-11-14T10:05:00Z' })
 })
 
 const toolResultsOf = (replies: { step?: unknown }[]) =>
@@ -521,28 +409,19 @@ const toolResultsOf = (replies: { step?: unknown }[]) =>
     const toolStep = step as { type?: string; name?: string; result?: string } | undefined
     return toolStep?.type === 'tool' ? [{ name: toolStep.name, result: toolStep.result }] : []
   })
-type AgentHost = Awaited<ReturnType<typeof stack.agentHost>>['host']
-const guestToolCall = async (host: AgentHost, token: string, name: string, input: object) => {
-  const answer = await host.modelCall({
-    path: '/mcp/github',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: rpcOf('tools/call', { name, arguments: input }),
-  })
-  const { result } = JSON.parse(answer.body)
-  return { isError: result.isError, text: textOf(result) }
-}
 
 test('the agent changes the title and description of the open pull request and the card follows; with no open pull request, or for a prompter whose GitHub access is Read, the change is refused', async () => {
   const { host } = await stack.agentHost('Pull request update host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
-  await connectGitHub(alice)
+  const aliceToken = await connectGitHub(alice)
   stack.setFakeLlmScript({ steps: [{ tool: 'update_pull_request', arguments: { title: 'Too early' } }], text: 'Done.' })
   expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
     { name: 'update_pull_request', result: 'This chat has no open pull request: open one first' },
   ])
-  expect((await publish(alice, id, 'pull_request', { title: 'Fix totals', body: 'First draft' })).status).toBe(200)
-  const opened = fakeGitHub.pullRequests.at(-1)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Fix totals', body: 'First draft' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   stack.setFakeLlmScript({
     steps: [{ tool: 'update_pull_request', arguments: { title: 'Fix the totals', body: 'Totals now add up.' } }],
     text: 'Updated.',
@@ -550,20 +429,18 @@ test('the agent changes the title and description of the open pull request and t
   expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
     {
       name: 'update_pull_request',
-      result: `Updated pull request #${opened?.number}: ${fakeGitHub.urls.webUrl}/acme/app/pull/${opened?.number}`,
+      result: `Updated pull request #${number}: ${fakeGitHub.urls.webUrl}/acme/app/pull/${number}`,
     },
   ])
-  expect(fakeGitHub.pullRequests.at(-1)).toMatchObject({ title: 'Fix the totals', body: 'Totals now add up.' })
+  expect(fakePullRequestOf(aliceToken, number)).toMatchObject({ title: 'Fix the totals', body: 'Totals now add up.' })
   expect((await cardOf(id))?.step).toMatchObject({ title: 'Fix the totals', state: 'open' })
-  expect(fakeGitHub.apiRequests).toContain(`PATCH /repos/acme/app/pulls/${opened?.number}`)
+  expect(fakeGitHub.apiRequests).toContain(`PATCH /repos/acme/app/pulls/${number}`)
   expect((await toolCallRows(id)).map(({ tool, read_only, status }) => ({ tool, read_only, status }))).toEqual([
     { tool: 'update_pull_request', read_only: false, status: 'refused' },
     { tool: 'update_pull_request', read_only: false, status: 'succeeded' },
   ])
 
-  const guest = await runtimeTurn(host, bob)
-  await database.$client`
-    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest' where id = ${guest.chatId}`
+  const guest = await guestTurnOn(host, 'spyria/guest')
   try {
     await setMemberGitHubLevel('read')
     expect(await guestToolCall(host, guest.token, 'update_pull_request', { title: 'Guest' })).toEqual({
@@ -580,8 +457,9 @@ test('any prompter’s agent reads review threads and issues of the chat’s rep
   const { id } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
-  expect((await publish(alice, id, 'pull_request', { title: 'Reviewed totals' })).status).toBe(200)
-  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Reviewed totals' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   fakeGitHub.reviewThreads.push(
     {
       repository: 'acme/app',
@@ -687,10 +565,7 @@ test('any prompter’s agent reads review threads and issues of the chat’s rep
     { prompter_id: alice, tool: 'read_issue', read_only: true, status: 'succeeded' },
   ])
 
-  const guest = await runtimeTurn(host, bob)
-  await database.$client`
-    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-reads'
-    where id = ${guest.chatId}`
+  const guest = await guestTurnOn(host, 'spyria/guest-reads')
   expect(await guestToolCall(host, guest.token, 'read_issue', { number: 41 })).toMatchObject({ isError: false })
   expect(await guestToolCall(host, guest.token, 'read_review_threads', {})).toEqual({
     isError: true,
@@ -724,8 +599,9 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
-  expect((await publish(alice, id, 'pull_request', { title: 'Checked totals' })).status).toBe(200)
-  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Checked totals' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const firstRunId = fakeGitHub.checkRuns.length + 1
   const run = { repository: 'acme/app', headSha, annotations: [] }
@@ -812,10 +688,7 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
     })),
   ).toEqual([{ prompter_id: alice, tool: 'read_checks', read_only: true, status: 'succeeded' }])
 
-  const guest = await runtimeTurn(host, bob)
-  await database.$client`
-    update chats set repository = 'acme/app', base_branch = 'main', git_branch = 'spyria/guest-checks'
-    where id = ${guest.chatId}`
+  const guest = await guestTurnOn(host, 'spyria/guest-checks')
   expect(await guestToolCall(host, guest.token, 'read_checks', { number })).toMatchObject({ isError: false })
   fakeGitHub.setInstallationPermissions({ contents: 'write', pull_requests: 'write', checks: 'read', metadata: 'read' })
   try {

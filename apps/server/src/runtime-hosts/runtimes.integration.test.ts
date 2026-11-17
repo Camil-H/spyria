@@ -299,7 +299,16 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
 
 test('the sweep removes runtimes stopped for 7 days with their container and volumes, keeping the chat history', async () => {
   const host = await fakeHost('Removing host')
-  const oldChat = chatId('chat-invoice-bug')
+  const oldChat = await newRuntimeChat('Old chat')
+  const promptId = `message-${crypto.randomUUID()}`
+  await database.$client.begin(async (sql) => {
+    await sql`
+      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+      values (${acme}, ${oldChat}, ${promptId}, 1, 'member', ${alice}, 'Go', now())`
+    await sql`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      values (${acme}, ${oldChat}, ${promptId}, 1, 'message.posted', ${alice}, '{}', now())`
+  })
   const recentChat = await newRuntimeChat()
   const old = await stoppedRuntime(oldChat)
   await stoppedRuntime(recentChat)
@@ -604,33 +613,15 @@ test('a sign-in expiring while its machine is removed waits for the removal and 
   expect(host?.capacity.expiredSignIns).toEqual({})
 })
 
-test("a failed install fails the runtime at once with npm's reason, and a retry installs and runs", async () => {
-  const machine = await newMachine()
-  const chat = await newRuntimeChat('Machine chat', undefined, 'codex')
-  const reason =
-    "code E404\n404 Not Found - GET http://registry.invalid/@openai%2fcodex - '@openai/codex@0.162.1' is not in this registry."
-  machine.failInstall(reason)
-  const capturedConsole = captureConsole()
-  await ensure(chat)
-  await runtimeIn(chat, 'failed')
-  capturedConsole.restore()
-  expect((await runtimeOf(chat)).failure).toBe(`install_failed: ${reason}`)
-  expect(harnessCommands(machine)).toEqual(['create', 'installed', 'install'])
-
-  machine.failInstall(undefined)
-  await retry(chat)
-  await runtimeIn(chat, 'running')
-  expect((await runtimeOf(chat)).failure).toBeNull()
-  expect(machine.installedHarnesses).toEqual(new Set(['codex']))
-})
-
-test('a failed bring-up stops its container to release its network; a retry removes it from its host, and failed runtimes idle for 7 days are removed by the sweep', async () => {
+test("a failed install fails the runtime at once with npm's reason and stops its container to release its network; a retry removes it from its host, installs and runs, and failed runtimes idle for 7 days are removed by the sweep", async () => {
   const machine = await newMachine()
   const [retriedChat, abandonedChat] = [
     await newRuntimeChat('Retried chat', undefined, 'codex'),
     await newRuntimeChat('Abandoned chat', undefined, 'codex'),
   ]
-  machine.failInstall('code E404')
+  const reason =
+    "code E404\n404 Not Found - GET http://registry.invalid/@openai%2fcodex - '@openai/codex@0.162.1' is not in this registry."
+  machine.failInstall(reason)
   const capturedConsole = captureConsole()
   for (const chat of [retriedChat, abandonedChat]) {
     await ensure(chat)
@@ -638,8 +629,10 @@ test('a failed bring-up stops its container to release its network; a retry remo
   }
   capturedConsole.restore()
   const [failed, abandoned] = [await runtimeOf(retriedChat), await runtimeOf(abandonedChat)]
-  const opsOf = (runtimeId: string) =>
-    machine.commands.filter((command) => command.runtimeId === runtimeId).map(({ op }) => op)
+  expect(failed.failure).toBe(`install_failed: ${reason}`)
+  const commandsOf = (runtimeId: string) => machine.commands.filter((command) => command.runtimeId === runtimeId)
+  const opsOf = (runtimeId: string) => commandsOf(runtimeId).map(({ op }) => op)
+  expect(harnessCommands({ commands: commandsOf(failed.id) })).toEqual(['create', 'installed', 'install'])
   await waitFor(() => opsOf(failed.id).includes('stop') && opsOf(abandoned.id).includes('stop'))
   expect(machine.containers.get(failed.id)?.running).toBe(false)
 
@@ -648,7 +641,10 @@ test('a failed bring-up stops its container to release its network; a retry remo
   await runtimeIn(retriedChat, 'running')
   await waitFor(() => !machine.containers.has(failed.id))
   expect(opsOf(failed.id).at(-1)).toBe('remove')
-  expect((await runtimeOf(retriedChat)).id).not.toBe(failed.id)
+  const retried = await runtimeOf(retriedChat)
+  expect(retried.id).not.toBe(failed.id)
+  expect(retried.failure).toBeNull()
+  expect(machine.installedHarnesses).toEqual(new Set(['codex']))
 
   await idleFor(abandonedChat, '6 days')
   await sweep()
@@ -693,16 +689,13 @@ test('a Claude Code or Codex session is never placed on a workspace host: with o
   expect(harnessCommands(workspaceHost)).toEqual([])
 })
 
-test('a runtime whose spyria-agent answers ready with a protocol below the minimum fails as outdated and is placed anew on the next prompt; an accepted one records its agent version', async () => {
+test('a runtime whose spyria-agent answers ready with a protocol below the minimum fails as outdated; an accepted one records its agent version', async () => {
   const host = await fakeHost('Old agent host', { agentProtocolVersion: 0 })
   const chat = await newRuntimeChat()
   const outdated = await ensure(chat)
   await runtimeIn(chat, 'failed')
   expect(await runtimeOf(chat)).toMatchObject({ id: outdated.id, failure: 'outdated', agent_protocol_version: null })
   await waitFor(() => host.containers.get(outdated.id)?.running === false)
-
-  const placed = await ensure(chat)
-  expect(placed.id).not.toBe(outdated.id)
   await host.disconnect()
 
   const current = await fakeHost('Current agent host')

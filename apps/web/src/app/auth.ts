@@ -1,7 +1,7 @@
 import type { WorkspaceSession } from '@spyria/db/zero-store'
 import type { MemberId, WorkspaceId } from '@spyria/kernel'
 
-export type SignInProvider = { id: string; kind: 'google' | 'microsoft' | 'oidc'; isWorkspaceSso: boolean }
+type SignInProvider = { id: string; kind: 'google' | 'microsoft' | 'oidc'; isWorkspaceSso: boolean }
 type SignInResult =
   | { status: 'signed_in' }
   | { status: 'not_invited'; email: string }

@@ -30,22 +30,31 @@ const logs = createBifrostUsageLogs({ url: gateway.url, ...gatewayAdmin, labels:
 const sync = (workspace: WorkspaceId = acme) => syncUsageNow(logs, { workspaceId: workspace, transact })
 
 const aliceKey = await virtualKeyOf(alice)
-const dimensionHeadersOf = (labels: Record<string, string>) =>
-  Object.fromEntries(Object.entries({ ...labels, run }).map(([name, value]) => [`x-bf-dim-${name}`, value]))
-let callsMade = 0
-const modelCall = async (labels: Record<string, string>, model = 'mistral/codestral-latest') => {
-  callsMade++
-  await fetch(`${gateway.url}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${aliceKey.value}`,
-      'content-type': 'application/json',
-      ...dimensionHeadersOf(labels),
-    },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
-  })
+const callsOfOneTest = () => {
+  const testLabel = crypto.randomUUID()
+  let callsMade = 0
+  const headersOfOneMoreCall = (labels: Record<string, string>) => {
+    callsMade++
+    return Object.fromEntries(
+      Object.entries({ ...labels, run, test: testLabel }).map(([name, value]) => [`x-bf-dim-${name}`, value]),
+    )
+  }
+  const modelCall = async (labels: Record<string, string>, model = 'mistral/codestral-latest') => {
+    await fetch(`${gateway.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${aliceKey.value}`,
+        'content-type': 'application/json',
+        ...headersOfOneMoreCall(labels),
+      },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
+    })
+  }
+  const landed = () => gatewayLogsOf(gateway, `metadata_run=${run}&metadata_test=${testLabel}`, callsMade)
+  return { headersOfOneMoreCall, modelCall, landed }
 }
-const landed = () => gatewayLogsOf(gateway, `metadata_run=${run}`, callsMade)
+const startSyncWindowBeforeNow = () =>
+  database.$client`update usage_sync_marks set logs_since = now() - interval '1 minute' where workspace_id = ${acme}`
 const research = { workspace: acme, chat: 'chat-research', owner: alice }
 const usageRows = async () =>
   database.$client`
@@ -57,6 +66,8 @@ const modelCallsOf = async (prompter: string) =>
 const month = new Date().toISOString().slice(0, 7)
 
 test('the sync records each gateway call once across overlapping windows and reruns, by the labels of the call', async () => {
+  const { modelCall, landed } = callsOfOneTest()
+  await startSyncWindowBeforeNow()
   await modelCall({ ...research, prompter: alice })
   await modelCall({ ...research, prompter: alice })
   await modelCall({ ...research, prompter: bob, turn: 'turn-bob', session: 'session-bob' })
@@ -105,6 +116,8 @@ test('the sync records each gateway call once across overlapping windows and rer
 })
 
 test('failed provider calls count as calls with zero tokens, logs of other workspaces are ignored', async () => {
+  const { modelCall, landed } = callsOfOneTest()
+  await startSyncWindowBeforeNow()
   await modelCall({ workspace: acme, chat: 'chat-welcome', owner: alice, prompter: alice }, 'openai/gpt-4o')
   await modelCall({ workspace: globex, chat: 'chat-launch-plan', owner: alice, prompter: alice })
   await landed()
@@ -123,16 +136,17 @@ test('an Anthropic call cached for an hour reaches the provider with its 1-hour 
   await addLlmKey(bob, 'Anthropic')
   const bobKey = await virtualKeyOf(bob)
   const system = [{ type: 'text', text: 'You are Spyria.', cache_control: { type: 'ephemeral', ttl: '1h' } }]
+  const { headersOfOneMoreCall, landed } = callsOfOneTest()
+  await startSyncWindowBeforeNow()
   const providerCallsBefore = fakeLlmBodies.length
   setFakeLlmScript({ cache: { read: 4000, write: 300 } })
-  callsMade++
   const answered = await fetch(`${gateway.url}/anthropic/v1/messages`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${bobKey.value}`,
       'content-type': 'application/json',
       'anthropic-version': '2023-06-01',
-      ...dimensionHeadersOf({ ...research, chat: 'chat-cached', prompter: bob }),
+      ...headersOfOneMoreCall({ ...research, chat: 'chat-cached', prompter: bob }),
     },
     body: JSON.stringify({
       model: 'anthropic/claude-opus-5-5',
@@ -180,6 +194,8 @@ test('with the gateway down the sync changes nothing and the job reschedules its
 })
 
 test('the sync pages through the gateway logs by time and records every call once', async () => {
+  const { modelCall, landed } = callsOfOneTest()
+  await startSyncWindowBeforeNow()
   const pagesFrom: Date[] = []
   const pagedLogs = createBifrostUsageLogs({ url: gateway.url, ...gatewayAdmin, labels: { run }, pageSize: 2 })
   const countedLogs = {

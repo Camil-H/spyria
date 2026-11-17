@@ -11,7 +11,7 @@ import {
 } from '@spyria/kernel'
 import { type Answers, confidenceThreshold } from './decisions.ts'
 
-export type Effort = 'high' | 'medium' | 'low'
+type Effort = 'high' | 'medium' | 'low'
 type SessionChoice = Readonly<{ model: Model; effort: Effort; reason: string }>
 
 export const sessionQuestions = {

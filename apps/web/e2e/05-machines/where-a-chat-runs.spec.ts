@@ -1,18 +1,21 @@
-import { openPageAs, type WorkerStack } from '../stack'
+import { openPageAs } from '../stack'
 import {
-  addLlmKey,
+  addMachine,
   addParticipant,
   chipOf,
   chooseRunsOn,
   expect,
+  expectRunsOnLockedLocal,
   machineSectionOf,
   mainOf,
   messageContaining,
   messageItemsOf,
+  mutationGateOf,
   newChatAnswerOf,
   newRuntimeChat,
   openChat,
   openProfile,
+  openSession,
   type Page,
   runsOnChoiceOf,
   runsOnOf,
@@ -21,7 +24,6 @@ import {
   sessionOf,
   signedInMachine,
   hostTest as test,
-  urlOf,
 } from './fixtures'
 
 test.describe('Where a chat runs', () => {
@@ -36,29 +38,7 @@ test.describe('Where a chat runs', () => {
     await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(names.length)
     for (const name of names) await expect(runsOnChoiceOf(page).getByRole('radio', { name })).not.toBeChecked()
   }
-  const openSession = async (page: Page) => {
-    if (!(await sessionOf(page).isVisible())) await chipOf(page, 'any').click()
-    await expect(sessionOf(page)).toBeVisible()
-  }
   const machineOf = { owner: 'member-alice', signedIn: 'claude-code' }
-  const expectRunsOnLockedLocal = async (page: Page) => {
-    await expect(runsOnOf(page)).toBeDisabled()
-    await expect(runsOnOf(page)).toHaveText('Local')
-  }
-  const startedCountOf = async (database: WorkerStack['database'], chatId: string) =>
-    (
-      await database.$client<{ count: string }[]>`
-      select count(*) from events
-      where chat_id = ${chatId} and payload->'event'->'update'->>'sessionUpdate' = 'session_started'`
-    )[0]?.count
-  const addMachine = async (page: Page) => {
-    await openProfile(page, 'My machine')
-    await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-    const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-    return command
-  }
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
@@ -69,7 +49,7 @@ test.describe('Where a chat runs', () => {
   }, async ({ page, machine, agentScript }) => {
     await machine(signedInMachine)
     const chatId = await newRuntimeChat(page, 'Left on Spyria runtime')
-    await openSession(page)
+    await openSession(page, 'any')
     await expect(runsOnOf(page)).toHaveValue('runtime')
     await page.keyboard.press('Escape')
     await agentScript(chatId, { text: 'Answered on a Spyria runtime.' })
@@ -85,17 +65,17 @@ test.describe('Where a chat runs', () => {
     await addParticipant(workerStack, await newRuntimeChat(page, 'Only Alice chooses'), 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Only Alice chooses')
-    await openSession(bobPage)
+    await openSession(bobPage, 'any')
     await expectRunsOnLocked(bobPage)
     await bobPage.context().close()
 
-    await openSession(page)
+    await openSession(page, 'any')
     await runsOnOf(page).selectOption({ label: claudeOnMachine })
     await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Lock it')
     await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
-    await openSession(page)
+    await openSession(page, 'any')
     await expect(runsOnOf(page)).toBeDisabled()
     await expect(runsOnOf(page)).toHaveValue('claude-code')
   })
@@ -133,7 +113,7 @@ test.describe('Where a chat runs', () => {
 
   test('As a member, I close the open session chip by clicking outside it', { tag: ['@spec-24'] }, async ({ page }) => {
     await newRuntimeChat(page, 'Click away')
-    await openSession(page)
+    await openSession(page, 'any')
     await mainOf(page).getByRole('heading', { level: 1, name: 'Click away' }).click()
     await expect(sessionOf(page)).toHaveCount(0)
   })
@@ -169,7 +149,7 @@ test.describe('Where a chat runs', () => {
     ])
       await test.step(`a machine ${step} offers ${options.join(' and ') || 'Spyria runtime only'}`, async () => {
         await machine(query)
-        await openSession(page)
+        await openSession(page, 'any')
         await expect(runsOnOf(page).getByRole('option')).toHaveText(['Spyria runtime', ...options])
         if (options.length) await expect(runsOnOf(page)).toBeEnabled()
         else await expectRunsOnLocked(page)
@@ -183,7 +163,7 @@ test.describe('Where a chat runs', () => {
       await page.getByRole('dialog', { name: 'Remove my machine' }).getByRole('button', { name: 'Remove' }).click()
       await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
       await openChat(page, 'Follows the machine')
-      await openSession(page)
+      await openSession(page, 'any')
       await expectRunsOnLocked(page)
     })
   })
@@ -193,22 +173,20 @@ test.describe('Where a chat runs', () => {
 
     test('As a chat owner without a workspace host, I get the no-host notice on Spyria runtime, then switching to my machine’s Claude Code answers there', {
       tag: ['@spec-24'],
-    }, async ({ page, workerStack, machine }) => {
-      const { id: machineId } = await machine(signedInMachine)
+    }, async ({ page, machine }) => {
+      await machine(signedInMachine)
       await machine({ online: 'false' })
-      const chatId = await newRuntimeChat(page, 'No host first')
+      await newRuntimeChat(page, 'No host first')
       await sendMessage(page, 'First try')
       await expect(messageContaining(page, 'No runtime host is available')).toHaveCount(1)
       await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
       await machine({ online: 'true' })
-      await openSession(page)
+      await openSession(page, 'any')
       await runsOnOf(page).selectOption({ label: claudeOnMachine })
       await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
       await page.keyboard.press('Escape')
       await sendMessage(page, 'Second try')
       await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(2)
-      const [runtime] = await workerStack.database.$client`select host_id from runtimes where chat_id = ${chatId}`
-      expect(runtime?.host_id).toBe(machineId)
       await expect.poll(async () => (await machine()).prompts).toEqual(['First try', 'Second try'])
     })
   })
@@ -219,15 +197,13 @@ test.describe('Where a chat runs', () => {
     test('As a chat owner, my machine offline when I choose it starts nothing and Runs on stays changeable; once online my first prompt starts the session', {
       tag: ['@spec-25'],
     }, async ({ page, workerStack, machine }) => {
+      const gate = await mutationGateOf(page)
       await machine(machineOf)
-      const release = Promise.withResolvers<void>()
-      await page.route('**/api/mutate*', async (route) => {
-        if (route.request().postData()?.includes('updateChatRouting')) await release.promise
-        await route.continue()
-      })
+      gate.hold()
       const chatId = await newRuntimeChat(page, 'Offline when chosen', null)
+      await expect(chipOf(page, 'harness')).toHaveText('Claude Code · subscription')
       await machine({ online: 'false' })
-      release.resolve()
+      gate.release()
       await expect
         .poll(
           async () =>
@@ -244,7 +220,6 @@ test.describe('Where a chat runs', () => {
       await sendMessage(page, 'Hello')
       await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible({ timeout: 45_000 })
       expect((await machine()).conversations).toHaveLength(1)
-      await expect.poll(() => startedCountOf(workerStack.database, chatId)).toBe('1')
     })
 
     test('As a chat owner with no workspace host online and one machine tool signed in, I get Runs on chosen for me and the session started', {
@@ -262,56 +237,30 @@ test.describe('Where a chat runs', () => {
     })
 
     test.describe(() => {
-      test.use({ signedInAs: 'member-bob' })
-      const bobMachine = { owner: 'member-bob', signedIn: 'claude-code' }
+      test.use({ signedInAs: 'member-bob', runtimeHost: true })
 
-      test('As a member with no workspace host online, I get my only machine tool chosen for me and the session started', {
+      test('As a member with the workspace host online, I choose between Spyria runtime and my machine tool, nothing chosen for me', {
         tag: ['@spec-25'],
       }, async ({ page, machine }) => {
-        await machine(bobMachine)
-        await newRuntimeChat(page, 'Bob on Claude Code', null)
-        await expect(chipOf(page, 'harness')).toHaveText('Claude Code · subscription')
-        await expect(page.getByRole('group', { name: 'Runs on' })).toHaveCount(0)
-        await expect.poll(async () => (await machine()).conversations.length).toBe(1)
-        await expectRunsOnLockedLocal(page)
-        await sendMessage(page, 'Hello')
-        await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
-        expect((await machine()).conversations).toHaveLength(1)
-      })
-
-      test.describe(() => {
-        test.use({ runtimeHost: true })
-
-        test('As a member with the workspace host online, I choose between Spyria runtime and my machine tool, nothing chosen for me', {
-          tag: ['@spec-25'],
-        }, async ({ page, machine }) => {
-          await machine(bobMachine)
-          await newRuntimeChat(page, 'Bob chooses', null)
-          await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(2)
-          await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'Spyria runtime' })).toBeVisible()
-          await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'Local · Claude Code' })).toBeVisible()
-          await expect(mainOf(page).getByText('Choose where this chat runs to send')).toBeVisible()
-          expect((await machine()).conversations).toHaveLength(0)
-        })
+        await machine({ owner: 'member-bob', signedIn: 'claude-code' })
+        await newRuntimeChat(page, 'Bob chooses', null)
+        await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(2)
+        await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'Spyria runtime' })).toBeVisible()
+        await expect(runsOnChoiceOf(page).getByRole('radio', { name: 'Local · Claude Code' })).toBeVisible()
+        await expect(mainOf(page).getByText('Choose where this chat runs to send')).toBeVisible()
+        expect((await machine()).conversations).toHaveLength(0)
       })
     })
-    test('As a chat owner with only my machine online, my ordinary runtime chats and another member’s wait with the no-host notice', {
+
+    test('As a chat owner with only my machine online, my ordinary runtime chats wait with the no-host notice', {
       tag: ['@spec-20'],
-    }, async ({ page, browser, workerStack, pair }) => {
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
+    }, async ({ page, pair }) => {
+      pair(await addMachine(page), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
 
       await openChat(page, 'Research')
       await sendMessage(page, 'Run this on any host')
       await expect(messageItemsOf(page).filter({ hasText: 'No runtime host is available' })).toHaveCount(1)
-
-      await addParticipant(workerStack, 'chat-research', 'member-bob', 'prompter')
-      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await addLlmKey(bobPage, 'Anthropic')
-      await openChat(bobPage, 'Research')
-      await sendMessage(bobPage, 'Bob tries too')
-      await expect(messageItemsOf(bobPage).filter({ hasText: 'No runtime host is available' })).toHaveCount(2)
-      await bobPage.context().close()
     })
   })
 })

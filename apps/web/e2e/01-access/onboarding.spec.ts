@@ -1,12 +1,8 @@
 import { openPageAs } from '../stack'
-import { expect, mainOf, type Page, sidebarOf, test } from './fixtures'
+import { expect, mainOf, onePixelPng, type Page, sidebarOf, test } from './fixtures'
 
 const startLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: /^Get started/ })
 const checklistOf = (page: Page, title: string) => mainOf(page).getByRole('region', { name: new RegExp(`^${title}`) })
-const onePixelPng = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-  'base64',
-)
 
 test.describe('Onboarding', () => {
   test.use({ runtimeHost: false, warmRuntimes: false })

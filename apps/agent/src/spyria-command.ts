@@ -22,7 +22,7 @@ const firstSentenceOf = (text = '') => text.split(/(?<=\.)\s|\n/)[0]?.trim() ?? 
 const serverOf = (toolName: string) => toolName.slice(0, toolName.indexOf('-'))
 const toolOf = (toolName: string) => toolName.slice(toolName.indexOf('-') + 1)
 
-export const servicesOf = (tools: readonly Tool[]) => {
+const servicesOf = (tools: readonly Tool[]) => {
   const counts = new Map<string, number>()
   for (const { name } of tools.filter((tool) => tool.name.includes('-')))
     counts.set(serverOf(name), (counts.get(serverOf(name)) ?? 0) + 1)
@@ -140,7 +140,7 @@ export const rpcAnswerOf = (text: string): Rpc => {
   return messages.find((message) => 'result' in message || 'error' in message) ?? {}
 }
 
-export const textOf = (result: ToolResult) =>
+const textOf = (result: ToolResult) =>
   (result.content ?? [])
     .map((part) => (part.type === 'text' || part.text !== undefined ? part.text : `[${part.type}]`))
     .join('\n')

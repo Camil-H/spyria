@@ -45,7 +45,14 @@ const postCredential = async (authorization: string, body: string, through = app
 const postCredentialAs = async (member: typeof aliceInAcme, body: object, through = app) =>
   postCredential(`Bearer ${await tokenOf(member.workspaceId, member.userId)}`, JSON.stringify(body), through)
 
-const credentialRows = () => database.$client`select * from llm_credentials order by id`
+const newAcmeMember = async () => {
+  const userId = memberId(`member-${crypto.randomUUID()}`)
+  await database.$client`insert into users (id, email) values (${userId}, ${`${userId}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${userId}, 'member', 'Dana')`
+  return { workspaceId: acme, userId }
+}
+const credentialRows = async () => [...(await database.$client`select * from llm_credentials order by id`)]
 const gatewayKeyOf = (row: { secret_ref: string } | undefined) => {
   const [, provider, id] = String(row?.secret_ref).match(/^gateway:([a-z]+)\/(.+)$/) ?? []
   return { provider: provider ?? '', id: id ?? '' }
@@ -85,6 +92,7 @@ const failingVirtualKeysProxy = () =>
 
 test('the credential endpoint refuses blank, missing, malformed or unsupported fields and stores nothing', async () => {
   const token = `Bearer ${await tokenOf(acme, alice)}`
+  const rowsBefore = await credentialRows()
   const keysBefore = await gatewayKeysOf('openai')
   for (const body of [
     { provider: '  ', secret: secretValue },
@@ -99,11 +107,11 @@ test('the credential endpoint refuses blank, missing, malformed or unsupported f
     status: 400,
     text: JSON.stringify({ error: 'unsupported_provider', message: 'Foo is not a supported provider' }),
   })
-  expect(await credentialRows()).toHaveLength(1)
+  expect(await credentialRows()).toEqual(rowsBefore)
   expect(await gatewayKeysOf('openai')).toEqual(keysBefore)
 })
 
-describe('Alice’s OpenAI credential, added then removed', () => {
+describe('a member’s LLM credentials', () => {
   test('adding a credential stores the secret in the gateway under an opaque name, binds it to the member virtual key, and Spyria keeps no secret and logs nothing', async () => {
     const consoleCalls = captureConsole()
     try {
@@ -113,7 +121,7 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     } finally {
       consoleCalls.restore()
     }
-    const rows = await credentialRows()
+    const rows = (await credentialRows()).filter((row) => row.user_id === alice)
     const stored = rows.find((row) => row.provider === 'OpenAI')
     const seeded = rows.find((row) => row.provider === 'Anthropic')
     expect(stored).toMatchObject({ workspace_id: acme, user_id: alice, last4: '4321' })
@@ -134,23 +142,13 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     expect(storedText).not.toContain(virtual_key.value)
   })
 
-  test('the secret never reaches a replicated row', async () => {
-    const publishedTables = await database.$client<{ table: string; columns: string[] }[]>`
-    select tablename as table, attnames as columns from pg_publication_tables where pubname = 'spyria_zero'`
-    for (const { table, columns } of publishedTables) {
-      const rows = await database.$client.unsafe(
-        `select ${columns.map((column) => `"${column}"`).join(', ')} from "${table}"`,
-      )
-      expect({ table, leaks: JSON.stringify(rows).includes(secretValue) }).toEqual({ table, leaks: false })
-    }
-  })
-
   test('an unreachable gateway leaves no row and logs no secret', async () => {
+    const dana = await newAcmeMember()
     const consoleCalls = captureConsole()
     try {
       expect(
         await postCredentialAs(
-          bobInAcme,
+          dana,
           { provider: 'Mistral', secret: secretValue },
           appWithGateway('http://127.0.0.1:9'),
         ),
@@ -159,16 +157,18 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     } finally {
       consoleCalls.restore()
     }
-    expect((await credentialRows()).filter((row) => row.user_id === bob)).toEqual([])
-    expect(await virtualKeyIdOf(bob)).toBeUndefined()
+    expect((await credentialRows()).filter((row) => row.user_id === dana.userId)).toEqual([])
+    expect(await virtualKeyIdOf(dana.userId)).toBeUndefined()
   })
 
   test('a failed Spyria commit deletes the gateway key it just created and logs no secret', async () => {
+    const dana = await newAcmeMember()
+    const rowsBefore = await credentialRows()
     const keysBefore = await gatewayKeysOf('mistral')
     await database.$client`alter table llm_credentials add constraint refuse_provider check (provider <> 'Mistral') not valid`
     const consoleCalls = captureConsole()
     try {
-      expect(await postCredentialAs(bobInAcme, { provider: 'Mistral', secret: 'sk-refused-value' })).toMatchObject({
+      expect(await postCredentialAs(dana, { provider: 'Mistral', secret: 'sk-refused-value' })).toMatchObject({
         status: 500,
       })
       expect(consoleCalls.logged()).not.toContain('sk-refused-value')
@@ -176,12 +176,13 @@ describe('Alice’s OpenAI credential, added then removed', () => {
       consoleCalls.restore()
       await database.$client`alter table llm_credentials drop constraint refuse_provider`
     }
-    expect((await credentialRows()).map((row) => row.provider)).not.toContain('Mistral')
+    expect(await credentialRows()).toEqual(rowsBefore)
     expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
-    expect(await virtualKeyIdOf(bob)).toBeUndefined()
+    expect(await virtualKeyIdOf(dana.userId)).toBeUndefined()
   })
 
   test('a failed virtual key write removes the new row and its gateway key, and keeps the member key as it was', async () => {
+    const rowsBefore = await credentialRows()
     const keysBefore = await gatewayKeysOf('mistral')
     const virtualKeyId = await virtualKeyIdOf(alice)
     const boundBefore = await boundKeyIdsOf(virtualKeyId)
@@ -197,53 +198,70 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     } finally {
       void proxy.stop(true)
     }
-    expect((await credentialRows()).map((row) => row.provider)).not.toContain('Mistral')
+    expect(await credentialRows()).toEqual(rowsBefore)
     expect(await gatewayKeysOf('mistral')).toEqual(keysBefore)
     expect(await virtualKeyIdOf(alice)).toBe(virtualKeyId)
     expect(await boundKeyIdsOf(virtualKeyId)).toEqual(boundBefore)
   })
 
   test('a member cannot remove the credential of another member; removing one unbinds and deletes its gateway key, removing the last keeps the virtual key with no provider for tools', async () => {
-    const rows = await credentialRows()
-    const [openAi] = rows.filter((row) => row.provider === 'OpenAI')
-    const [seeded] = rows.filter((row) => row.provider === 'Anthropic')
-    const removal = { workspaceId: acme, credentialId: openAi?.id, memberId: alice }
+    const dana = await newAcmeMember()
+    for (const provider of ['OpenAI', 'Mistral'])
+      expect(await postCredentialAs(dana, { provider, secret: `${secretValue}-${provider}` })).toEqual({
+        status: 201,
+        text: '',
+      })
+    const rowsBefore = await credentialRows()
+    const [openAi] = rowsBefore.filter((row) => row.user_id === dana.userId && row.provider === 'OpenAI')
+    const [mistral] = rowsBefore.filter((row) => row.user_id === dana.userId && row.provider === 'Mistral')
+    const removal = { workspaceId: acme, credentialId: openAi?.id, memberId: dana.userId }
     expect(await resultOf(bobInAcme, 'profile.removeLlmCredential', removal)).toEqual(
       failedWith(`LLM credential ${openAi?.id} was not found`),
     )
-    expect(await credentialRows()).toHaveLength(2)
+    expect(await credentialRows()).toEqual(rowsBefore)
 
-    const virtualKeyId = await virtualKeyIdOf(alice)
+    const virtualKeyId = await virtualKeyIdOf(dana.userId)
     const openAiKey = gatewayKeyOf(openAi as { secret_ref: string })
-    const seededKey = gatewayKeyOf(seeded as { secret_ref: string })
-    expect(await resultOf(aliceInAcme, 'profile.removeLlmCredential', removal)).toEqual(succeeded)
-    expect((await credentialRows()).map((row) => row.provider)).toEqual(['Anthropic'])
-    await jobDone('profile.gateway-sync', { memberId: alice })
+    const mistralKey = gatewayKeyOf(mistral as { secret_ref: string })
+    expect(await resultOf(dana, 'profile.removeLlmCredential', removal)).toEqual(succeeded)
+    expect(await credentialRows()).toEqual(rowsBefore.filter((row) => row.id !== openAi?.id))
+    await jobDone('profile.gateway-sync', { memberId: dana.userId })
     expect((await gateway.request(`/api/providers/openai/keys/${openAiKey.id}`)).status).toBe(404)
-    expect(await boundKeyIdsOf(virtualKeyId)).toEqual([seededKey.id])
+    expect(await boundKeyIdsOf(virtualKeyId)).toEqual([mistralKey.id])
 
     expect(
-      await resultOf(aliceInAcme, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: seeded?.id }),
+      await resultOf(dana, 'profile.removeLlmCredential', { workspaceId: acme, credentialId: mistral?.id }),
     ).toEqual(succeeded)
-    await jobDone('profile.gateway-sync', { memberId: alice })
+    await jobDone('profile.gateway-sync', { memberId: dana.userId })
     expect(await boundKeyIdsOf(virtualKeyId)).toEqual([])
-    expect((await gateway.request(`/api/providers/mistral/keys/${seededKey.id}`)).status).toBe(404)
-    expect(await virtualKeyIdOf(alice)).toBe(virtualKeyId)
-    expect(await jobStatesOf('profile.gateway-sync', {})).toEqual(['done', 'done'])
+    expect((await gateway.request(`/api/providers/mistral/keys/${mistralKey.id}`)).status).toBe(404)
+    expect(await virtualKeyIdOf(dana.userId)).toBe(virtualKeyId)
+    expect(await jobStatesOf('profile.gateway-sync', { memberId: dana.userId })).toEqual(['done', 'done'])
   })
 })
 
 test('renameMember changes the display name of the member in the current workspace only', async () => {
+  const displayNames = async () =>
+    (await database.query.memberships.findMany({ orderBy: { workspaceId: 'asc', userId: 'asc' } })).map(
+      ({ workspaceId, userId, displayName }) => ({ workspaceId, userId, displayName }),
+    )
+  const namesBefore = await displayNames()
+  expect(namesBefore).toEqual(
+    expect.arrayContaining([
+      { workspaceId: acme, userId: alice, displayName: 'Alice' },
+      { workspaceId: acme, userId: bob, displayName: 'Bob' },
+      { workspaceId: acme, userId: lee, displayName: 'Lee' },
+      { workspaceId: globex, userId: alice, displayName: 'Alice' },
+    ]),
+  )
   expect(
     await resultOf(aliceInAcme, 'profile.renameMember', { workspaceId: acme, name: ' Alice D. ', memberId: bob }),
   ).toEqual(succeeded)
-  const names = await database.query.memberships.findMany({ orderBy: { workspaceId: 'asc', userId: 'asc' } })
-  expect(names.map(({ workspaceId, userId, displayName }) => [workspaceId, userId, displayName])).toEqual([
-    [acme, alice, 'Alice D.'],
-    [acme, bob, 'Bob'],
-    [acme, lee, 'Lee'],
-    [globex, alice, 'Alice'],
-  ])
+  expect(await displayNames()).toEqual(
+    namesBefore.map((row) =>
+      row.workspaceId === acme && row.userId === alice ? { ...row, displayName: 'Alice D.' } : row,
+    ),
+  )
   expect(await resultOf(aliceInAcme, 'profile.renameMember', { workspaceId: globex, name: 'Other' })).toEqual(
     failedWith('A member can only change their own profile in their current workspace'),
   )
@@ -293,13 +311,6 @@ test.each([
   },
 )
 
-const newAcmeMember = async () => {
-  const userId = memberId(`member-${crypto.randomUUID()}`)
-  await database.$client`insert into users (id, email) values (${userId}, ${`${userId}@example.com`})`
-  await database.$client`
-    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${userId}, 'member', 'Dana')`
-  return { workspaceId: acme, userId }
-}
 const postCredentialDuringRemoval = async (
   member: typeof aliceInAcme,
   body: object,

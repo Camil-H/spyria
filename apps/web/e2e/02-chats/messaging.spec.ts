@@ -1,10 +1,9 @@
-import { jobs } from '@spyria/db/postgres'
-import type { WorkerStack } from '../stack'
 import {
   agentReplyText,
   chatLinkOf,
   chipOf,
   composerOf,
+  deleteMessageDialogOf,
   draftIconOf,
   expect,
   mainOf,
@@ -12,8 +11,12 @@ import {
   messageActionsOf,
   messageContaining,
   messageItemsOf,
+  numberedMessages,
   openChat,
+  openMessageAction,
   type Page,
+  postMessages,
+  runsOnOf,
   sendButtonOf,
   sendMessage,
   test,
@@ -26,21 +29,13 @@ const onePixelPng = Buffer.from(
 )
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
 
-const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
-  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
-const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
-const agentPromptJobs = async (workerStack: WorkerStack) =>
-  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
-
 test.describe('Messaging', () => {
   test.beforeEach(async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-10-01T12:34:00Z'))
     await page.goto('/')
   })
 
-  test('As a member, I send in a channel, keep a draft per chat and see the newest message scrolled into view', {
-    tag: ['@smoke'],
-  }, async ({ page, workerStack }) => {
+  test('As a member, I send in a channel with the Send button or Cmd+Enter', { tag: ['@smoke'] }, async ({ page }) => {
     await openChat(page, 'Welcome')
 
     await test.step('sends with the Send button, clears the textbox and keeps focus in it', async () => {
@@ -56,10 +51,6 @@ test.describe('Messaging', () => {
 
     await test.step('appends only the member message', async () => {
       await expect(workingIndicatorOf(page)).toHaveCount(0)
-      await expect
-        .poll(() => workerStack.database.query.messages.findFirst({ where: { body: 'Hello team' } }))
-        .toBeDefined()
-      expect(await agentPromptJobs(workerStack)).toEqual([])
       await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(3)
     })
@@ -69,6 +60,12 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
       await expect(composerOf(page)).toHaveValue('')
     })
+  })
+
+  test('As a member, I keep a draft per chat, through a reload, until I send it', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    await sendMessage(page, 'Sent from the keyboard')
+    await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
 
     await test.step('keeps each chat messages separate and persistent while switching, with a draft per chat', async () => {
       await composerOf(page).fill('Work in progress')
@@ -96,24 +93,16 @@ test.describe('Messaging', () => {
       await composerOf(page).press('ControlOrMeta+Enter')
       await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
     })
+  })
+
+  test('As a member, I see the newest message of a long chat scrolled into view and go back to it from earlier messages', async ({
+    page,
+    workerStack,
+  }) => {
+    await openChat(page, 'Welcome')
 
     await test.step('scrolls the newest message into view when opening a chat and after sending', async () => {
-      await workerStack.database.$client.begin(async (sql) => {
-        await sql`select 1 from chats where id = 'chat-welcome' for update`
-        await sql`
-        with fillers as (
-          select 'filler-' || number as id, 'Filler ' || number as body,
-            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
-          from generate_series(1, 29) as number
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
-          from fillers
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
-      })
+      await postMessages(workerStack, 'chat-welcome', numberedMessages('filler-', 'Filler ', 29))
       await expect(messageContaining(page, 'Filler 29')).toHaveCount(1)
       await sendMessage(page, 'Filler 30')
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
@@ -152,69 +141,45 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
       await expect(goToLastMessage).toHaveCount(0)
     })
-
-    await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
-      await workerStack.database.$client.begin(async (sql) => {
-        await sql`select 1 from chats where id = 'chat-welcome' for update`
-        await sql`
-        with fillers as (
-          select 'later-' || number as id, 'Later ' || number as body,
-            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
-          from generate_series(1, 20) as number
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
-          from fillers
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
-      })
-      await expect(messageContaining(page, 'Later 20')).toHaveCount(1)
-      await openChat(page, 'Standup')
-      await openChat(page, 'Welcome')
-      await expect(messageContaining(page, 'Later 20')).toBeInViewport()
-      await expect(messageItemsOf(page)).toHaveCount(50)
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
-      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
-      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
-      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
-    })
   })
 
-  test('As a member, I open a chat on its last week of messages and load the older ones when scrolling up', async ({
+  test('As a member, I open a chat on at most its newest 50 messages of the last week and load the older ones when scrolling up', async ({
     page,
     workerStack,
   }) => {
-    await workerStack.database.$client.begin(async (sql) => {
-      await sql`select 1 from chats where id = 'chat-standup' for update`
-      await sql`
-        with posted_messages as (
-          select 'standup-older-' || number as id, 'Last month ' || number as body,
-            timestamptz '2026-09-01T00:00:00Z' + number * interval '1 minute' as created_at, number
-          from generate_series(1, 2) as number
-          union all
-          select 'standup-recent-' || number, 'This week ' || number, now(), 2 + number
-          from generate_series(1, 30) as number
-        ), numbered as (
-          select *, (select max(seq) from events where chat_id = 'chat-standup') + number as seq from posted_messages
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-standup', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), created_at
-          from numbered
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-standup', id, seq, 'member', 'member-alice', body, created_at from numbered`
+    const showEarlierMessages = mainOf(page).getByRole('button', { name: 'Show earlier messages' })
+    const thisWeekMessages = numberedMessages('standup-recent-', 'This week ', 60)
+    await postMessages(workerStack, 'chat-standup', [
+      { id: 'standup-older-1', body: 'Last month 1', createdAt: '2026-09-01T00:01:00Z' },
+      { id: 'standup-older-2', body: 'Last month 2', createdAt: '2026-09-01T00:02:00Z' },
+      ...thisWeekMessages.slice(0, 30),
+    ])
+
+    await test.step('opens on the messages of the last week only', async () => {
+      await openChat(page, 'Standup')
+      await expect(messageContaining(page, 'This week 30')).toBeInViewport()
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(1)
+      await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
+      await expect(showEarlierMessages).toBeVisible()
     })
-    await openChat(page, 'Standup')
-    await expect(messageContaining(page, 'This week 30')).toBeInViewport()
-    await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
-    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
-    await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
-    await expect(messageContaining(page, 'Last month 1')).toHaveCount(1)
-    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
+
+    await test.step('opens on the newest 50 messages when the last week holds more', async () => {
+      await postMessages(workerStack, 'chat-standup', thisWeekMessages.slice(30))
+      await expect(messageContaining(page, 'This week 60')).toHaveCount(1)
+      await openChat(page, 'Welcome')
+      await openChat(page, 'Standup')
+      await expect(messageContaining(page, 'This week 60')).toBeInViewport()
+      await expect(messageItemsOf(page)).toHaveCount(50)
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(0)
+      await expect(showEarlierMessages).toBeVisible()
+    })
+
+    await test.step('loads the earlier messages when scrolling up', async () => {
+      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(1)
+      await expect(messageContaining(page, 'Last month 1')).toHaveCount(1)
+      await expect(showEarlierMessages).toHaveCount(0)
+    })
   })
 
   test('As a member, a message refused for sending too fast shows why and I resend it', {
@@ -229,7 +194,6 @@ test.describe('Messaging', () => {
       await expect(notSent).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
       await expect(composerOf(page)).toHaveValue('Sent too fast')
       await expect(messageContaining(page, 'Sent too fast')).toHaveCount(0)
-      expect(await workerStack.database.query.messages.findFirst({ where: { body: 'Sent too fast' } })).toBeUndefined()
     })
 
     await test.step('resends it with Send: the message is posted once and the reason goes away', async () => {
@@ -368,7 +332,7 @@ test.describe('Messaging', () => {
 
     await test.step('replaces the message with a tombstone after confirmation', async () => {
       await openMessageAction(page, 'Thanks, happy to be here.', 'Delete')
-      await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
+      await deleteMessageDialogOf(page).getByRole('button', { name: 'Delete' }).click()
       await expect(messageContaining(page, 'This message was deleted')).toBeVisible()
       await expect(messageContaining(page, 'Thanks, happy to be here.')).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(2)
@@ -437,6 +401,8 @@ test.describe('Messaging', () => {
       await expect(mainOf(page)).not.toContainText('GPT-5')
       await expect(mainOf(page)).not.toContainText('Claude Sonnet 5.5')
       await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
+      await expect(runsOnOf(page)).toHaveCount(0)
+      await expect(chipOf(page, 'any')).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(2)
       await expect(messageItemsOf(page).nth(0)).toContainText('Bob')
       await expect(messageItemsOf(page).nth(0)).toContainText('09:00')
@@ -510,8 +476,8 @@ test.describe('Messaging', () => {
 
     await test.step('keeps the message when the deletion is cancelled', async () => {
       await openMessageAction(page, 'Thanks, glad to be here.', 'Delete')
-      await deleteDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
-      await expect(deleteDialogOf(page)).toHaveCount(0)
+      await deleteMessageDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+      await expect(deleteMessageDialogOf(page)).toHaveCount(0)
       await expect(messageContaining(page, 'Thanks, glad to be here.')).toBeVisible()
     })
   })

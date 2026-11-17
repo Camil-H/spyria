@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { mainOf, switcherOf } from '../fixtures.ts'
+import { mainOf, sidebarOf, switcherOf } from '../fixtures.ts'
 import type { WorkerStack } from '../stack'
 
 export * from '../fixtures.ts'
@@ -9,6 +9,11 @@ export const signedOutScreenOf = (page: Page, workspaceName: string) =>
 export const anySignedOutScreenOf = (page: Page) => page.getByText(/You are signed out of/)
 export const signInButtonOf = (page: Page) => page.getByRole('button', { name: 'Sign in' })
 export const creationFormOf = (page: Page) => page.getByRole('form', { name: 'Create a workspace' })
+export const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
+export const onePixelPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  'base64',
+)
 export const logInAtProvider = async (popup: Page, email: string) => {
   const popupClosed = popup.waitForEvent('close')
   await popup.locator('#login').fill(email)

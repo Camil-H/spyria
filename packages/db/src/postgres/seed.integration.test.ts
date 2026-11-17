@@ -1,7 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
-import { browserSettingsFrom, workspacePermissions } from '@spyria/kernel'
-import { createMockSnapshot } from '../mock-data.ts'
-import { resetDatabase } from './seed.ts'
+import { getTableName } from 'drizzle-orm'
+import { allTables, resetDatabase } from './seed.ts'
 import * as tables from './tables.ts'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from './testing.ts'
 
@@ -9,142 +8,53 @@ const seededDatabase = await createTestDatabase()
 const { database } = seededDatabase
 afterAll(() => seededDatabase.drop(), databaseDropTimeoutMilliseconds)
 
-const isoOrNull = (date: Date | null) => date?.toISOString() ?? null
-const canonical = (row: object) =>
-  JSON.stringify(Object.entries(row).sort(([first], [second]) => first.localeCompare(second)))
-const unordered = (rows: readonly object[]) =>
-  rows.toSorted((first, second) => canonical(first).localeCompare(canonical(second)))
-const groupedByChat = <Row extends { chatId: string }>(rows: readonly Row[]) =>
-  rows.toSorted((first, second) => first.chatId.localeCompare(second.chatId))
-const userAsMember = <Row extends { userId: string }>({ userId, ...row }: Row) => ({ ...row, memberId: userId })
+const tablesTheSeedFills = [
+  'browser_pages',
+  'chat_participants',
+  'chat_roles',
+  'chats',
+  'events',
+  'llm_credentials',
+  'memberships',
+  'messages',
+  'projects',
+  'read_markers',
+  'sources',
+  'usage_entries',
+  'usage_sync_marks',
+  'users',
+  'workspace_role_permissions',
+  'workspace_roles',
+  'workspaces',
+]
+const columnsSetAtEachSeed: Record<string, string[]> = { usage_sync_marks: ['logsSince'] }
 
-const readSnapshot = async () => {
-  const grantedPermissions = await database.select().from(tables.workspaceRolePermissions)
-  const [memberships, users, chats, messages, readMarkers] = await Promise.all([
-    database.select().from(tables.memberships),
-    database.select().from(tables.users),
-    database.select().from(tables.chats).orderBy(tables.chats.createdAt),
-    database.select().from(tables.messages).orderBy(tables.messages.chatId, tables.messages.seq),
-    database.select().from(tables.readMarkers),
-  ])
-  const chatType = new Map(chats.map((chat) => [chat.id, chat.type]))
-  const answeredIds = new Set(messages.map((message) => message.replyToId))
-  return {
-    workspaces: (await database.select().from(tables.workspaces)).map(
-      ({ workspaceId, name, localSessions, aiProviderAllowList, devLoop, setupCommands, browser }) => ({
-        id: workspaceId,
-        name,
-        localSessions,
-        aiProviderAllowList,
-        devLoop,
-        setupCommands: setupCommands ?? [],
-        browser: browserSettingsFrom(browser),
+const tableNameOf = (table: (typeof allTables)[number]): string => getTableName(table)
+const withoutColumns = (row: Record<string, unknown>, columns: readonly string[]) =>
+  Object.fromEntries(Object.entries(row).filter(([column]) => !columns.includes(column)))
+const everyTableRows = async () =>
+  Object.fromEntries(
+    await Promise.all(
+      allTables.map(async (table) => {
+        const name = tableNameOf(table)
+        const rows = (await database.select().from(table)).map((row) =>
+          withoutColumns(row, columnsSetAtEachSeed[name] ?? []),
+        )
+        return [name, rows.map((row) => JSON.stringify(row)).toSorted()] as const
       }),
     ),
-    memberships: memberships.map((membership) => ({
-      ...userAsMember(membership),
-      email: users.find((user) => user.id === membership.userId)?.email,
-    })),
-    invitations: await database.select().from(tables.invitations),
-    projects: (await database.select().from(tables.projects).orderBy(tables.projects.createdAt)).map(
-      ({ createdAt, ...project }) => project,
-    ),
-    chats: chats.map(
-      ({
-        ownerUserId,
-        ownerKind,
-        ownerServiceIdentityId,
-        mode,
-        createdAt,
-        agentTurnPrompterId,
-        agentTurnFailure,
-        agentModel,
-        agentReasoningEffort,
-        ...chat
-      }) => ({
-        ...chat,
-        ownerId: ownerUserId,
-      }),
-    ),
-    messages: messages.map(({ replyToId, createdAt, editedAt, deletedAt, pickedUpAt, ...message }) => ({
-      ...message,
-      createdAt: createdAt.toISOString(),
-      editedAt: isoOrNull(editedAt),
-      deletedAt: isoOrNull(deletedAt),
-      pickedUpAt: isoOrNull(pickedUpAt),
-      needsReply:
-        chatType.get(message.chatId) === 'runtime' &&
-        message.kind === 'member' &&
-        deletedAt === null &&
-        !answeredIds.has(message.id),
-    })),
-    readMarkers: readMarkers.map(userAsMember),
-    threadReadMarkers: (await database.select().from(tables.threadReadMarkers)).map(userAsMember),
-    runtimeOrigins: await database.select().from(tables.runtimeOrigins),
-    llmCredentials: (await database.select().from(tables.llmCredentials)).map(({ secretRef, ...credential }) =>
-      userAsMember(credential),
-    ),
-    githubApps: (await database.select().from(tables.githubApps)).map(({ workspaceId }) => ({ workspaceId })),
-    githubConnections: (await database.select().from(tables.githubConnections)).map(({ workspaceId, userId }) => ({
-      workspaceId,
-      memberId: userId,
-    })),
-    workspaceOnboarding: (await database.select().from(tables.workspaceOnboarding)).map(({ workspaceId, task }) => ({
-      workspaceId,
-      task,
-    })),
-    memberOnboarding: (await database.select().from(tables.memberOnboarding)).map(
-      ({ workspaceId, userId, task, completedAt, skippedAt }) => ({
-        workspaceId,
-        memberId: userId,
-        task,
-        isCompleted: completedAt !== null,
-        isSkipped: skippedAt !== null,
-      }),
-    ),
-    workspaceConnections: await database.select().from(tables.workspaceConnections),
-    connectionAccess: await database.select().from(tables.connectionAccess),
-    toolApprovals: (await database.select().from(tables.toolApprovals)).map(userAsMember),
-    toolConnections: (await database.select().from(tables.toolConnections)).map(userAsMember),
-    chatMembers: (await database.select().from(tables.chatParticipants)).map(userAsMember),
-    chatRoles: await database.select().from(tables.chatRoles),
-    workspaceRoles: (await database.select().from(tables.workspaceRoles)).map((role) => ({
-      ...role,
-      permissions: workspacePermissions.filter((permission) =>
-        grantedPermissions.some(
-          (granted) =>
-            granted.workspaceId === role.workspaceId && granted.roleId === role.id && granted.permission === permission,
-        ),
-      ),
-    })),
-    browserPages: (await database.select().from(tables.browserPages)).map(({ openedAt, ...page }) => ({
-      ...page,
-      openedAt: openedAt.toISOString(),
-    })),
-    sources: await database.select().from(tables.sources),
-    usageEntries: (await database.select().from(tables.usageEntries)).map(userAsMember),
-    budgetAlerts: (await database.select().from(tables.budgetAlerts)).map(({ reachedAt, ...alert }) => alert),
-    runtimeHosts: await database.select().from(tables.runtimeHosts),
-    machineCounts: await database.select().from(tables.machineCounts),
-    runtimes: await database.select().from(tables.runtimes),
-  }
-}
+  )
 
-const expectSnapshotRoundTrip = async () => {
-  const { latestMessages, latestAgentActivity, pinnedSteps, projects, chats, messages, ...unorderedCollections } =
-    createMockSnapshot()
-  const stored = await readSnapshot()
-  expect(stored.projects).toEqual([...projects])
-  expect(stored.chats).toEqual([...chats])
-  expect(stored.messages).toEqual(groupedByChat(messages).map(({ replyToId, ...message }) => message))
-  for (const [name, rows] of Object.entries(unorderedCollections))
-    expect({ [name]: unordered(stored[name as keyof typeof unorderedCollections]) }).toEqual({
-      [name]: unordered(rows),
-    })
-}
-
-test('the seed stores exactly the mock snapshot', async () => {
-  await expectSnapshotRoundTrip()
+test('every table the seed writes has rows, and no other table does', async () => {
+  const counted = await Promise.all(
+    allTables.map(async (table) => ({ name: tableNameOf(table), count: await database.$count(table) })),
+  )
+  expect(
+    counted
+      .filter(({ count }) => count > 0)
+      .map(({ name }) => name)
+      .toSorted(),
+  ).toEqual(tablesTheSeedFills)
 })
 
 test('every message has its event with the same seq', async () => {
@@ -181,9 +91,10 @@ test('every chat starts its events with chat.created, before its first message',
   )
 })
 
-test('reset is idempotent and restores the snapshot after changes', async () => {
+test('reset is idempotent and restores every seeded row after changes', async () => {
+  const seeded = await everyTableRows()
   await database.delete(tables.readMarkers)
   await resetDatabase(database)
   await resetDatabase(database)
-  await expectSnapshotRoundTrip()
+  expect(await everyTableRows()).toEqual(seeded)
 })

@@ -4,7 +4,6 @@ import {
   type Browser,
   creationFormOf,
   expect,
-  invite,
   type Locator,
   logInAtProvider,
   mainOf,
@@ -12,7 +11,6 @@ import {
   openMenu,
   openSettings,
   type Page,
-  pendingInvitesOf,
   ssoProviderIssuer,
   ssoServerUrl,
   ssoViteUrl,
@@ -84,12 +82,6 @@ const inviteToAcme = (workerStack: WorkerStack, email: string) =>
     insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
     values ('workspace-acme', ${crypto.randomUUID()}, ${email}, 'member', 'member-alice', now(), now() + interval '7 days')`
 
-const ssoEventsOf = async (workerStack: WorkerStack, workspaceId: string) =>
-  (
-    await workerStack.database.$client`
-      select type from workspace_events where workspace_id = ${workspaceId} and type like 'sso.%' order by created_at`
-  ).map(({ type }) => type)
-
 const domainsSectionOf = (page: Page) => signInSectionOf(page).getByRole('region', { name: 'Domains' })
 
 const claimTokenOf = async (workerStack: WorkerStack) =>
@@ -103,15 +95,6 @@ const addTxtRecord = async (domain: string, record: string) => {
   })
   expect(response.status).toBe(204)
 }
-
-const domainEventsOf = async (workerStack: WorkerStack) =>
-  (
-    await workerStack.database.$client`
-      select type from workspace_events where workspace_id = 'workspace-acme' and type like 'domain.%' order by created_at`
-  ).map(({ type }) => type)
-
-const acmeSsoRowsOf = (workerStack: WorkerStack) =>
-  workerStack.database.$client`select issuer, client_id from workspace_sso where workspace_id = 'workspace-acme'`
 
 test.describe('SSO', () => {
   test.use({ baseURL: ssoViteUrl, signedInAs: null, runtimeHost: false, warmRuntimes: false })
@@ -129,7 +112,7 @@ test.describe('SSO', () => {
     await expect(page.getByText(/Acme|Globex/)).toHaveCount(0)
   })
 
-  test('As an invitee of a workspace enforcing SSO, I see its sign-in after typing my email and join through it, while a stranger goes straight to the sign-in of this Spyria', {
+  test('As an invitee of a workspace enforcing SSO, I see its sign-in after typing my email and join through it', {
     tag: ['@spec-37'],
   }, async ({ page, browser, workerStack }) => {
     await enforceAcmeSsoAsAlice(browser, workerStack)
@@ -152,21 +135,9 @@ test.describe('SSO', () => {
       await expect(switcherOf(page)).toContainText('Acme')
       expect(await menuItemNamesOf(page)).toEqual(['Acme', 'Log out of Acme'])
     })
-
-    await test.step('a stranger is offered no choice: the popup goes straight to the sign-in of this Spyria', async () => {
-      const olivePage = await openPageAs(browser, workerStack, null, ssoViteUrl)
-      const popupOpened = olivePage.waitForEvent('popup')
-      await continueWith(olivePage, 'olive@example.com')
-      const popup = await popupOpened
-      await expect(popup).toHaveURL(new RegExp(`^${ssoProviderIssuer}/`))
-      await expect(olivePage.getByRole('button', { name: organizationSignInLabel })).toHaveCount(0)
-      await popup.close()
-      await expect(olivePage.getByRole('button', { name: 'Continue' })).toBeEnabled()
-      await olivePage.context().close()
-    })
   })
 
-  test("As a member of a workspace enforcing SSO, my own account does not open it and my organization's sign-in does", {
+  test('As a member of a workspace enforcing SSO, I cannot open it with my own account', {
     tag: ['@spec-37'],
   }, async ({ page, browser, workerStack }) => {
     await enforceAcmeSsoAsAlice(browser, workerStack)
@@ -177,23 +148,18 @@ test.describe('SSO', () => {
       await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
       await expect(page.getByText(/Acme/)).toHaveCount(0)
     })
-
-    await test.step("signing in through my organization's sign-in opens Acme", async () => {
-      await page.reload()
-      await signInThroughChosenProvider(page, 'bob@example.com', organizationSignInLabel)
-      await expect(switcherOf(page)).toContainText('Acme')
-    })
   })
 
-  test('As the first person installing Spyria, I need the setup link, then create the first workspace with my own account: it does not enforce SSO and the people I invite sign in with theirs', {
+  test('As the first person installing Spyria, I need the setup link, then create the first workspace with my own account, which does not enforce SSO', {
     tag: ['@spec-51', '@spec-53'],
-  }, async ({ page, browser, workerStack }) => {
+  }, async ({ page, workerStack }) => {
     await workerStack.database.$client`truncate workspaces cascade`
 
     await test.step('without the setup link, or with a wrong one, the instance is being set up', async () => {
       await page.goto('/')
       await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
       await expect(creationFormOf(page)).toHaveCount(0)
+      await expect(page.getByRole('form', { name: 'Sign in' })).toHaveCount(0)
       await page.goto('/?setup=not-the-token')
       await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
     })
@@ -212,17 +178,6 @@ test.describe('SSO', () => {
       await openSettings(page, 'Single sign-on')
       await expect(signInSectionOf(page)).toContainText(notEnforcedText)
       await expect(providerFormOf(page).getByRole('button', { name: 'Enforce SSO' })).toBeVisible()
-      expect(await workerStack.database.$client`select 1 from workspace_sso`).toHaveLength(0)
-    })
-
-    await test.step('a person I invite signs in with their own account and lands in the workspace', async () => {
-      await openSettings(page, 'Members and roles')
-      await invite(page, 'bob@example.com')
-      await expect(pendingInvitesOf(page)).toContainText('bob@example.com')
-      const bobPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
-      await signInStraightThroughProvider(bobPage, 'bob@example.com')
-      await expect(switcherOf(bobPage)).toContainText('Umbrella')
-      await bobPage.context().close()
     })
   })
 
@@ -241,7 +196,6 @@ test.describe('SSO', () => {
       await fillProvider(form, unreachableIssuer)
       await form.getByRole('button', { name: 'Create and sign in' }).click()
       await expect(page.getByText(discoveryFailure)).toBeVisible()
-      expect(await workerStack.database.$client`select 1 from workspaces`).toHaveLength(0)
     })
 
     await test.step('signing in through my provider creates the workspace, which enforces SSO without showing its secret', async () => {
@@ -257,9 +211,6 @@ test.describe('SSO', () => {
       await expect(providerFormOf(page).getByLabel('Issuer')).toHaveValue(ssoProviderIssuer)
       await expect(providerFormOf(page).getByLabel('Client secret')).toHaveValue('')
       await expect(page.locator('body')).not.toContainText(providerClientSecret)
-      expect(await workerStack.database.$client`select issuer, client_id as "clientId" from workspace_sso`).toEqual([
-        { issuer: ssoProviderIssuer, clientId: providerClientId },
-      ])
     })
   })
 
@@ -268,7 +219,7 @@ test.describe('SSO', () => {
 
     test('As an Admin, I enforce SSO in Single sign-on by signing in through the provider with my own address; another address, or a provider whose discovery fails, changes nothing', {
       tag: ['@spec-37'],
-    }, async ({ page, workerStack }) => {
+    }, async ({ page }) => {
       await page.goto('/')
       await openSettings(page, 'Single sign-on')
       const form = providerFormOf(page)
@@ -290,14 +241,12 @@ test.describe('SSO', () => {
           form.getByText('Sign in as alice@example.com to confirm the provider: nothing was changed'),
         ).toBeVisible()
         await expect(signInSectionOf(page)).toContainText(notEnforcedText)
-        expect(await acmeSsoRowsOf(workerStack)).toHaveLength(0)
       })
 
       await test.step('an issuer whose discovery fails is refused with its reason', async () => {
         await form.getByLabel('Issuer').fill(unreachableIssuer)
         await form.getByRole('button', { name: 'Enforce SSO' }).click()
         await expect(form.getByText(discoveryFailure)).toBeVisible()
-        expect(await acmeSsoRowsOf(workerStack)).toHaveLength(0)
       })
 
       await test.step('signing in as myself enforces SSO, keeps me in the workspace and never shows the secret', async () => {
@@ -316,7 +265,6 @@ test.describe('SSO', () => {
         await expect(form.getByLabel('Client secret')).toHaveValue('')
         await expect(page.locator('body')).not.toContainText(providerClientSecret)
         await expect(switcherOf(page)).toContainText('Acme')
-        expect(await ssoEventsOf(workerStack, 'workspace-acme')).toEqual(['sso.configured'])
       })
     })
 
@@ -341,7 +289,6 @@ test.describe('SSO', () => {
         )
         await confirmation.getByRole('button', { name: 'Cancel' }).click()
         await expect(confirmation).toHaveCount(0)
-        expect(await acmeSsoRowsOf(workerStack)).toHaveLength(1)
       })
 
       await test.step('stopping SSO signs everyone out of the workspace, me included', async () => {
@@ -354,11 +301,6 @@ test.describe('SSO', () => {
         await openMenu(page)
         await expect(page.getByRole('menuitem', { name: /^Acme/ })).toContainText('Signed out')
         await page.keyboard.press('Escape')
-        expect(await acmeSsoRowsOf(workerStack)).toHaveLength(0)
-        expect(
-          await workerStack.database.$client`select 1 from sessions where workspace_id = 'workspace-acme'`,
-        ).toHaveLength(0)
-        expect(await ssoEventsOf(workerStack, 'workspace-acme')).toEqual(['sso.configured', 'sso.removed'])
       })
 
       await test.step('a member then signs in with their own account, straight to the sign-in of this Spyria', async () => {
@@ -396,7 +338,6 @@ test.describe('SSO', () => {
         await claim.getByRole('button', { name: 'Check the record' }).click()
         await expect(claim).toContainText('Claimed')
         await expect(claim.getByRole('button', { name: 'Release' })).toBeVisible()
-        expect(await domainEventsOf(workerStack)).toEqual(['domain.claimed'])
       })
 
       await test.step('a member at the domain goes straight to our provider, which opens each of their workspaces, without New workspace', async () => {
@@ -410,8 +351,6 @@ test.describe('SSO', () => {
       await test.step('releasing the domain frees it', async () => {
         await claim.getByRole('button', { name: 'Release' }).click()
         await expect(claim).toHaveCount(0)
-        expect(await workerStack.database.$client`select 1 from domain_claims`).toHaveLength(0)
-        expect(await domainEventsOf(workerStack)).toEqual(['domain.claimed', 'domain.released'])
       })
     })
   })

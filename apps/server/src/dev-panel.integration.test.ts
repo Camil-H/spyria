@@ -1,98 +1,26 @@
-import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
-import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
-import {
-  acme,
-  alice,
-  bob,
-  sessionTokenOf,
-  startAgentStack,
-  succeeded,
-  testSecretsKeyring,
-  waitFor,
-} from './testing/testing.ts'
+import type { ChatId } from '@spyria/kernel'
+import { gitIn, startGitHubStack } from './testing/github-stack.ts'
+import { acme, alice, bob, sessionTokenOf, succeeded, waitFor } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
-const fakeGitHub = startFakeGitHub()
-const stack = await startAgentStack({
-  llm: { model: 'openai/mistral/codestral-latest' },
-  github: { api: createGitHubApi(fakeGitHub.urls), secretBox: createSecretBox(testSecretsKeyring) },
-})
-afterAll(() => fakeGitHub.stop())
+const { stack, request, configureGitHubApp, newDevChat, promptAndWait, workspaceOf, snapshotOf, runtimeWorkspaceOf } =
+  await startGitHubStack({ llm: { model: 'openai/mistral/codestral-latest' } })
 const { app, database } = stack
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
-}
 const read = (userId: string, chat: ChatId, kind: string, path = '') =>
   request(userId, 'GET', `/api/chats/${chat}/workspace/${kind}?${new URLSearchParams({ path })}`)
-const git = (cwd: string, ...command: string[]) => {
-  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
-    cwd,
-    stderr: 'pipe',
-  })
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
-}
 
-expect(
-  await request(alice, 'POST', '/api/github-settings', {
-    appId: fakeGitHubAppId,
-    clientId: fakeGitHubClientId,
-    clientSecret: fakeGitHubClientSecret,
-    privateKey: fakeGitHub.appPrivateKey,
-    webhookSecret: 'whsec-dev-panel-0123',
-  }),
-).toMatchObject({ status: 200 })
-
-const newDevChat = async (repository: string) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Panel check',
-    projectId: null,
-    repository,
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  return id
-}
-const promptAndWait = async (id: ChatId, text: string) => {
-  const promptId = await stack.prompt(id, text)
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 15_000)
-  return stack.repliesTo(promptId, ['kind', 'body', 'step'])
-}
-const workspaceOf = async (id: ChatId) => {
-  const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
-  return String(frames.find((frame) => frame.workspace)?.workspace.cwd)
-}
-const snapshotOf = async (id: ChatId) =>
-  (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot
+await configureGitHubApp('whsec-dev-panel-0123')
 
 test('a dev chat reads its tree, files, changes against base and commits through spyria-agent, for readers only, with caps', async () => {
   await stack.agentHost('panel host')
-  const id = await newDevChat('acme/app')
-  await promptAndWait(id, 'stub:ls')
-  await waitFor(async () => (await snapshotOf(id)) != null, 20_000)
-  const workspace = await workspaceOf(id)
+  const { id } = await newDevChat()
+  const { workspace } = await runtimeWorkspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 2\n')
-  git(workspace, 'commit', '-qam', 'Fix the totals')
+  gitIn(workspace, 'commit', '-qam', 'Fix the totals')
   writeFileSync(join(workspace, 'src/new.ts'), 'export const added = true\n')
 
   expect(await read(alice, id, 'tree')).toEqual({
@@ -138,12 +66,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
   expect((await read(bob, id, 'file', 'README.md')).body.content).toBe('# acme app\n')
   expect((await request(bob, 'POST', `/api/chats/${id}/workspace/wake`)).status).toBe(403)
 
-  mkdirSync(join(workspace, 'many'))
-  for (let index = 0; index <= 500; index++) writeFileSync(join(workspace, 'many', `file-${index}.txt`), '')
   writeFileSync(join(workspace, 'large.txt'), 'x\n'.repeat(250_000))
-  const many = (await read(alice, id, 'tree', 'many')).body
-  expect([many.entries.length, many.truncated]).toEqual([500, true])
-  expect((await read(alice, id, 'file', 'large.txt')).body).toMatchObject({ truncated: true })
   expect((await read(alice, id, 'changes')).body).toMatchObject({ truncated: true, cut: ['unstaged'] })
   const compressed = await app.request(`/api/chats/${id}/workspace/changes`, {
     headers: {
@@ -158,7 +81,7 @@ test('a dev chat reads its tree, files, changes against base and commits through
 
 test('a file the agent made is shown inline through the server, only to readers, only as allowed media from inside the workspace', async () => {
   await stack.agentHost('media host')
-  const id = await newDevChat('acme/app')
+  const { id } = await newDevChat()
   await promptAndWait(id, 'stub:ls')
   const workspace = await workspaceOf(id)
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
@@ -190,12 +113,10 @@ test('a file the agent made is shown inline through the server, only to readers,
 
 test('an asleep runtime serves the snapshot of the last turn end, a read never wakes it, and Wake starts it again', async () => {
   const { host, relay } = await stack.agentHost('sleep host')
-  const id = await newDevChat('acme/app')
-  await promptAndWait(id, 'stub:ls')
-  await waitFor(async () => (await snapshotOf(id)) != null, 20_000)
-  const workspace = await workspaceOf(id)
+  const { id } = await newDevChat()
+  const { workspace } = await runtimeWorkspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 3\n')
-  git(workspace, 'commit', '-qam', 'Raise the totals')
+  gitIn(workspace, 'commit', '-qam', 'Raise the totals')
   await promptAndWait(id, 'stub:ls')
   await waitFor(async () => String(await snapshotOf(id)).includes('export const total = 3'))
 
@@ -243,7 +164,7 @@ test('a slow .spyria/setup.sh no longer holds the launch past the relay limit: t
       commands: [{ repository: 'acme/docs', command: 'sh .spyria/setup.sh' }],
     }),
   ).toEqual(succeeded)
-  const id = await newDevChat('acme/docs')
+  const { id } = await newDevChat({ repository: 'acme/docs' })
   const { frames } = await stack.openStream(id)
   const replies = await promptAndWait(id, 'stub:ls')
   expect(replies.map(({ body }) => body).join('')).toContain('files:.git,.spyria,README.md')

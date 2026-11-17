@@ -1,6 +1,8 @@
 import {
+  type AgentScript,
   configureGitHubApp,
   expect,
+  finished,
   messageContaining,
   newDevChat,
   type Page,
@@ -9,7 +11,6 @@ import {
   serverUrl,
   tabPanelOf,
   test,
-  workingIndicatorOf,
 } from './fixtures'
 
 const appFix = {
@@ -21,14 +22,8 @@ const commitCommand = `git add src/app.ts && git -c user.name='Pi Agent' -c user
 const treeRowOf = (page: Page, name: string) => tabPanelOf(page).getByRole('button', { name, exact: false })
 const changeOf = (page: Page, path: string) =>
   tabPanelOf(page).getByRole('button', { name: new RegExp(`^${path.replace('.', '\\.')}`) })
-const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 
-const devChatWithEdits = async (
-  page: Page,
-  agentScript: (chatId: string, script: object) => Promise<void>,
-  name: string,
-  extraSteps: object[] = [],
-) => {
+const devChatWithEdits = async (page: Page, agentScript: AgentScript, name: string, extraSteps: object[] = []) => {
   await configureGitHubApp(page)
   const chatId = await newDevChat(page, name, 'acme/app')
   await agentScript(chatId, {

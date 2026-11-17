@@ -34,6 +34,7 @@ import {
   rpcOf,
   runtimeTurn,
   sessionTokenOf,
+  succeeded,
   testAuthSettings,
   testSecretsKeyring,
   textOf,
@@ -44,7 +45,7 @@ import {
 } from './testing/testing.ts'
 
 setDefaultTimeout(30_000)
-const { database, app, port, gateway, llmGateway, fakeMcp } = await openSharedTestApp()
+const { database, app, port, gateway, llmGateway, fakeMcp, resultOf } = await openSharedTestApp()
 const { fakeHost, disconnectFakeHosts } = createFakeHosts({ port, database })
 const worker = startJobWorker(database, { pollIntervalMilliseconds: 5, llmGateway })
 afterEach(() => disconnectFakeHosts())
@@ -76,6 +77,18 @@ const sessionsOf = async (virtualKeyId: string) =>
       `/api/mcp/sessions?virtual_key_id=${virtualKeyId}&mcp_client_id=${await fakeClientId()}`,
     )
   ).sessions
+const removeKeysOf = async (userId: string) => {
+  const credentials = await database.$client<{ id: string }[]>`
+    select id from llm_credentials where workspace_id = ${acme} and user_id = ${userId}`
+  for (const { id } of credentials)
+    expect(
+      await resultOf({ workspaceId: acme, userId }, 'profile.removeLlmCredential', {
+        workspaceId: acme,
+        credentialId: id,
+      }),
+    ).toEqual(succeeded)
+  if (credentials.length > 0) await waitFor(async () => !(await virtualKeyOf(userId)).provider_configs?.length)
+}
 
 test('Connect grants the server on the member key, runs the consent through Spyria’s callback, and Disconnect deletes the gateway session', async () => {
   const providerKeysBefore = (await virtualKeyOf(alice)).provider_configs.flatMap((config) => config.keys)
@@ -250,6 +263,7 @@ test('a pending sign-in left behind does not block Connect, and Connect while si
 })
 
 test('a member acts only on their own key: unknown servers are refused, a member without an LLM key connects on a key that serves only tools, and Bob never touches Alice’s connection', async () => {
+  await removeKeysOf(bob)
   expect(await asMember(alice, 'POST', '/api/tool-connections/Jira/connect')).toEqual({
     status: 400,
     body: JSON.stringify({
@@ -341,6 +355,7 @@ test('/mcp runs on the prompter’s key with Spyria’s attribution, lists only 
 })
 
 test('/mcp for a prompter without an LLM key runs the workspace tools on a key that serves only tools, and a call to a server they sign in to answers that the prompter needs to connect', async () => {
+  await removeKeysOf(bob)
   const host = await fakeHost('Keyless tools host')
   const { token } = await runtimeTurn(host, bob, bob)
   const initialized = await mcpCall(
@@ -538,6 +553,7 @@ test('session headers pass through, the gateway’s list passes through whether 
     await hosts.disconnectFakeHosts()
     void server.stop(true)
     void stubGateway.stop(true)
+    await removeKeysOf(bob)
   }
 })
 

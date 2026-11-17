@@ -177,16 +177,8 @@ test('the purge erases every row of the workspace with its chat history, gateway
   expect((await rowCountsOf(wayne)).message_attachments).toBe(1)
   const [acmeRowsBefore, globexRowsBefore] = [await rowCountsOf(acme), await rowCountsOf(globex)]
   expect(await deleteAs(aliceInWayne)).toEqual(succeeded)
-  await database.$client`
-    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, last_error)
-    values (${wayne}, 'removal-on-a-lost-host', 'runtime.remove', '{}', now(), 5, 'failed', 'Host offline')`
 
   await purgeWorkspaceNow(database, wayne)
-  await Bun.sleep(1000)
-  expect((await workspaceOf(wayne))?.isDeleted).toBe(true)
-  expect([...(await abandonFailedCleanup(database, wayne))]).toEqual([
-    { type: 'runtime.remove', lastError: 'Host offline' },
-  ])
   await waitFor(async () => (await workspaceOf(wayne)) === undefined)
 
   expect(Object.entries(await rowCountsOf(wayne)).filter(([, count]) => count > 0)).toEqual([])

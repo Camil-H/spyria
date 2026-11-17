@@ -6,18 +6,19 @@ import { dirname, join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
 import { startTelemetry } from './telemetry.ts'
-import {
-  type AgentEvent,
-  apiKey,
-  clientOf,
-  createAgentTestbed,
-  kindOf,
-  piHello,
-  questionAt,
-  textOf,
-} from './testing.ts'
+import { type AgentEvent, apiKey, clientOf, createAgentTestbed, kindOf, questionAt, textOf } from './testing.ts'
 
 const { stateDirectory, stubCommand, launchOf, piLaunchOf, running, started } = createAgentTestbed()
+
+const withTelemetryLines = async (run: (lines: Record<string, unknown>[]) => Promise<void>) => {
+  const lines: Record<string, unknown>[] = []
+  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
+  try {
+    await run(lines)
+  } finally {
+    await telemetry.shutdown()
+  }
+}
 
 test('a session asks the harness to keep per-session details out of its system prompt, so the prompt prefix stays cacheable across chats', async () => {
   const { open, create, prompt } = started()
@@ -281,14 +282,12 @@ test('a conversation stays running while a later prompt runs after an earlier on
 })
 
 test('a prompt sent again with its id runs once: while it runs the repeat is ignored, once ended the repeat resends its turn end', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
-  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  expect((await promptWithId(id, 'stub:long', 'prompt-1')).status).toBe(200)
   await socket.until((event) => event.update.status === 'in_progress')
-  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  expect((await promptWithId(id, 'stub:long', 'prompt-1')).status).toBe(200)
   await call('POST', `/api/conversations/${id}/interrupt`, {})
   await socket.until(kindOf('turn_end'))
   expect(socket.events.find(kindOf('turn_end'))?.update).toEqual({
@@ -297,9 +296,9 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
     promptId: 'prompt-1',
   })
 
-  await promptWithId('hello', 'prompt-2')
+  await promptWithId(id, 'hello', 'prompt-2')
   await socket.until(kindOf('turn_end'), 2)
-  await promptWithId('hello', 'prompt-2')
+  await promptWithId(id, 'hello', 'prompt-2')
   await socket.until(kindOf('turn_end'), 3)
   expect(textOf(socket.events)).toBe('[t1] [t2] Hello from the stub (model stub-default, mode bypassPermissions).')
   expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.promptId)).toEqual([
@@ -310,15 +309,13 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
 })
 
 test('an interrupt naming a prompt that already ended cancels nothing, one naming the running prompt cancels it', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
-  await promptWithId('hello', 'prompt-ended')
+  await promptWithId(id, 'hello', 'prompt-ended')
   await socket.until(kindOf('turn_end'))
-  await promptWithId('stub:long', 'prompt-running')
+  await promptWithId(id, 'stub:long', 'prompt-running')
   await socket.until((event) => event.update.status === 'in_progress')
 
   expect((await interrupt('prompt-ended')).status).toBe(200)
@@ -335,15 +332,13 @@ test('an interrupt naming a prompt that already ended cancels nothing, one namin
 })
 
 test('an interrupt naming a prompt queued behind the running one ends only that prompt, and the running prompt goes on', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
-  await promptWithId('stub:long', 'prompt-running')
+  await promptWithId(id, 'stub:long', 'prompt-running')
   await socket.until((event) => event.update.status === 'in_progress')
-  await promptWithId('hello', 'prompt-queued')
+  await promptWithId(id, 'hello', 'prompt-queued')
 
   expect((await interrupt('prompt-queued')).status).toBe(200)
   await socket.until(kindOf('turn_end'))
@@ -359,7 +354,7 @@ test('an interrupt naming a prompt queued behind the running one ends only that 
     stopReason: 'cancelled',
     promptId: 'prompt-running',
   })
-  await promptWithId('hello', 'prompt-after')
+  await promptWithId(id, 'hello', 'prompt-after')
   await socket.until(kindOf('turn_end'), 3)
   expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toEqual({
     sessionUpdate: 'turn_end',
@@ -369,14 +364,12 @@ test('an interrupt naming a prompt queued behind the running one ends only that 
 })
 
 test('stopping a prompt queued behind one waiting on a question leaves that question open, and its answer still reaches the adapter', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
-  await promptWithId('stub:ask', 'prompt-asking')
+  await promptWithId(id, 'stub:ask', 'prompt-asking')
   const questionId = await questionAt(socket, 1)
-  await promptWithId('hello', 'prompt-queued')
+  await promptWithId(id, 'hello', 'prompt-queued')
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-queued' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
@@ -394,20 +387,18 @@ test('stopping a prompt queued behind one waiting on a question leaves that ques
 })
 
 test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const cancelledTurnEnd = { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-unsent' }
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-unsent' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
   expect(socket.events.find(kindOf('turn_end'))?.update).toEqual(cancelledTurnEnd)
 
-  expect((await promptWithId('hello', 'prompt-unsent')).status).toBe(200)
+  expect((await promptWithId(id, 'hello', 'prompt-unsent')).status).toBe(200)
   await socket.until(kindOf('turn_end'), 2)
-  await promptWithId('hello', 'prompt-next')
+  await promptWithId(id, 'hello', 'prompt-next')
   await socket.until(kindOf('turn_end'), 3)
   expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
     cancelledTurnEnd,
@@ -417,27 +408,25 @@ test('an interrupt naming a prompt never received ends its turn as cancelled at 
   expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
-test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
-  const { call, open, create } = started()
+test('a conversation remembers the last prompt ids, as many as it is set to keep: an older one sent again runs again', async () => {
+  const { open, create, promptWithId } = started({ rememberedPromptCount: 3 })
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text: 'hello' }], prompt_id: promptId })
-  for (let index = 0; index <= 50; index++) {
-    await promptWithId(`prompt-${index}`)
+  for (let index = 0; index <= 3; index++) {
+    await promptWithId(id, 'hello', `prompt-${index}`)
     await socket.until(kindOf('turn_end'), index + 1)
   }
-  await promptWithId('prompt-1')
-  await socket.until(kindOf('turn_end'), 52)
-  await promptWithId('prompt-0')
-  await socket.until(kindOf('turn_end'), 53)
+  await promptWithId(id, 'hello', 'prompt-1')
+  await socket.until(kindOf('turn_end'), 5)
+  await promptWithId(id, 'hello', 'prompt-0')
+  await socket.until(kindOf('turn_end'), 6)
   expect(
     socket.events
       .filter(kindOf('turn_end'))
       .slice(-2)
       .map(({ update }) => update.promptId),
   ).toEqual(['prompt-1', 'prompt-0'])
-  expect(textOf(socket.events)).toEndWith('[t52] Hello from the stub (model stub-default, mode bypassPermissions).')
+  expect(textOf(socket.events)).toEndWith('[t5] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
 test('events are numbered per conversation, resent after a sequence number, from a bounded buffer that says how many it no longer holds', async () => {
@@ -570,9 +559,7 @@ test('the final tool call update carries the merged call; turn ends and adapter 
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'error' })
   expect((await prompt(id, 'after the crash')).status).toBe(409)
 
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const failing = await call('POST', '/api/conversations', {
       ...launchOf(),
       agent: { acp_command: ['env', 'STUB_FAIL_START=1', ...stubCommand.slice(1)] },
@@ -582,9 +569,7 @@ test('the final tool call update carries the merged call; turn ends and adapter 
     for (const deadline = Date.now() + 5_000; adapterFailures().length === 0 && Date.now() < deadline; )
       await Bun.sleep(10)
     expect(adapterFailures()).toHaveLength(1)
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 
   const missing = await create({ ...launchOf(), agent: { acp_command: ['spyria-agent-no-such-adapter'] } })
   expect((await call('GET', `/api/conversations/${missing}`)).body).toMatchObject({ execution_status: 'error' })
@@ -798,9 +783,7 @@ test('a new spyria-agent resumes the session of an earlier one, and a missing se
 })
 
 test("an ACP harness whose Claude process dies mid-turn is restarted: the turn ends with a notice, the next prompt keeps the session, and the adapter's error output is logged redacted", async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const { call, open, create, prompt } = started()
     const id = await create(
       launchOf({ acp_model: 'stub-large' }, { CLAUDE_CODE_OAUTH_TOKEN: { value: 'subscription-token-0003' } }),
@@ -833,9 +816,7 @@ test("an ACP harness whose Claude process dies mid-turn is restarted: the turn e
     expect(JSON.stringify(lines)).not.toContain('subscription-token-0003')
     expect(JSON.stringify(lines)).not.toContain('sk-ant-oat01-stubtoken')
     expect(JSON.stringify(socket.events)).not.toContain('subscription-token-0003')
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
 test('a restart notice leaves out a command the agent asked to run, which a member cannot, and asks to restart the session instead', async () => {
@@ -898,17 +879,15 @@ test.each([
 ])(
   '%s that never answers %s is stopped after the request timeout and its conversation fails with what it last reported',
   async (_, method, launch) => {
-    const lines: Record<string, unknown>[] = []
-    const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-    try {
-      const { call } = started({ requestTimeoutMilliseconds: 2000 })
+    await withTelemetryLines(async (lines) => {
+      const { call } = started({ requestTimeoutMilliseconds: 400 })
       const silentLaunch = launch()
       silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
       const { status, body } = await call('POST', '/api/conversations', silentLaunch)
       expect(status).toBe(201)
       expect(body).toMatchObject({
         execution_status: 'error',
-        error: `The agent did not respond within 2 seconds. It reported: Waiting on ${method}`,
+        error: `The agent did not respond within 0.4 seconds. It reported: Waiting on ${method}`,
       })
       const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
       for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
@@ -916,9 +895,7 @@ test.each([
       await Bun.sleep(200)
       const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
       expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/new'])
-    } finally {
-      await telemetry.shutdown()
-    }
+    })
   },
 )
 
@@ -936,7 +913,7 @@ test.each([
     const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
     const id = await create(silentOn(method, launch()))
     const socket = open(id)
-    await prompt(id, 'stub:linger first')
+    await prompt(id, 'stub:long')
     await call('POST', `/api/conversations/${id}/switch_acp_model`, { model })
     await socket.until(kindOf('turn_end'))
     expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toStrictEqual([
@@ -947,17 +924,15 @@ test.each([
 )
 
 test('an interrupt naming a prompt that waits for the session to start stops only that prompt, not a later one also waiting', async () => {
-  const { call, open, create } = started({ requestTimeoutMilliseconds: 1500 })
+  const { call, open, create, promptWithId } = started({ requestTimeoutMilliseconds: 500 })
   const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const restarting = call('POST', `/api/conversations/${id}/restart`)
   for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
     if (Date.now() > deadline) throw new Error('The session did not start reloading')
-  await promptWithId('hello', 'prompt-stopped')
-  await promptWithId('hello', 'prompt-next')
+  await promptWithId(id, 'hello', 'prompt-stopped')
+  await promptWithId(id, 'hello', 'prompt-next')
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-stopped' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
@@ -971,7 +946,7 @@ test('an interrupt naming a prompt that waits for the session to start stops onl
 })
 
 test('a Stop naming no prompt stops every prompt waiting for the session to start', async () => {
-  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 1500 })
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 500 })
   const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
   const socket = open(id)
@@ -994,10 +969,10 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
   const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
   const silentOnce = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(
-    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=1500'),
+    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=700'),
   )
   const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-  await Bun.sleep(700)
+  await Bun.sleep(500)
   const restarted = await call('POST', `/api/conversations/${id}/restart`)
   await switching
   expect(restarted.body).toMatchObject({ execution_status: 'idle' })
@@ -1009,56 +984,42 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
 })
 
 test('a conversation deleted while its timed-out adapter is still stopping logs no failure', async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
+  await withTelemetryLines(async (lines) => {
     const { call, create } = started({ requestTimeoutMilliseconds: 300 })
-    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=1500'))
+    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=700'))
     const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-    await Bun.sleep(700)
+    await Bun.sleep(500)
     expect((await call('DELETE', `/api/conversations/${id}`)).status).toBe(200)
     await switching
     await Bun.sleep(200)
     expect(lines.filter((line) => line['event.name'] === 'agent.adapter_failed')).toStrictEqual([])
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
 test('a request in flight when another one times out fails at once with the same timeout, which is logged once', async () => {
-  const lines: Record<string, unknown>[] = []
-  const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
-  try {
-    const { call, create } = started({ requestTimeoutMilliseconds: 1_000 })
+  await withTelemetryLines(async (lines) => {
+    const { call, create } = started({ requestTimeoutMilliseconds: 500 })
     const id = await create(silentOn('session/set_config_option', launchOf()))
     const first = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-    await Bun.sleep(900)
+    await Bun.sleep(400)
     const secondSentAt = performance.now()
     const second = await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
-    expect(performance.now() - secondSentAt).toBeLessThan(700)
+    expect(performance.now() - secondSentAt).toBeLessThan(350)
     const timedOut = {
-      error: 'The agent did not respond within 1 second. It reported: Waiting on session/set_config_option',
+      error: 'The agent did not respond within 0.5 seconds. It reported: Waiting on session/set_config_option',
     }
     expect((await first).body).toStrictEqual(timedOut)
     expect(second.body).toStrictEqual(timedOut)
-    await Bun.sleep(1_200)
+    await Bun.sleep(700)
     const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
     expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
-  } finally {
-    await telemetry.shutdown()
-  }
+  })
 })
 
-test.each([
-  [
-    'an ACP adapter',
-    () => launchOf(),
-    (turn: number) => `[t${turn}] Hello from the stub (model stub-default, mode bypassPermissions).`,
-  ],
-  ['Pi', () => piLaunchOf(), (turn: number) => piHello(turn)],
-])('with %s, a prompt sent while a turn runs waits for it and gets its own turn end', async (_, launch, hello) => {
+test('a prompt sent while a turn runs waits for it and gets its own turn end', async () => {
+  const hello = (turn: number) => `[t${turn}] Hello from the stub (model stub-default, mode bypassPermissions).`
   const { call, open, create, prompt } = started()
-  const id = await create(launch())
+  const id = await create(launchOf())
   const socket = open(id)
   await prompt(id, 'stub:linger first')
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })

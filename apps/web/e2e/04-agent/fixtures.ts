@@ -58,6 +58,7 @@ export const newHarnessChat = async (
   return newOnlineSession(page, harness.name, name)
 }
 
+export const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
 export const questionOf = (page: Page) => mainOf(page).getByRole('form', { name: 'Question' })
 export const turnEnded = async (page: Page, count = 1) => {
   await expect(messageContaining(page, 'Hello from the stub')).toHaveCount(count)

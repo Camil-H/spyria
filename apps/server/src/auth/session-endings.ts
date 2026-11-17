@@ -1,9 +1,9 @@
 import type { Database } from '@spyria/db/postgres'
 import { log } from '@spyria/kernel'
 
-export const sessionsEndedChannel = 'sessions_ended'
+const sessionsEndedChannel = 'sessions_ended'
 
-export type WatchedSession = { workspaceId: string; sessionId: string; end: () => void }
+type WatchedSession = { workspaceId: string; sessionId: string; end: () => void }
 
 const listenRetryMilliseconds = 5000
 
