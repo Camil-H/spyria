@@ -293,8 +293,14 @@ test('stop and remove of a runtime whose container is gone still release its net
   }) as Docker
   const runner = createCommandRunner({ docker: missingDocker, prefix: 'spyria-' })
   const deletionsOf = () => calls.filter((call) => !call.startsWith('GET '))
+  const browserFilters = encodeURIComponent(JSON.stringify({ label: ['spyria.browser=runtime-1'] }))
+  const browserListings = [
+    `GET /containers/json?all=true&filters=${browserFilters}`,
+    `GET /volumes?filters=${browserFilters}`,
+  ]
   await runner.run({ op: 'stop', runtimeId: 'runtime-1' })
   expect(deletionsOf()).toEqual(['DELETE /networks/spyria-rt-runtime-1-net'])
+  for (const listing of browserListings) expect(calls).toContain(listing)
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
   expect(deletionsOf()).toEqual([
@@ -304,6 +310,10 @@ test('stop and remove of a runtime whose container is gone still release its net
     'DELETE /volumes/spyria-rt-runtime-1-tmp',
     'DELETE /networks/spyria-rt-runtime-1-net',
   ])
+  for (const listing of browserListings) expect(calls).toContain(listing)
+  expect(calls).toContain(
+    `GET /volumes?filters=${encodeURIComponent(JSON.stringify({ name: ['spyria-cache-'], dangling: ['true'] }))}`,
+  )
   const { docker: unmanagedDocker, calls: unmanagedCalls } = recordingDocker()
   for (const op of ['start', 'stop', 'remove'] as const)
     await expect(
@@ -473,6 +483,7 @@ test('a recreate removes the managed container alone and creates it again on the
     'POST /networks/create',
     'POST /containers/create',
   ])
+  expect(calls).toContain(`GET /images/${image}/json`)
   expect(bodies[0]?.HostConfig.Mounts.map(({ Source }) => Source)).toEqual([
     'spyria-rt-runtime-1-ws',
     'spyria-rt-runtime-1-home',
@@ -481,6 +492,7 @@ test('a recreate removes the managed container alone and creates it again on the
   calls.length = 0
   await runner.run({ op: 'recreate', ...create })
   expect(changesOf()).toEqual(['POST /networks/create', 'POST /containers/create'])
+  expect(calls).toContain(`GET /images/${image}/json`)
 })
 
 const snapshotKey = 'd'.repeat(32)
