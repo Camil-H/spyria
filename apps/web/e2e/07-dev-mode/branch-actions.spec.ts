@@ -1,42 +1,28 @@
 import { openPageAs } from '../stack'
 import {
   addParticipant,
+  appEdit,
   configureGitHubApp,
   connectGitHub,
+  devChatWithCommit,
+  diffOf,
   expect,
   messageContaining,
-  newDevChat,
   openChat,
   type Page,
   panelTabOf,
-  sendMessage,
+  runAgent,
   serverUrl,
   tabPanelOf,
   test,
   toastOf,
-  workingIndicatorOf,
 } from './fixtures'
 
-type AgentScript = (chatId: string, script: object) => Promise<void>
-
 const toastShownMilliseconds = 5000
-const commitCommand = (subject: string) =>
-  `git add -A && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm '${subject}'`
-const appEdit = (from: number, to: number) => ({
-  edit: { path: 'src/app.ts', oldText: `export const total = ${from}\n`, newText: `export const total = ${to}\n` },
-})
-const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const statusLineOf = (page: Page) => tabPanelOf(page).getByRole('region', { name: 'Branch status' })
 const headerButtonOf = (page: Page, name: string) => tabPanelOf(page).getByRole('button', { name, exact: true })
-const diffOf = (page: Page, path: string) => tabPanelOf(page).getByRole('table', { name: `Diff of ${path}` })
 const commitsOf = (page: Page) => tabPanelOf(page).getByRole('region', { name: /^Commit [0-9a-f]{7}$/ })
 
-const runAgent = async (page: Page, agentScript: AgentScript, chatId: string, steps: object[], text: string) => {
-  await agentScript(chatId, { steps, text })
-  await sendMessage(page, text.replace(/\.$/, ''))
-  await expect(messageContaining(page, text)).toHaveCount(1)
-  await finished(page)
-}
 const newBaseBranch = async () => {
   const branch = `e2e-base-${crypto.randomUUID().slice(0, 8)}`
   await commitToBase(branch, { [`docs/${branch}.md`]: 'base\n' }, 'Start the base')
@@ -48,18 +34,6 @@ const commitToBase = (branch: string, files: Record<string, string>, message: st
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ repository: 'acme/app', branch, files, message }),
   })
-const devChatWithCommit = async (
-  page: Page,
-  agentScript: AgentScript,
-  name: string,
-  baseBranch = 'main',
-  command = commitCommand('Fix the totals'),
-) => {
-  const chatId = await newDevChat(page, name, 'acme/app', baseBranch)
-  await runAgent(page, agentScript, chatId, [appEdit(1, 2), { command }], 'Fixed.')
-  await panelTabOf(page, 'Changes').click()
-  return chatId
-}
 
 test.describe('Branch actions', () => {
   test.beforeEach(async ({ page }) => {

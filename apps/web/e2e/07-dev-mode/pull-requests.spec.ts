@@ -1,15 +1,18 @@
 import { createHmac } from 'node:crypto'
 import { openPageAs, type WorkerStack } from '../stack'
 import {
+  type AgentScript,
   addLlmKey,
   addParticipant,
+  commitCommand,
   configureGitHubApp,
   connectGitHub,
+  devChatWithCommit,
   expect,
+  finished,
   mainOf,
   messageContaining,
   messageItemsOf,
-  newDevChat,
   openChat,
   type Page,
   panelTabOf,
@@ -18,17 +21,11 @@ import {
   tabPanelOf,
   test,
   toastOf,
-  workingIndicatorOf,
 } from './fixtures'
 
-type AgentScript = (chatId: string, script: object) => Promise<void>
-
 const webhookSecret = 'e2e-webhook-secret'
-const commitCommand = (subject: string) =>
-  `git add -A && git -c user.name='Pi Agent' -c user.email=agent@example.com commit -qm '${subject}'`
 const cardOf = (page: Page) => messageItemsOf(page).getByRole('region', { name: 'Pull request #1' })
 const chipOf = (page: Page, state: string) => mainOf(page).getByRole('link', { name: `PR #1 · ${state}` })
-const finished = (page: Page) => expect(workingIndicatorOf(page)).toHaveCount(0)
 const pushButtonOf = (page: Page) => tabPanelOf(page).getByRole('button', { name: 'Push', exact: true })
 
 const headShaOf = async (workerStack: WorkerStack, chatId: string) => {
@@ -53,20 +50,6 @@ const sendWebhook = async (workerStack: WorkerStack, event: string, payload: obj
     body,
   })
   return response.status
-}
-const devChatWithCommit = async (page: Page, agentScript: AgentScript, name: string) => {
-  const chatId = await newDevChat(page, name, 'acme/app')
-  await agentScript(chatId, {
-    steps: [
-      { edit: { path: 'src/app.ts', oldText: 'export const total = 1\n', newText: 'export const total = 2\n' } },
-      { command: commitCommand('Fix the totals') },
-    ],
-    text: 'Committed the fix.',
-  })
-  await sendMessage(page, 'Fix the totals and commit')
-  await expect(messageContaining(page, 'Committed the fix.')).toHaveCount(1)
-  await finished(page)
-  return chatId
 }
 const openPullRequest = async (page: Page) => {
   await panelTabOf(page, 'Changes').click()
