@@ -89,7 +89,6 @@
         "react": "19.3.0",
         "react-dom": "19.3.0",
         "react-router": "7.18.2",
-        "tailwind-merge": "^3.3.1",
         "tailwind-scrollbar": "^4.0.2",
         "tailwindcss": "^4.1.10",
       },
@@ -262,7 +261,6 @@
       "name": "@spyria/usage",
       "dependencies": {
         "@radix-ui/react-tabs": "1.1.21",
-        "@rocicorp/zero": "1.9.0",
         "@spyria/db": "workspace:*",
         "@spyria/kernel": "workspace:*",
         "@spyria/ui": "workspace:*",
@@ -1750,8 +1748,6 @@
     "systeminformation": ["systeminformation@5.33.15", "", { "os": "!aix", "bin": { "systeminformation": "lib/cli.js" } }, "sha512-s5RloL0F7xhN0ZjfHtLGnbf7EW74EI0N8NFL+1xR7Oxz9QA33obNZsl7lyfnJOhN04E/kGFPoJPlvY7TZ5fzmw=="],
 
     "table-layout": ["table-layout@4.1.1", "", { "dependencies": { "array-back": "^6.2.2", "wordwrapjs": "^5.1.0" } }, "sha512-iK5/YhZxq5GO5z8wb0bY1317uDF3Zjpha0QFFLA8/trAoiLbQD0HUbMesEaxyzUgDxi2QlcbM8IvqOlEjgoXBA=="],
-
-    "tailwind-merge": ["tailwind-merge@3.7.0", "", {}, "sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA=="],
 
     "tailwind-scrollbar": ["tailwind-scrollbar@4.0.2", "", { "dependencies": { "prism-react-renderer": "^2.4.1" }, "peerDependencies": { "tailwindcss": "4.x" } }, "sha512-wAQiIxAPqk0MNTPptVe/xoyWi27y+NRGnTwvn4PQnbvB9kp8QUBiGl/wsfoVBHnQxTmhXJSNt9NHTmcz9EivFA=="],
 
