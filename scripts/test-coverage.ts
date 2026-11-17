@@ -67,16 +67,29 @@ const countByArea = (covered: CoveredLines) => {
   return counts
 }
 
-export const compareCoverage = (baseline: CoveredLines, current: CoveredLines) => {
-  const lost = [...baseline].flatMap(([file, lines]) => {
+const missingLinesOf = (baseline: CoveredLines, current: CoveredLines) =>
+  [...baseline].flatMap(([file, lines]) => {
     const missing = [...lines].filter((line) => !current.get(file)?.has(line))
     return missing.length > 0 ? [{ file, lines: new Set(missing) }] : []
   })
+
+export const compareCoverage = (
+  baseline: CoveredLines,
+  current: CoveredLines,
+  otherLayers: CoveredLines = new Map(),
+) => {
+  const missing = missingLinesOf(baseline, current)
+  const lost = missingLinesOf(new Map(missing.map(({ file, lines }) => [file, lines])), otherLayers)
+  const moved = missingLinesOf(
+    new Map(missing.map(({ file, lines }) => [file, lines])),
+    new Map(lost.map(({ file, lines }) => [file, lines])),
+  )
   const baselineByArea = countByArea(baseline)
   const currentByArea = countByArea(current)
   const areas = [...new Set([...baselineByArea.keys(), ...currentByArea.keys()])].toSorted()
   return {
     lost,
+    moved,
     areas: areas.map((area) => ({
       area,
       baseline: baselineByArea.get(area) ?? 0,
@@ -87,19 +100,28 @@ export const compareCoverage = (baseline: CoveredLines, current: CoveredLines) =
 
 const baselineFileOf = (layer: string) => new URL(`../tests/baseline/${layer}.coverage.txt`, import.meta.url).pathname
 
-const run = (command: string | undefined, layer: string | undefined, lcovFile: string | undefined) => {
+const run = (
+  command: string | undefined,
+  layer: string | undefined,
+  lcovFile: string | undefined,
+  ...otherLcovFiles: string[]
+) => {
   if (!layer || !lcovFile || (command !== 'save' && command !== 'compare'))
-    throw new Error('Usage: bun scripts/test-coverage.ts save|compare <layer> <lcov.info>')
+    throw new Error(
+      'Usage: bun scripts/test-coverage.ts save|compare <layer> <lcov.info> [<lcov.info of another layer>...]',
+    )
   const current = coveredLinesOfLcov(readFileSync(lcovFile, 'utf8'))
   if (command === 'save') return writeFileSync(baselineFileOf(layer), formatCoveredLines(current))
+  const otherLayers = coveredLinesOfLcov(otherLcovFiles.map((file) => readFileSync(file, 'utf8')).join('\n'))
   const baselineFile = baselineFileOf(layer)
   const baseline = existsSync(baselineFile) ? parseCoveredLines(readFileSync(baselineFile, 'utf8')) : new Map()
-  const { lost, areas } = compareCoverage(baseline, current)
+  const { lost, moved, areas } = compareCoverage(baseline, current, otherLayers)
   console.log(`${layer} covered source lines, baseline → now:`)
   for (const { area, baseline: before, current: after } of areas)
     console.log(`  ${area.padEnd(40)} ${String(before).padStart(6)} → ${String(after).padStart(6)}`)
+  for (const { file, lines } of moved) console.log(`moved to another layer: ${file}: ${rangesOf(lines)}`)
   for (const { file, lines } of lost) console.log(`lost: ${file}: ${rangesOf(lines)}`)
   process.exitCode = lost.length > 0 ? 1 : 0
 }
 
-if (import.meta.main) run(...(process.argv.slice(2) as [string, string, string]))
+if (import.meta.main) run(...(process.argv.slice(2) as [string, string, string, ...string[]]))

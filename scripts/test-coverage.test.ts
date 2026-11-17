@@ -28,11 +28,21 @@ test('a line the baseline covered and the current run misses is lost, and counts
   const current = parseCoveredLines('apps/server/src/auth/sso.ts: 1-3,8-9\npackages/kernel/src/ids.ts: 4\n')
   expect(compareCoverage(baseline, current)).toEqual({
     lost: [{ file: 'apps/server/src/auth/sso.ts', lines: new Set([7]) }],
+    moved: [],
     areas: [
       { area: 'apps/server/src/auth', baseline: 4, current: 5 },
       { area: 'packages/kernel', baseline: 1, current: 1 },
     ],
   })
+})
+
+test('a line the layer no longer covers but another layer does has moved, not been lost', () => {
+  const baseline = parseCoveredLines('apps/server/src/llm-relay.ts: 10-12\n')
+  const current = parseCoveredLines('apps/server/src/llm-relay.ts: 10\n')
+  const otherLayers = parseCoveredLines('apps/server/src/llm-relay.ts: 11\n')
+  const { lost, moved } = compareCoverage(baseline, current, otherLayers)
+  expect(moved).toEqual([{ file: 'apps/server/src/llm-relay.ts', lines: new Set([11]) }])
+  expect(lost).toEqual([{ file: 'apps/server/src/llm-relay.ts', lines: new Set([12]) }])
 })
 
 test('an area is a server folder, the server root, or a workspace package', () => {
