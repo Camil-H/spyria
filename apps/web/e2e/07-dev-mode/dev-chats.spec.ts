@@ -82,7 +82,7 @@ test.describe('Dev chats', () => {
   })
 
   test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step while the chat says it is setting up the repository, and is answered once it ends', {
-    tag: ['@spec-40', '@slow'],
+    tag: ['@spec-40', '@spec-39', '@slow'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
     await setSetupCommand(page, 'acme/docs', 'sh .spyria/setup.sh')
