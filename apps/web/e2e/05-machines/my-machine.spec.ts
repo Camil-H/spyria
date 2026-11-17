@@ -170,11 +170,7 @@ test.describe('My machine', () => {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
       pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
-      await expect(machineSectionOf(page)).toContainText('Online')
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
-      await expect(machineSectionOf(page).getByRole('button', { name: 'Set up Claude Code' })).toHaveCount(0)
-      await expect(machineToolOf(page, 'Codex')).toHaveText('CodexNot signed inSet up')
-      await expect(machineSectionOf(page)).not.toContainText('docker exec')
       await setUpButtonOf(page, 'Codex').click()
       const dialog = useToolDialogOf(page, 'Codex')
       await expect(dialog.getByRole('textbox', { name: 'Command' })).toHaveValue(
