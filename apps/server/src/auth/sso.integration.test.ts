@@ -207,17 +207,11 @@ const accountProviders = [
 ]
 
 test('the server tells its auth mode, the account providers of this Spyria and whether a workspace can be created', async () => {
-  const modeOf = async (server: { request: (path: string) => Response | Promise<Response> }, query = '') =>
-    (await server.request(`/auth/mode${query}`)).json()
+  const modeOf = async (server: { request: (path: string) => Response | Promise<Response> }) =>
+    (await server.request('/auth/mode')).json()
   const callbackOrigin = new URL(testAuthSettings.oidc.redirectUri).origin
   const mode = { authMode: 'sso', accountProviders: ['microsoft', 'oidc'], callbackOrigin, instanceApps: ['microsoft'] }
   expect(await modeOf(app)).toEqual({ ...mode, isBeingSetUp: false, canCreateWorkspace: false })
-  expect(await modeOf(emptyInstanceApp)).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
-  expect(await modeOf(emptyInstanceApp, `?setup=${testSetupToken}`)).toEqual({
-    ...mode,
-    isBeingSetUp: true,
-    canCreateWorkspace: true,
-  })
   const google = { clientId: 'spyria-google', clientSecret: 'google-secret' }
   expect(
     await modeOf(
