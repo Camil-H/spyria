@@ -67,6 +67,26 @@ type Update = {
 }
 const agentClient = createSpyriaAgentClient()
 type AgentLlmChoice = Parameters<typeof agentClient.createConversation>[2]
+type PiLaunch = Extract<AgentLlmChoice, { pi: unknown }>['pi']
+type PiModel = PiLaunch['models'][number]
+const mistralMedium = {
+  id: 'mistral/mistral-medium-latest',
+  name: 'Mistral Medium',
+  reasoning: false,
+  readsImages: false,
+}
+const mistralSmall = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false }
+const haiku = {
+  id: 'anthropic/claude-haiku-5-5',
+  name: 'Haiku 5.5',
+  reasoning: false,
+  readsImages: false,
+  contextWindow: 200000,
+}
+const piLlm = (models: [PiModel, ...PiModel[]], compactionModel: PiModel, adapterModel = models[0]) => ({
+  adapterModel: `spyria/${adapterModel.id}`,
+  pi: { models, compactionModel: compactionModel.id },
+})
 const piConversationOf = async (transport: AgentTransport, token: string, llm: AgentLlmChoice) => {
   const conversation = { transport, apiKey, conversationId: crypto.randomUUID() }
   await agentClient.createConversation(conversation, token, llm)
@@ -112,24 +132,13 @@ test("Pi in Spyria's image answers through the LLM relay on the chat and Anthrop
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
-  const { conversation, turnEnds, answerOf, close } = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [
-        { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-        {
-          id: 'anthropic/claude-haiku-5-5',
-          name: 'Haiku 5.5',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 200000,
-        },
-      ],
-      compactionModel: 'mistral/mistral-small-latest',
-    },
-  })
+  const { conversation, turnEnds, answerOf, close } = await piConversationOf(
+    transport,
+    token,
+    piLlm([mistralMedium, haiku], mistralSmall),
+  )
   expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentClient.switchModel(conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
+  await agentClient.switchModel(conversation, `spyria-anthropic/${haiku.id}`)
   expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
   const anthropicRequest = fakeLlmBodies.findLast((body) => body.includes('Hello Pi on Anthropic')) ?? ''
   expect(anthropicRequest).toContain('"ttl":"1h"')
@@ -163,34 +172,18 @@ test('a model switch keeps the conversation: the next request on a curated model
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
-  const models = [
-    { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-    {
-      id: 'anthropic/claude-haiku-5-5',
-      name: 'Haiku 5.5',
-      reasoning: false,
-      readsImages: false,
-      contextWindow: 200000,
-    },
-  ]
-  const llm = {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: { models, compactionModel: 'mistral/mistral-medium-latest' },
-  }
   const bodiesBefore = fakeLlmBodies.length
   const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
-  const first = await piConversationOf(transport, token, llm)
+  const first = await piConversationOf(transport, token, piLlm([mistralMedium, haiku], mistralMedium))
   await first.answerOf('The code word is PAPAYA')
-  await agentClient.switchModel(first.conversation, 'spyria-anthropic/anthropic/claude-haiku-5-5')
+  await agentClient.switchModel(first.conversation, `spyria-anthropic/${haiku.id}`)
   await first.answerOf('Curated switch: what is the code word?')
   const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
   first.close()
   await agentClient.deleteConversation(first.conversation)
 
-  const picked = { id: 'mistral/mistral-small-latest', name: 'Mistral Small', reasoning: false, readsImages: false }
   const relaunched = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-small-latest',
-    pi: { models: [...models, picked], compactionModel: 'mistral/mistral-medium-latest' },
+    ...piLlm([mistralMedium, haiku, mistralSmall], mistralMedium, mistralSmall),
     resumeSessionId: sessionId,
   })
   await relaunched.answerOf('Picked switch: what is the code word?')
@@ -212,28 +205,16 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   setFakeLlmScript({ summary })
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
+  const smallContextLlm = piLlm(
+    [
+      { ...mistralMedium, contextWindow: 4000 },
+      { ...mistralSmall, contextWindow: 4000 },
+    ],
+    mistralSmall,
+  )
   const llm = {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [
-        {
-          id: 'mistral/mistral-medium-latest',
-          name: 'Mistral Medium',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 4000,
-        },
-        {
-          id: 'mistral/mistral-small-latest',
-          name: 'Mistral Small',
-          reasoning: false,
-          readsImages: false,
-          contextWindow: 4000,
-        },
-      ],
-      compactionModel: 'mistral/mistral-small-latest',
-      compaction: { reserveTokens: 3999, keepRecentTokens: 1 },
-    },
+    ...smallContextLlm,
+    pi: { ...smallContextLlm.pi, compaction: { reserveTokens: 3999, keepRecentTokens: 1 } },
   }
   const first = await piConversationOf(transport, token, llm)
   for (const text of ['Remember the word PAPAYA', 'Second turn', 'Third turn']) await first.answerOf(text)
@@ -278,13 +259,7 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
   await addLlmKey(bob, 'Mistral')
   const { id, transport } = await runtime()
   const { token } = await runtimeTurn({ id }, bob)
-  const pi = await piConversationOf(transport, token, {
-    adapterModel: 'spyria/mistral/mistral-medium-latest',
-    pi: {
-      models: [{ id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false }],
-      compactionModel: 'mistral/mistral-medium-latest',
-    },
-  })
+  const pi = await piConversationOf(transport, token, piLlm([mistralMedium], mistralMedium))
   const finalOf = (title: string) =>
     pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
   setFakeLlmScript({
@@ -357,15 +332,7 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
   try {
     const traceId = await withSpan('test turn', {}, async (span) => {
       await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: dockerHost.hostId, runtimeId: 'pi-smoke' })
-      const pi = await piConversationOf(transport, token, {
-        adapterModel: 'spyria/mistral/mistral-medium-latest',
-        pi: {
-          models: [
-            { id: 'mistral/mistral-medium-latest', name: 'Mistral Medium', reasoning: false, readsImages: false },
-          ],
-          compactionModel: 'mistral/mistral-medium-latest',
-        },
-      })
+      const pi = await piConversationOf(transport, token, piLlm([mistralMedium], mistralMedium))
       expect(await pi.answerOf('Hello traced Pi')).toBe('Understood, working on it.')
       pi.close()
       return span.spanContext().traceId
