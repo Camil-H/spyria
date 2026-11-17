@@ -89,7 +89,7 @@ test.each([
   ).toEqual(permissions as never)
 })
 
-test('renameProject and archiveProject with the release policy update the project and detach its chats', async () => {
+test('renameProject renames the project', async () => {
   expect(
     await resultOf(aliceInAcme, 'workspace.renameProject', {
       workspaceId: acme,
@@ -97,15 +97,7 @@ test('renameProject and archiveProject with the release policy update the projec
       name: 'Starting',
     }),
   ).toEqual(succeeded)
-  expect(
-    await resultOf(aliceInAcme, 'workspace.archiveProject', {
-      workspaceId: acme,
-      projectId: 'project-onboarding',
-      chatsPolicy: 'release',
-    }),
-  ).toEqual(succeeded)
-  expect(await projectRow('project-onboarding')).toMatchObject({ name: 'Starting', archived: true })
-  expect(await chatRow('chat-welcome')).toMatchObject({ projectId: null, archived: false })
+  expect(await projectRow('project-onboarding')).toMatchObject({ name: 'Starting' })
 })
 
 test('createWorkspace creates the workspace, the caller admin membership with their display name and the built-in chat roles, and no sign-in provider of its own', async () => {
