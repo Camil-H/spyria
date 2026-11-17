@@ -170,12 +170,7 @@ test.describe('Channels', () => {
     await browsedChatOf(bobPage, 'Lounge').getByRole('button', { name: 'Join' }).click()
     await expect(browsedChatOf(bobPage, 'Garden').getByRole('button', { name: 'Join' })).toBeDisabled()
     await chatAction(page, 'Lounge', 'Make private')
-    await expect
-      .poll(
-        async () =>
-          (await workerStack.database.$client`select visibility from chats where name = 'Lounge'`)[0]?.visibility,
-      )
-      .toBe('private')
+    await expect(toastOf(page).getByRole('status')).toHaveText('Lounge is now private: only its members can see it')
     gate.release()
     await expect(browseOf(bobPage).getByRole('alert')).toHaveText('You need the chat.read permission on this chat')
     await expect(browsedChatOf(bobPage, 'Garden').getByRole('button', { name: 'Join' })).toBeEnabled()
