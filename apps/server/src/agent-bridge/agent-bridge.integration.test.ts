@@ -63,6 +63,8 @@ const outputOf = async (path: string, workspaceId: string, userId: string) => {
   return { status: response.status, body: await response.text() }
 }
 const turnEnded = (chat: string) => waitFor(async () => (await turnOf(chat as never)) === null)
+const removeLlmKeysOf = (userId: string) =>
+  database.$client`delete from llm_credentials where workspace_id = ${acme} and user_id = ${userId}`
 
 test('a prompt starts the runtime, creates one Pi conversation with the runtime LLM token and is answered once', async () => {
   const { relay, launches } = await agentHost()
@@ -594,6 +596,7 @@ test('a failed start and a turn error each end with one notice and no endless tu
 })
 
 test('a member without an LLM key cannot prompt a runtime chat, and still posts in a channel', async () => {
+  await removeLlmKeysOf(bob)
   const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
   const send = (chatId: string) =>
     mutate(bobInAcme, 'conversation.sendMessage', {
@@ -634,6 +637,7 @@ test.each<[string, (sql: typeof database.$client, chat: string) => unknown, stri
 ])(
   'a prompt %s is refused at turn time with Spyria’s notice, without reaching the agent',
   async (_, beforeTurn, notice) => {
+    await removeLlmKeysOf(bob)
     const { relay } = await agentHost()
     const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
     const promptId = await queuedPrompt(chat, bob, (sql) => beforeTurn(sql, chat))
@@ -823,14 +827,18 @@ test.each([
 
 test('removing the owner of a runtime chat closes their stream, stops the turn and the runtime, and freezes the chat until an admin transfers it', async () => {
   await agentHost()
-  const chat = await newRuntimeChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
+  const owner = `member-${crypto.randomUUID()}`
+  await database.$client`insert into users (id, email) values (${owner}, ${`${owner}@example.com`})`
+  await database.$client`
+    insert into memberships (workspace_id, user_id, role, display_name) values (${acme}, ${owner}, 'member', 'Dana')`
+  const chat = await newRuntimeChat({ ownerId: owner, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const aliceViewer = await openStream(chat)
-  const bobViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
-  await Promise.all([aliceViewer.subscribed, bobViewer.subscribed])
+  const ownerViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, owner) })
+  await Promise.all([aliceViewer.subscribed, ownerViewer.subscribed])
   const question = await prompt(chat, 'stub:linger Stream until the owner leaves')
   await holds.reached('linger')
-  expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: bob })).toEqual(succeeded)
-  await bobViewer.closed
+  expect(await mutate(aliceInAcme, 'workspace.removeMember', { workspaceId: acme, memberId: owner })).toEqual(succeeded)
+  await ownerViewer.closed
   await turnEnded(chat)
   expect(await repliesTo(question)).toContainEqual({ kind: 'notice', body: 'Stopped by Alice' })
   await waitFor(async () => (await runtimeOf(chat)).state === 'stopped')
