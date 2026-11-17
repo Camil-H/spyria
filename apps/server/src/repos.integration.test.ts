@@ -28,6 +28,7 @@ const {
   requestWithText: request,
   appSettingsWith,
   ensureGitHubApp,
+  disconnectGitHub,
   githubCallbackOf,
   newDevChat,
   promptAndWait,
@@ -43,6 +44,9 @@ const connectionRow = async () =>
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
 test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
+  await database.$client`delete from github_apps where workspace_id = ${acme}`
+  for (const member of [alice, bob, lee]) await disconnectGitHub(member)
+  const githubEventsBefore = (await githubEvents()).length
   for (const [method, path, body] of [
     ['GET', '/api/github-settings'],
     ['POST', '/api/github-settings', appSettings],
@@ -114,13 +118,17 @@ test('GitHub App settings: admins only, secrets required at first, sealed at res
   const rotated = await appRow()
   expect(await secretBox.open(rotated.encrypted_webhook_secret ?? '')).toBe('whsec-rotated')
   expect(rotated.encrypted_private_key).toBe(sealed.encrypted_private_key ?? '')
-  expect((await githubEvents()).map(({ type, actorId, payload }) => ({ type, actorId, payload }))).toEqual([
+  expect(
+    (await githubEvents()).slice(githubEventsBefore).map(({ type, actorId, payload }) => ({ type, actorId, payload })),
+  ).toEqual([
     { type: 'github.configured', actorId: alice, payload: { appId: fakeGitHubAppId, clientId: fakeGitHubClientId } },
     { type: 'github.secret_rotated', actorId: alice, payload: { secrets: ['webhookSecret'] } },
   ])
 })
 
 test('a member connects GitHub through the user OAuth: tokens sealed server-side, refreshed when expired, Needs reconnection when the refresh fails', async () => {
+  await ensureGitHubApp(webhookSecret)
+  for (const member of [alice, bob]) await disconnectGitHub(member)
   expect(await request(alice, 'GET', '/api/github/connection')).toMatchObject({ body: { connection: null } })
   const started = await request(alice, 'POST', '/api/github/connection/connect')
   const authorizeUrl = new URL(started.body.authorizeUrl)
@@ -167,6 +175,7 @@ test('a member connects GitHub through the user OAuth: tokens sealed server-side
 })
 
 test('a refresh waiting on a disconnect in progress stores nothing, so the member stays disconnected', async () => {
+  await ensureGitHubApp(webhookSecret)
   expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
   await database.$client`
     update github_connections set access_expires_at = now() - interval '1 minute'
@@ -183,6 +192,7 @@ test('a refresh waiting on a disconnect in progress stores nothing, so the membe
 })
 
 test('a refresh waiting on a reconnection in progress leaves the new connection and its tokens alone', async () => {
+  await ensureGitHubApp(webhookSecret)
   expect((await app.request(await githubCallbackOf(alice))).status).toBe(200)
   await database.$client`
     update github_connections set access_expires_at = now() - interval '1 minute'
@@ -211,6 +221,7 @@ test('a refresh waiting on a reconnection in progress leaves the new connection 
 })
 
 test('returning from GitHub while a removal is in progress stores no token once it commits, and the callback is refused', async () => {
+  await ensureGitHubApp(webhookSecret)
   const dana = `member-${crypto.randomUUID()}`
   await database.$client`insert into users (id, email) values (${dana}, ${`${dana}@example.com`})`
   await database.$client`
@@ -232,6 +243,7 @@ test('returning from GitHub while a removal is in progress stores no token once 
 })
 
 test('a dev chat needs a granted repository and an existing base branch, and stores its working branch', async () => {
+  await ensureGitHubApp(webhookSecret)
   const withGitHubCalls = async <Result>(action: () => Promise<Result>) => {
     const callsBefore = fakeGitHub.apiRequests.length
     const result = await action()
@@ -289,6 +301,7 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
 })
 
 test('GitHub enforces token permissions: branches need contents read; a refusal answers 422 with GitHub reason and logs one github.refused line without secrets', async () => {
+  await ensureGitHubApp(webhookSecret)
   const api = createGitHubApi(fakeGitHub.urls)
   const jwt = appJwtOf(fakeGitHubAppId, fakeGitHub.appPrivateKey)
   const metadataOnly = await api.installationToken(jwt, 77, {
@@ -337,6 +350,8 @@ test('GitHub enforces token permissions: branches need contents read; a refusal 
 
 test('a dev chat clones its repository with a read-only installation token kept out of the agent and the repository config, on the working branch', async () => {
   const { launches } = await stack.agentHost('repos host')
+  await ensureGitHubApp(webhookSecret)
+  await disconnectGitHub(alice)
   const { id } = await newDevChat()
   const replies = await promptAndWait(id, 'stub:ls stub:env')
   const { gitBranch } = (await stack.chatRow(id)) ?? {}
