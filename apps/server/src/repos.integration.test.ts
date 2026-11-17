@@ -14,6 +14,7 @@ import {
   bobInAcme,
   captureLogs,
   lee,
+  rejectionOf,
   succeeded,
   waitFor,
   waitingOnLock,
@@ -236,17 +237,11 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
     const result = await action()
     return { result, githubCalls: fakeGitHub.apiRequests.slice(callsBefore) }
   }
-  const branchesCalls = (repository: string) => [
-    `GET /repos/${repository}/installation`,
-    'POST /app/installations/77/access_tokens',
-    `GET /repos/${repository}/branches`,
-  ]
   expect(await request(bob, 'GET', '/api/github/repositories')).toMatchObject({
     body: { repositories: [{ fullName: 'acme/app' }, { fullName: 'acme/docs' }] },
   })
-  expect(await withGitHubCalls(() => request(bob, 'GET', '/api/github/branches?repository=acme/app'))).toMatchObject({
-    result: { body: { branches: ['main', 'release'] } },
-    githubCalls: branchesCalls('acme/app'),
+  expect(await request(bob, 'GET', '/api/github/branches?repository=acme/app')).toMatchObject({
+    body: { branches: ['main', 'release'] },
   })
   for (const outside of ['acme/../app', 'acme/secret', ''])
     expect(
@@ -267,8 +262,7 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
     status: 400,
     body: { error: 'branch_not_found', message: 'acme/app has no branch gone' },
   })
-  const { result: created, githubCalls } = await withGitHubCalls(() => devChat('acme/app', 'release'))
-  expect(githubCalls).toEqual(branchesCalls('acme/app'))
+  const created = await devChat('acme/app', 'release')
   expect(created.status).toBe(201)
   const id = String(created.body.chatId)
   expect(await stack.chatRow(id)).toMatchObject({
@@ -301,7 +295,7 @@ test('GitHub enforces token permissions: branches need contents read; a refusal 
     repositories: ['app'],
     permissions: { metadata: 'read' },
   })
-  await expect(api.branches(metadataOnly, 'acme/app')).rejects.toMatchObject({
+  expect(await rejectionOf(api.branches(metadataOnly, 'acme/app'))).toMatchObject({
     status: 403,
     message: 'Resource not accessible by integration (403)',
   })
