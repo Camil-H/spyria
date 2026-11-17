@@ -105,17 +105,22 @@ test('an edit waiting on a deletion in progress is refused once it commits, so t
 })
 
 test('markChatRead moves the marker to the newest seq and never backwards', async () => {
+  const chat = await newChat({ type: 'channel' })
+  expect(await sendTo(aliceInAcme, chat, `message-first-${chat}`, 'First')).toEqual(succeeded)
+  expect(await sendTo(aliceInAcme, chat, `message-newest-${chat}`, 'Newest')).toEqual(succeeded)
+  const newestSeq = (await messageRow(`message-newest-${chat}`))?.seq
+  expect(newestSeq).toBeGreaterThan((await messageRow(`message-first-${chat}`))?.seq ?? Number.POSITIVE_INFINITY)
   const markerOf = (chatId: string) =>
     database.query.readMarkers.findFirst({ where: { chatId, userId: alice } }).then((marker) => marker?.lastReadSeq)
-  expect(
-    await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: 'chat-standup' }),
-  ).toEqual(succeeded)
-  expect(await markerOf('chat-standup')).toBe(3)
-  await database.$client`update read_markers set last_read_seq = 99 where chat_id = 'chat-standup' and user_id = ${alice}`
-  expect(
-    await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: 'chat-standup' }),
-  ).toEqual(succeeded)
-  expect(await markerOf('chat-standup')).toBe(99)
+  expect(await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: chat })).toEqual(
+    succeeded,
+  )
+  expect(await markerOf(chat)).toBe(newestSeq)
+  await database.$client`update read_markers set last_read_seq = 99 where chat_id = ${chat} and user_id = ${alice}`
+  expect(await resultOf(aliceInAcme, 'conversation.markChatRead', { workspaceId: acme, chatId: chat })).toEqual(
+    succeeded,
+  )
+  expect(await markerOf(chat)).toBe(99)
 })
 
 test('markChatRead that read the marker before a newer one committed keeps the newer one instead of moving it back', async () => {
