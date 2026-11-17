@@ -469,11 +469,11 @@ test('a prompt that waited over an hour for an offline host is not sent when it 
 })
 
 test.each([
-  ['running', agentReply(2)],
-  ['stopping', agentReply(1)],
+  ['running', agentReply(2), { state: 'running', host_online: true }],
+  ['stopping', agentReply(1), { host_online: true }],
 ])(
   'a prompt while the host is offline gets one notice and is answered after the host says hello again, with its runtime %s, whose host_online follows the host',
-  async (runtimeState, reply) => {
+  async (runtimeState, reply, runtimeAfterHello) => {
     const { relay, host } = await agentHost()
     const chat = await newRuntimeChat()
     await answered(await prompt(chat, 'Warm up'))
@@ -491,7 +491,7 @@ test.each([
     expect(await turnOf(chat)).toBeNull()
 
     await host.connect()
-    expect(await runtimeOf(chat)).toMatchObject({ host_online: true })
+    expect(await runtimeOf(chat)).toMatchObject(runtimeAfterHello)
     await answered(waiting, 2)
     expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), reply])
     expect(relay.prompts).toEqual(['Warm up', 'Are you there?'])
