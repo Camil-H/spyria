@@ -218,7 +218,7 @@ test('the callback refuses an address the provider did not confirm, saying so', 
   expect(signIn.cookie).not.toContain('spyria_s_')
 })
 
-test('the callback refuses a wrong state, a missing login cookie and a tampered login cookie', async () => {
+test('the callback refuses a wrong state, a missing login cookie, a tampered login cookie and an authorization response that names another issuer', async () => {
   const login = await startLogin()
   nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
   const tamperedCookie = login.cookie.replace(/spyria_login=([^;]*)/, (_, value) => `spyria_login=x${value}`)
@@ -226,6 +226,10 @@ test('the callback refuses a wrong state, a missing login cookie and a tampered 
     await callback('wrong-state', login.cookie),
     await callback(login.state, ''),
     await callback(login.state, tamperedCookie),
+    await app.request(
+      `/auth/callback?${new URLSearchParams({ code: 'code-1', state: login.state, iss: 'http://localhost:1/evil' })}`,
+      { headers: { cookie: login.cookie } },
+    ),
   ]) {
     expect(response.status).toBe(400)
     expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
@@ -249,17 +253,6 @@ test("the callback sends its login's PKCE verifier, so a code issued to another 
   } finally {
     challengeOfCode.clear()
   }
-})
-
-test('the callback refuses an authorization response that names another issuer', async () => {
-  const login = await startLogin()
-  nextIdToken = await signIdToken({ nonce: login.nonce, email: 'alice@example.com', email_verified: true })
-  const response = await app.request(
-    `/auth/callback?${new URLSearchParams({ code: 'code-1', state: login.state, iss: 'http://localhost:1/evil' })}`,
-    { headers: { cookie: login.cookie } },
-  )
-  expect(response.status).toBe(400)
-  expect(cookieHeaderOf(response)).not.toContain('spyria_s_')
 })
 
 test('the API refuses a revoked session at once, even with an unexpired token', async () => {
