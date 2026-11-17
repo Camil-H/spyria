@@ -130,7 +130,6 @@ export const startGitHubStack = async (
     connectGitHub,
     disconnectGitHub,
     newDevChat,
-    turnEnded,
     promptAndWait,
     workspaceOf,
     snapshotOf,
