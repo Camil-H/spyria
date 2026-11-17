@@ -1,5 +1,5 @@
 import { chatId as toChatId, type WorkspaceId } from '@spyria/kernel'
-import { AgentAvatar, focusRing, MemberAvatar } from '@spyria/ui'
+import { AgentAvatar, focusRing, formatClockTime, MemberAvatar } from '@spyria/ui'
 import { IterationCw, Reply } from 'lucide-react'
 import { type Ref, Suspense, use, useEffect, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router'
@@ -26,13 +26,6 @@ import {
 import { threadContextOf } from './thread-context.ts'
 
 const plainTextClassName = 'text-sm whitespace-pre-wrap'
-
-const timeFormat = new Intl.DateTimeFormat('en-GB', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-  timeZone: 'UTC',
-})
 
 type ThreadRoot = ConversationMessage & { thread: NonNullable<ConversationMessage['thread']> }
 
@@ -177,7 +170,7 @@ export const MessageItem = ({
               )}
               <span className="text-sm font-medium">{message.authorName}</span>
               <time dateTime={message.createdAt.toISOString()} className="text-xs text-muted">
-                {timeFormat.format(message.createdAt)}
+                {formatClockTime(message.createdAt)}
               </time>
               {message.isEdited && !message.isDeleted && <span className="text-xs text-muted">(edited)</span>}
               {message.isQueued && <span className="text-xs text-muted">Queued</span>}
