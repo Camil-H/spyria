@@ -93,7 +93,7 @@ test.describe('Sessions', () => {
 
     test('As a member, I stay signed in while my session lasts through silent renewal, and logging out in another tab signs this tab out at its next renewal', {
       tag: ['@spec-05', '@slow'],
-    }, async ({ page, context }) => {
+    }, async ({ page, context, workerStack }) => {
       await test.step('the app renews its token and keeps saving messages past expiry', async () => {
         let renewals = 0
         page.on('response', (response) => {
@@ -119,8 +119,13 @@ test.describe('Sessions', () => {
         await composerOf(page).fill('Sent after the first token expired')
         await composerOf(page).press('ControlOrMeta+Enter')
         await expect(messageItemsOf(page).last()).toContainText('Sent after the first token expired')
-        await page.reload()
-        await expect(messageItemsOf(page).last()).toContainText('Sent after the first token expired')
+        await expect
+          .poll(async () =>
+            (await workerStack.database.query.messages.findMany({ where: { chatId: 'chat-welcome' } })).map(
+              (message) => message.body,
+            ),
+          )
+          .toContain('Sent after the first token expired')
       })
 
       await test.step('logging out in another tab signs the first tab out of Acme at its next renewal', async () => {
