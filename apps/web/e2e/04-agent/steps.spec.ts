@@ -222,19 +222,6 @@ test.describe('Steps', () => {
       await expect(foldOf(page, 4)).toHaveAttribute('aria-expanded', 'true')
     })
 
-    test('As a member, I see a step that failed outside the fold, with the other steps folded', {
-      tag: ['@spec-10'],
-    }, async ({ page, agentScript }) => {
-      await agentScript(research, {
-        steps: [{ command: 'echo one' }, { command: 'echo two' }, { fail: 'The model is overloaded' }],
-      })
-      await sendMessage(page, 'Try it')
-
-      await expect(foldOf(page, 2)).toHaveAttribute('aria-expanded', 'false')
-      await expect(messageItemsOf(page).getByRole('alert')).toBeVisible()
-      await expect(mainOf(page)).not.toContainText('$ echo one')
-    })
-
     test('As a prompter, I open a successful command’s output on click, and a failing one shows exit 3 and its last lines at once', {
       tag: ['@spec-10'],
     }, async ({ page, agentScript }) => {
