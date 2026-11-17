@@ -620,6 +620,22 @@ test('a member adds one machine of their own under a lock on their membership; a
   expect((await adding).status).toBe(201)
 })
 
+test('a member is refused adding a machine while machine sessions are turned off, and nothing is stored', async () => {
+  await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
+  const setLocalSessions = (isOn: boolean) =>
+    requestMutation(app, database, aliceInAcme, 'runtime.setLocalSessions', { workspaceId: acme, isOn })
+  expect(await setLocalSessions(false)).toEqual(succeeded)
+  const refused = await addMachine(bobInAcme)
+  expect(await setLocalSessions(true)).toEqual(succeeded)
+  expect(refused).toMatchObject({
+    status: 403,
+    body: { error: 'local_sessions_off', message: "Your workspace turned off sessions on members' machines" },
+  })
+  expect(
+    await database.$client`select 1 from runtime_hosts where owner_id = ${bob} and removed_at is null`,
+  ).toHaveLength(0)
+})
+
 test('an offline machine gets a new command from its owner, which revokes its old token and pairs it again; an offline workspace host does not', async () => {
   await database.$client`update runtime_hosts set removed_at = now() where owner_id is not null`
   const { id, token, host } = await pairedHost('My machine', { machineOf: bobInAcme })

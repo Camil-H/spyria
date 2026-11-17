@@ -1,4 +1,4 @@
-import { openPageAs, type WorkerStack } from '../stack'
+import { openPageAs } from '../stack'
 import {
   answerNewAiChat,
   chipOf,
@@ -14,7 +14,6 @@ import {
   type Page,
   runsOnChoiceOf,
   sendMessage,
-  serverUrl,
   machineTest as test,
 } from './fixtures'
 
@@ -35,14 +34,6 @@ test.describe('Policy', () => {
     await page.getByRole('button', { name: 'New chat' }).click()
     return page.getByRole('dialog', { name: 'New chat' })
   }
-  const tokenOf = async (workerStack: WorkerStack, user: string) =>
-    (
-      await (
-        await fetch(`${serverUrl}/test/token?db=${workerStack.databaseName}&user=${user}&workspace=workspace-acme`, {
-          method: 'POST',
-        })
-      ).json()
-    ).token as string
 
   test.use({ runtimeHost: false })
 
@@ -50,7 +41,7 @@ test.describe('Policy', () => {
     await page.goto('/')
   })
 
-  test('As a member who can manage runtime hosts, I turn sessions on members’ machines off: My machine shows the notice with no Add my machine and no Set up for Claude Code or Codex, an add is refused, and the chip offers no machine', {
+  test('As a member who can manage runtime hosts, I turn sessions on members’ machines off: My machine shows the notice with no Add my machine and no Set up for Claude Code or Codex, and the chip offers no machine', {
     tag: ['@spec-22'],
   }, async ({ page, browser, workerStack, machine }) => {
     await setLocalSessions(page, false)
@@ -63,21 +54,6 @@ test.describe('Policy', () => {
       machineSectionOf(bobPage).getByRole('button', { name: /Set up Claude Code|Set up Codex/ }),
     ).toHaveCount(0)
     await expect(machineSectionOf(bobPage)).not.toContainText('docker')
-
-    const response = await fetch(`${serverUrl}/api/runtime-hosts`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${await tokenOf(workerStack, 'member-bob')}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ personal: true }),
-    })
-    expect(response.status).toBe(403)
-    expect((await response.json()).message).toBe(turnedOffNotice)
-    expect(
-      await workerStack.database
-        .$client`select 1 from runtime_hosts where owner_id = 'member-bob' and removed_at is null`,
-    ).toHaveLength(0)
 
     await machine({ owner: 'member-bob', signedIn: 'claude-code' })
     await expect(machineSectionOf(bobPage)).toContainText('Online')
