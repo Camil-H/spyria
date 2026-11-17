@@ -21,6 +21,7 @@ import {
   type PullRequestDraft,
   type PullRequestStep,
   publishToolOf,
+  withRecordedReviews,
 } from '../domain/pull-requests.ts'
 import type { AgentDependencies } from './agent-turn.ts'
 import { githubRefusalOf } from './github-access.ts'
@@ -36,12 +37,14 @@ const recordPullRequest = (
   { chat, actor, step, cardId }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId },
 ) =>
   transactor.run(async ({ messages }) => {
-    if (cardId)
+    if (cardId) {
+      const card = await messages.lock(cardId)
       return messages.record({
         type: 'message.step_changed',
         actor,
-        message: { ...(await messages.get(cardId)), step },
+        message: { ...card, step: card.step?.type === 'pull_request' ? withRecordedReviews(step, card.step) : step },
       })
+    }
     await messages.record({
       type: 'message.posted',
       actor,
