@@ -1,7 +1,18 @@
 import type { Snapshot } from '@spyria/db'
-import type { ChatId, MemberId, WorkspaceId } from '@spyria/kernel'
+import type { ChatId, MemberId, MessageId, WorkspaceId } from '@spyria/kernel'
 
 const unreadChatKeysBySnapshot = new WeakMap<Snapshot, { memberId: MemberId; chatKeys: ReadonlySet<string> }>()
+
+const unreadFollowedThreadRepliesOf = (snapshot: Snapshot, memberId: MemberId) => {
+  const lastReadSeqByThread = new Map(
+    snapshot.threadReadMarkers
+      .filter((marker) => marker.memberId === memberId)
+      .map((marker) => [`${marker.workspaceId}/${marker.threadRootId}`, marker.lastReadSeq]),
+  )
+  return snapshot.followedThreadReplies.filter(
+    (reply) => reply.seq > (lastReadSeqByThread.get(`${reply.workspaceId}/${reply.threadRootId}`) ?? 0),
+  )
+}
 
 const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
   const cached = unreadChatKeysBySnapshot.get(snapshot)
@@ -24,9 +35,18 @@ const unreadChatKeysOf = (snapshot: Snapshot, memberId: MemberId) => {
     )
       chatKeys.add(chatKey)
   }
+  for (const reply of unreadFollowedThreadRepliesOf(snapshot, memberId))
+    chatKeys.add(`${reply.workspaceId}/${reply.chatId}`)
   unreadChatKeysBySnapshot.set(snapshot, { memberId, chatKeys })
   return chatKeys
 }
 
 export const hasUnread = (workspaceId: WorkspaceId, chatId: ChatId, memberId: MemberId) => (snapshot: Snapshot) =>
   unreadChatKeysOf(snapshot, memberId).has(`${workspaceId}/${chatId}`)
+
+export const getOldestUnreadThreadReply =
+  (workspaceId: WorkspaceId, chatId: ChatId, memberId: MemberId) =>
+  (snapshot: Snapshot): MessageId | null =>
+    unreadFollowedThreadRepliesOf(snapshot, memberId)
+      .filter((reply) => reply.workspaceId === workspaceId && reply.chatId === chatId)
+      .toSorted((first, second) => first.seq - second.seq)[0]?.id ?? null

@@ -114,9 +114,13 @@ export const createChatWindowCache = (capacity = keptChatWindows) => {
 }
 const scopedKeyOf = (workspaceId: WorkspaceId, name: ScopedQueryName, args: object) =>
   `${workspaceId}/${name}/${JSON.stringify(args)}`
-const chatsWithLatestMessage = ['latestMessages', 'latestAgentActivity']
-const latestMessagesIn = (chats: readonly object[]) =>
-  chats.flatMap((chat) => (chat as { messages: readonly object[] }).messages)
+const nestedMessagesPathByQuery: Partial<Record<keyof typeof queries, readonly string[]>> = {
+  latestMessages: ['messages'],
+  latestAgentActivity: ['messages'],
+  followedThreadReplies: ['messages', 'threadReplies'],
+}
+const nestedMessagesIn = (parents: readonly object[], path: readonly string[]) =>
+  path.reduce((rows, key) => rows.flatMap((row) => (row as Record<string, readonly object[]>)[key] ?? []), parents)
 type WindowRoot = { id: string; replies: readonly object[]; threadReplies: readonly object[] }
 const messageWithoutRepliesByRow = new WeakMap<object, object>()
 const withoutReplies = (row: object) => {
@@ -281,6 +285,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
   const plainMessagesOf = () =>
     memoizedOnSources((messages: ZeroRows['messages']) => messages.map((message) => messageRowOf(message, false)))
   const latestMessagesOf = plainMessagesOf()
+  const followedThreadRepliesOf = plainMessagesOf()
   const latestAgentActivityOf = plainMessagesOf()
   const pinnedStepsOf = plainMessagesOf()
   const usageRowsOf = memoizedOnSources((chatUsage: ZeroRows['usageEntries'], monthUsage: ZeroRows['usageEntries']) =>
@@ -385,6 +390,7 @@ export const createSnapshotBuilder = (viewerId: MemberId) => {
       messages: messagesOf(rowsOf('messages', 'chatMessages'), runtimeChatIdsKeyOf(rowsOf('chats'))),
       latestMessages: latestMessagesOf(rowsOf('messages', 'latestMessages')),
       latestAgentActivity: latestAgentActivityOf(rowsOf('messages', 'latestAgentActivity')),
+      followedThreadReplies: followedThreadRepliesOf(rowsOf('messages', 'followedThreadReplies')),
       pinnedSteps: pinnedStepsOf(rowsOf('messages', 'chatPinnedSteps')),
       readMarkers: readMarkersOf(rowsOf('readMarkers')),
       threadReadMarkers: threadReadMarkersOf(rowsOf('threadReadMarkers')),
@@ -571,8 +577,9 @@ export const createZeroStore = ({
         .materialize((queries[table] as () => Parameters<typeof zero.materialize>[0])())
         .addListener((data, result) => {
           if (rowsByWorkspace.get(workspaceId) !== rows) return
-          rows[table] = chatsWithLatestMessage.includes(table)
-            ? latestMessagesIn(data as readonly object[])
+          const nestedMessagesPath = nestedMessagesPathByQuery[table]
+          rows[table] = nestedMessagesPath
+            ? nestedMessagesIn(data as readonly object[], nestedMessagesPath)
             : (data as object[])
           publish()
           if (isCacheReadable && table === 'workspaces' && isWorkspaceRowIn(data, workspaceId))

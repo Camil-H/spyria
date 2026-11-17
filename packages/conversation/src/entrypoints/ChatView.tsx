@@ -13,12 +13,13 @@ import {
   useShortcut,
 } from '@spyria/ui'
 import { Folder, GitBranch, TextSearch } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { ChatFrozen } from '../domain/errors.ts'
 import { runsOnNames, runsOnWaitingNoticeOf } from '../domain/session-routing.ts'
 import { getConversation } from '../queries/get-conversation.ts'
 import { getMentionableNames } from '../queries/get-mentionable-names.ts'
+import { getOldestUnreadThreadReply } from '../queries/has-unread.ts'
 import { Composer } from './Composer.tsx'
 import { ContextChip } from './ContextChip.tsx'
 import type { QuestionAnswer } from './endpoints.ts'
@@ -138,6 +139,15 @@ export const ChatView = ({
   useEffect(() => {
     if (isReadMarkerBehind) commands.markChatRead({ workspaceId, chatId })
   }, [commands, workspaceId, chatId, isReadMarkerBehind])
+  const unreadThreadReplyId = useQuery(getOldestUnreadThreadReply, workspaceId, chatId, memberId)
+  const isReadyToOpen = isWorkspaceLoaded && Boolean(conversation)
+  const chatOpenedOnUnreadThread = useRef<ChatId | null>(null)
+  useEffect(() => {
+    if (!isReadyToOpen || chatOpenedOnUnreadThread.current === chatId) return
+    chatOpenedOnUnreadThread.current = chatId
+    if (unreadThreadReplyId && !linkedMessageId && !findTargetId)
+      navigate(`?${new URLSearchParams({ [linkedMessageParam]: unreadThreadReplyId })}`, { replace: true })
+  }, [isReadyToOpen, chatId, unreadThreadReplyId, linkedMessageId, findTargetId, navigate])
   const isShown = (id: string) =>
     live.messages.some((message) => message.id === id || message.thread?.replies.some((reply) => reply.id === id))
   const isTargetMissing = [findTargetId, linkedMessageId].some((id) => id !== null && !isShown(id))

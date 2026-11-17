@@ -30,7 +30,7 @@ test.describe('Threads', () => {
     await page.goto('/')
   })
 
-  test('As a member, I see a thread reply collapsed under my message as "1 reply · 1 new", not in the channel flow, and open it: its reply and composer show, "new" clears, and my reply reaches Bob live', {
+  test('As a member, I see a thread reply collapsed under my message as "1 reply · 1 new" with the channel unread until I open it: its reply and composer show, "new" and the unread icon clear, and my reply reaches Bob live', {
     tag: ['@spec-31', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -38,12 +38,15 @@ test.describe('Threads', () => {
     await openWelcome(bobPage)
     await replyInThread(bobPage, 'Count me in for lunch')
     await expect(threadToggleOf(page)).toHaveText('1 reply · 1 new')
+    await expect(threadToggleOf(page).getByText('1 new')).toBeVisible()
+    await expect(unreadIconOf(page, 'Welcome')).toBeVisible()
     await expect(threadToggleOf(page)).toHaveAttribute('aria-expanded', 'false')
     await expect(messageContaining(page, 'Count me in for lunch')).toHaveCount(0)
     await threadToggleOf(page).click()
     await expect(repliesOf(page)).toHaveText([/Bob.*Count me in for lunch/])
     await expect(replyBoxOf(page)).toBeVisible()
     await expect(threadToggleOf(page)).toHaveText('1 reply')
+    await expect(unreadIconOf(page, 'Welcome')).toHaveCount(0)
     await replyBoxOf(page).fill('Great, see you at noon')
     await replyBoxOf(page).press('ControlOrMeta+Enter')
     await expect(threadToggleOf(bobPage)).toHaveText('2 replies')
@@ -51,7 +54,7 @@ test.describe('Threads', () => {
     await bobPage.context().close()
   })
 
-  test('As a member, a thread reply does not make a channel unread for me, while a new top-level message does', {
+  test('As a member, a reply in my thread makes the channel unread, and opening the channel opens that thread on the reply and clears it', {
     tag: ['@spec-31'],
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -59,15 +62,34 @@ test.describe('Threads', () => {
     await openChat(page, 'Invoice bug')
     await expect(unreadIconOf(page, 'Welcome')).toHaveCount(0)
     await replyInThread(bobPage, 'Only in the thread')
-    await expect
-      .poll(
-        async () =>
-          (await workerStack.database.$client`select 1 from messages where body = 'Only in the thread'`).length,
-      )
-      .toBe(1)
+    await expect(unreadIconOf(page, 'Welcome')).toBeVisible()
+    await openChat(page, 'Welcome')
+    await expect(threadToggleOf(page)).toHaveAttribute('aria-expanded', 'true')
+    await expect(repliesOf(page).filter({ hasText: 'Only in the thread' })).toHaveAttribute('aria-current', 'true')
+    await expect(unreadIconOf(page, 'Welcome')).toHaveCount(0)
+    await bobPage.context().close()
+  })
+
+  test('As a member, a reply in a thread I neither started nor replied in does not make the channel unread, while a new top-level message does', {
+    tag: ['@spec-31'],
+  }, async ({ page, browser, workerStack }) => {
+    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await openWelcome(bobPage)
+    await sendMessage(bobPage, 'Bob starts a thread')
+    await openChat(page, 'Welcome')
+    await expect(messageContaining(page, 'Bob starts a thread')).toBeVisible()
+    await openChat(page, 'Invoice bug')
+    await (await messageActionOf(messageContaining(bobPage, 'Bob starts a thread'), 'Reply in thread')).click()
+    await replyBoxOf(bobPage).fill('Only in the thread')
+    await replyBoxOf(bobPage).press('ControlOrMeta+Enter')
+    await expect(repliesOf(bobPage).filter({ hasText: 'Only in the thread' })).toHaveCount(1)
     await expect(unreadIconOf(page, 'Welcome')).toHaveCount(0)
     await sendMessage(bobPage, 'For everyone')
     await expect(unreadIconOf(page, 'Welcome')).toBeVisible()
+    await openChat(page, 'Welcome')
+    await expect(threadToggleOf(page)).toHaveText('1 reply · 1 new')
+    await expect(threadToggleOf(page)).toHaveAttribute('aria-expanded', 'false')
+    await expect(unreadIconOf(page, 'Welcome')).toHaveCount(0)
     await bobPage.context().close()
   })
 

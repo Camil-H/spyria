@@ -92,6 +92,9 @@ const rootMessagesOf = (ctx: ZeroContext, chatId: string) =>
     .where('threadRootId', 'IS', null)
     .where(({ or, cmp }) => or(cmp('replyToId', 'IS', null), cmp('kind', 'member')))
 const time = z.int().check(z.nonnegative())
+const repliesBy = (authorId: MemberId) => (reply: Query<'messages', Schema>) => reply.where('authorId', authorId)
+const repliesOfOthers = (userId: MemberId) => (reply: Query<'messages', Schema>) =>
+  reply.where('deletedAt', 'IS', null).where('authorId', '!=', userId)
 
 const activeMember = (userId: MemberId) => (membership: Query<'memberships', Schema>) =>
   membership.where('userId', userId).where('removedAt', 'IS', null)
@@ -177,6 +180,19 @@ export const queries = defineQueries({
         .where(({ or, cmp }) => or(cmp('authorId', 'IS', null), cmp('authorId', '!=', ctx.userId)))
         .orderBy('seq', 'desc')
         .limit(1),
+    ),
+  ),
+  followedThreadReplies: defineQuery(({ ctx }) =>
+    readableBy(ctx.userId)(zql.chats.where('workspaceId', ctx.workspaceId).where('type', 'channel')).related(
+      'messages',
+      (root) =>
+        root
+          .where('threadRootId', 'IS', null)
+          .where(({ or, cmp, exists }) =>
+            or(cmp('authorId', ctx.userId), exists('threadReplies', repliesBy(ctx.userId))),
+          )
+          .whereExists('threadReplies', repliesOfOthers(ctx.userId))
+          .related('threadReplies', (reply) => repliesOfOthers(ctx.userId)(reply).orderBy('seq', 'desc').limit(1)),
     ),
   ),
   latestAgentActivity: defineQuery(({ ctx }) =>

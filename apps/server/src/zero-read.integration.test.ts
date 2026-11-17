@@ -71,6 +71,24 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
       .slice(0, 1)
       .map((message) => ({ ...message, needsReply: false })),
   )
+  const channelKeys = new Set(
+    readableChats.filter((chat) => chat.type === 'channel').map((chat) => keyOf(chat.workspaceId, chat.id)),
+  )
+  const followedThreadReplies = readableMessages
+    .filter((root) => root.threadRootId === null && channelKeys.has(keyOf(root.workspaceId, root.chatId)))
+    .flatMap((root) => {
+      const replies = readableMessages.filter(
+        (reply) => reply.workspaceId === root.workspaceId && reply.threadRootId === root.id,
+      )
+      const isFollowed = root.authorId === viewerId || replies.some((reply) => reply.authorId === viewerId)
+      return isFollowed
+        ? replies
+            .filter((reply) => reply.deletedAt === null && reply.authorId !== null && reply.authorId !== viewerId)
+            .toSorted((first, second) => second.seq - first.seq)
+            .slice(0, 1)
+            .map((reply) => ({ ...reply, needsReply: false }))
+        : []
+    })
   return {
     ...snapshot,
     workspaces: snapshot.workspaces.filter((workspace) => workspaceIds.includes(workspace.id)),
@@ -82,6 +100,7 @@ const visibleTo = (snapshot: Snapshot, viewerId: MemberId, workspaceIds: readonl
     messages: readableMessages,
     latestMessages,
     latestAgentActivity,
+    followedThreadReplies,
     pinnedSteps: readableMessages
       .filter((message) => message.kind === 'step' && pinnedStepTypes.includes(message.body))
       .map((message) => ({ ...message, needsReply: false })),
@@ -456,6 +475,70 @@ test('a member watching a chat he cannot read receives none of its messages, ste
   ).toEqual([messageId(`${chat}-hello`)])
   await database.$client`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`
   await waitFor(() => rowsOfChat() === 0)
+})
+
+test('a member reads the newest reply by someone else, not deleted, of each thread he started or replied in, only while he can read the channel', async () => {
+  const chat = await newChat({
+    type: 'channel',
+    visibility: 'private',
+    participants: [
+      { memberId: bob, roleId: 'prompter' },
+      { memberId: lee, roleId: 'prompter' },
+    ],
+  })
+  const aliceStore = await openZeroStore(createZeroStore, alice, [acme])
+  const bobStore = await openZeroStore(createZeroStore, bob, [acme])
+  const leeStore = await openZeroStore(createZeroStore, lee, [acme])
+  const send = async (store: ZeroStore, id: string, threadRootId?: string) =>
+    (
+      await store.mutate(
+        acme,
+        conversationMutators.conversation.sendMessage({
+          workspaceId: acme,
+          id: `${chat}-${id}`,
+          chatId: chat,
+          text: id,
+          ...(threadRootId && { threadRootId: `${chat}-${threadRootId}` }),
+        }),
+      )
+    ).confirmation
+  const followedOf = (store: ZeroStore) =>
+    store
+      .read()
+      .followedThreadReplies.filter((reply) => reply.chatId === chat)
+      .map((reply) => reply.id)
+      .sort()
+  const followsExactly = (store: ZeroStore, name: string | null) =>
+    JSON.stringify(followedOf(store)) === JSON.stringify(name ? [`${chat}-${name}`] : [])
+  await waitFor(() =>
+    [aliceStore, bobStore, leeStore].every((store) => store.read().chats.some((row) => row.id === chat)),
+  )
+  await send(aliceStore, 'alice-root')
+  await send(leeStore, 'lee-root')
+  for (const replier of [aliceStore, bobStore]) {
+    await watchChats(replier, acme, [chat])
+    await waitFor(() =>
+      [`${chat}-alice-root`, `${chat}-lee-root`].every((id) =>
+        replier.read().messages.some((message) => message.id === id),
+      ),
+    )
+  }
+  await send(bobStore, 'bob-first', 'alice-root')
+  await send(bobStore, 'bob-in-lee-thread', 'lee-root')
+  await send(aliceStore, 'alice-reply', 'alice-root')
+  await send(bobStore, 'bob-second', 'alice-root')
+  await waitFor(() => followsExactly(aliceStore, 'bob-second'))
+  await waitFor(() => followsExactly(leeStore, 'bob-in-lee-thread'))
+  await waitFor(() => followsExactly(bobStore, 'alice-reply'))
+  await (
+    await bobStore.mutate(
+      acme,
+      conversationMutators.conversation.deleteMessage({ workspaceId: acme, messageId: `${chat}-bob-second` }),
+    )
+  ).confirmation
+  await waitFor(() => followsExactly(aliceStore, 'bob-first'))
+  await database.$client`delete from chat_participants where chat_id = ${chat} and user_id = ${alice}`
+  await waitFor(() => followsExactly(aliceStore, null))
 })
 
 test('a member searching messages finds none from a private chat he cannot read until he joins it, accented capitals match their lower case, and a wildcard matches only itself', async () => {

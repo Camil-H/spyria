@@ -63,7 +63,7 @@ In a runtime chat, a prompt that replies to a message reaches the agent with tha
 
 ## Threads
 
-In a channel, the actions of a top-level message offer **Reply in thread**. Replies stay under their root message, collapsed behind a toggle such as "3 replies · 1 new"; they never appear in the channel flow. Replies are ordinary messages: their authors can edit or delete them, and a deleted root keeps its thread. Runtime chats have no threads, and the server refuses a reply there.
+In a channel, the actions of a top-level message offer **Reply in thread**. Replies stay under their root message, collapsed behind a toggle such as "3 replies · 1 new", the new count in a badge; they never appear in the channel flow. Replies are ordinary messages: their authors can edit or delete them, and a deleted root keeps its thread. Runtime chats have no threads, and the server refuses a reply there.
 
 ## Search
 
@@ -92,7 +92,7 @@ Single keys move around the workspace. They do nothing while typing in a field o
 
 ## Unread state
 
-A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon, its color and its tooltip tell where the agent is: an hourglass while it is **working** on a turn, a question mark while it is **waiting** for an answer to a question or a tool approval, a cross when it stopped with an **error**, a check mark when it is **done**, and a sleep sign (two Zs) in the muted text color once its runtime is **asleep**, after an idle stop or a member stopping it. They are outline icons, not emoji. A channel's icon, and a runtime chat's before its agent first answers, is an exclamation mark in the text color. In channels only top-level messages count: a new reply never makes the channel unread. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new.
+A chat with messages a member has not seen shows an **Unread messages** icon in the sidebar. Opening the chat marks it read. In a runtime chat, the icon, its color and its tooltip tell where the agent is: an hourglass while it is **working** on a turn, a question mark while it is **waiting** for an answer to a question or a tool approval, a cross when it stopped with an **error**, a check mark when it is **done**, and a sleep sign (two Zs) in the muted text color once its runtime is **asleep**, after an idle stop or a member stopping it. They are outline icons, not emoji. A channel's icon, and a runtime chat's before its agent first answers, is an exclamation mark in the text color. In channels, a thread reply makes the channel unread only for the members who follow that thread: its root's author and everyone who replied in it. Each thread keeps its own read marker per member; opening a thread marks it read, and its toggle shows how many replies are new in a badge. Opening a channel with an unread reply in a thread the member follows opens the chat on that thread, expanded, with the reply marked, which marks the thread read; with several, it takes the one with the oldest unread reply, and the channel stays unread until the member has opened each of them. A reply that arrives while the channel is open, in a collapsed thread the member follows, keeps the channel unread until they open that thread.
 
 ## Sharing a chat and chat roles
 
