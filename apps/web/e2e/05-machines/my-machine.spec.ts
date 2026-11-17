@@ -1,5 +1,6 @@
 import { openPageAs } from '../stack'
 import {
+  addMachine,
   expect,
   hostsSectionOf,
   localRuntimesSectionOf,
@@ -27,14 +28,6 @@ const tools = [
 
 test.describe('My machine', () => {
   const useToolDialogOf = (page: Page, toolName: string) => page.getByRole('dialog', { name: `Use ${toolName}` })
-  const addMachine = async (page: Page) => {
-    await openProfile(page, 'My machine')
-    await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-    const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-    return command
-  }
 
   test.use({ runtimeHost: false })
 
@@ -92,7 +85,7 @@ test.describe('My machine', () => {
       for (const toolName of ['Claude Code', 'Codex'])
         await expect(machineToolOf(page, toolName)).toHaveText(`${toolName}Not signed inSet up`)
 
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['codex'] })
+      pair(await addMachine(page), { personal: true, signedIn: ['codex'] })
       await expect(machineSectionOf(page).getByText('Online', { exact: true })).toHaveCount(1)
       await expect(machineSectionOf(page).getByRole('button', { name: 'Remove' })).toBeVisible()
       await expect(machineSectionOf(page).getByRole('button', { name: 'Add my machine' })).toHaveCount(0)
@@ -146,7 +139,7 @@ test.describe('My machine', () => {
       tag: ['@spec-20'],
     }, async ({ page, pair }) => {
       const startButtonOf = () => machineSectionOf(page).getByRole('button', { name: 'Start', exact: true })
-      const machine = pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
+      const machine = pair(await addMachine(page), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
       await expect(startButtonOf()).toHaveCount(0)
       machine.disconnect()
@@ -169,7 +162,7 @@ test.describe('My machine', () => {
     test('As a member whose machine is signed in to Claude only, I get only the Codex sign-in command when I set up Codex', {
       tag: ['@spec-23'],
     }, async ({ page, pair }) => {
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
+      pair(await addMachine(page), { personal: true, signedIn: ['claude-code'] })
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeSigned in')
       await setUpButtonOf(page, 'Codex').click()
       const dialog = useToolDialogOf(page, 'Codex')

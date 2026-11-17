@@ -1,5 +1,6 @@
 import { openPageAs } from '../stack'
 import {
+  addMachine,
   addParticipant,
   chipOf,
   chooseRunsOn,
@@ -20,7 +21,6 @@ import {
   sessionOf,
   signedInMachine,
   hostTest as test,
-  urlOf,
 } from './fixtures'
 
 test.describe('Where a chat runs', () => {
@@ -43,14 +43,6 @@ test.describe('Where a chat runs', () => {
   const expectRunsOnLockedLocal = async (page: Page) => {
     await expect(runsOnOf(page)).toBeDisabled()
     await expect(runsOnOf(page)).toHaveText('Local')
-  }
-  const addMachine = async (page: Page) => {
-    await openProfile(page, 'My machine')
-    await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-    const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-    return command
   }
 
   test.beforeEach(async ({ page }) => {
@@ -270,7 +262,7 @@ test.describe('Where a chat runs', () => {
     test('As a chat owner with only my machine online, my ordinary runtime chats wait with the no-host notice', {
       tag: ['@spec-20'],
     }, async ({ page, pair }) => {
-      pair(urlOf(await addMachine(page)), { personal: true, signedIn: ['claude-code'] })
+      pair(await addMachine(page), { personal: true, signedIn: ['claude-code'] })
       await expect(machineSectionOf(page)).toContainText('Online')
 
       await openChat(page, 'Research')

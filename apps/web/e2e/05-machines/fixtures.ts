@@ -3,7 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, type Page } from '@playwright/test'
-import { machineTest as base, chipOf, machineToolOf, newRuntimeChat, runsOnChipOf } from '../fixtures.ts'
+import {
+  machineTest as base,
+  chipOf,
+  machineSectionOf,
+  machineToolOf,
+  newRuntimeChat,
+  openProfile,
+  runsOnChipOf,
+} from '../fixtures.ts'
 import { viteUrl } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
@@ -17,6 +25,14 @@ export const newMachineSession = async (page: Page, name: string, option = 'Loca
   return chatId
 }
 export const urlOf = (command: string) => `${viteUrl}/h/${command.match(/\/h\/([A-Z0-9]{8})\b/)?.[1]}`
+export const addMachine = async (page: Page) => {
+  await openProfile(page, 'My machine')
+  await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add my machine' })
+  const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  return urlOf(command)
+}
 
 const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
 export const gibibyte = 1024 ** 3

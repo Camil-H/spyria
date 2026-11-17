@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { viteUrl } from '../stack-ports'
 import {
+  addMachine,
   expect,
   gibibyte,
   hostsSectionOf,
   machineSectionOf,
   mainOf,
-  openProfile,
   openSettings,
   type Page,
   sidebarOf,
@@ -196,14 +196,6 @@ test.describe('Workspace hosts', () => {
     await expect(rootedRow).toContainText('0 / 6')
   })
 
-  const addMachine = async (page: Page) => {
-    await openProfile(page, 'My machine')
-    await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-    const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-    return command
-  }
   const addWorkspaceHost = async (page: Page) => {
     await openSettings(page, 'Runtimes')
     await hostsSectionOf(page).getByRole('button', { name: 'Add runtime host' }).click()
@@ -219,7 +211,7 @@ test.describe('Workspace hosts', () => {
     tag: ['@spec-20'],
   }, async ({ page, pair }) => {
     await test.step('a machine paired without --personal', async () => {
-      const machine = pair(urlOf(await addMachine(page)), {})
+      const machine = pair(await addMachine(page), {})
       expect(await machine.closed).toBe('This host was paired as your machine: restart spyria-host with --personal')
       await expect(machineSectionOf(page)).toContainText('Offline')
     })
