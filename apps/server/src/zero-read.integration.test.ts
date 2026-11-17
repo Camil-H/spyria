@@ -515,6 +515,12 @@ test('a member reads the newest reply by someone else, not deleted, of each thre
   )
   await send(aliceStore, 'alice-root')
   await send(leeStore, 'lee-root')
+  await watchChats(bobStore, acme, [chat])
+  await waitFor(() =>
+    [`${chat}-alice-root`, `${chat}-lee-root`].every((id) =>
+      bobStore.read().messages.some((message) => message.id === id),
+    ),
+  )
   await send(bobStore, 'bob-first', 'alice-root')
   await send(bobStore, 'bob-in-lee-thread', 'lee-root')
   await send(aliceStore, 'alice-reply', 'alice-root')
