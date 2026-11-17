@@ -39,11 +39,13 @@ const addDeadJob = (id: string, promptId: string) =>
     attempts: maximumJobAttempts,
     state: 'failed',
     lastError: 'Earlier failure',
+    finishedAt: new Date(),
   })
+const deleteDeadJobs = () => database.$client`delete from jobs where state = 'failed'`
 const repliesTo = async (messageId: string) =>
   (await database.query.messages.findMany()).filter((message) => message.replyToId === messageId)
 
-describe('the dead jobs left by a throwing job', () => {
+describe('dead jobs', () => {
   test('a throwing job is retried with a growing delay, then dead after 5 attempts with its last error', async () => {
     await addAgentPromptJob('job-broken', 'message-missing')
     const logged = captureLogs()
@@ -69,12 +71,12 @@ describe('the dead jobs left by a throwing job', () => {
   })
 
   test('jobs:failed lists the dead jobs and jobs:retry requeues one, which then succeeds', async () => {
+    await deleteDeadJobs()
     await addDeadJob('job-dead-1', 'message-welcome-1')
     await addDeadJob('job-dead-2', 'message-welcome-2')
     expect(
       (await listFailedJobs(database)).toSorted((first, second) => first.id.localeCompare(second.id)),
     ).toMatchObject([
-      { workspaceId: acme, id: 'job-broken', type: 'agent.prompt', attempts: 5, lastError: missingMessageError },
       { workspaceId: acme, id: 'job-dead-1', type: 'agent.prompt', attempts: 5, lastError: 'Earlier failure' },
       { workspaceId: acme, id: 'job-dead-2', type: 'agent.prompt', attempts: 5, lastError: 'Earlier failure' },
     ])
@@ -88,21 +90,21 @@ describe('the dead jobs left by a throwing job', () => {
     await worker.stop()
     expect(await jobRow('job-dead-1')).toMatchObject({ state: 'done', attempts: 1 })
     expect(await repliesTo('message-welcome-1')).toEqual([])
-    expect((await listFailedJobs(database)).map((job) => job.id).toSorted()).toEqual(['job-broken', 'job-dead-2'])
+    expect((await listFailedJobs(database)).map((job) => job.id)).toEqual(['job-dead-2'])
   })
 
   test('jobs:retry --all requeues every dead job', async () => {
-    expect((await retryFailedJobs(database, 'all')).requeued.toSorted()).toEqual(['job-broken', 'job-dead-2'])
-    expect(await jobRow('job-broken')).toMatchObject({ state: 'queued', attempts: 0 })
-    const logged = captureLogs()
-    const worker = startWorker({ retryDelayMilliseconds: 0 })
-    await waitFor(
-      async () => (await jobRow('job-dead-2'))?.state === 'done' && (await jobRow('job-broken'))?.state === 'failed',
-    )
-    await worker.stop()
-    logged.restore()
-    expect(await jobRow('job-dead-2')).toMatchObject({ state: 'done', attempts: 1 })
-    expect(await retryFailedJobs(database, 'job-unknown')).toEqual({ requeued: [], dropped: [] })
+    await deleteDeadJobs()
+    await addDeadJob('job-dead-all-1', 'message-missing')
+    await addDeadJob('job-dead-all-2', 'message-missing')
+    try {
+      expect((await retryFailedJobs(database, 'all')).requeued.toSorted()).toEqual(['job-dead-all-1', 'job-dead-all-2'])
+      for (const id of ['job-dead-all-1', 'job-dead-all-2'])
+        expect(await jobRow(id)).toMatchObject({ state: 'queued', attempts: 0, finishedAt: null })
+      expect(await retryFailedJobs(database, 'job-unknown')).toEqual({ requeued: [], dropped: [] })
+    } finally {
+      await database.$client`delete from jobs where id in ('job-dead-all-1', 'job-dead-all-2')`
+    }
   })
 })
 
@@ -359,6 +361,7 @@ test('jobs:retry drops a dead sweep already scheduled or superseded by a later f
       .filter((job) => job.workspaceId === globex && job.type === 'runtime.sweep')
       .map(({ id, state }) => ({ id, state }))
       .toSorted((first, second) => first.id.localeCompare(second.id))
+  await deleteDeadJobs()
   await database.$client`delete from jobs where workspace_id = ${globex} and type = 'runtime.sweep'`
   await database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state, finished_at) values
@@ -378,7 +381,7 @@ test('jobs:retry drops a dead sweep already scheduled or superseded by a later f
   await enqueueSweeps(database, globex)
   expect((await runtimeSweepsOfGlobex()).map((job) => job.state)).toEqual(['failed', 'failed'])
   const { requeued, dropped } = await retryFailedJobs(database, 'all')
-  expect(requeued).toContain('job-dead-runtime-sweep-3')
+  expect(requeued).toEqual(['job-dead-runtime-sweep-3'])
   expect(dropped).toEqual(['job-dead-runtime-sweep-2'])
   expect(await runtimeSweepsOfGlobex()).toEqual([{ id: 'job-dead-runtime-sweep-3', state: 'queued' }])
 
