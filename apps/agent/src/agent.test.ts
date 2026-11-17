@@ -936,7 +936,7 @@ test.each([
     const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
     const id = await create(silentOn(method, launch()))
     const socket = open(id)
-    await prompt(id, 'stub:linger first')
+    await prompt(id, 'stub:long')
     await call('POST', `/api/conversations/${id}/switch_acp_model`, { model })
     await socket.until(kindOf('turn_end'))
     expect(socket.events.filter(kindOf('error')).map(({ update }) => update.message)).toStrictEqual([
