@@ -11,7 +11,7 @@ import {
   test,
   unreadIconOf,
 } from '../fixtures'
-import { cancelDialog, chatMenuButtonOf, chatRowIn, dialogOf, looseChatsOf, setChatRole } from './fixtures'
+import { cancelDialog, chatMenuButtonOf, chatRowIn, dialogOf, dragBy, looseChatsOf, setChatRole } from './fixtures'
 
 const logoutDialogOf = (page: Page, workspaceName: string) =>
   page.getByRole('dialog', { name: `Log out of ${workspaceName}` })
@@ -119,15 +119,6 @@ test.describe('Sidebar', () => {
   }) => {
     const separator = sidebarOf(page).getByRole('separator', { name: 'Resize sidebar' })
     const sidebarWidth = async () => (await boundingBoxOf(sidebarOf(page))).width
-    const dragSeparatorBy = async (horizontalOffset: number) => {
-      const handleBox = await boundingBoxOf(separator)
-      const handleCenterX = handleBox.x + handleBox.width / 2
-      const handleCenterY = handleBox.y + handleBox.height / 2
-      await page.mouse.move(handleCenterX, handleCenterY)
-      await page.mouse.down()
-      await page.mouse.move(handleCenterX + horizontalOffset, handleCenterY, { steps: 8 })
-      await page.mouse.up()
-    }
 
     await test.step('exposes the separator on the right edge with its bounds and the default width', async () => {
       await expect(separator).toHaveAttribute('aria-valuemin', '240')
@@ -153,12 +144,12 @@ test.describe('Sidebar', () => {
     })
 
     await test.step('widens when dragged right, stopping at the maximum, and narrows down to the minimum', async () => {
-      await dragSeparatorBy(100)
+      await dragBy(page, separator, 100)
       expect(await sidebarWidth()).toBeCloseTo(340, 0)
       expect(await page.evaluate(() => getSelection()?.toString())).toBe('')
-      await dragSeparatorBy(300)
+      await dragBy(page, separator, 300)
       expect(await sidebarWidth()).toBeCloseTo(400, 0)
-      await dragSeparatorBy(-400)
+      await dragBy(page, separator, -400)
       expect(await sidebarWidth()).toBeCloseTo(240, 0)
       await expect(switcherOf(page)).toBeVisible()
       const sidebarBox = await boundingBoxOf(sidebarOf(page))
@@ -167,7 +158,7 @@ test.describe('Sidebar', () => {
     })
 
     await test.step('keeps the width after a reload', async () => {
-      await dragSeparatorBy(60)
+      await dragBy(page, separator, 60)
       await page.reload()
       await expect(separator).toHaveAttribute('aria-valuenow', '300')
       expect(await sidebarWidth()).toBeCloseTo(300, 0)
