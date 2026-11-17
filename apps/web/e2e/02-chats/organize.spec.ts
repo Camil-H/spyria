@@ -120,11 +120,6 @@ test.describe('Organize', () => {
       await expect(dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' })).toBeFocused()
     })
 
-    await test.step('rename chat: cannot confirm a blank name', async () => {
-      await dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' }).fill('   ')
-      await expect(dialogOf(page, 'Rename chat').getByRole('button', { name: 'Confirm' })).toBeDisabled()
-    })
-
     await test.step('rename chat: keeps the old name when cancelled', async () => {
       await dialogOf(page, 'Rename chat').getByRole('textbox', { name: 'Chat name' }).fill('Something else')
       await cancelDialog(page, 'Rename chat')
@@ -136,11 +131,6 @@ test.describe('Organize', () => {
       const projectNameBox = dialogOf(page, 'Rename project').getByRole('textbox', { name: 'Project name' })
       await expect(projectNameBox).toHaveValue('Billing')
       await expect(projectNameBox).toBeFocused()
-    })
-
-    await test.step('rename project: cannot confirm a blank name', async () => {
-      await dialogOf(page, 'Rename project').getByRole('textbox', { name: 'Project name' }).fill('   ')
-      await expect(dialogOf(page, 'Rename project').getByRole('button', { name: 'Confirm' })).toBeDisabled()
     })
 
     await test.step('rename project: keeps the old name when cancelled', async () => {

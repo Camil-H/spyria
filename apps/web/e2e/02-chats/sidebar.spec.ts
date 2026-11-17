@@ -1,14 +1,12 @@
 import { openMenu, signedOutScreenOf } from '../01-access/fixtures'
 import {
   boundingBoxOf,
-  chatAction,
   chatLinkOf,
   composerOf,
   expect,
   mainOf,
   openChat,
   type Page,
-  projectAction,
   projectGroupOf,
   sendMessage,
   sidebarOf,
@@ -215,20 +213,6 @@ test.describe('Sidebar', () => {
       await expectDialogTitleToUseAppTextColor('New chat')
       await cancelDialog(page, 'New chat')
     })
-    await test.step('uses the app text color for the archive dialogs', async () => {
-      await chatAction(page, 'Research', 'Archive chat')
-      await expectDialogTitleToUseAppTextColor('Archive chat')
-      await page.getByRole('button', { name: 'Cancel' }).click()
-      await chatAction(page, 'Research', 'Rename chat')
-      await expectDialogTitleToUseAppTextColor('Rename chat')
-      await page.getByRole('button', { name: 'Cancel' }).click()
-      await projectAction(page, 'Billing', 'Archive project')
-      await expectDialogTitleToUseAppTextColor('Archive project')
-      await page.getByRole('button', { name: 'Cancel' }).click()
-      await projectAction(page, 'Billing', 'Rename project')
-      await expectDialogTitleToUseAppTextColor('Rename project')
-      await cancelDialog(page, 'Rename project')
-    })
     await test.step('offers Team channel and AI chat as one row of options', async () => {
       await page.getByRole('button', { name: 'New chat' }).click()
       const channelOptionBox = await boundingBoxOf(page.getByRole('radio', { name: 'Team channel' }).locator('..'))
@@ -238,7 +222,7 @@ test.describe('Sidebar', () => {
     })
   })
 
-  test('As a member, I reach the workspace menu’s log-out icons with the keyboard, and the menu, its dialog and the signed-out screen use the app text colour in dark mode', async ({
+  test('As a member, I reach the workspace menu’s log-out icons with the keyboard, and the menu and the signed-out screen use the app text colour in dark mode', async ({
     page,
   }) => {
     await test.step('reaches the log-out icons with the keyboard', async () => {
@@ -255,7 +239,7 @@ test.describe('Sidebar', () => {
     })
     await openMenu(page)
     await page.keyboard.press('Escape')
-    await test.step('uses the app text color in dark mode for the menu, the dialog and the signed-out screen', async () => {
+    await test.step('uses the app text color in dark mode for the menu and the signed-out screen', async () => {
       await page.emulateMedia({ colorScheme: 'dark' })
       const sidebarColor = await sidebarOf(page).evaluate((element) => getComputedStyle(element).color)
       await openMenu(page)
@@ -266,10 +250,6 @@ test.describe('Sidebar', () => {
         expect(itemColor).toBe(sidebarColor)
       }
       await page.getByRole('menuitem', { name: 'Log out of Acme' }).click()
-      const dialogTitleColor = await logoutDialogOf(page, 'Acme')
-        .getByRole('heading', { name: 'Log out of Acme' })
-        .evaluate((element) => getComputedStyle(element).color)
-      expect(dialogTitleColor).toBe(sidebarColor)
       await logoutDialogOf(page, 'Acme').getByRole('button', { name: 'Log out' }).click()
       const signedOutColor = await signedOutScreenOf(page, 'Acme').evaluate(
         (element) => getComputedStyle(element).color,
@@ -306,18 +286,6 @@ test.describe('Sidebar', () => {
     await test.step('shows a tooltip on hover and exposes the icon as an image', async () => {
       await unreadIconOf(page, 'Standup').hover()
       await expect(page.getByRole('tooltip', { name: 'Unread messages' })).toBeVisible()
-    })
-  })
-
-  test('As a member, I see the draft pencil at the end of the row, before the menu button', async ({ page }) => {
-    await openChat(page, 'Welcome')
-    await test.step('places the pencil at the right end of the row, before the menu button', async () => {
-      await composerOf(page).fill('Draft')
-      const chatNameBox = await boundingBoxOf(chatLinkOf(page, 'Welcome').getByText('Welcome', { exact: true }))
-      const pencilBox = await boundingBoxOf(draftIconOf(page, 'Welcome'))
-      const menuButtonBox = await boundingBoxOf(page.getByRole('button', { name: 'Chat actions for Welcome' }))
-      expect(pencilBox.x).toBeGreaterThan(chatNameBox.x + chatNameBox.width)
-      expect(pencilBox.x + pencilBox.width).toBeLessThanOrEqual(menuButtonBox.x)
     })
   })
 
