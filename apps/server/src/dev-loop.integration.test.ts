@@ -726,8 +726,8 @@ test('As a chat owner, quality gates whose publishing keeps failing on an unexpe
   await readyChat(id)
   await database.$client.unsafe(
     `create function refuse_branch_push() returns trigger language plpgsql
-     as $ begin if new.type = 'branch.pushed' then raise exception 'The push record is refused'; end if;
-     return new; end $`,
+     as $$ begin if new.type = 'branch.pushed' then raise exception 'The push record is refused'; end if;
+     return new; end $$`,
   )
   await database.$client.unsafe(
     'create trigger refuse_branch_push before insert on events for each row execute function refuse_branch_push()',
