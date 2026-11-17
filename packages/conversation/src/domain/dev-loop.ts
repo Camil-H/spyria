@@ -302,6 +302,7 @@ export const memberWroteNoticeOf = (name: string) => `Not sent: ${name} wrote in
 export const loopStoppedNoticeOf = (name: string) => `Not sent: ${name} stopped the quality gates`
 export const turnedOffOutcome = 'Stopped: quality gates were turned off for this repository'
 export const notRunOutcome = 'Stopped: a message of the quality gates could not run: over to you'
+export const failedJobOutcome = 'Stopped: the quality gates kept failing on an unexpected error: over to you'
 const listOf = (parts: string[]) =>
   parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
 export const readyOutcomeOf = (step: DevLoopStep) => {

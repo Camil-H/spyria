@@ -703,6 +703,41 @@ test('As a chat owner, the gates check they still run before updating a conflict
   expect(ciJob).toMatchObject({ attempts: maximumJobAttempts, state: 'done' })
 })
 
+test('As a chat owner, quality gates whose publishing keeps failing on an unexpected error stop on its last attempt and say so', async () => {
+  const steps: Step[] = [{ kind: 'pull_request' }, { kind: 'ci', fixes: 1 }]
+  expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+  await stack.agentHost('Failing publish host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  await database.$client.unsafe(
+    `create function refuse_branch_push() returns trigger language plpgsql
+     as $ begin if new.type = 'branch.pushed' then raise exception 'The push record is refused'; end if;
+     return new; end $`,
+  )
+  await database.$client.unsafe(
+    'create trigger refuse_branch_push before insert on events for each row execute function refuse_branch_push()',
+  )
+  try {
+    stack.setFakeLlmScript({
+      steps: [committing('export const total = 15', 'Change the totals'), finish],
+      text: 'Done.',
+    })
+    await stack.prompt(id, 'Fix the totals')
+    await loopStateIs(id, 'stopped')
+  } finally {
+    await database.$client.unsafe('drop trigger refuse_branch_push on events')
+    await database.$client.unsafe('drop function refuse_branch_push')
+  }
+  expect((await loopOf(id))?.step.outcome).toBe(
+    'Stopped: the quality gates kept failing on an unexpected error: over to you',
+  )
+  const [runJob] = await database.$client`
+    select jobs.attempts, jobs.state from jobs join messages on messages.id = jobs.payload->>'loopId'
+    where jobs.type = 'dev_loop.run' and jobs.state = 'failed' and messages.chat_id = ${id}`
+  expect(runJob).toMatchObject({ attempts: maximumJobAttempts, state: 'failed' })
+})
+
 test("the quality gates' tools come from Spyria's own tool server, to the chat's own turns only, and never from the GitHub one", async () => {
   expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint')]))).toEqual(succeeded)
   const { host } = await stack.agentHost('Tool servers host', { routesModelCalls: true })

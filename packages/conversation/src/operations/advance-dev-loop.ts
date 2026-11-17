@@ -17,6 +17,7 @@ import {
   type DevLoopStep,
   devLoopJobTypes,
   failedAt,
+  failedJobOutcome,
   finished,
   handOffOutcomeOf,
   limitOutcomeOf,
@@ -314,6 +315,20 @@ const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => 
     return moveOn(unitOfWork, current, step, current.step.position + 1)
   })
 }
+
+export const stopLoopAfterLastFailure = <Result>(
+  dependencies: Dependencies,
+  job: LoopJob,
+  isLastAttempt: boolean,
+  work: () => Promise<Result>,
+) =>
+  work().catch(async (error: unknown) => {
+    if (isLastAttempt)
+      await withLoop(dependencies, job, ['running', 'waiting_for_ci'], (unitOfWork, loop) =>
+        endLoop(unitOfWork, loop, stopped(loop.step, failedJobOutcome)),
+      )
+    throw error
+  })
 
 export const runLoop = async (dependencies: Dependencies, job: LoopJob) => {
   const loop = await loopIn(dependencies, job)
