@@ -248,12 +248,17 @@ test('a key the provider refuses is classified on the turn without provider text
   const host = await fakeHost('Refused key host')
   await removeCredentials(alice, await credentialIdsOf(alice))
   await waitFor(async () => (await providerKeyIdsOf(alice)).length === 0)
-  await withLlmKey(alice, 'Mistral', `fake-refused-${crypto.randomUUID()}`, async () => {
-    const { chatId, token } = await runtimeTurn(host, alice)
-    const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
-    expect(refused.status).toBe(401)
-    expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
-  })
+  try {
+    await withLlmKey(alice, 'Mistral', `fake-refused-${crypto.randomUUID()}`, async () => {
+      const { chatId, token } = await runtimeTurn(host, alice)
+      const refused = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
+      expect(refused.status).toBe(401)
+      expect(await failureOf(chatId)).toBe('The LLM key of Alice was refused')
+    })
+  } finally {
+    await addLlmKey(alice, 'Mistral')
+    await waitFor(async () => (await providerKeyIdsOf(alice)).length === 1)
+  }
 })
 
 test('a call with tools sets the chat’s context size and a call without tools, such as a compaction summary, leaves it', async () => {
