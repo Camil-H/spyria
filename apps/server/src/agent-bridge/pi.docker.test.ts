@@ -127,57 +127,20 @@ const modelCallsOf = async (chatId: string, minimum: number) => {
     select prompter_id, owner_id, model, provider, status from model_calls where chat_id = ${chatId}`
 }
 
-test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, its Anthropic prompt cached for an hour through the gateway, streams its text to the events socket, ends the turn and each call is attributed to the prompter and the owner", async () => {
+test("Pi in Spyria's image answers through the LLM relay on the chat and Anthropic routes, its Anthropic prompt cached for an hour through the gateway, streams its text to the events socket and ends each turn; a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns; each call is attributed to the prompter and the owner", async () => {
   await addLlmKey(bob, 'Mistral')
   await addLlmKey(bob, 'Anthropic')
   const { id, transport } = await runtime()
   const { chatId, token } = await runtimeTurn({ id }, bob)
-  const { conversation, turnEnds, answerOf, close } = await piConversationOf(
-    transport,
-    token,
-    piLlm([mistralMedium, haiku], mistralSmall),
-  )
-  expect(await answerOf('Hello Pi')).toBe('Understood, working on it.')
-  await agentClient.switchModel(conversation, `spyria-anthropic/${haiku.id}`)
-  expect(await answerOf('Hello Pi on Anthropic')).toContain('Understood')
-  const anthropicRequest = fakeLlmBodies.findLast((body) => body.includes('Hello Pi on Anthropic')) ?? ''
-  expect(anthropicRequest).toContain('"ttl":"1h"')
-  expect(fakeLlmBodies.find((body) => body.includes('Hello Pi'))).not.toContain('prompt_cache_retention')
-  expect(turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
-  close()
-
-  const calls = await modelCallsOf(chatId, 2)
-  expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
-    new Set([
-      JSON.stringify({
-        prompter_id: bob,
-        owner_id: alice,
-        model: 'mistral-medium-latest',
-        provider: 'mistral',
-        status: 'success',
-      }),
-      JSON.stringify({
-        prompter_id: bob,
-        owner_id: alice,
-        model: 'claude-haiku-5-5',
-        provider: 'anthropic',
-        status: 'success',
-      }),
-    ]),
-  )
-})
-
-test('a model switch keeps the conversation: the next request on a curated model of another provider, and after a relaunch on the same session with a picked model, carries the earlier turns', async () => {
-  await addLlmKey(bob, 'Mistral')
-  await addLlmKey(bob, 'Anthropic')
-  const { id, transport } = await runtime()
-  const { token } = await runtimeTurn({ id }, bob)
   const bodiesBefore = fakeLlmBodies.length
   const requestOf = (text: string) => fakeLlmBodies.slice(bodiesBefore).find((body) => body.includes(text)) ?? ''
   const first = await piConversationOf(transport, token, piLlm([mistralMedium, haiku], mistralMedium))
-  await first.answerOf('The code word is PAPAYA')
+  expect(await first.answerOf('The code word is PAPAYA')).toBe('Understood, working on it.')
   await agentClient.switchModel(first.conversation, `spyria-anthropic/${haiku.id}`)
-  await first.answerOf('Curated switch: what is the code word?')
+  expect(await first.answerOf('Curated switch: what is the code word?')).toContain('Understood')
+  expect(requestOf('Curated switch')).toContain('"ttl":"1h"')
+  expect(requestOf('The code word is PAPAYA')).not.toContain('prompt_cache_retention')
+  expect(first.turnEnds().map((update) => update.stopReason)).toEqual(['end_turn', 'end_turn'])
   const sessionId = first.updates.find((update) => update.sessionUpdate === 'session_started')?.sessionId
   first.close()
   await agentClient.deleteConversation(first.conversation)
@@ -197,6 +160,16 @@ test('a model switch keeps the conversation: the next request on a curated model
   expect(requestOf('Picked switch')).toContain('"model":"mistral-small-latest"')
   expect(requestOf('Picked switch')).toContain('The code word is PAPAYA')
   expect(requestOf('Picked switch')).toContain('Curated switch: what is the code word?')
+
+  const calls = await modelCallsOf(chatId, 3)
+  const attributed = { prompter_id: bob, owner_id: alice }
+  expect(new Set(calls.map((call) => JSON.stringify(call)))).toEqual(
+    new Set([
+      JSON.stringify({ ...attributed, model: 'mistral-medium-latest', provider: 'mistral', status: 'success' }),
+      JSON.stringify({ ...attributed, model: 'claude-haiku-5-5', provider: 'anthropic', status: 'success' }),
+      JSON.stringify({ ...attributed, model: 'mistral-small-latest', provider: 'mistral', status: 'success' }),
+    ]),
+  )
 })
 
 test('a long Pi conversation compacts on the compaction model, recorded with prompter and owner, and a new conversation loads the session without replaying it and keeps its context', async () => {
