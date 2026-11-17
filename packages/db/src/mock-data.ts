@@ -238,6 +238,7 @@ export const createMockSnapshot = (): Snapshot => {
     ]),
     latestMessages: [],
     latestAgentActivity: [],
+    followedThreadReplies: [],
     pinnedSteps: [],
     readMarkers: [
       { workspaceId: acme, memberId: alice, chatId: welcomeChat, lastReadSeq: seededChatCreatedSeq + 2 },

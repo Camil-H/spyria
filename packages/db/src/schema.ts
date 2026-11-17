@@ -249,6 +249,7 @@ export type Snapshot = {
   messages: readonly MessageRow[]
   latestMessages: readonly MessageRow[]
   latestAgentActivity: readonly MessageRow[]
+  followedThreadReplies: readonly MessageRow[]
   pinnedSteps: readonly MessageRow[]
   readMarkers: readonly ReadMarkerRow[]
   threadReadMarkers: readonly ThreadReadMarkerRow[]
