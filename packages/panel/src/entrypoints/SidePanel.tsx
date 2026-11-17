@@ -9,7 +9,7 @@ import {
 import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
 import { ResizeHandle, ShortcutKeys, tooltipClass, useShortcut } from '@spyria/ui'
-import { BookOpen, ChartColumn, FileDiff, FolderTree, Globe, type LucideIcon, Plug, Users } from 'lucide-react'
+import { ChartColumn, FileDiff, FolderTree, Globe, type LucideIcon, Plug, Users } from 'lucide-react'
 import { Activity, type ComponentType, type CSSProperties, lazy, type ReactNode, Suspense, useState } from 'react'
 import { getPanelTabs, type PanelTabId } from '../queries/get-panel-tabs.ts'
 import { BrowserTab } from './BrowserTab.tsx'
@@ -19,7 +19,6 @@ import type { PanelProps, TabProps } from './TabProps.ts'
 import { tabClass } from './ui.ts'
 
 const ChangesTab = lazy(() => import('./ChangesTab.tsx'))
-const SourcesTab = lazy(() => import('./SourcesTab.tsx'))
 const ConnectionsTab = lazy(() => import('./ConnectionsTab.tsx'))
 const MembersTab = lazy(() => import('./MembersTab.tsx'))
 
@@ -27,7 +26,6 @@ const tabs: Record<PanelTabId, { label: string; Icon: LucideIcon; Component: Com
   changes: { label: 'Changes', Icon: FileDiff, Component: ChangesTab },
   files: { label: 'Files', Icon: FolderTree, Component: FilesTab },
   browser: { label: 'Browser', Icon: Globe, Component: BrowserTab },
-  sources: { label: 'Sources', Icon: BookOpen, Component: SourcesTab },
   usage: { label: 'Usage', Icon: ChartColumn, Component: null },
   connections: { label: 'Connected tools', Icon: Plug, Component: ConnectionsTab },
   members: { label: 'Members', Icon: Users, Component: MembersTab },
