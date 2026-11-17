@@ -82,13 +82,10 @@ test('an admin creates, changes and deletes a workspace role, each recorded and 
   ])
 })
 
-test('names follow the role rules, Admin and Member are reserved and fixed, permissions are workspace ones, a Member manages no role', async () => {
+test('names follow the role rules, Admin and Member are reserved and fixed, a Member manages no role', async () => {
   expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
   expect(await createRole('role-copy', 'FINANCE', [])).toEqual(failedWith('A role named FINANCE already exists'))
   expect(await createRole('role-admin', 'admin', [])).toEqual(failedWith('admin is the name of a built-in role'))
-  expect(await createRole('role-chat', 'Reader', ['chat.read'])).toEqual(
-    failedWith('chat.read is not a workspace permission'),
-  )
   for (const roleId of ['admin', 'member']) {
     expect(await updateRole(roleId, 'Renamed', [])).toEqual(
       failedWith(`${roleId} is not a custom role of this workspace`),

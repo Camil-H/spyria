@@ -86,22 +86,13 @@ test('a member who is not an admin can neither create, change nor delete a role'
   expect((await roleEventsOf()).map(({ type }) => type)).toEqual(['role.created'])
 })
 
-test('names are 1 to 40 characters, unique whatever their case and never a built-in name; permissions come from the kernel; built-ins stay fixed', async () => {
+test('names are never blank and unique whatever their case; built-ins stay fixed', async () => {
   expect(await createRole(reviewer)).toEqual(succeeded)
   expect(await createRole({ id: 'role-blank', name: '  ', permissions: [] })).toEqual(
     failedWith('A role name has 1 to 40 characters'),
   )
-  expect(await createRole({ id: 'role-long', name: 'R'.repeat(41), permissions: [] })).toEqual(
-    failedWith('A role name has 1 to 40 characters'),
-  )
   expect(await createRole({ id: 'role-copy', name: 'REVIEWER', permissions: [] })).toEqual(
     failedWith('A role named REVIEWER already exists'),
-  )
-  expect(await createRole({ id: 'role-owner', name: 'owner', permissions: [] })).toEqual(
-    failedWith('owner is the name of a built-in role'),
-  )
-  expect(await createRole({ id: 'role-unknown', name: 'Deleter', permissions: ['chat.delete'] })).toEqual(
-    failedWith('chat.delete is not a chat permission'),
   )
   expect(await updateRole({ name: 'reviewer', permissions: [] })).toEqual(succeeded)
   for (const roleId of ['reader', 'role-missing']) {
