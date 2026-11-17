@@ -228,72 +228,8 @@ test('a long Pi conversation compacts on the compaction model, recorded with pro
   expect(request?.split('After the restart')).toHaveLength(2)
 })
 
-test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, streams text around a command once, and reports a provider error", async () => {
+test("Pi in Spyria's image runs a command with its output, asks through Spyria's extension and gets a free answer, streams text around a command once, and reports a provider error; its first turn carries the server’s trace into the JSON lines of the real spyria-host and spyria-agent", async () => {
   await addLlmKey(bob, 'Mistral')
-  const { id, transport } = await runtime()
-  const { token } = await runtimeTurn({ id }, bob)
-  const pi = await piConversationOf(transport, token, piLlm([mistralMedium], mistralMedium))
-  const finalOf = (title: string) =>
-    pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
-  setFakeLlmScript({
-    steps: [
-      { command: 'echo one; echo two; exit 3' },
-      { tool: 'ask_member', arguments: { question: 'Which database?', options: ['Postgres', 'SQLite'] } },
-    ],
-    text: 'Asked.',
-  })
-  const asked = pi.answerOf('Run it, then ask me')
-  const question = await pi.questionOf('question')
-  expect(question).toMatchObject({
-    questions: [
-      {
-        id: 'answer',
-        text: 'Which database?',
-        options: [
-          { value: 'Postgres', label: 'Postgres' },
-          { value: 'SQLite', label: 'SQLite' },
-        ],
-        free: true,
-      },
-    ],
-  })
-  expect(
-    await agentClient.answerQuestion(pi.conversation, String(question.questionId), {
-      answers: {},
-      free: { answer: 'MySQL' },
-    }),
-  ).toBe(200)
-  expect(await asked).toBe('Asked.')
-  expect(finalOf('echo one; echo two; exit 3')).toMatchObject({
-    kind: 'execute',
-    status: 'failed',
-    rawOutput: { formatted_output: 'one\ntwo\n', exit_code: 3 },
-  })
-  expect(pi.updates.find((update) => update.sessionUpdate === 'question_answered')).toMatchObject({
-    free: { answer: 'MySQL' },
-  })
-  expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
-  expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({ cwd: '/workspace/project' })
-
-  setFakeLlmScript({
-    steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
-    text: 'The check passed, so every word streams once.',
-  })
-  expect(await pi.answerOf('Stream around a command')).toBe(
-    'Let me check that first. The check passed, so every word streams once.',
-  )
-  setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
-  await pi.answerOf('Fail it')
-  expect(pi.updates.slice(-2)).toMatchObject([
-    { sessionUpdate: 'error' },
-    { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
-  ])
-  pi.close()
-})
-
-test('a turn through a real spyria-host and spyria-agent carries the server’s trace into their JSON lines', async () => {
-  await addLlmKey(bob, 'Mistral')
-  setFakeLlmScript(undefined)
   const { id, transport } = await runtime()
   const { token, promptId } = await runtimeTurn({ id }, bob)
   const telemetry = startTestTelemetry({})
@@ -303,13 +239,55 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       .filter((line) => line.startsWith('{'))
       .map((line) => JSON.parse(line))
   try {
-    const traceId = await withSpan('test turn', {}, async (span) => {
+    setFakeLlmScript({
+      steps: [
+        { command: 'echo one; echo two; exit 3' },
+        { tool: 'ask_member', arguments: { question: 'Which database?', options: ['Postgres', 'SQLite'] } },
+      ],
+      text: 'Asked.',
+    })
+    const { pi, traceId } = await withSpan('test turn', {}, async (span) => {
       await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: dockerHost.hostId, runtimeId: 'pi-smoke' })
       const pi = await piConversationOf(transport, token, piLlm([mistralMedium], mistralMedium))
-      expect(await pi.answerOf('Hello traced Pi')).toBe('Understood, working on it.')
-      pi.close()
-      return span.spanContext().traceId
+      const asked = pi.answerOf('Run it, then ask me')
+      const question = await pi.questionOf('question')
+      expect(question).toMatchObject({
+        questions: [
+          {
+            id: 'answer',
+            text: 'Which database?',
+            options: [
+              { value: 'Postgres', label: 'Postgres' },
+              { value: 'SQLite', label: 'SQLite' },
+            ],
+            free: true,
+          },
+        ],
+      })
+      expect(
+        await agentClient.answerQuestion(pi.conversation, String(question.questionId), {
+          answers: {},
+          free: { answer: 'MySQL' },
+        }),
+      ).toBe(200)
+      expect(await asked).toBe('Asked.')
+      return { pi, traceId: span.spanContext().traceId }
     })
+    const finalOf = (title: string) =>
+      pi.updates.findLast((update) => update.sessionUpdate === 'tool_call_update' && update.title === title)
+    expect(finalOf('echo one; echo two; exit 3')).toMatchObject({
+      kind: 'execute',
+      status: 'failed',
+      rawOutput: { formatted_output: 'one\ntwo\n', exit_code: 3 },
+    })
+    expect(pi.updates.find((update) => update.sessionUpdate === 'question_answered')).toMatchObject({
+      free: { answer: 'MySQL' },
+    })
+    expect(fakeLlmBodies.some((body) => body.includes('The member answered: MySQL'))).toBe(true)
+    expect(pi.updates.find((update) => update.sessionUpdate === 'workspace')).toMatchObject({
+      cwd: '/workspace/project',
+    })
+
     await waitFor(() =>
       linesOf(dockerHost.hostOutput()).some(
         (line) => line['event.name'] === 'host.command' && line.trace_id === traceId,
@@ -331,6 +309,21 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       'gen_ai.request.model': 'mistral/mistral-medium-latest',
       'http.response.status_code': 200,
     })
+
+    setFakeLlmScript({
+      steps: [{ command: 'echo checked', say: 'Let me check that first. ' }],
+      text: 'The check passed, so every word streams once.',
+    })
+    expect(await pi.answerOf('Stream around a command')).toBe(
+      'Let me check that first. The check passed, so every word streams once.',
+    )
+    setFakeLlmScript({ steps: [{ fail: 'Overloaded' }] })
+    await pi.answerOf('Fail it')
+    expect(pi.updates.slice(-2)).toMatchObject([
+      { sessionUpdate: 'error' },
+      { sessionUpdate: 'turn_end', stopReason: 'end_turn' },
+    ])
+    pi.close()
   } finally {
     await telemetry.stop()
   }
