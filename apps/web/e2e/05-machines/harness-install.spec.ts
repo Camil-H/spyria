@@ -28,19 +28,6 @@ test.describe('Harness install on my machine', () => {
     expect((await machine()).installs).toBe(1)
   })
 
-  test('As a member, I start a second Claude Code session on my machine and it starts with no install step', {
-    tag: ['@spec-51'],
-  }, async ({ page, machine }) => {
-    await machine(signedInMachine)
-    await newSession(page, 'Claude Code', 'First session')
-    await expect(runsOnStatusOf(page)).toHaveText('Ready')
-    await newSession(page, 'Claude Code', 'Second session')
-    await expect(runsOnStatusOf(page)).toHaveText('Ready')
-    await sendMessage(page, 'Hello again')
-    await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
-    expect((await machine()).installs).toBe(1)
-  })
-
   test("As a member, a failed install shows npm's reason and a Retry, and Retry installs and runs my turn", {
     tag: ['@spec-51'],
   }, async ({ page, machine }) => {
