@@ -5,7 +5,7 @@ import { getPanelTabs } from './get-panel-tabs.ts'
 
 const snapshot = createMockSnapshot()
 
-test('a runtime chat shows its changes first, then its files and the member’s own browser; a channel its sources, with no browser since it has no runtime', () => {
+test('a runtime chat shows its changes first, then its files, the member’s own browser and the agent’s usage and tools; a channel, which has no agent, only its members', () => {
   expect(getPanelTabs(acme, chatId('chat-invoice-bug'), alice)(snapshot)).toEqual([
     'changes',
     'files',
@@ -14,15 +14,10 @@ test('a runtime chat shows its changes first, then its files and the member’s 
     'connections',
     'members',
   ])
-  expect(getPanelTabs(acme, chatId('chat-welcome'), alice)(snapshot)).toEqual([
-    'sources',
-    'usage',
-    'connections',
-    'members',
-  ])
+  expect(getPanelTabs(acme, chatId('chat-welcome'), alice)(snapshot)).toEqual(['members'])
 })
 
-test('the owner’s connections show only to the chat’s participants, not to every reader of a public channel', () => {
+test('the owner’s connections show only to the chat’s participants, not to a member who only reads it', () => {
   expect(getPanelTabs(acme, chatId('chat-invoice-bug'), lee)(snapshot)).toContain('connections')
-  expect(getPanelTabs(acme, chatId('chat-welcome'), lee)(snapshot)).toEqual(['sources', 'usage', 'members'])
+  expect(getPanelTabs(acme, chatId('chat-research'), lee)(snapshot)).not.toContain('connections')
 })

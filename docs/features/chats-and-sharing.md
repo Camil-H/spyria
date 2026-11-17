@@ -96,7 +96,7 @@ A chat with messages a member has not seen shows an **Unread messages** icon in 
 
 ## Sharing a chat and chat roles
 
-A chat's participants and their roles are in the **Members** tab of the side panel, where a member with the right permissions can **Invite** another workspace member with a role, change a participant's role, or **Remove** them (private chats only). Anyone but the owner can **Leave chat**.
+A chat's participants and their roles are in the **Members** tab of the side panel, where a member with the right permissions can **Invite** another workspace member with a role, change a participant's role from the small role picker on their row, or **Remove** them (private chats only). Anyone but the owner can **Leave chat**. **Invite** and **Leave chat** are icons in the tab's header row, and **Remove** is an icon at the end of the participant's row.
 
 A role is a named set of permissions. Spyria ships four built-in chat roles; admins can add custom chat roles in Workspace settings (see [Admin](./admin.md)).
 
@@ -155,7 +155,7 @@ When an admin removes a member, that member's runtime chats are **frozen**: they
 
 ## Side panel
 
-The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels have **Sources**, **Usage**, **Connected tools** and **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the catalogue servers the agent can use on your own prompts, with your sign-in status on those each member signs in to. A member who manages the chat's tools (the owner, or a role with **Manage the chat's tools**) switches a server off for that chat: the agent stops seeing its tools on everyone's prompts in the chat, a call to it is refused with "*server* is off for this chat", and the tab shows **Off in this chat**. Every server starts on, including those added to the catalogue later. The dev tabs are described in [Dev mode](./dev-mode.md). **Sources** is a placeholder: nothing fills it yet. **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
+The side panel next to a chat has tabs that depend on the chat type. Runtime chats have **Changes**, **Files**, **Browser**, **Usage**, **Connected tools** and **Members**; channels, which have no agent, have only **Members**. **Usage** breaks down the chat's model spend per member and per model, and **Connected tools** lists the catalogue servers the agent can use on your own prompts, with your sign-in status on those each member signs in to. A member who manages the chat's tools (the owner, or a role with **Manage the chat's tools**) switches a server off for that chat: the agent stops seeing its tools on everyone's prompts in the chat, a call to it is refused with "*server* is off for this chat", and the tab shows **Off in this chat**. Every server starts on, including those added to the catalogue later. The dev tabs are described in [Dev mode](./dev-mode.md). **R** collapses or expands the side panel, and **R** then a number opens it on that tab; each tab's tooltip shows its shortcut.
 
 ### Browser
 
@@ -165,4 +165,4 @@ Each member of a chat has their own browser with their own sign-ins, and only th
 
 The browser's own container shares only the runtime's network, so `localhost` reaches the app the agent runs there, but the agent's shell cannot read your browser's cookies or profile. Your workspace may block internal networks, the host machine and sites, and may record the addresses your browser visits in the audit log (never the pages' contents). See [Admin](./admin.md#browser).
 
-A file of the project the agent opens with `open_page`, such as an HTML report it built, is listed for everyone in the chat under **Files the agent opened**, the newest shown at once; an HTML file runs its scripts in an isolated frame.
+A file of the project the agent opens with `open_page`, such as an HTML report it built, is listed for everyone in the chat under **Files the agent opened**, an icon in the Browser tab's header row that reads **Back to your browser** while a file or the list shows, and the newest one shows at once; an HTML file runs its scripts in an isolated frame.
