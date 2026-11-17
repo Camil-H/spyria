@@ -1,78 +1,31 @@
-import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
-import {
-  fakeGitHubAppId,
-  fakeGitHubClientId,
-  fakeGitHubClientSecret,
-  fakeGitHubLogin,
-  fakeGitHubUserId,
-  startFakeGitHub,
-} from './testing/fake-github.ts'
-import {
-  acme,
-  alice,
-  bob,
-  lee,
-  sessionTokenOf,
-  startAgentStack,
-  testSecretsKeyring,
-  waitFor,
-} from './testing/testing.ts'
+import type { ChatId } from '@spyria/kernel'
+import { fakeGitHubLogin, fakeGitHubUserId } from './testing/fake-github.ts'
+import { gitIn, startGitHubStack } from './testing/github-stack.ts'
+import { alice, bob, lee, waitFor } from './testing/testing.ts'
 
 setDefaultTimeout(60_000)
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
-afterAll(() => fakeGitHub.stop())
-const { app, database } = stack
+const {
+  stack,
+  fakeGitHub,
+  request,
+  configureGitHubApp,
+  connectGitHub,
+  newDevChat: newGitHubDevChat,
+  runtimeWorkspaceOf,
+} = await startGitHubStack({ routing: true })
+const { database } = stack
 const ownerOnly = 'Only Alice can commit or update the branch in this chat'
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
-}
 const gitAction = (userId: string, chat: ChatId, action: string, message = '') =>
   request(userId, 'POST', `/api/chats/${chat}/git/${action}`, { message })
 const statusOf = async (userId: string, chat: ChatId) =>
   (await request(userId, 'GET', `/api/chats/${chat}/workspace/status?path=`)).body
-const gitIn = (cwd: string, ...command: string[]) => {
-  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
-    cwd,
-    stderr: 'pipe',
-  })
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
-  return result.stdout.toString()
-}
+await configureGitHubApp('whsec-git-actions-0123')
 
-expect(
-  await request(alice, 'POST', '/api/github-settings', {
-    appId: fakeGitHubAppId,
-    clientId: fakeGitHubClientId,
-    clientSecret: fakeGitHubClientSecret,
-    privateKey: fakeGitHub.appPrivateKey,
-    webhookSecret: 'whsec-git-actions-0123',
-  }),
-).toMatchObject({ status: 200 })
-
-const connectGitHub = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(started.body.authorizeUrl, { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  expect((await app.request(`${callback.pathname}${callback.search}`)).status).toBe(200)
-}
 const baseBranchOf = (name: string) => {
   const branch = `e2e-base-${name}`
   fakeGitHub.commitToBranch('acme/app', {
@@ -82,38 +35,8 @@ const baseBranchOf = (name: string) => {
   })
   return branch
 }
-const newDevChat = async (baseBranch: string, participants: { memberId: string; roleId: string }[] = []) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Git actions',
-    projectId: null,
-    repository: 'acme/app',
-    baseBranch,
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  for (const { memberId, roleId } of participants)
-    await database.$client`
-      insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${memberId}, ${roleId})`
-  const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
-  return { id, branch: String(branch) }
-}
-const runtimeWorkspaceOf = async (id: ChatId) => {
-  const promptId = await stack.prompt(id, 'stub:ls')
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
-  await waitFor(
-    async () =>
-      (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot !=
-      null,
-    20_000,
-  )
-  const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
-  return { promptId, workspace: String(frames.find((frame) => frame.workspace)?.workspace.cwd) }
-}
+const newDevChat = (baseBranch: string, participants: { memberId: string; roleId: string }[] = []) =>
+  newGitHubDevChat({ baseBranch, participants })
 const agentCommit = (workspace: string, total: number) => {
   writeFileSync(join(workspace, 'src/app.ts'), `export const total = ${total}\n`)
   gitIn(workspace, 'commit', '-qam', `Set the total to ${total}`)

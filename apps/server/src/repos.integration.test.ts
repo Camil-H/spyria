@@ -1,16 +1,10 @@
-import { afterAll, expect, test } from 'bun:test'
+import { expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
 import { appJwtOf, createGitHubApi } from './github/github-api.ts'
-import {
-  fakeGitHubAppId,
-  fakeGitHubClientId,
-  fakeGitHubClientSecret,
-  fakeGitHubLogin,
-  startFakeGitHub,
-} from './testing/fake-github.ts'
+import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, fakeGitHubLogin } from './testing/fake-github.ts'
+import { startGitHubStack } from './testing/github-stack.ts'
 import {
   acme,
   addLlmKey,
@@ -20,54 +14,31 @@ import {
   bobInAcme,
   captureLogs,
   lee,
-  sessionTokenOf,
-  startAgentStack,
   succeeded,
-  testSecretsKeyring,
   waitFor,
   waitingOnLock,
   workspaceEventsOf,
 } from './testing/testing.ts'
 
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({
-  llm: { model: 'openai/mistral/codestral-latest' },
-  github: { api: createGitHubApi(fakeGitHub.urls), secretBox },
-})
-afterAll(() => fakeGitHub.stop())
+const {
+  stack,
+  fakeGitHub,
+  secretBox,
+  requestWithText: request,
+  appSettingsWith,
+  ensureGitHubApp,
+  githubCallbackOf,
+  newDevChat,
+  turnEnded,
+} = await startGitHubStack({ llm: { model: 'openai/mistral/codestral-latest' } })
 const { app, database } = stack
 const webhookSecret = 'whsec-integration-0123'
-const appSettings = {
-  appId: fakeGitHubAppId,
-  clientId: fakeGitHubClientId,
-  clientSecret: fakeGitHubClientSecret,
-  privateKey: fakeGitHub.appPrivateKey,
-  webhookSecret,
-}
+const appSettings = appSettingsWith(webhookSecret)
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, text, body: text ? JSON.parse(text) : null }
-}
 const appRow = async () =>
   (await database.$client`select * from github_apps where workspace_id = ${acme}`)[0] as Record<string, string>
 const connectionRow = async () =>
   (await database.$client`select * from github_connections where workspace_id = ${acme} and user_id = ${alice}`)[0]
-const githubCallbackOf = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(new URL(started.body.authorizeUrl), { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  return `${callback.pathname}${callback.search}`
-}
 const githubEvents = async () => (await workspaceEventsOf(database)).filter(({ type }) => type.startsWith('github.'))
 
 test('GitHub App settings: admins only, secrets required at first, sealed at rest, never returned, rotations recorded, refused credentials refused, configured readable without secrets', async () => {
@@ -371,21 +342,8 @@ test('GitHub enforces token permissions: branches need contents read; a refusal 
 })
 
 const devChatAndPrompt = async (repository: string, text: string) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Clone check',
-    projectId: null,
-    repository,
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  const promptId = await stack.prompt(id, text)
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 15_000)
+  const { id } = await newDevChat({ repository })
+  const promptId = await turnEnded(id, text)
   return { id, promptId, replies: await stack.repliesTo(promptId) }
 }
 
@@ -441,8 +399,7 @@ test('a dev chat clones its repository with a read-only installation token kept 
 
 test('a fork of a dev chat checks out the original working branch, kept with its open pull request card or on a new branch as the forker chose, whoever forks it', async () => {
   const { launches, relay } = await stack.agentHost('fork host')
-  if (!(await request(alice, 'GET', '/api/github-settings/configured')).body.configured)
-    expect(await request(alice, 'POST', '/api/github-settings', appSettings)).toMatchObject({ status: 200 })
+  await ensureGitHubApp(webhookSecret)
   const created = await request(alice, 'POST', '/api/dev-chats', {
     name: 'Fix totals',
     projectId: null,

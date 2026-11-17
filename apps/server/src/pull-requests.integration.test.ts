@@ -1,48 +1,21 @@
-import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
+import { expect, setDefaultTimeout, test } from 'bun:test'
 import { createHmac } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ChatId, chatId } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
-import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
-import {
-  acme,
-  alice,
-  bob,
-  lee,
-  rpcOf,
-  runtimeTurn,
-  sessionTokenOf,
-  startAgentStack,
-  testSecretsKeyring,
-  textOf,
-  waitFor,
-} from './testing/testing.ts'
+import type { ChatId } from '@spyria/kernel'
+import { fakeGitHubAppId } from './testing/fake-github.ts'
+import { gitIn, startGitHubStack } from './testing/github-stack.ts'
+import { alice, bob, lee, rpcOf, runtimeTurn, textOf } from './testing/testing.ts'
 
 setDefaultTimeout(40_000)
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
-afterAll(() => fakeGitHub.stop())
+const { stack, fakeGitHub, request, configureGitHubApp, connectGitHub, newDevChat, promptAndWait, runtimeWorkspaceOf } =
+  await startGitHubStack({ routing: true })
 const { app, database } = stack
 const webhookSecret = 'whsec-pull-requests-0123'
 const noGitHubAccount = 'Connect your GitHub account in your profile to push'
 const githubReadTools = ['fetch_branch', 'read_review_threads', 'read_checks', 'list_issues', 'read_issue']
 const allGitHubTools = ['push_branch', 'open_pull_request', 'update_pull_request', ...githubReadTools]
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
-}
 const publish = (userId: string, chat: ChatId, action: string, draft: object = {}) =>
   request(userId, 'POST', `/api/chats/${chat}/publish/${action}`, draft)
 const githubToolsOf = async (userId: string, chat: ChatId) =>
@@ -55,13 +28,6 @@ const setMemberGitHubLevel = async (level: string | null) =>
       toolChanges: {},
     }),
   ).toMatchObject({ status: 200 })
-const git = (cwd: string, ...command: string[]) => {
-  const result = Bun.spawnSync(['git', '-c', 'user.name=Pi Agent', '-c', 'user.email=agent@example.com', ...command], {
-    cwd,
-    stderr: 'pipe',
-  })
-  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
-}
 const signatureOf = (body: string, secret = webhookSecret) =>
   `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
 const sendWebhook = async (
@@ -92,71 +58,23 @@ const toolCallRows = async (chat: ChatId) => [
   ...(await database.$client`select prompter_id, owner_id, server, tool, read_only, decision, status from tool_calls where chat_id = ${chat}`),
 ]
 
-expect(
-  await request(alice, 'POST', '/api/github-settings', {
-    appId: fakeGitHubAppId,
-    clientId: fakeGitHubClientId,
-    clientSecret: fakeGitHubClientSecret,
-    privateKey: fakeGitHub.appPrivateKey,
-    webhookSecret,
-  }),
-).toMatchObject({ status: 200 })
+await configureGitHubApp(webhookSecret)
 
-const connectGitHub = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(started.body.authorizeUrl, { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  expect((await app.request(`${callback.pathname}${callback.search}`)).status).toBe(200)
-  const [row] = await database.$client`
-    select encrypted_access_token from github_connections where workspace_id = ${acme} and user_id = ${userId}`
-  return secretBox.open(String(row?.encrypted_access_token))
-}
-const newDevChat = async (participants: { memberId: string; roleId: string }[] = []) => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Fix totals',
-    projectId: null,
-    repository: 'acme/app',
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  for (const { memberId, roleId } of participants)
-    await database.$client`
-      insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${memberId}, ${roleId})`
-  const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
-  return { id, branch: String(branch) }
-}
-const promptAndWait = async (id: ChatId, text: string) => {
-  const promptId = await stack.prompt(id, text)
-  await stack.answered(promptId)
-  await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
-  return stack.repliesTo(promptId, ['kind', 'body', 'step'])
-}
 const committedWorkspace = async (id: ChatId) => {
-  await promptAndWait(id, 'stub:ls')
-  await waitFor(
-    async () =>
-      (await database.$client`select workspace_snapshot from runtimes where chat_id = ${id}`)[0]?.workspace_snapshot !=
-      null,
-    20_000,
-  )
-  const frames = (await stack.subscribedFrames(id)).map((frame) => JSON.parse(frame))
-  const workspace = String(frames.find((frame) => frame.workspace)?.workspace.cwd)
+  const { workspace } = await runtimeWorkspaceOf(id)
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 2\n')
-  git(workspace, 'commit', '-qam', 'Fix the totals')
+  gitIn(workspace, 'commit', '-qam', 'Fix the totals')
   return workspace
 }
 
 test('a member whose GitHub access allows it pushes and opens a pull request with their own GitHub token passed only to git, as the Changes panel’s check shows; a member with Read, a reader and a member without GitHub are refused', async () => {
   const { relay, launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
-  const { id, branch } = await newDevChat([
-    { memberId: bob, roleId: 'prompter' },
-    { memberId: lee, roleId: 'reader' },
-  ])
+  const { id, branch } = await newDevChat({
+    participants: [
+      { memberId: bob, roleId: 'prompter' },
+      { memberId: lee, roleId: 'reader' },
+    ],
+  })
   const workspace = await committedWorkspace(id)
 
   expect(await publish(alice, id, 'push')).toEqual({
@@ -235,7 +153,7 @@ test('a member whose GitHub access allows it pushes and opens a pull request wit
   expect(posted).toMatchObject({ actor: alice, payload: { step: { type: 'pull_request', number: 1 } } })
 
   writeFileSync(join(workspace, 'src/app.ts'), 'export const total = 3\n')
-  git(workspace, 'commit', '-qam', 'Address the review')
+  gitIn(workspace, 'commit', '-qam', 'Address the review')
   expect((await publish(alice, id, 'pull_request')).body.text).toBe(
     `Pushed ${branch} to pull request #1 (2 commits): ${fakeGitHub.urls.webUrl}/acme/app/pull/1`,
   )

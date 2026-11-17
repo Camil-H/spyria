@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
-import { createHash } from 'node:crypto'
 import { testCrmConnection } from '@spyria/db/testing'
 import { chatId as toChatId } from '@spyria/kernel'
 import { startJobWorker } from './job-worker.ts'
@@ -17,6 +16,7 @@ import {
   connectionRows,
   connectMember,
   createFakeHosts,
+  delegationTokenOn,
   lookup,
   mcpCall,
   openSharedTestApp,
@@ -174,15 +174,6 @@ test('a guest’s turn answers only tool and session methods, so resources, prom
   expect(fakeMcp.records.slice(callsBefore)).toEqual([])
 })
 
-const delegationTokenOn = async (chatId: string) => {
-  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
-  const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
-  await database.$client`
-    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
-    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${tokenHash}, now()
-    from chats where id = ${chatId}`
-  return subToken
-}
 const nextPromptBy = async (chatId: string, prompterId: string) => {
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client`

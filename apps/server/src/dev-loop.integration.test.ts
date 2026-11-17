@@ -1,67 +1,40 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { createHash } from 'node:crypto'
-
 import { type ChatId, chatId, type DevLoopSettings, type DevLoopStepConfig } from '@spyria/kernel'
-import { createSecretBox } from './auth/secret-box.ts'
-import { createGitHubApi } from './github/github-api.ts'
 import { maximumJobAttempts } from './job-worker.ts'
-import { fakeGitHubAppId, fakeGitHubClientId, fakeGitHubClientSecret, startFakeGitHub } from './testing/fake-github.ts'
+import { startGitHubStack } from './testing/github-stack.ts'
 import {
   acme,
   addLlmKey,
   alice,
   bob,
+  delegationTokenOn,
   failedWith,
   lee,
   rpcOf,
   runtimeTurn,
-  sessionTokenOf,
-  startAgentStack,
   succeeded,
-  testSecretsKeyring,
   textOf,
   waitFor,
 } from './testing/testing.ts'
 
 setDefaultTimeout(120_000)
-const fakeGitHub = startFakeGitHub()
-const secretBox = createSecretBox(testSecretsKeyring)
-const stack = await startAgentStack({ routing: true, github: { api: createGitHubApi(fakeGitHub.urls), secretBox } })
-const { app, database } = stack
+const {
+  stack,
+  fakeGitHub,
+  configureGitHubApp,
+  connectGitHub,
+  newDevChat: newGitHubDevChat,
+} = await startGitHubStack({
+  routing: true,
+})
+const { database } = stack
 const finish = { tool: 'finish_work', arguments: { title: 'Fix totals', body: 'The totals add up again' } }
 const committing = (line: string, message: string) => ({
   command: `echo '${line}' >> src/app.ts && git -c user.name=Pi -c user.email=pi@example.com commit -qam '${message}'`,
 })
 
-const request = async (userId: string, method: string, path: string, body?: object) => {
-  const response = await app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, userId)}`,
-      'content-type': 'application/json',
-    },
-    body: body && JSON.stringify(body),
-  })
-  const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : null }
-}
+await configureGitHubApp('whsec-dev-loop-0123')
 
-expect(
-  await request(alice, 'POST', '/api/github-settings', {
-    appId: fakeGitHubAppId,
-    clientId: fakeGitHubClientId,
-    clientSecret: fakeGitHubClientSecret,
-    privateKey: fakeGitHub.appPrivateKey,
-    webhookSecret: 'whsec-dev-loop-0123',
-  }),
-).toMatchObject({ status: 200 })
-
-const connectGitHub = async (userId: string) => {
-  const started = await request(userId, 'POST', '/api/github/connection/connect')
-  const authorized = await fetch(started.body.authorizeUrl, { redirect: 'manual' })
-  const callback = new URL(authorized.headers.get('location') ?? '')
-  expect((await app.request(`${callback.pathname}${callback.search}`)).status).toBe(200)
-}
 type Step = DevLoopStepConfig
 const commandStep = (name: string, command: string, fixes = 3): Step => ({
   kind: 'command',
@@ -77,24 +50,7 @@ const setSetupCommands = (userId: string, commands: { repository: string | null;
   stack.mutate({ workspaceId: acme, userId }, 'workspace.setSetupCommands', { workspaceId: acme, commands })
 const setDevLoop = (userId: string, settings: DevLoopSettings | null) =>
   stack.mutate({ workspaceId: acme, userId }, 'workspace.setDevLoop', { workspaceId: acme, settings })
-const newDevChat = async () => {
-  const created = await request(alice, 'POST', '/api/dev-chats', {
-    name: 'Fix totals',
-    projectId: null,
-    repository: 'acme/app',
-    baseBranch: 'main',
-  })
-  const id = chatId(String(created.body.chatId))
-  await stack.mutate({ workspaceId: acme, userId: alice }, 'conversation.updateChatRouting', {
-    workspaceId: acme,
-    chatId: id,
-    runsOn: 'runtime',
-  })
-  await database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, ${id}, ${lee}, 'editor')`
-  const [{ git_branch: branch } = {}] = await database.$client`select git_branch from chats where id = ${id}`
-  return { id, branch: String(branch) }
-}
+const newDevChat = () => newGitHubDevChat({ participants: [{ memberId: lee, roleId: 'editor' }] })
 const readyChat = async (id: ChatId) => {
   stack.setFakeLlmScript({ text: 'Ready.' })
   const promptId = await stack.prompt(id, 'Get ready')
@@ -769,11 +725,7 @@ test("the quality gates' tools come from Spyria's own tool server, to the chat's
       select server from tool_calls where chat_id = ${turn.chatId} and tool = 'finish_work' order by called_at`),
   ]).toEqual([{ server: 'github' }, { server: 'spyria' }])
 
-  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
-  await database.$client`
-    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
-    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${createHash('sha256').update(JSON.stringify(subToken)).digest('hex')}, now()
-    from chats where id = ${turn.chatId}`
+  const subToken = await delegationTokenOn(turn.chatId)
   const subagentTools = await listOf(subToken, '/mcp/spyria')
   expect(subagentTools).toContain('open_page')
   expect(subagentTools).not.toContain('finish_work')

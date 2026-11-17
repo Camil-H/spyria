@@ -580,6 +580,16 @@ export const rootIn = async (chatId: string) => {
   return root
 }
 
+export const delegationTokenOn = async (chatId: string) => {
+  const subToken = `dl_${crypto.randomUUID().replaceAll('-', '')}`
+  const tokenHash = createHash('sha256').update(JSON.stringify(subToken)).digest('hex')
+  await (await openedTestApp()).database.$client`
+    insert into delegations (workspace_id, chat_id, id, prompt_id, task, effort_hint, policy, model, reason, status, token_hash, created_at)
+    select workspace_id, id, ${crypto.randomUUID()}, agent_turn_message_id, 'Look up', 'small', 'auto', 'mistral/mistral-small-latest', 'asked', 'running', ${tokenHash}, now()
+    from chats where id = ${chatId}`
+  return subToken
+}
+
 export const testSpyriaAgentImage = `sha256:${'0'.repeat(64)}`
 
 export const runtimeTurn = async (host: { id: string }, prompterId: string | null, ownerId = alice) => {
