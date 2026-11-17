@@ -51,7 +51,7 @@ export type MemberGatewayKeyRepository = {
 }
 
 export type GatewaySyncJob = { workspaceId: WorkspaceId; memberId: MemberId; key?: GatewayKey; isLeaving?: boolean }
-export type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: string }
+type ToolServerRemovalJob = { workspaceId: WorkspaceId; gatewayName: string }
 export type GatewayJobs = {
   syncLater(job: Pick<GatewaySyncJob, 'key' | 'isLeaving'>): Promise<void>
   regrantLater(memberId: MemberId): Promise<void>

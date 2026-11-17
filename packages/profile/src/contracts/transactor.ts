@@ -23,6 +23,6 @@ export type UnitOfWork = {
   workspaceEvents: WorkspaceEventLog
 }
 
-export type ActingMember = Readonly<{ workspaceId: WorkspaceId; memberId: MemberId }>
+type ActingMember = Readonly<{ workspaceId: WorkspaceId; memberId: MemberId }>
 
 export type ProfileTransactor = Transactor<UnitOfWork> & { member: ActingMember }

@@ -1,6 +1,6 @@
 import { blankKind, DomainError, errorKind } from '@spyria/kernel'
 
-export class ProfileError extends DomainError {}
+class ProfileError extends DomainError {}
 
 export const BlankDisplayName = blankKind('blank_display_name', 'A display name', ProfileError)
 export const BlankProvider = blankKind('blank_provider', 'A provider', ProfileError)
