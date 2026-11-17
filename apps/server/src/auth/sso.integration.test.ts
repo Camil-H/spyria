@@ -1092,47 +1092,40 @@ test('the first workspace needs the setup token: refused without it, with a wron
 })
 
 test('with the Microsoft app of this Spyria, a workspace is created and signed in to without any client id or secret, and an app the Spyria lacks is refused', async () => {
-  const instance = await createTestDatabase()
-  await instance.database.$client`truncate workspaces, users cascade`
-  const instanceApp = createApp({ database: instance.database, ...ssoSettings })
-  try {
-    const create = (form: Record<string, string>) =>
-      startCreation({ name: 'Initech', usesInstanceApp: 'true', ...form }, testAuthSettings.appOrigin, instanceApp)
-    expect(await (await create({ preset: 'google' })).text()).toContain(
-      'This Spyria has no Google app: enter the client id and secret of your own',
-    )
-    const completed = await callbackAfter(
-      microsoftIdp,
-      await create({ preset: 'microsoft', tenantId: 'tenant-1' }),
-      { sub: 'pat', oid: 'pat-object', preferred_username: 'pat@initech.com' },
-      instanceApp,
-    )
-    expect(completed.authorizationEndpoint).toBe(`${microsoftIdp.issuer}/auth`)
-    expect(completed.clientId).toBe('spyria-microsoft')
-    expect(completed.page).toContain('"status":"signed_in"')
-    expect(microsoftIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-microsoft')
-    const [stored] = await instance.database.$client`
-      select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
-        encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp"
-      from workspace_sso`
-    expect(stored).toMatchObject({
-      preset: 'microsoft',
-      issuer: microsoftIdp.issuer,
-      clientId: 'spyria-microsoft',
-      encryptedClientSecret: '',
-      usesInstanceApp: true,
-    })
-    const signedIn = await signInThrough(
-      microsoftIdp,
-      `workspace=${stored?.workspaceId}`,
-      { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
-      instanceApp,
-    )
-    expect(signedIn.sessions).toHaveLength(1)
-    expect(signedIn.userId).toBe(completed.userId)
-  } finally {
-    await instance.drop()
-  }
+  await emptyInstance.database.$client`truncate workspaces, users cascade`
+  const create = (form: Record<string, string>) => startCreation({ name: 'Initech', usesInstanceApp: 'true', ...form })
+  expect(await (await create({ preset: 'google' })).text()).toContain(
+    'This Spyria has no Google app: enter the client id and secret of your own',
+  )
+  const completed = await callbackAfter(
+    microsoftIdp,
+    await create({ preset: 'microsoft', tenantId: 'tenant-1' }),
+    { sub: 'pat', oid: 'pat-object', preferred_username: 'pat@initech.com' },
+    emptyInstanceApp,
+  )
+  expect(completed.authorizationEndpoint).toBe(`${microsoftIdp.issuer}/auth`)
+  expect(completed.clientId).toBe('spyria-microsoft')
+  expect(completed.page).toContain('"status":"signed_in"')
+  expect(microsoftIdp.tokenRequests.at(-1)?.get('client_id')).toBe('spyria-microsoft')
+  const [stored] = await emptyInstance.database.$client`
+    select workspace_id as "workspaceId", preset, issuer, client_id as "clientId",
+      encrypted_client_secret as "encryptedClientSecret", uses_instance_app as "usesInstanceApp"
+    from workspace_sso`
+  expect(stored).toMatchObject({
+    preset: 'microsoft',
+    issuer: microsoftIdp.issuer,
+    clientId: 'spyria-microsoft',
+    encryptedClientSecret: '',
+    usesInstanceApp: true,
+  })
+  const signedIn = await signInThrough(
+    microsoftIdp,
+    `workspace=${stored?.workspaceId}`,
+    { sub: 'pat-in-another-app', oid: 'pat-object', preferred_username: 'pat@initech.com' },
+    emptyInstanceApp,
+  )
+  expect(signedIn.sessions).toHaveLength(1)
+  expect(signedIn.userId).toBe(completed.userId)
 })
 
 test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured; a workspace awaiting its purge does not hold up the start', async () => {
