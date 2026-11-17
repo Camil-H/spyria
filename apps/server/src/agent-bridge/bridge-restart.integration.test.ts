@@ -57,3 +57,29 @@ test('an agent event whose recording keeps failing is recorded again, and read a
     select id from events where chat_id = ${chat} and payload->'event'->'update'->>'sessionUpdate' = 'turn_end'`
   expect(turnEnds).toHaveLength(1)
 })
+
+test('an agent event that can never be recorded is read again from the agent once, then skipped, so the turn still ends', async () => {
+  await stack.agentHost('Unrecordable event host', { holdUrl })
+  const chat = await newRuntimeChat()
+  await database.$client.unsafe(
+    `create function refuse_agent_messages() returns trigger language plpgsql as $$ begin
+       if new.type = 'agent.event' and new.payload->'event'->'update'->>'sessionUpdate' = 'agent_message' then
+         raise exception 'The agent message record is refused'; end if;
+       return new; end $$`,
+  )
+  await database.$client.unsafe(
+    'create trigger refuse_agent_messages before insert on events for each row execute function refuse_agent_messages()',
+  )
+  const capturedConsole = captureConsole()
+  try {
+    await prompt(chat, 'Say hello')
+    await waitFor(async () => (await turnOf(chat)) === null, 40_000)
+  } finally {
+    capturedConsole.restore()
+    await database.$client.unsafe('drop trigger refuse_agent_messages on events')
+    await database.$client.unsafe('drop function refuse_agent_messages')
+  }
+  const turnEnds = await database.$client`
+    select id from events where chat_id = ${chat} and payload->'event'->'update'->>'sessionUpdate' = 'turn_end'`
+  expect(turnEnds).toHaveLength(1)
+}, 60_000)

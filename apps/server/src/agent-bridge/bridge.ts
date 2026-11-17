@@ -132,6 +132,7 @@ export const createAgentBridge = ({
     turn.span.end()
   }
   const bridgeOf = (database: Database) => {
+    const eventsReadAgain = new Set<string>()
     const sockets = new Map<
       string,
       {
@@ -332,6 +333,7 @@ export const createAgentBridge = ({
         }, logFailure(chat))
       const shownPromptIdOf = () => chatSocket.replyToId ?? chatSocket.promptId
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
+        const eventKey = `${keyOf(chat)}/${event.id}`
         const promptAtEvent = chatSocket.promptId
         const shownAtEvent = turnPromptId ?? shownPromptIdOf()
         recording = recording
@@ -341,6 +343,7 @@ export const createAgentBridge = ({
               : withRecordRetries(() => handlers.recordEvent(chat, event, turnPromptId)),
           )
           .then((recorded) => {
+            eventsReadAgain.delete(eventKey)
             if (recorded?.isReplyStored && shownAtEvent) broadcast(chat, { promptId: shownAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
@@ -351,12 +354,17 @@ export const createAgentBridge = ({
             chatSocket.streamedText = ''
           })
           .catch((error) => {
+            const isReadAgain = !(error instanceof DomainError) && !eventsReadAgain.has(eventKey)
             log.error({
               event: 'agent.event.record_failed',
-              body: 'Recording an agent event failed: the events are read again from the agent',
+              body: isReadAgain
+                ? 'Recording an agent event failed: the events are read again from the agent'
+                : 'Recording an agent event failed: it is skipped',
               attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
               error,
             })
+            if (!isReadAgain) return eventsReadAgain.delete(eventKey)
+            eventsReadAgain.add(eventKey)
             chatSocket.isRecordLost = true
             opened.then(
               (socket) => socket.close(),
