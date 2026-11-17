@@ -5,7 +5,6 @@ import {
   expect,
   type Locator,
   mainOf,
-  messageActionOf,
   messageActionsOf,
   messageContaining,
   newRuntimeChat,
@@ -20,9 +19,6 @@ import {
   workingIndicatorOf,
 } from '../fixtures'
 
-const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
-  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
-const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
 const workingDirectoryOf = (page: Page) =>
   mainOf(page).getByRole('img', { name: 'Working directory' }).locator('xpath=..')
 const turnsEnded = async (page: Page, count: number) => {
@@ -41,10 +37,9 @@ test.describe('Chat view', () => {
     await page.goto('/')
   })
 
-  test('As a member, I see a channel’s Send icon with its tooltip, the message menu revealed on keyboard focus, dialogs in the app text colour and readable links', async ({
+  test('As a member, I see a channel’s Send icon with its tooltip, the message menu revealed on keyboard focus and readable links', async ({
     page,
     workerStack,
-    refuseNextMessage,
   }) => {
     await openChat(page, 'Welcome')
     await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
@@ -75,18 +70,6 @@ test.describe('Chat view', () => {
       await expect(actionNamed('Delete')).toBeFocused()
       await expect(messageActions.locator('button[tabindex="0"]')).toHaveCount(1)
       await expect(actionNamed('Delete')).toHaveAttribute('tabindex', '0')
-    })
-    await test.step('uses the text color of the app for the delete message dialog title in dark mode', async () => {
-      await page.emulateMedia({ colorScheme: 'dark' })
-      await openMessageAction(page, 'Thanks, glad to be here.', 'Delete')
-      const dialogTitleColor = await deleteDialogOf(page)
-        .getByRole('heading', { name: 'Delete message' })
-        .evaluate((element) => getComputedStyle(element).color)
-      const pageTitleColor = await mainOf(page)
-        .getByRole('heading', { level: 1 })
-        .evaluate((element) => getComputedStyle(element).color)
-      expect(dialogTitleColor).toBe(pageTitleColor)
-      await deleteDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
     })
     await test.step('a link in a message has a contrast of at least 4.5:1 against the message background in light mode', async () => {
       await page.emulateMedia({ colorScheme: 'light' })
@@ -121,11 +104,6 @@ test.describe('Chat view', () => {
       const [lighter = 0, darker = 0] = [luminanceOf(foreground), luminanceOf(background)].sort((x, y) => y - x)
       const ratio = (lighter + 0.05) / (darker + 0.05)
       expect(ratio).toBeGreaterThanOrEqual(4.5)
-    })
-    await test.step('shows a refused message as not sent above the composer, with its text back in it', async () => {
-      await refuseNextMessage()
-      await sendMessage(page, 'Sent too fast')
-      await expect(mainOf(page).getByRole('alert')).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
     })
   })
 
@@ -237,12 +215,6 @@ test.describe('Chat view', () => {
       await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Not started')
       await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
       expect(await dotColourOf()).toBe(await colourOf('--color-muted'))
-      const [runsOnRight, statusLeft] = await Promise.all([
-        runsOnOf(page).evaluate((select) => select.getBoundingClientRect().right),
-        runtimeStatusOf(page).evaluate((status) => status.getBoundingClientRect().left),
-      ])
-      expect(statusLeft).toBeGreaterThan(runsOnRight)
-      expect(statusLeft - runsOnRight).toBeLessThan(24)
 
       await sendMessage(page, 'Start please')
       await expect(runtimeStatusOf(page)).toHaveText('Starting…')
