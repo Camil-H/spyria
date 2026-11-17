@@ -81,7 +81,7 @@ test.describe('Dev chats', () => {
     await expect(dialog.getByLabel('Base branch')).toHaveValue('main')
   })
 
-  test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step while the chat says it is setting up the repository, and is answered once it ends', {
+  test('As a member, my first message waits for a slow setup command, whose output streams into its conversation step while the chat says it is setting up the repository; when it fails I see a notice with its last output lines, and the session still answers', {
     tag: ['@spec-40', '@spec-39', '@slow'],
   }, async ({ page }) => {
     await configureGitHubApp(page)
@@ -100,5 +100,6 @@ test.describe('Dev chats', () => {
     await expect(notice).toHaveCount(1)
     await expect(notice).toContainText('docs-tool: command not found')
     await expect(messageContaining(page, 'files:.git,.spyria,README.md')).toHaveCount(1)
+    await expect(workingIndicatorOf(page)).toHaveCount(0)
   })
 })
