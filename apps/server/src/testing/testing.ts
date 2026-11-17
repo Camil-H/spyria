@@ -708,11 +708,12 @@ export const startAgentStack = async ({
     browserSockets.push(socket)
     const frames: string[] = []
     const subscribed = Promise.withResolvers<void>()
-    let subscriptions = 0
+    const subscribedChatIds: string[] = []
     const closed = new Promise<number>((resolve) => socket.addEventListener('close', (event) => resolve(event.code)))
     socket.onmessage = (message) => {
-      if (!JSON.parse(String(message.data)).subscribed) return frames.push(String(message.data))
-      subscriptions += 1
+      const frame = JSON.parse(String(message.data))
+      if (!frame.subscribed) return frames.push(String(message.data))
+      subscribedChatIds.push(frame.chatId)
       subscribed.resolve()
     }
     await new Promise((resolve) => socket.addEventListener('open', resolve))
@@ -722,16 +723,23 @@ export const startAgentStack = async ({
       )
     socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
     const resubscribe = async () => {
-      const before = subscriptions
+      const before = subscribedChatIds.length
       socket.send(JSON.stringify({ type: 'unsubscribe', chatId: chat }))
       socket.send(JSON.stringify({ type: 'subscribe', chatId: chat }))
-      await waitFor(() => subscriptions > before)
+      await waitFor(() => subscribedChatIds.length > before)
+    }
+    const subscribeTo = async (otherChat: ChatId) => {
+      const before = subscribedChatIds.length
+      socket.send(JSON.stringify({ type: 'subscribe', chatId: otherChat }))
+      await waitFor(() => subscribedChatIds.slice(before).includes(otherChat))
     }
     return {
       frames,
       closed,
       subscribed: subscribed.promise,
+      subscribedChatIds,
       resubscribe,
+      subscribeTo,
       authenticate: (renewedToken: string) => socket.send(JSON.stringify({ type: 'auth', token: renewedToken })),
       close: () => socket.close(),
     }

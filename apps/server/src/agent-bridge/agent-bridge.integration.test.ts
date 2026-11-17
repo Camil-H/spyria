@@ -685,12 +685,11 @@ test('a command output of a chat that does not exist is refused like one the mem
 test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
   'watching the agent stream needs chat.read, a refused watch gets nothing: $name',
   async (role) => {
-    const viewer = await openStream(await chatAs(role), { token: await sessionTokenOf(database, acme, role.userId) })
-    const isSubscribed = await Promise.race([
-      viewer.subscribed.then(() => true),
-      Bun.sleep(role.isAllowed ? 5_000 : 6_000).then(() => false),
-    ])
-    expect(isSubscribed).toBe(role.isAllowed)
+    const chat = await chatAs(role)
+    const chatTheMemberOwns = await newRuntimeChat({ ownerId: role.userId })
+    const viewer = await openStream(chat, { token: await sessionTokenOf(database, acme, role.userId) })
+    await viewer.subscribeTo(chatTheMemberOwns)
+    expect(viewer.subscribedChatIds).toEqual(role.isAllowed ? [chat, chatTheMemberOwns] : [chatTheMemberOwns])
     expect(viewer.frames).toEqual([])
   },
 )
