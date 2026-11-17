@@ -454,4 +454,4 @@ packages/workspace/src/queries/list-roles.ts: 6-14,16-17,19-20
 packages/workspace/src/server.ts: 2,10,35,51-53,76-79,86,95
 scripts/bump-harnesses.ts: 1,6-10,12-13,15-21,23-36,38,42,44-47,49-55,57,59-63,66-69,72-91,94-95,97,102,113,126,135,141,147-151,153,155,158,176,198,208
 scripts/script-tests.ts: 1-4
-scripts/test-coverage.ts: 1,5,7-12,15-24,27,30-37,39,42-47,49-62,64-67,70-85,88,90,105
+scripts/test-coverage.ts: 1,5,7-12,15-24,27,30-37,39,42-47,49-62,64-67,70-74,76-79,81-98,101,103,127
