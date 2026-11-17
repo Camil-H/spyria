@@ -25,27 +25,26 @@ jobs:
       - if: always()
         run: bun run test:integration --coverage --coverage-reporter=lcov --coverage-dir=.check/coverage-integration
       - if: always()
+        run: bun scripts/test-timings.ts unit.xml integration.xml | bash .github/notices.sh timings
+      - if: always()
         run: |
-          notice() {
-            split --line-bytes=3000 - "$RUNNER_TEMP/notice."
-            for chunk in "$RUNNER_TEMP"/notice.*; do
-              body=$(sed 's/%/%25/g' "$chunk" | sed ':a;N;$!ba;s/\n/%0A/g')
-              echo "::notice title=$1 $(basename "$chunk")::$body"
-              rm "$chunk"
-            done
-          }
-          bun scripts/test-timings.ts unit.xml integration.xml | notice timings
           for layer in unit integration; do
-            lcov=".check/coverage-$layer/lcov.info"
-            [ -f "$lcov" ] || continue
-            { bun scripts/test-coverage.ts compare "$layer" "$lcov" || true; } | notice "$layer coverage"
-            bun scripts/test-coverage.ts save "$layer" "$lcov"
-            gzip -9c "tests/baseline/$layer.coverage.txt" | base64 -w0 | fold -w 3000 | notice "$layer covered lines"
+            { bun scripts/test-coverage.ts compare "$layer" ".check/coverage-$layer/lcov.info" || true; } > "$RUNNER_TEMP/$layer-report.txt"
           done
+          cat "$RUNNER_TEMP"/*-report.txt | bash .github/notices.sh coverage
+      - if: always()
+        run: |
+          bun scripts/test-coverage.ts save unit .check/coverage-unit/lcov.info
+          gzip -9c tests/baseline/unit.coverage.txt | base64 -w0 | fold -w 7999 | bash .github/notices.sh "unit covered lines"
+      - if: always()
+        run: |
+          bun scripts/test-coverage.ts save integration .check/coverage-integration/lcov.info
+          gzip -9c tests/baseline/integration.coverage.txt | base64 -w0 | fold -w 7999 | bash .github/notices.sh "integration covered lines"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage
+          include-hidden-files: true
           path: |
             .check/coverage-*/lcov.info
             .check/*.xml
@@ -70,9 +69,4 @@ jobs:
         env:
           WORKERS: 2
       - if: always()
-        run: |
-          bun scripts/test-timings.ts e2e-results.json > "$RUNNER_TEMP/timings.txt"
-          split --line-bytes=3000 "$RUNNER_TEMP/timings.txt" "$RUNNER_TEMP/notice."
-          for chunk in "$RUNNER_TEMP"/notice.*; do
-            echo "::notice title=e2e timings ${{ matrix.shard }} $(basename "$chunk")::$(sed 's/%/%25/g' "$chunk" | sed ':a;N;$!ba;s/\n/%0A/g')"
-          done
+        run: bun scripts/test-timings.ts e2e-results.json | bash .github/notices.sh "e2e timings ${{ matrix.shard }}"
