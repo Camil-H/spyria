@@ -1,7 +1,7 @@
 import { domainOfEmail } from './domain-claim.ts'
 import { InvalidSsoSettings } from './errors.ts'
 
-export const ssoPresets = ['google', 'microsoft', 'oidc'] as const
+const ssoPresets = ['google', 'microsoft', 'oidc'] as const
 export type SsoPreset = (typeof ssoPresets)[number]
 export type SignInScope = 'account' | 'workspace'
 export type SsoSettingsInput = {
@@ -19,13 +19,13 @@ export type SsoEmail =
   | { email?: undefined; refusal: 'unconfirmed' | 'untrusted' }
 export const instanceAppPresets = ['google', 'microsoft'] as const
 export type InstanceAppPreset = (typeof instanceAppPresets)[number]
-export type InstanceApp = { clientId: string; clientSecret: string }
+type InstanceApp = { clientId: string; clientSecret: string }
 export type InstanceApps = Partial<Record<InstanceAppPreset, InstanceApp>> & { oidc?: InstanceApp & { issuer: string } }
-export const accountProviders = ['google', 'microsoft', 'oidc'] as const
+const accountProviders = ['google', 'microsoft', 'oidc'] as const
 export type AccountProvider = (typeof accountProviders)[number]
 
-export const googleIssuer = 'https://accounts.google.com'
-export const microsoftLoginOrigin = 'https://login.microsoftonline.com'
+const googleIssuer = 'https://accounts.google.com'
+const microsoftLoginOrigin = 'https://login.microsoftonline.com'
 export const microsoftPersonalAccountsTenantId = '9188040d-6c67-4c5b-b112-36a304b66dad'
 const multiTenantSegments = new Set(['common', 'organizations', 'consumers'])
 const tenantIdPattern = /^[\w.-]+$/

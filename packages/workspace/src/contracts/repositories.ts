@@ -65,7 +65,7 @@ export type WorkspaceRepository = {
   setBrowserSettings(settings: BrowserSettings): Promise<void>
 }
 
-export type WorkspaceCleanup = { isPending: boolean; failed: readonly { type: string; count: number }[] }
+type WorkspaceCleanup = { isPending: boolean; failed: readonly { type: string; count: number }[] }
 
 export type DeletedWorkspace = {
   isDeleted(): Promise<boolean>
