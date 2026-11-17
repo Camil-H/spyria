@@ -14,6 +14,7 @@ import {
   runsOnStatusOf,
   sendMessage,
   sessionOf,
+  sessionStarted,
   signedInMachine,
   machineTest as test,
 } from './fixtures'
@@ -119,10 +120,9 @@ test.describe('Machine sessions', () => {
 
   test('As a member, my prompt while my machine is offline waits with "Your machine is offline" and is answered once it is back', {
     tag: ['@spec-20', '@slow'],
-  }, async ({ page, machine }) => {
+  }, async ({ page, workerStack, machine }) => {
     await machine(signedInMachine)
-    await newMachineSession(page, 'Laptop goes away')
-    await expect(runsOnStatusOf(page)).toHaveText('Ready')
+    await sessionStarted(workerStack, await newMachineSession(page, 'Laptop goes away'))
     await machine({ online: 'false' })
     await sendMessage(page, 'Wait for my laptop')
     await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(1)

@@ -14,6 +14,7 @@ import {
   runsOnOf,
   sessionOf,
 } from '../fixtures.ts'
+import type { WorkerStack } from '../stack.ts'
 import { viteUrl } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
@@ -27,6 +28,14 @@ export const expectRunsOnLockedLocal = async (page: Page) => {
   await expect(runsOnOf(page)).toHaveText('Local')
 }
 export const runsOnStatusOf = (page: Page) => runsOnChipOf(page).getByRole('status', { name: 'Runtime' })
+export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
+  expect
+    .poll(
+      async () =>
+        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
+          ?.agent_conversation_id,
+    )
+    .toBeTruthy()
 export const setUpButtonOf = (page: Page, toolName: string) =>
   machineToolOf(page, toolName).getByRole('button', { name: `Set up ${toolName}` })
 export const newMachineSession = async (page: Page, name: string, option = 'Local · Claude Code') => {
