@@ -320,6 +320,30 @@ test('a bundle over 12 MB is refused with the push-from-your-machine reason, so 
   })
 })
 
+test('a bundle leaves out the history the runtime fetched from GitHub, even when the base moved on to a commit the runtime never saw', async () => {
+  const heavyBase = join(directory, 'heavy-base')
+  git(directory, 'clone', '-q', source, heavyBase)
+  writeFileSync(join(heavyBase, 'data.bin'), crypto.getRandomValues(new Uint8Array(12_100_000)))
+  git(heavyBase, 'add', 'data.bin')
+  git(heavyBase, 'commit', '-q', '-m', 'Add data')
+  const runtime = join(directory, 'heavy-base-runtime')
+  git(directory, 'clone', '-q', heavyBase, runtime)
+  git(runtime, 'checkout', '-q', '-b', 'spyria/light')
+  writeFileSync(join(runtime, 'light.txt'), 'light')
+  git(runtime, 'add', 'light.txt')
+  git(runtime, 'commit', '-q', '-m', 'Add light')
+  const { call } = started({ workspaceDirectory: runtime })
+  const prerequisitesOf = async (branch: string) => {
+    const { status, body } = await call('POST', '/api/workspace/bundle', { branch, prerequisite: 'f'.repeat(40) })
+    expect({ status, error: body.error }).toEqual({ status: 200, error: undefined })
+    const file = join(directory, `${branch.replace('/', '-')}.bundle`)
+    writeFileSync(file, Buffer.from(String(body.bundle), 'base64'))
+    expect(statSync(file).size).toBeLessThan(10_000)
+    return Bun.spawnSync(['git', 'bundle', 'verify', file], { cwd: runtime }).stdout.toString()
+  }
+  expect(await prerequisitesOf('spyria/light')).toContain(revisionOf(runtime, 'main'))
+})
+
 const author = { name: 'Alice', email: 'alice@example.com' }
 const revisionOf = (cwd: string, revision: string) =>
   Bun.spawnSync(['git', 'rev-parse', revision], { cwd }).stdout.toString().trim()
