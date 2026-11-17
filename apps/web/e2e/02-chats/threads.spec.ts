@@ -2,12 +2,14 @@ import { openPageAs } from '../stack'
 import {
   addParticipant,
   alicesWelcomeMessage,
+  deleteMessageDialogOf,
   expect,
   messageActionOf,
   messageActionsOf,
   messageContaining,
   messageItemsOf,
   openChat,
+  openMessageAction,
   openWelcome,
   type Page,
   repliesOf,
@@ -102,11 +104,11 @@ test.describe('Threads', () => {
     await bobPage.getByRole('button', { name: 'Save' }).click()
     await expect(repliesOf(bobPage).filter({ hasText: 'Second draft' })).toContainText('(edited)')
     await (await messageActionOf(repliesOf(bobPage).filter({ hasText: 'Second draft' }), 'Delete')).click()
-    await bobPage.getByRole('dialog', { name: 'Delete message' }).getByRole('button', { name: 'Delete' }).click()
+    await deleteMessageDialogOf(bobPage).getByRole('button', { name: 'Delete' }).click()
     await expect(repliesOf(bobPage)).toHaveText([/This message was deleted/, /Keep this one/])
 
-    await (await messageActionOf(messageContaining(page, alicesWelcomeMessage), 'Delete')).click()
-    await page.getByRole('dialog', { name: 'Delete message' }).getByRole('button', { name: 'Delete' }).click()
+    await openMessageAction(page, alicesWelcomeMessage, 'Delete')
+    await deleteMessageDialogOf(page).getByRole('button', { name: 'Delete' }).click()
     const deletedRoot = messageItemsOf(page).filter({ hasText: 'This message was deleted' }).first()
     await expect(messageActionsOf(deletedRoot)).toHaveCount(0)
     await expect(threadToggleOf(page)).toHaveText('2 replies · 1 new')

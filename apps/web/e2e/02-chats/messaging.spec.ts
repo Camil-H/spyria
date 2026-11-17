@@ -2,6 +2,7 @@ import {
   chatLinkOf,
   chipOf,
   composerOf,
+  deleteMessageDialogOf,
   draftIconOf,
   expect,
   mainOf,
@@ -11,6 +12,7 @@ import {
   messageItemsOf,
   numberedMessages,
   openChat,
+  openMessageAction,
   type Page,
   postMessages,
   runsOnOf,
@@ -24,10 +26,6 @@ const onePixelPng = Buffer.from(
   'base64',
 )
 const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
-
-const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
-  (await messageActionOf(messageContaining(page, messageText), actionName)).click()
-const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
 
 test.describe('Messaging', () => {
   test.beforeEach(async ({ page }) => {
@@ -326,7 +324,7 @@ test.describe('Messaging', () => {
 
     await test.step('replaces the message with a tombstone after confirmation', async () => {
       await openMessageAction(page, 'Thanks, happy to be here.', 'Delete')
-      await deleteDialogOf(page).getByRole('button', { name: 'Delete' }).click()
+      await deleteMessageDialogOf(page).getByRole('button', { name: 'Delete' }).click()
       await expect(messageContaining(page, 'This message was deleted')).toBeVisible()
       await expect(messageContaining(page, 'Thanks, happy to be here.')).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(2)
@@ -470,8 +468,8 @@ test.describe('Messaging', () => {
 
     await test.step('keeps the message when the deletion is cancelled', async () => {
       await openMessageAction(page, 'Thanks, glad to be here.', 'Delete')
-      await deleteDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
-      await expect(deleteDialogOf(page)).toHaveCount(0)
+      await deleteMessageDialogOf(page).getByRole('button', { name: 'Cancel' }).click()
+      await expect(deleteMessageDialogOf(page)).toHaveCount(0)
       await expect(messageContaining(page, 'Thanks, glad to be here.')).toBeVisible()
     })
   })
