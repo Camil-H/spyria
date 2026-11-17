@@ -64,7 +64,7 @@ export const browserBodyOf = ({
   },
 })
 
-export class NotAFile extends Error {
+class NotAFile extends Error {
   constructor() {
     super('refused: not a file of the browser')
   }

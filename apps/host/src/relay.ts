@@ -29,7 +29,7 @@ export const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
 const maximumHeldStreamBytes = 8 * 1024 * 1024
 const fileChunkBytes = 192 * 1024
-export const maximumFrameBytes = 64 * 1024 * 1024
+const maximumFrameBytes = 64 * 1024 * 1024
 const tooLarge = 'The response is too large to relay'
 export const frameTextOf = (frame: Frame, maximumBytes = maximumFrameBytes) => {
   const text = JSON.stringify(frame)
