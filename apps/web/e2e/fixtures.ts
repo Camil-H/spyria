@@ -38,15 +38,6 @@ export const research = 'chat-research'
 export const blockedNotice = 'Connect an LLM key in your profile to prompt'
 export const signedInMachine = { owner: 'member-alice', signedIn: 'claude-code' }
 
-export const sessionStarted = (workerStack: WorkerStack, chatId: string) =>
-  expect
-    .poll(
-      async () =>
-        (await workerStack.database.$client`select agent_conversation_id from runtimes where chat_id = ${chatId}`)[0]
-          ?.agent_conversation_id,
-    )
-    .toBeTruthy()
-
 export const addParticipant = async (workerStack: WorkerStack, chatId: string, memberId: string, roleId: string) => {
   await expect
     .poll(async () => (await workerStack.database.$client`select 1 from chats where id = ${chatId}`).length)
