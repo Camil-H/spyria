@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeAll, describe, expect, test } from 'bun:test'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { rebuildMessages } from '@spyria/conversation/server'
 import { events, jobs } from '@spyria/db/postgres'
@@ -76,8 +76,8 @@ test('deleting a project appends chat.archived or chat.moved for each of its cha
   ])
 })
 
-describe('the history written by the rebuild test, then drifted', () => {
-  test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
+describe('a history of every kind of change, rebuilt and then drifted', () => {
+  beforeAll(async () => {
     await succeeds('conversation.sendMessage', { id: 'message-history-1', chatId: 'chat-standup', text: 'First' })
     await succeeds('conversation.editMessage', { messageId: 'message-history-1', text: 'First, edited' })
     await succeeds('conversation.sendMessage', {
@@ -118,6 +118,9 @@ describe('the history written by the rebuild test, then drifted', () => {
     await succeeds('workspace.createProject', { id: 'project-history', name: 'History' })
     await succeeds('workspace.moveChat', { chatId: 'chat-history-runtime', projectId: 'project-history' })
     await succeeds('workspace.archiveProject', { projectId: 'project-history', chatsPolicy: 'archive' })
+  })
+
+  test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
     const live = await allMessages()
     expect(live.find((message) => message.replyToId === 'message-history-3')).toMatchObject({ kind: 'notice' })
     expect(live.find((message) => message.id === 'message-history-2')).toMatchObject({ body: '' })
