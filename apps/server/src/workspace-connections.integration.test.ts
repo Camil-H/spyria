@@ -17,6 +17,7 @@ import {
   consentThroughSpyria,
   createFakeHosts,
   everyStoredText,
+  type FakeHost,
   globex,
   lee,
   llmGatewayAt,
@@ -556,9 +557,7 @@ test('editing replaces the secret in place, a new URL registers the server again
     expect(await everyStoredText(database)).not.toContain(secret)
 })
 
-test('a running agent’s MCP stream hears that its tool list changed when a connection is added, opened, narrowed or removed, and its next listing has the change', async () => {
-  const host = await fakeHost('Tool list changes host')
-  const { token } = await runtimeTurn(host, alice)
+const listChangesOf = async (host: FakeHost, token: string) => {
   const streamed: string[] = []
   const opened = Promise.withResolvers<number | undefined>()
   const closing = new AbortController()
@@ -571,7 +570,19 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
     signal: closing.signal,
   })
   expect(await opened.promise).toBe(200)
-  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  return {
+    changeCount: () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length,
+    closeStream: async () => {
+      closing.abort()
+      await stream
+    },
+  }
+}
+
+test('a running agent’s MCP stream hears that its tool list changed when a connection is added, opened, narrowed or removed, and its next listing has the change', async () => {
+  const host = await fakeHost('Tool list changes host')
+  const { token } = await runtimeTurn(host, alice)
+  const { changeCount, closeStream } = await listChangesOf(host, token)
   const listedNames = async () =>
     ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(({ name }) => name)
 
@@ -595,8 +606,7 @@ test('a running agent’s MCP stream hears that its tool list changed when a con
   expect((await asMember(alice, 'POST', ordersPath('remove'))).status).toBe(200)
   await waitFor(() => changeCount() > beforeRemoving)
   expect((await listedNames()).filter((name) => name.startsWith(`${gatewayName}-`))).toEqual([])
-  closing.abort()
-  await stream
+  await closeStream()
 })
 
 test('a tool server switched off in a chat leaves its agent’s list while the others stay, its calls are refused and recorded, and switching it on brings it back', async () => {
@@ -607,19 +617,7 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   await openToEveryRole(billing.connectionId)
   const ledgerName = (await connectionRow(ledger.connectionId))?.gatewayName ?? ''
   const billingName = (await connectionRow(billing.connectionId))?.gatewayName ?? ''
-  const streamed: string[] = []
-  const opened = Promise.withResolvers<number | undefined>()
-  const closing = new AbortController()
-  const stream = host.modelCall({
-    method: 'GET',
-    path: '/mcp',
-    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
-    onHead: opened.resolve,
-    onChunk: (data) => streamed.push(data),
-    signal: closing.signal,
-  })
-  expect(await opened.promise).toBe(200)
-  const changeCount = () => streamed.filter((data) => data.includes('"notifications/tools/list_changed"')).length
+  const { changeCount, closeStream } = await listChangesOf(host, token)
   const listedServers = async () =>
     ((await mcpCall(host, token, rpcOf('tools/list'))).result.tools as { name: string }[]).map(
       ({ name }) => name.split('-')[0],
@@ -656,8 +654,7 @@ test('a tool server switched off in a chat leaves its agent’s list while the o
   expect(await switchLedger(true)).toEqual(succeeded)
   await waitFor(() => changeCount() > beforeOn)
   expect(await listedServers()).toEqual(expect.arrayContaining([ledgerName, billingName]))
-  closing.abort()
-  await stream
+  await closeStream()
 })
 
 test('the agent lists the tools of the member who prompted, so a guest’s turn lists their own access and not the owner’s', async () => {
