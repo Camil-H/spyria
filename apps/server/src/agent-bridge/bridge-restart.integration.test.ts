@@ -70,16 +70,17 @@ test('an agent event that can never be recorded is read again from the agent onc
   await database.$client.unsafe(
     'create trigger refuse_agent_messages before insert on events for each row execute function refuse_agent_messages()',
   )
+  const turnEndsOf = () => database.$client`
+    select id from events where chat_id = ${chat} and payload->'event'->'update'->>'sessionUpdate' = 'turn_end'`
   const capturedConsole = captureConsole()
   try {
     await prompt(chat, 'Say hello')
-    await waitFor(async () => (await turnOf(chat)) === null, 40_000)
+    await waitFor(async () => (await turnEndsOf()).length > 0, 40_000)
   } finally {
     capturedConsole.restore()
     await database.$client.unsafe('drop trigger refuse_agent_messages on events')
     await database.$client.unsafe('drop function refuse_agent_messages')
   }
-  const turnEnds = await database.$client`
-    select id from events where chat_id = ${chat} and payload->'event'->'update'->>'sessionUpdate' = 'turn_end'`
-  expect(turnEnds).toHaveLength(1)
+  await waitFor(async () => (await turnOf(chat)) === null)
+  expect(await turnEndsOf()).toHaveLength(1)
 }, 60_000)

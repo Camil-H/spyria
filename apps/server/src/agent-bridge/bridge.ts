@@ -316,12 +316,15 @@ export const createAgentBridge = ({
           )
         },
       }
-      const closed = () => {
-        ready.resolve()
-        if (chatSocket.isClosed || sockets.get(keyOf(chat)) !== chatSocket) return
+      const isCurrentSocket = () => !chatSocket.isClosed && sockets.get(keyOf(chat)) === chatSocket
+      const forgetAndReopen = () => {
         sockets.delete(keyOf(chat))
         if (chatSocket.promptId) reopenLater(chat, chatSocket.promptId)
         else forgetStreamOf(chat)
+      }
+      const closed = () => {
+        ready.resolve()
+        if (isCurrentSocket()) forgetAndReopen()
       }
       sockets.set(keyOf(chat), chatSocket)
       if (promptId)
@@ -366,10 +369,9 @@ export const createAgentBridge = ({
             if (!isReadAgain) return eventsReadAgain.delete(eventKey)
             eventsReadAgain.add(eventKey)
             chatSocket.isRecordLost = true
-            opened.then(
-              (socket) => socket.close(),
-              () => {},
-            )
+            if (!isCurrentSocket()) return
+            chatSocket.close()
+            forgetAndReopen()
           })
       }
       const unsentOutputs = new Set<string>()
