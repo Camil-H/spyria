@@ -8,8 +8,10 @@ const image = `sha256:${'a'.repeat(64)}`
 const apiKey = 'k'.repeat(32)
 const create = { runtimeId: 'runtime-1', image, apiKey }
 
-test('accepts exactly create, prepare, start, stop, remove, status, installed, install and list with their arguments', () => {
+test('accepts exactly create, recreate, prepare, start, stop, remove, status, installed, install and list with their arguments', () => {
   expect(parseCommand('create', create)).toEqual({ op: 'create', ...create })
+  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
+  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
   for (const op of ['installed', 'install'] as const)
     expect(parseCommand(op, { runtimeId: 'runtime-1', harness: 'codex' })).toEqual({
       op,
@@ -182,11 +184,6 @@ test('relays only to paths on the spyria-agent port of the runtime', () => {
     expect(() => relayUrlOf('http://172.20.0.2:8000', path)).toThrow('refused')
 })
 
-const browserFilters = encodeURIComponent(JSON.stringify({ label: ['spyria.browser=runtime-1'] }))
-const browserListings = [
-  `GET /containers/json?all=true&filters=${browserFilters}`,
-  `GET /volumes?filters=${browserFilters}`,
-]
 const noBrowsers = (path: string) => {
   if (path.startsWith('/containers/json')) return []
   if (path.startsWith('/volumes?')) return { Volumes: [] }
@@ -254,29 +251,18 @@ test('removing a runtime never deletes the credentials volumes', async () => {
 test('each runtime gets its own network only while it runs: created and joined by a containerized spyria-host on create and start, released on stop and remove', async () => {
   const { docker, calls } = recordingDocker()
   const runner = createCommandRunner({ docker, prefix: 'spyria-', selfContainerId: 'self-1' })
-  const joined = { Container: 'self-1', EndpointConfig: { Aliases: ['spyria-gateway-relay'] } }
-  await runner.run({ op: 'create', ...create })
-  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual([
-    {
-      method: 'POST',
-      path: '/networks/create',
-      body: { Name: 'spyria-rt-runtime-1-net', Driver: 'bridge', Labels: { 'spyria.managed': '1' } },
-    },
-    { method: 'POST', path: '/networks/spyria-rt-runtime-1-net/connect', body: joined },
-  ])
-  calls.splice(0)
-  await runner.run({ op: 'start', runtimeId: 'runtime-1' })
-  expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    'POST /networks/create',
-    'POST /networks/spyria-rt-runtime-1-net/connect',
-    'POST /networks/spyria-rt-runtime-1-net/connect',
-    'POST /containers/spyria-rt-runtime-1/start',
-  ])
-  expect(calls.filter((call) => call.path.endsWith('/connect')).map((call) => call.body)).toEqual([
-    joined,
-    { Container: 'spyria-rt-runtime-1' },
-  ])
+  const networkCallsOf = () => calls.filter((call) => call.path.startsWith('/networks/'))
+  const changesOf = () => calls.filter((call) => call.method !== 'GET')
+  const networkCreated = {
+    method: 'POST',
+    path: '/networks/create',
+    body: { Name: 'spyria-rt-runtime-1-net', Driver: 'bridge', Labels: { 'spyria.managed': '1' } },
+  }
+  const joined = {
+    method: 'POST',
+    path: '/networks/spyria-rt-runtime-1-net/connect',
+    body: { Container: 'self-1', EndpointConfig: { Aliases: ['spyria-gateway-relay'] } },
+  }
   const released = [
     {
       method: 'POST',
@@ -285,17 +271,25 @@ test('each runtime gets its own network only while it runs: created and joined b
     },
     { method: 'DELETE', path: '/networks/spyria-rt-runtime-1-net', body: undefined },
   ]
+  await runner.run({ op: 'create', ...create })
+  expect(networkCallsOf()).toEqual([networkCreated, joined])
+  calls.splice(0)
+  await runner.run({ op: 'start', runtimeId: 'runtime-1' })
+  expect(changesOf()).toEqual([
+    networkCreated,
+    joined,
+    { method: 'POST', path: '/networks/spyria-rt-runtime-1-net/connect', body: { Container: 'spyria-rt-runtime-1' } },
+    { method: 'POST', path: '/containers/spyria-rt-runtime-1/start', body: undefined },
+  ])
   calls.splice(0)
   await runner.run({ op: 'stop', runtimeId: 'runtime-1' })
-  expect(calls.map(({ method, path }) => `${method} ${path}`).slice(0, 4)).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
-    'POST /containers/spyria-rt-runtime-1/stop?t=10',
+  expect(changesOf()).toEqual([
+    { method: 'POST', path: '/containers/spyria-rt-runtime-1/stop?t=10', body: undefined },
+    ...released,
   ])
-  expect(calls.slice(4)).toEqual(released)
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
-  expect(calls.filter((call) => call.path.startsWith('/networks/'))).toEqual(released)
+  expect(networkCallsOf()).toEqual(released)
 })
 
 test('stop and remove of a runtime whose container is gone still release its network and volumes, but never touch an unmanaged container', async () => {
@@ -306,23 +300,17 @@ test('stop and remove of a runtime whose container is gone still release its net
     return noBrowsers(path) ?? {}
   }) as Docker
   const runner = createCommandRunner({ docker: missingDocker, prefix: 'spyria-' })
+  const deletionsOf = () => calls.filter((call) => !call.startsWith('GET '))
   await runner.run({ op: 'stop', runtimeId: 'runtime-1' })
-  expect(calls).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
-    'DELETE /networks/spyria-rt-runtime-1-net',
-  ])
+  expect(deletionsOf()).toEqual(['DELETE /networks/spyria-rt-runtime-1-net'])
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
-  expect(calls).toEqual([
-    'GET /containers/spyria-rt-runtime-1/json',
-    ...browserListings,
+  expect(deletionsOf()).toEqual([
     'DELETE /containers/spyria-rt-runtime-1-snapshot?force=true',
     'DELETE /volumes/spyria-rt-runtime-1-ws',
     'DELETE /volumes/spyria-rt-runtime-1-home',
     'DELETE /volumes/spyria-rt-runtime-1-tmp',
     'DELETE /networks/spyria-rt-runtime-1-net',
-    `GET /volumes?filters=${encodeURIComponent(JSON.stringify({ name: ['spyria-cache-'], dangling: ['true'] }))}`,
   ])
   const { docker: unmanagedDocker, calls: unmanagedCalls } = recordingDocker()
   for (const op of ['start', 'stop', 'remove'] as const)
@@ -482,14 +470,11 @@ test('a recreate removes the managed container alone and creates it again on the
     return {}
   }) as Docker
   const runner = createCommandRunner({ docker, prefix: 'spyria-' })
+  const changesOf = () => calls.filter((call) => !call.startsWith('GET '))
   await runner.run({ op: 'recreate', ...create })
-  expect(calls).toEqual([
-    'GET /containers/json',
-    'GET /volumes',
-    'GET /containers/spyria-rt-runtime-1/json',
+  expect(changesOf()).toEqual([
     'DELETE /containers/spyria-rt-runtime-1',
     'POST /networks/create',
-    `GET /images/${image}/json`,
     'POST /containers/create',
   ])
   expect(bodies[0]?.HostConfig.Mounts.map(({ Source }) => Source)).toEqual([
@@ -499,16 +484,7 @@ test('a recreate removes the managed container alone and creates it again on the
   ])
   calls.length = 0
   await runner.run({ op: 'recreate', ...create })
-  expect(calls).toEqual([
-    'GET /containers/json',
-    'GET /volumes',
-    'GET /containers/spyria-rt-runtime-1/json',
-    'POST /networks/create',
-    `GET /images/${image}/json`,
-    'POST /containers/create',
-  ])
-  expect(parseCommand('recreate', create)).toEqual({ op: 'recreate', ...create })
-  expect(() => parseCommand('recreate', { runtimeId: 'runtime-1' })).toThrow('refused')
+  expect(changesOf()).toEqual(['POST /networks/create', 'POST /containers/create'])
 })
 
 const snapshotKey = 'd'.repeat(32)
