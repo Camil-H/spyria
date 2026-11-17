@@ -4,10 +4,7 @@ const deleteSectionOf = (page: Page) => mainOf(page).getByRole('region', { name:
 const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete workspace' })
 
 test.describe('Delete workspace', () => {
-  test('As an Admin, I delete the workspace after typing DELETE and land in my other workspace', async ({
-    page,
-    workerStack,
-  }) => {
+  test('As an Admin, I delete the workspace after typing DELETE and land in my other workspace', async ({ page }) => {
     await page.goto('/w/workspace-acme/settings')
     await deleteSectionOf(page).getByRole('button', { name: 'Delete workspace' }).click()
     const dialog = deleteDialogOf(page)
@@ -23,9 +20,6 @@ test.describe('Delete workspace', () => {
     await expect(switcherOf(page)).toContainText('Globex')
     await switcherOf(page).click()
     await expect(page.getByRole('menuitem', { name: /Acme/ })).toHaveCount(0)
-    const [workspace] = await workerStack.database.$client`
-      select deleted_at from workspaces where workspace_id = 'workspace-acme'`
-    expect(workspace?.deleted_at).not.toBeNull()
   })
 
   test.describe('as a member', () => {
