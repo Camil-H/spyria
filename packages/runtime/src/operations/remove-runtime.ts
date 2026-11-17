@@ -1,6 +1,7 @@
 import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
+import { HostNotConnected } from '../domain/errors.ts'
 import { locationOf, transitioned } from '../domain/runtime.ts'
 import { recordIfUnchanged } from './record-if-unchanged.ts'
 
@@ -17,7 +18,7 @@ export const removeRuntime = async (
   const isRemoved = await provider.remove(sandbox).then(
     () => true,
     (error: unknown) => {
-      if (!isLastAttempt) throw error
+      if (!isLastAttempt || error instanceof HostNotConnected) throw error
       log.error({
         event: 'runtime.remove_failed',
         body: 'A runtime could not be removed: it is recorded as failed for the sweep to remove later',

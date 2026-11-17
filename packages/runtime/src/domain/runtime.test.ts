@@ -68,7 +68,7 @@ test('a transition stamps its time and sets or clears the failure', () => {
   expect(transitioned(failed, 'removing', now + 6)).toMatchObject({ failure: null, stateChangedAt: now + 6 })
 })
 
-test('a failed bring-up fails with its reason on an online host; on an offline one a runtime that ran goes back to stopped there, and a new one fails with no_host to be placed elsewhere', () => {
+test('a failed bring-up fails with its reason on an online host; on an offline one a runtime that ran goes back to stopped there, and a new one fails with no_host to be placed elsewhere; a host found not connected counts as offline without changing the host status it keeps', () => {
   const ran = { agentProtocolVersion: 2 }
   expect(
     failedBringUpOf(runtime({ state: 'starting', hostOnline: true, ...ran }), now + 1, 'start_failed'),
@@ -82,6 +82,9 @@ test('a failed bring-up fails with its reason on an online host; on an offline o
       failure: null,
       hostId: 'host-1',
     })
+  expect(
+    failedBringUpOf(runtime({ state: 'starting', hostOnline: true, ...ran }), now + 1, 'start_failed', false),
+  ).toMatchObject({ state: 'stopped', failure: null, hostOnline: true })
   expect(failedBringUpOf(runtime({ state: 'creating', hostOnline: false }), now + 1, 'create_failed')).toMatchObject({
     state: 'failed',
     failure: 'no_host',

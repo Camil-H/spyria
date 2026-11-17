@@ -273,6 +273,35 @@ test('a runtime whose host drops while it starts goes back to stopped on that ho
   expect(host.commands.filter(({ runtimeId }) => runtimeId === runtime.id).map(({ op }) => op)).not.toContain('remove')
 })
 
+test('a stop or a removal that runs out of attempts while its host is disconnected stays pending and finishes once the host returns', async () => {
+  const host = await fakeHost('Disconnected Docker host')
+  const [stoppingChat, removingChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const stopping = await runningRuntime(stoppingChat)
+  const removing = await stoppedRuntime(removingChat)
+  await host.disconnect()
+  await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
+  await database.$client`update runtimes set host_online = true where host_id = ${host.id}`
+  const capturedConsole = captureConsole()
+  await zeroDatabase.transaction((tx) =>
+    stopChatRuntime(
+      { transactor: createRuntimeTransactor(tx) },
+      { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
+    ),
+  )
+  expect(await archive(removingChat)).toEqual(succeeded)
+  await waitFor(async () => (await jobsOf('runtime.stop', stopping.id)).some((job) => job.state === 'failed'), 15_000)
+  await waitFor(async () => (await jobsOf('runtime.remove', removing.id)).some((job) => job.state === 'failed'), 15_000)
+  capturedConsole.restore()
+  expect((await runtimeOf(stoppingChat)).state).toBe('stopping')
+  expect((await runtimeOf(removingChat)).state).toBe('removing')
+
+  await host.connect()
+  await runtimeIn(stoppingChat, 'stopped')
+  await runtimeIn(removingChat, 'removed')
+  expect(host.containers.get(stopping.id)?.running).toBe(false)
+  expect(host.containers.has(removing.id)).toBe(false)
+})
+
 test('after a server restart, a start that runs before the host reconnects leaves a runtime that already ran stopped, and it starts there once the host returns', async () => {
   const host = await fakeHost('Restarted server host')
   const chat = await newRuntimeChat()

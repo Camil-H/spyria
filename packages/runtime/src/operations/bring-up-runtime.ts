@@ -86,7 +86,7 @@ export const bringUpRuntime = async (
           : 'start_failed'
     const isHostGone = error instanceof HostNotConnected
     const overtaken = await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
-      runtimes.save(failedBringUpOf(isHostGone ? { ...current, hostOnline: false } : current, now, failure)),
+      runtimes.save(failedBringUpOf(current, now, failure, !isHostGone && current.hostOnline)),
     )
     await (overtaken ? cleanUpOvertaken(provider, sandbox, overtaken) : provider.stop(sandbox)).catch(() => {})
     log.error({
