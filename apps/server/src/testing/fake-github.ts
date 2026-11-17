@@ -147,6 +147,7 @@ export const startFakeGitHub = () => {
   let installationPermissions = grantedAppPermissions
   const userTokens = new Map<string, number>()
   const refreshTokens = new Set<string>()
+  let refreshFailureStatus: number | null = null
   const codes = new Set<string>()
   const gitAuthorizations: string[] = []
   const apiRequests: string[] = []
@@ -602,6 +603,8 @@ export const startFakeGitHub = () => {
         const parameters = Object.fromEntries(new URLSearchParams(await request.text()))
         if (parameters.client_id !== fakeGitHubClientId || parameters.client_secret !== fakeGitHubClientSecret)
           return Response.json({ error: 'incorrect_client_credentials' })
+        if (parameters.grant_type === 'refresh_token' && refreshFailureStatus !== null)
+          return new Response('Bad gateway', { status: refreshFailureStatus })
         if (parameters.grant_type === 'refresh_token')
           return refreshTokens.delete(parameters.refresh_token ?? '')
             ? userTokensIssued()
@@ -643,6 +646,9 @@ export const startFakeGitHub = () => {
       for (const token of userTokens.keys()) userTokens.set(token, 0)
     },
     revokeRefreshTokens: () => refreshTokens.clear(),
+    failRefreshesWith: (status: number | null) => {
+      refreshFailureStatus = status
+    },
     setInstallationPermissions: (permissions: Permissions = grantedAppPermissions) => {
       installationPermissions = permissions
     },
