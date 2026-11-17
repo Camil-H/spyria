@@ -25,7 +25,7 @@ const severityNumbers = { INFO: SeverityNumber.INFO, WARN: SeverityNumber.WARN, 
 const secretKeyPart = /^(token|secret|password|authorization|cookie|key|body|prompt|content|query|full)$/i
 const writeToStdout = (line: string) => void process.stdout.write(`${line}\n`)
 
-export const loggedAttributesOf = (attributes: LogAttributes) =>
+const loggedAttributesOf = (attributes: LogAttributes) =>
   Object.fromEntries(
     Object.entries(attributes).flatMap(([key, value]) =>
       value === undefined || key.split(/[._-]|(?=[A-Z])/).some((part) => secretKeyPart.test(part))
@@ -57,7 +57,7 @@ const emitted =
 
 export const log = { info: emitted('INFO'), warn: emitted('WARN'), error: emitted('ERROR') }
 
-export const lineOf = (record: ReadableLogRecord) =>
+const lineOf = (record: ReadableLogRecord) =>
   JSON.stringify({
     timestamp: new Date(hrTimeToMilliseconds(record.hrTime)).toISOString(),
     severity: record.severityText,

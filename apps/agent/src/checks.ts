@@ -12,7 +12,7 @@ const maximumTimeoutMinutes = 120
 
 const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
-export const checksOf = (body: unknown): Check[] | { failure: string } => {
+const checksOf = (body: unknown): Check[] | { failure: string } => {
   const checks = (body as { checks?: unknown } | undefined)?.checks
   if (!Array.isArray(checks) || checks.length === 0 || checks.length > maximumChecks)
     return { failure: `Give between 1 and ${maximumChecks} checks` }
