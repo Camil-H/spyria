@@ -96,7 +96,7 @@ A chat with messages a member has not seen shows an **Unread messages** icon in 
 
 ## Sharing a chat and chat roles
 
-A chat's participants and their roles are in the **Members** tab of the side panel, where a member with the right permissions can **Invite** another workspace member with a role, change a participant's role, or **Remove** them (private chats only). Anyone but the owner can **Leave chat**.
+A chat's participants and their roles are in the **Members** tab of the side panel, where a member with the right permissions can **Invite** another workspace member with a role, change a participant's role from the small role picker on their row, or **Remove** them (private chats only). Anyone but the owner can **Leave chat**. **Invite** and **Leave chat** are icons in the tab's header row, and **Remove** is an icon at the end of the participant's row.
 
 A role is a named set of permissions. Spyria ships four built-in chat roles; admins can add custom chat roles in Workspace settings (see [Admin](./admin.md)).
 

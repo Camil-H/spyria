@@ -7,18 +7,22 @@ import {
   fieldClass,
   focusRing,
   ghostButtonClass,
+  iconButtonClass,
   labelClass,
   useGuardedAction,
   useNotifiedRun,
 } from '@spyria/ui'
+import { LogOut, UserPlus, X } from 'lucide-react'
 import { type SubmitEvent, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { getMembers } from '../queries/get-members.ts'
 import { usePanelCommands } from './providers.tsx'
 import type { TabProps } from './TabProps.ts'
 
 type Option = { value: string; label: string }
 
-const removeButtonClass = `rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`
+const roleSelectClass = `rounded-md bg-raised bg-[position:right_0.25rem_center] py-0.5 pr-6 pl-1.5 text-xs text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`
+const memberActionClass = `${iconButtonClass} disabled:cursor-not-allowed disabled:opacity-60`
 
 const optionsOf = (options: readonly Option[]) =>
   options.map((option) => (
@@ -72,7 +76,7 @@ const InviteForm = ({
   )
 }
 
-const MembersTab = ({ workspaceId, chatId }: TabProps) => {
+const MembersTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
   const { memberId: viewerId } = useSession()
   const view = useQuery(getMembers, workspaceId, chatId, viewerId)
   const commands = usePanelCommands()
@@ -96,7 +100,7 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
               <span className="flex items-center gap-1">
                 <select
                   aria-label={`Role of ${name}`}
-                  className={fieldClass}
+                  className={roleSelectClass}
                   value={roleId}
                   disabled={isPending}
                   onChange={(event) =>
@@ -112,13 +116,14 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
                   <button
                     type="button"
                     aria-label={`Remove ${name}`}
-                    className={removeButtonClass}
+                    title={`Remove ${name}`}
+                    className={memberActionClass}
                     disabled={isPending}
                     onClick={() =>
                       runNotified(() => commands.removeMember({ ...target, memberId }), `${name} removed from the chat`)
                     }
                   >
-                    Remove
+                    <X aria-hidden className="size-4" />
                   </button>
                 )}
               </span>
@@ -128,35 +133,50 @@ const MembersTab = ({ workspaceId, chatId }: TabProps) => {
           </li>
         ))}
       </ul>
-      {canInvite &&
-        (isInviting ? (
-          <InviteForm
-            invitees={view.invitees.map(({ memberId, name }) => ({ value: memberId, label: name }))}
-            roles={roleOptions(view.invitableRoles)}
-            invite={(memberId, roleId) =>
-              runNotified(
-                () => commands.inviteMember({ ...target, memberId, roleId }),
-                `${nameOf(memberId)} added to the chat`,
-              )
-            }
-            isPending={isPending}
-            onClose={() => setIsInviting(false)}
-          />
-        ) : (
-          <button type="button" className={`${ghostButtonClass} self-start`} onClick={() => setIsInviting(true)}>
-            Invite
-          </button>
-        ))}
-      {view.canLeave && (
-        <button
-          type="button"
-          className={`${ghostButtonClass} self-start`}
-          disabled={isPending}
-          onClick={() => runNotified(() => commands.leaveChat(target), 'You left the chat')}
-        >
-          Leave chat
-        </button>
+      {isInviting && canInvite && (
+        <InviteForm
+          invitees={view.invitees.map(({ memberId, name }) => ({ value: memberId, label: name }))}
+          roles={roleOptions(view.invitableRoles)}
+          invite={(memberId, roleId) =>
+            runNotified(
+              () => commands.inviteMember({ ...target, memberId, roleId }),
+              `${nameOf(memberId)} added to the chat`,
+            )
+          }
+          isPending={isPending}
+          onClose={() => setIsInviting(false)}
+        />
       )}
+      {actionsSlot &&
+        createPortal(
+          <>
+            {canInvite && (
+              <button
+                type="button"
+                aria-label="Invite"
+                title="Invite"
+                aria-expanded={isInviting}
+                onClick={() => setIsInviting(!isInviting)}
+                className={memberActionClass}
+              >
+                <UserPlus aria-hidden className="size-4" />
+              </button>
+            )}
+            {view.canLeave && (
+              <button
+                type="button"
+                aria-label="Leave chat"
+                title="Leave chat"
+                disabled={isPending}
+                onClick={() => runNotified(() => commands.leaveChat(target), 'You left the chat')}
+                className={memberActionClass}
+              >
+                <LogOut aria-hidden className="size-4" />
+              </button>
+            )}
+          </>,
+          actionsSlot,
+        )}
       <ErrorMessage message={errorMessage} />
     </div>
   )
