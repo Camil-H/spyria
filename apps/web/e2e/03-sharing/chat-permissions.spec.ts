@@ -266,21 +266,14 @@ test.describe('Chat permissions', () => {
       await page.goto('/')
     })
 
-    test('As a chat owner, I am offered no custom role without Post in a public channel, and an Editor invites only with roles within his own permissions', {
+    test('As a chat owner, I am offered no custom role without Post in a public channel', {
       tag: ['@spec-47'],
-    }, async ({ page, browser, workerStack }) => {
+    }, async ({ page, workerStack }) => {
       await insertRole(workerStack, 'role-reviewer', 'Reviewer', ['chat.read', 'session.configure'])
       await insertRole(workerStack, 'role-keeper', 'Keeper', ['chat.read', 'tools.manage'])
       await insertRole(workerStack, 'role-poster', 'Poster', ['chat.read', 'chat.post'])
       await openPanelTab(page, 'Welcome', 'Members')
       expect(await inviteRoleOptionsOf(page)).toEqual(['Editor', 'Prompter', 'Poster'])
-
-      const chatId = await newRuntimeChat(page, 'Bob edits roles')
-      await addParticipant(workerStack, chatId, 'member-bob', 'editor')
-      const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-      await openPanelTab(bobPage, 'Bob edits roles', 'Members')
-      expect(await inviteRoleOptionsOf(bobPage)).toEqual(['Editor', 'Prompter', 'Poster', 'Reviewer', 'Reader'])
-      await bobPage.context().close()
     })
   })
 })

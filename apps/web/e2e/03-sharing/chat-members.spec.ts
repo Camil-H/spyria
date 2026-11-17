@@ -7,6 +7,7 @@ import {
   chatLinkOf,
   expect,
   expectMembers,
+  insertRole,
   mainOf,
   messageContaining,
   messageItemsOf,
@@ -103,9 +104,12 @@ test.describe('Chat members', () => {
     await bobPage.context().close()
   })
 
-  test('As an Editor, I invite with Editor, Prompter or Reader, never Owner, and get no role select or Remove', {
-    tag: ['@spec-29'],
+  test('As an Editor, I invite only with roles within my own permissions, never Owner, and get no role select or Remove', {
+    tag: ['@spec-29', '@spec-47'],
   }, async ({ page, browser, workerStack }) => {
+    await insertRole(workerStack, 'role-reviewer', 'Reviewer', ['chat.read', 'session.configure'])
+    await insertRole(workerStack, 'role-keeper', 'Keeper', ['chat.read', 'tools.manage'])
+    await insertRole(workerStack, 'role-poster', 'Poster', ['chat.read', 'chat.post'])
     const chatId = await newRuntimeChat(page, 'Bob edits')
     await addParticipant(workerStack, chatId, 'member-bob', 'editor')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -118,7 +122,7 @@ test.describe('Chat members', () => {
     await expect(tabPanelOf(bobPage).getByRole('button', { name: /^Remove/ })).toHaveCount(0)
 
     await tabPanelOf(bobPage).getByRole('button', { name: 'Invite' }).click()
-    expect(await optionsOf(bobPage, 'Role')).toEqual(['Editor', 'Prompter', 'Reader'])
+    expect(await optionsOf(bobPage, 'Role')).toEqual(['Editor', 'Prompter', 'Poster', 'Reviewer', 'Reader'])
     expect(await optionsOf(bobPage, 'Member')).toEqual(['Lee'])
     await inviteFormOf(bobPage).getByRole('button', { name: 'Cancel' }).click()
     await invite(bobPage, 'Lee', 'Editor')
