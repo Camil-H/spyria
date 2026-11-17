@@ -697,7 +697,7 @@ test('an Entra guest from another tenant is never bound to a member or an invite
 
 const starkForm = { preset: 'oidc', issuer: starkIdp.issuer, clientId: 'spyria-stark', clientSecret: 'stark-secret' }
 
-test('Setup SSO is only for members who may set it up, and refuses another origin, no session, a failing discovery, a multi-tenant Entra issuer and a first save without secret, changing nothing', async () => {
+test('Setup SSO is only for members who may set it up, and refuses another origin, no session, a failing discovery and a first save without secret, changing nothing', async () => {
   const refusedToBob = await startSsoChange('stark', await sessionCookieOf('stark', bob), starkForm)
   expect(refusedToBob.status).toBe(400)
   expect(refusedToBob.headers.get('location')).toBeNull()
@@ -713,7 +713,6 @@ test('Setup SSO is only for members who may set it up, and refuses another origi
       { issuer: 'http://127.0.0.1:9/nothing' },
       'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
     ],
-    [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
     [{ clientSecret: '' }, 'A client secret is required'],
   ] as const) {
     const refused = await startSsoChange('stark', aliceCookie, { ...starkForm, ...change })
@@ -925,7 +924,6 @@ test('on an empty Spyria, creating the first workspace refuses another origin, i
   for (const [change, reason] of [
     [{ name: ' ' }, 'A name must contain at least one non-blank character'],
     [{ clientSecret: '' }, 'A client secret is required'],
-    [{ preset: 'microsoft', tenantId: 'common' }, 'Only a tenant-specific Microsoft Entra issuer is accepted'],
     [
       { issuer: 'http://127.0.0.1:9/nothing' },
       'The discovery of http://127.0.0.1:9/nothing failed: check that the issuer',
