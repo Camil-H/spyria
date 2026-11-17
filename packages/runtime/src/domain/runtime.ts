@@ -18,6 +18,7 @@ export type RuntimeFailure =
   | 'no_image'
   | 'create_failed'
   | 'start_failed'
+  | 'remove_failed'
   | 'lost'
   | 'outdated'
   | `${typeof installFailedPrefix}${string}`

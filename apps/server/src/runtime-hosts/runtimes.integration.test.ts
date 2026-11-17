@@ -15,7 +15,7 @@ import {
 import { websocket } from 'hono/bun'
 import { createApp } from '../app.ts'
 import { secretsKeyringOf } from '../auth/secret-box.ts'
-import { startJobWorker } from '../job-worker.ts'
+import { maximumJobAttempts, startJobWorker } from '../job-worker.ts'
 import {
   acme,
   alice,
@@ -294,6 +294,26 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
   expect((await runtimeOf(touchedChat)).state).toBe('running')
   expect(host.commands.filter((command) => command.op === 'stop').map((command) => command.runtimeId)).toEqual([
     idle.id,
+  ])
+})
+
+test('a stop or a removal that keeps failing while its host stays connected records the runtime stopped, or failed for a later retry, on its last attempt', async () => {
+  const host = await fakeHost('Failing Docker host')
+  const [stoppingChat, removingChat] = [await newRuntimeChat(), await newRuntimeChat()]
+  const stopping = await runningRuntime(stoppingChat)
+  await stoppedRuntime(removingChat)
+  host.failing('stop')
+  host.failing('remove')
+  const capturedConsole = captureConsole()
+  await idleFor(stoppingChat, '2 hours')
+  await idleFor(removingChat, '8 days')
+  await sweep()
+  await runtimeIn(stoppingChat, 'stopped')
+  await runtimeIn(removingChat, 'failed')
+  capturedConsole.restore()
+  expect((await runtimeOf(removingChat)).failure).toBe('remove_failed')
+  expect((await jobsOf('runtime.stop', stopping.id)).map(({ state, attempts }) => ({ state, attempts }))).toEqual([
+    { state: 'done', attempts: maximumJobAttempts },
   ])
 })
 
