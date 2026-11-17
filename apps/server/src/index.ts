@@ -1,3 +1,4 @@
+import './secret-files.ts'
 import { createDatabase } from '@spyria/db/postgres'
 import { setModelDirectory } from '@spyria/db/server-writes'
 import { deploymentOf, log } from '@spyria/kernel'

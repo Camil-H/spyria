@@ -1,3 +1,4 @@
+import './secret-files.ts'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { rebuildMessages } from '@spyria/conversation/server'
 import { createDatabase } from '@spyria/db/postgres'

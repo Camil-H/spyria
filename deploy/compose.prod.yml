@@ -24,7 +24,7 @@ services:
   migrate:
     image: *server-image
     container_name: ${SPYRIA_DEPLOYMENT}-migrate
-    command: [bun, run, --cwd, packages/db, migrate]
+    command: [bun, --preload, ./apps/server/src/secret-files.ts, packages/db/src/postgres/migrate.ts]
     environment:
       DATABASE_URL: *database-url
     depends_on:
