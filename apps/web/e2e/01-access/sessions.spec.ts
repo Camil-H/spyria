@@ -68,6 +68,9 @@ test.describe('Sessions', () => {
     })
 
     await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
+    await composerOf(page).fill('Sent before logout')
+    await composerOf(page).press('ControlOrMeta+Enter')
+    await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
     await composerOf(page).fill('Draft before logout')
     const urlBeforeLogout = page.url()
 
@@ -79,10 +82,11 @@ test.describe('Sessions', () => {
       await expect(page.getByRole('link', { name: 'Go to Globex' })).toBeVisible()
     })
 
-    await test.step('signing in again from the signed-out screen restores Acme with its route and draft', async () => {
+    await test.step('signing in again from the signed-out screen restores Acme with its route, messages and draft', async () => {
       await signInThroughProvider(page, 'alice@example.com')
       expect(page.url()).toBe(urlBeforeLogout)
       await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
+      await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
       await expect(composerOf(page)).toHaveValue('Draft before logout')
       expect(await menuItemNamesOf(page)).toEqual(alicesWorkspacesSignedIn)
     })
