@@ -1,35 +1,23 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createSpyriaAgentClient } from '@spyria/conversation/server'
 import { testGatewayAdmin } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { runtimeHostId } from '@spyria/kernel'
 import { createBifrostUsageLogs, syncUsageNow } from '@spyria/usage/server'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
-import { createModelCallRelay } from '../llm-relay.ts'
-import { createRuntimeHostGateway } from '../runtime-hosts/gateway.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { withSpan } from '../telemetry.ts'
+import { startDockerTestHost } from '../testing/docker-runtime-host.ts'
 import { startTestTelemetry } from '../testing/telemetry.ts'
 import {
   acme,
   addLlmKey,
   alice,
-  aliceInAcme,
   bob,
   gatewayLogsOf,
   openSharedTestApp,
   runtimeTurn,
-  sessionTokenOf,
-  testAuthSettings,
-  testSecretsKeyring,
   waitFor,
 } from '../testing/testing.ts'
-import { createAgentBridge } from './bridge.ts'
 
 setDefaultTimeout(180_000)
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
@@ -38,91 +26,25 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 
 const { database, gateway, llmGateway, fakeLlmBodies, setFakeLlmScript } = await openSharedTestApp()
-const runtimeHosts = createRuntimeHostGateway({
-  secretsKeyring: testSecretsKeyring,
-  databases: () => [database],
-  spyriaAgentImage: spyriaImage,
-  relayModelCall: createModelCallRelay({ llmGateway, agentBridge: () => agentBridge }),
-})
-const agentBridge = createAgentBridge({ sandboxProvider: runtimeHosts.sandboxProvider, spyriaAgentImage: spyriaImage })
-const app = createApp({ database, ...testAuthSettings, llmGateway, runtimeHosts, agentBridge })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
-const prefix = `${deployment}-`
-const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
-const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-let hostProcess: ReturnType<typeof Bun.spawn> | undefined
-const hostOutput: string[] = []
-const listed = (...command: string[]) =>
-  docker(...command, '--filter', `name=^${prefix}`)
-    .stdout.toString()
-    .split('\n')
-    .filter(Boolean)
+const dockerHost = await startDockerTestHost({ database, spyriaAgentImage: spyriaImage, personal: true, llmGateway })
+const runtimeHosts = dockerHost.gateway
 afterAll(async () => {
   setFakeLlmScript(undefined)
-  agentBridge.release(database)
-  hostProcess?.kill()
-  await hostProcess?.exited
-  const containers = listed('ps', '-aq')
-  if (containers.length > 0) docker('rm', '-f', ...containers)
-  for (const volume of listed('volume', 'ls', '-q')) docker('volume', 'rm', '-f', volume)
-  for (const network of listed('network', 'ls', '-q')) docker('network', 'rm', network)
-  void server.stop(true)
-  rmSync(stateDirectory, { recursive: true, force: true })
+  await dockerHost.cleanup()
 })
-
-const startHost = async () => {
-  const added = await app.request('/api/runtime-hosts', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(database, acme, aliceInAcme.userId)}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ personal: true }),
-  })
-  const { id, code } = (await added.json()) as { id: string; code: string }
-  const spawned = Bun.spawn(
-    [process.execPath, hostProgram, '--personal', `http://localhost:${server.port}/h/${code}`],
-    {
-      env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
-      stdout: 'pipe',
-      stderr: 'inherit',
-    },
-  )
-  hostProcess = spawned
-  void (async () => {
-    for await (const chunk of spawned.stdout) {
-      hostOutput.push(new TextDecoder().decode(chunk))
-      process.stdout.write(chunk)
-    }
-  })()
-  await waitFor(
-    async () => (await database.$client`select status from runtime_hosts where id = ${id}`)[0]?.status === 'online',
-    30_000,
-  )
-  return id
-}
 
 const apiKey = runtimeHosts.sandboxProvider.apiKeyOf({ workspaceId: acme, runtimeId: 'pi-smoke' })
 type AgentTransport = ReturnType<typeof runtimeHosts.sandboxProvider.connect>
 let runtimeStarted: Promise<{ id: string; transport: AgentTransport }> | undefined
 const startRuntime = async () => {
-  const id = await startHost()
-  const host = { workspaceId: acme, hostId: runtimeHostId(id) }
+  const host = { workspaceId: acme, hostId: dockerHost.hostId }
   await runtimeHosts.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'pi-smoke' }
   await runtimeHosts.sandboxProvider.create({ ...runtime, image: spyriaImage })
-  const [created] = JSON.parse(docker('inspect', `${prefix}rt-pi-smoke`).stdout.toString())
+  const [created] = JSON.parse(docker('inspect', `${dockerHost.prefix}rt-pi-smoke`).stdout.toString())
   expect(created.HostConfig.ExtraHosts).toEqual(['host.docker.internal:host-gateway'])
   await runtimeHosts.sandboxProvider.start(runtime)
-  const transport = runtimeHosts.sandboxProvider.connect(runtime)
-  const isReady = () =>
-    transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-      (response) => response.status === 200,
-      () => false,
-    )
-  await waitFor(isReady, 30_000)
-  return { id, transport }
+  return { id: dockerHost.hostId, transport: await dockerHost.readyRuntime(runtime) }
 }
 const runtime = () => {
   runtimeStarted ??= startRuntime()
@@ -434,7 +356,7 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       .map((line) => JSON.parse(line))
   try {
     const traceId = await withSpan('test turn', {}, async (span) => {
-      await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'pi-smoke' })
+      await runtimeHosts.sandboxProvider.status({ workspaceId: acme, hostId: dockerHost.hostId, runtimeId: 'pi-smoke' })
       const pi = await piConversationOf(transport, token, {
         adapterModel: 'spyria/mistral/mistral-medium-latest',
         pi: {
@@ -449,14 +371,16 @@ test('a turn through a real spyria-host and spyria-agent carries the server’s 
       return span.spanContext().traceId
     })
     await waitFor(() =>
-      linesOf(hostOutput.join('')).some((line) => line['event.name'] === 'host.command' && line.trace_id === traceId),
+      linesOf(dockerHost.hostOutput()).some(
+        (line) => line['event.name'] === 'host.command' && line.trace_id === traceId,
+      ),
     )
-    expect(linesOf(hostOutput.join('')).find((line) => line.trace_id === traceId)).toMatchObject({
+    expect(linesOf(dockerHost.hostOutput()).find((line) => line.trace_id === traceId)).toMatchObject({
       'service.name': 'spyria-host',
       'event.name': 'host.command',
       'host.command': 'status',
     })
-    const agentLines = () => linesOf(docker('logs', `${prefix}rt-pi-smoke`).stdout.toString())
+    const agentLines = () => linesOf(docker('logs', `${dockerHost.prefix}rt-pi-smoke`).stdout.toString())
     await waitFor(() => agentLines().some((line) => line['event.name'] === 'agent.turn' && line.trace_id === traceId))
     expect(agentLines().find((line) => line['event.name'] === 'agent.listening')).toMatchObject({
       'service.name': 'spyria-agent',
