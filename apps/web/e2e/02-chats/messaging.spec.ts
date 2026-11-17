@@ -1,4 +1,5 @@
 import {
+  agentReplyText,
   chatLinkOf,
   chipOf,
   composerOf,
@@ -19,6 +20,7 @@ import {
   sendButtonOf,
   sendMessage,
   test,
+  workingIndicatorOf,
 } from './fixtures'
 
 const onePixelPng = Buffer.from(
@@ -45,6 +47,12 @@ test.describe('Messaging', () => {
       await expect(messageItemsOf(page).nth(2)).toContainText('Hello team')
       await expect(composerOf(page)).toHaveValue('')
       await expect(composerOf(page)).toBeFocused()
+    })
+
+    await test.step('appends only the member message', async () => {
+      await expect(workingIndicatorOf(page)).toHaveCount(0)
+      await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
+      await expect(messageItemsOf(page)).toHaveCount(3)
     })
 
     await test.step('sends with Cmd+Enter', async () => {
