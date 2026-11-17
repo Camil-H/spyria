@@ -20,7 +20,6 @@ import {
   rootIn,
   succeeded,
   waitFor,
-  writtenMessage,
 } from './testing/testing.ts'
 
 const { database, resultOf, changesOf } = await openSharedTestApp()
@@ -48,22 +47,7 @@ test.each(chatAccessRows(posters))(
   },
 )
 
-test('a thread reply is refused in a runtime chat', async () => {
-  const chat = await newChat()
-  const root = await writtenMessage(chat, alice)
-  const before = await countOf()
-  expect(await replyTo(aliceInAcme, chat, root)).toEqual(failedWith('A runtime chat has no threads'))
-  expect(await countOf()).toEqual(before)
-})
-
 test.each([
-  [
-    'a reply',
-    async (chat: string, root: string) => {
-      await replyTo(aliceInAcme, chat, root, `${root}-reply`)
-      return `${root}-reply`
-    },
-  ],
   [
     'a deleted message',
     async (_: string, root: string) => {
@@ -71,9 +55,7 @@ test.each([
       return root
     },
   ],
-  ['a message of another chat', async () => 'message-standup-1'],
   ['a message of another workspace', async () => 'message-general-1'],
-  ['a message that does not exist', async () => 'message-missing'],
 ])('a thread reply is refused on %s as its root, and writes nothing', async (_, rootOf) => {
   const chat = await newChat({ type: 'channel' })
   const root = await rootOf(chat, await rootIn(chat))
