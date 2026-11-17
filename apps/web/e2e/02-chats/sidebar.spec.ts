@@ -11,7 +11,7 @@ import {
   test,
   unreadIconOf,
 } from '../fixtures'
-import { chatMenuButtonOf, chatRowIn, looseChatsOf } from './fixtures'
+import { chatMenuButtonOf, chatRowIn, looseChatsOf, setChatRole } from './fixtures'
 
 const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
 const cancelDialog = async (page: Page, dialogName: string) => {
@@ -20,15 +20,6 @@ const cancelDialog = async (page: Page, dialogName: string) => {
 }
 const logoutDialogOf = (page: Page, workspaceName: string) =>
   page.getByRole('dialog', { name: `Log out of ${workspaceName}` })
-const makeAliceAdminOf = async (
-  workerStack: Parameters<Parameters<typeof test>[2]>[0]['workerStack'],
-  chatId: string,
-) => {
-  await workerStack.database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-    values ('workspace-acme', ${chatId}, 'member-alice', 'owner')
-    on conflict (workspace_id, chat_id, user_id) do update set role_id = 'owner'`
-}
 
 test.describe('Sidebar', () => {
   test.use({ runtimeHost: false, warmRuntimes: false })
@@ -257,7 +248,7 @@ test.describe('Sidebar', () => {
     page,
     workerStack,
   }) => {
-    await makeAliceAdminOf(workerStack, 'chat-standup')
+    await setChatRole(workerStack, 'chat-standup', 'member-alice', 'owner')
     await expect(unreadIconOf(page, 'Standup')).toBeVisible()
     await test.step('places the icon at the right end of the row, before the menu button', async () => {
       const iconBox = await boundingBoxOf(unreadIconOf(page, 'Standup'))

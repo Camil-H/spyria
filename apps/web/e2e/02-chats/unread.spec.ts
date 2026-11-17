@@ -13,6 +13,7 @@ import {
   postMessages,
   research,
   sendMessage,
+  setChatRole,
   sidebarOf,
   switchWorkspace,
   test,
@@ -25,20 +26,13 @@ const agentStoppedWithError = (workerStack: WorkerStack, chatId: string) =>
     { id: 'failure-notice', kind: 'notice', authorId: null, body: 'The agent stopped with an error' },
   ])
 
-const makeAliceAdminOf = async (workerStack: WorkerStack, chatId: string) => {
-  await workerStack.database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
-    values ('workspace-acme', ${chatId}, 'member-alice', 'owner')
-    on conflict (workspace_id, chat_id, user_id) do update set role_id = 'owner'`
-}
-
 test.describe('Unread', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
   })
 
   test('As a member, I see which chats have unread messages, per workspace', async ({ page, workerStack }) => {
-    await makeAliceAdminOf(workerStack, 'chat-standup')
+    await setChatRole(workerStack, 'chat-standup', 'member-alice', 'owner')
     await test.step('shows the icon on chats with unread messages only', async () => {
       await expect(unreadIconOf(page, 'Standup')).toBeVisible()
       await expect(unreadIconOf(page, 'Setup helper')).toBeVisible()
@@ -108,7 +102,7 @@ test.describe('Unread', () => {
     page,
     workerStack,
   }) => {
-    await makeAliceAdminOf(workerStack, 'chat-standup')
+    await setChatRole(workerStack, 'chat-standup', 'member-alice', 'owner')
     await openChat(page, 'Research')
     await composerOf(page).fill('Draft for later')
     await chatLinkOf(page, 'Welcome').click()

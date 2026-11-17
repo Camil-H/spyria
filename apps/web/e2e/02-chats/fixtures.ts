@@ -11,6 +11,12 @@ export const draftIconOf = (page: Page, chatName: string) =>
 export const chatMenuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
 
+export const setChatRole = (workerStack: WorkerStack, chatId: string, memberId: string, roleId: string) =>
+  workerStack.database.$client`
+    insert into chat_participants (workspace_id, chat_id, user_id, role_id)
+    values ('workspace-acme', ${chatId}, ${memberId}, ${roleId})
+    on conflict (workspace_id, chat_id, user_id) do update set role_id = excluded.role_id`
+
 export type PostedMessage = {
   id: string
   body: string
