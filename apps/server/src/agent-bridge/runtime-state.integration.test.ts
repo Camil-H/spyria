@@ -476,52 +476,33 @@ test('a prompt that waited over an hour for an offline host is not sent when it 
   expect(relay.prompts).toEqual(['Warm up', 'From now'])
 })
 
-test('runtimes.host_online follows its host through hello and offline', async () => {
-  const { host } = await agentHost()
-  const chat = await newRuntimeChat()
-  await answered(await prompt(chat, 'Start'))
-  expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: true })
-  await host.disconnect()
-  expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: false })
-  await host.connect()
-  expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: true })
-})
+test.each([
+  ['running', agentReply(2)],
+  ['stopping', agentReply(1)],
+])(
+  'a prompt while the host is offline gets one notice and is answered after the host says hello again, with its runtime %s, whose host_online follows the host',
+  async (runtimeState, reply) => {
+    const { relay, host } = await agentHost()
+    const chat = await newRuntimeChat()
+    await answered(await prompt(chat, 'Warm up'))
+    await turnIs(chat, null)
+    expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: true })
+    await host.disconnect()
+    await database.$client`
+      update runtimes set state = ${runtimeState}, state_changed_at = now() where chat_id = ${chat} and state <> ${runtimeState}`
+    expect(await runtimeOf(chat)).toMatchObject({ state: runtimeState, host_online: false })
 
-test('a prompt while the host is offline gets one notice and is answered after the host says hello again', async () => {
-  const { relay, host } = await agentHost()
-  const chat = await newRuntimeChat()
-  await answered(await prompt(chat, 'Warm up'))
-  await turnIs(chat, null)
-  await host.disconnect()
+    const waiting = await prompt(chat, 'Are you there?')
+    await answered(waiting)
+    await jobDone('agent.prompt', { messageId: waiting })
+    expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
+    expect(await turnOf(chat)).toBeNull()
 
-  const waiting = await prompt(chat, 'Are you there?')
-  await answered(waiting)
-  await jobDone('agent.prompt', { messageId: waiting })
-  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
-  expect(await turnOf(chat)).toBeNull()
-
-  await host.connect()
-  await answered(waiting, 2)
-  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(2)])
-  expect(relay.prompts).toEqual(['Warm up', 'Are you there?'])
-})
-
-test('a prompt to a runtime stopping on an offline host gets one notice instead of waiting for it, and is answered once the host is back', async () => {
-  const { relay, host } = await agentHost()
-  const chat = await newRuntimeChat()
-  await answered(await prompt(chat, 'Warm up'))
-  await turnIs(chat, null)
-  await host.disconnect()
-  await database.$client`update runtimes set state = 'stopping', state_changed_at = now() where chat_id = ${chat}`
-
-  const waiting = await prompt(chat, 'Still there?')
-  await answered(waiting)
-  await jobDone('agent.prompt', { messageId: waiting })
-  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline')])
-  expect(await turnOf(chat)).toBeNull()
-
-  await host.connect()
-  await answered(waiting, 2)
-  expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), agentReply(1)])
-  expect(relay.prompts).toEqual(['Warm up', 'Still there?'])
-})
+    await host.connect()
+    expect(await runtimeOf(chat)).toMatchObject({ host_online: true })
+    await answered(waiting, 2)
+    expect(await repliesTo(waiting)).toEqual([notice('The runtime host is offline'), reply])
+    expect(relay.prompts).toEqual(['Warm up', 'Are you there?'])
+    expect(await runtimeOf(chat)).toMatchObject({ state: 'running', host_online: true })
+  },
+)
