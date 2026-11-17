@@ -27,10 +27,6 @@ test.describe('Runtime lifecycle', () => {
   const turnOf = async (workerStack: WorkerStack, chatId: string) =>
     (await workerStack.database.$client`select agent_turn_message_id from chats where id = ${chatId}`)[0]
       ?.agent_turn_message_id
-  const enqueueJob = (workerStack: WorkerStack, type: string, payload: object) =>
-    workerStack.database.$client`
-    insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
-    values ('workspace-acme', ${crypto.randomUUID()}, ${type}, ${JSON.stringify(payload)}::jsonb, now(), 0, 'queued')`
   const sweepNow = (workerStack: WorkerStack) =>
     workerStack.database.$client`
     insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
@@ -48,12 +44,6 @@ test.describe('Runtime lifecycle', () => {
         return runtimeStateOf(workerStack, chatId)
       })
       .toBe('stopped')
-  }
-
-  const stopRuntime = async (workerStack: WorkerStack, chatId: string) => {
-    const [runtime] = await workerStack.database.$client`
-    update runtimes set state = 'stopping', state_changed_at = now() where chat_id = ${chatId} returning id`
-    await enqueueJob(workerStack, 'runtime.stop', { runtimeId: runtime?.id })
   }
 
   test.beforeEach(async ({ page }) => {
@@ -138,28 +128,7 @@ test.describe('Runtime lifecycle', () => {
   test.describe(() => {
     test.use({ fakeBootHold: 'boot' })
 
-    test('As a prompter, I see Sleeping after the idle stop, and my next prompt wakes the runtime with the history kept', {
-      tag: ['@spec-10', '@slow'],
-    }, async ({ page, workerStack, release }) => {
-      await openChat(page, 'Research')
-      await expect(runtimeStatusOf(page)).toHaveText('Ready')
-      await sendMessage(page, 'Before the sleep')
-      await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
-      await triggerIdleStop(workerStack, research)
-      await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
-
-      await sendMessage(page, 'After the sleep')
-      await expect(runtimeStatusOf(page)).toHaveText('Starting…')
-      await release('boot')
-      await expect(runtimeStatusOf(page)).toHaveText('Ready')
-      await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
-      await expect(messageItemsOf(page)).toHaveCount(4)
-      await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
-      await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
-      await expect(mainOf(page)).not.toContainText(newSessionNotice)
-    })
-
-    test('As a member, I see the unread icon of a chat turn from done to asleep when its runtime falls asleep', {
+    test('As a member, I see the unread icon of a chat turn from done to asleep when its runtime falls asleep, then Sleeping in the chat, and my next prompt wakes the runtime with the history kept', {
       tag: ['@spec-10', '@slow'],
     }, async ({ page, workerStack, agentScript, release }) => {
       await agentScript(research, heldScript)
@@ -177,10 +146,16 @@ test.describe('Runtime lifecycle', () => {
 
       await agentScript(research, {})
       await openChat(page, 'Research')
+      await expect(runtimeStatusOf(page)).toHaveText('Sleeping')
       await sendMessage(page, 'After the sleep')
+      await expect(runtimeStatusOf(page)).toHaveText('Starting…')
       await release('boot')
       await expect(runtimeStatusOf(page)).toHaveText('Ready')
       await expect(messageContaining(page, agentReplyText)).toHaveCount(2)
+      await expect(messageItemsOf(page)).toHaveCount(4)
+      await expect(messageItemsOf(page).nth(0)).toContainText('Before the sleep')
+      await expect(messageItemsOf(page).nth(2)).toContainText('After the sleep')
+      await expect(mainOf(page)).not.toContainText(newSessionNotice)
     })
 
     test('As the owner, I restart the session or stop the runtime from the status menu, confirming while the agent works, and the chip tells me once the session restarted; a prompter gets no menu', {
@@ -234,23 +209,6 @@ test.describe('Runtime lifecycle', () => {
     await expect(runtimeStatusOf(page)).toHaveText(/^(Ready|Sleeping)$/)
     await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await expect(messageContaining(page, 'The runtime host is offline')).toHaveCount(1)
-    await expect(runtimeStatusOf(page)).toHaveText('Ready')
-  })
-
-  test('As a prompter, I see a turn end with a notice when its runtime stops, and my next prompt wakes it and is answered', {
-    tag: ['@spec-10'],
-  }, async ({ page, workerStack, agentScript }) => {
-    await agentScript(research, heldScript)
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Work until stopped')
-    await expect(stopButtonOf(page)).toBeVisible()
-    await agentScript(research, {})
-    await stopRuntime(workerStack, research)
-
-    await expect(messageContaining(page, 'The agent stopped before finishing')).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await sendMessage(page, 'Wake up')
-    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await expect(runtimeStatusOf(page)).toHaveText('Ready')
   })
 
