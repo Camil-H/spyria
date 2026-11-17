@@ -303,6 +303,24 @@ test('a member watches and drives only their own browser; the actions they send 
   for (const watcher of [bobs, alices, lees]) watcher.close()
 })
 
+test("a member using their browser keeps the chat's runtime active, so the idle stop does not remove a browser in use", async () => {
+  await setBrowserSettings({})
+  const host = await fakeHost('Browser activity host')
+  const { chatId } = await runtimeTurn(host, bob)
+  await database.$client`update runtimes set last_active_at = now() - interval '2 hours' where chat_id = ${chatId}`
+  const bobs = await watchBrowser(chatId, bob)
+  expect(await bobs.stateOf()).toMatchObject({ state: 'running' })
+  bobs.send({ type: 'input', event: { kind: 'key', action: 'down', key: 'a' } })
+  await waitFor(
+    async () =>
+      (
+        await database.$client`
+          select 1 from runtimes where chat_id = ${chatId} and last_active_at > now() - interval '1 minute'`
+      ).length === 1,
+  )
+  bobs.close()
+})
+
 test('a browser that failed to start says why and starts when the member tries again', async () => {
   await setBrowserSettings({})
   const host = await fakeHost('Browser retry host')
