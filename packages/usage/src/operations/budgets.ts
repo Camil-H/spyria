@@ -51,7 +51,11 @@ export const readOwnBudget = ({ transactor }: Dependencies, { memberId, now }: {
   transactor.run(async (ledger) => ownBudgetsOf(await ledger.memberSpends(periodStartsOf(now), memberId)))
 
 export const findUsedUpBudget = ({ transactor }: Dependencies, { memberId, now }: { memberId: MemberId; now: Date }) =>
-  transactor.run(async (ledger) => usedUpPeriodOf(await ledger.memberSpends(periodStartsOf(now), memberId)))
+  transactor.run(async (ledger) =>
+    (await ledger.hasBudget(memberId))
+      ? usedUpPeriodOf(await ledger.memberSpends(periodStartsOf(now), memberId))
+      : null,
+  )
 
 export const recordBudgetAlerts = ({ transactor }: Dependencies, { now }: { now: Date }) =>
   transactor.run((ledger) => recordReachedAlerts(ledger, now))
