@@ -286,62 +286,51 @@ test.each(chatAccessRows(['owner']))(
   },
 )
 
-test('making a channel public turns its Readers into Prompters, recorded as role changes by the member who changed it', async () => {
-  const chat = await newChat({
-    type: 'channel',
-    visibility: 'private',
-    participants: [
-      { memberId: bob, roleId: 'reader' },
-      { memberId: lee, roleId: 'prompter' },
-    ],
-  })
-  expect(
-    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
-      workspaceId: acme,
-      chatId: chat,
-      visibility: 'public',
-    }),
-  ).toEqual(succeeded)
-  expect(await participantsOf(chat)).toEqual(
-    expect.arrayContaining([
-      { userId: alice, roleId: 'owner' },
-      { userId: bob, roleId: 'prompter' },
-      { userId: lee, roleId: 'prompter' },
-    ]),
-  )
-  expect(await changesOf(chat)).toEqual([
-    { seq: 1, type: 'chat.visibility_changed', actor: alice, payload: { visibility: 'public' } },
-    { seq: 2, type: 'member.role_changed', actor: alice, payload: { memberId: bob, roleId: 'prompter' } },
-  ])
-  expect(
-    await resultOf(aliceInAcme, 'workspace.changeVisibility', {
-      workspaceId: acme,
-      chatId: chat,
+test.each(['channel', 'runtime'] as const)(
+  'making a %s public turns its Readers into Prompters, recorded as role changes by the member who changed it, and private again',
+  async (type) => {
+    const chat = await newChat({
+      type,
       visibility: 'private',
-    }),
-  ).toEqual(succeeded)
-  expect((await changesOf(chat)).map(({ type }) => type)).toEqual([
-    'chat.visibility_changed',
-    'member.role_changed',
-    'chat.visibility_changed',
-  ])
-})
-
-test('the owner makes an AI chat public, which turns its Readers into Prompters, and private again', async () => {
-  const chat = await newChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
-  const changeTo = (visibility: 'public' | 'private') =>
-    resultOf(aliceInAcme, 'workspace.changeVisibility', { workspaceId: acme, chatId: chat, visibility })
-  expect(await changeTo('public')).toEqual(succeeded)
-  expect(await chatRow(chat)).toMatchObject({ type: 'runtime', visibility: 'public' })
-  expect(await participantsOf(chat)).toEqual(
-    expect.arrayContaining([
-      { userId: alice, roleId: 'owner' },
-      { userId: bob, roleId: 'prompter' },
-    ]),
-  )
-  expect(await changeTo('private')).toEqual(succeeded)
-  expect(await chatRow(chat)).toMatchObject({ visibility: 'private' })
-})
+      participants: [
+        { memberId: bob, roleId: 'reader' },
+        { memberId: lee, roleId: 'prompter' },
+      ],
+    })
+    expect(
+      await resultOf(aliceInAcme, 'workspace.changeVisibility', {
+        workspaceId: acme,
+        chatId: chat,
+        visibility: 'public',
+      }),
+    ).toEqual(succeeded)
+    expect(await chatRow(chat)).toMatchObject({ type, visibility: 'public' })
+    expect(await participantsOf(chat)).toEqual(
+      expect.arrayContaining([
+        { userId: alice, roleId: 'owner' },
+        { userId: bob, roleId: 'prompter' },
+        { userId: lee, roleId: 'prompter' },
+      ]),
+    )
+    expect(await changesOf(chat)).toEqual([
+      { seq: 1, type: 'chat.visibility_changed', actor: alice, payload: { visibility: 'public' } },
+      { seq: 2, type: 'member.role_changed', actor: alice, payload: { memberId: bob, roleId: 'prompter' } },
+    ])
+    expect(
+      await resultOf(aliceInAcme, 'workspace.changeVisibility', {
+        workspaceId: acme,
+        chatId: chat,
+        visibility: 'private',
+      }),
+    ).toEqual(succeeded)
+    expect(await chatRow(chat)).toMatchObject({ visibility: 'private' })
+    expect((await changesOf(chat)).map((change) => change.type)).toEqual([
+      'chat.visibility_changed',
+      'member.role_changed',
+      'chat.visibility_changed',
+    ])
+  },
+)
 
 const sidebarPositionsOf = (chatIds: string[]) =>
   database.$client`select chat_id as "chatId", user_id as "userId", sidebar_position as "sidebarPosition" from chat_participants where chat_id in ${database.$client(chatIds)} order by user_id, chat_id`.then(
