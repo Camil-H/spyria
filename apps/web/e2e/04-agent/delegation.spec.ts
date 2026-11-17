@@ -113,33 +113,6 @@ test.describe('Delegation', () => {
     )
   })
 
-  test('As a prompter, I see a long subagent task read as still delegating, then its result from await_task, in one group with one answer', {
-    tag: ['@spec-16', '@spec-25', '@stage-f', '@stage-g', '@slow'],
-  }, async ({ page, agentScript, release, reached, workerStack }) => {
-    const answer = 'The long listing is done.'
-    const heldWork = { ...subagentWork, text: 'The slow listing found two files today.', hold: 'subagent' }
-    await agentScript(
-      researchChatId,
-      resuming(answer, { delegateRoute: confidentSmall, subagents: { 'mistral-small-latest': heldWork } }, 'resume'),
-    )
-    await sendMessage(page, 'Delegate a long listing')
-    await reached('resume')
-    await expect(mainOf(page).getByRole('button', { name: /^Subagent · Mistral Small · working…/ })).toBeVisible()
-    await expect(mainOf(page)).not.toContainText(/timed out|failed/)
-    await release('subagent')
-    await delegationsFinished(workerStack, researchChatId)
-    await release('resume')
-    await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
-    await expect(groupOf(page, 'Mistral Small')).toHaveCount(1)
-    await expect(mainOf(page).getByRole('button', { name: /^Used (delegate|await_task)/ })).toHaveCount(0)
-    await expect(mainOf(page)).not.toContainText(/validation|There is no task/)
-    await groupOf(page, 'Mistral Small').click()
-    const group = messageItemsOf(page).filter({ has: page.getByRole('group', { name: 'Steps of Mistral Small' }) })
-    await expect(group).toContainText('The slow listing found two files today.')
-    await expect(group).not.toContainText('is still running')
-    await expect(messageItemsOf(page).filter({ hasText: answer })).toHaveCount(1)
-  })
-
   test('As a prompter, I stop during a delegation: the subagent stops, the group shows stopped, and my next prompt runs', {
     tag: ['@spec-16'],
   }, async ({ page, agentScript }) => {
@@ -164,8 +137,8 @@ test.describe('Delegation', () => {
     await expect(mainOf(page)).not.toContainText('Never shown.')
   })
 
-  test('As a prompter, I follow a running delegation’s first step and text live, labelled as the subagent’s, then the stored version without duplicates', {
-    tag: ['@spec-25', '@stage-g'],
+  test('As a prompter, I follow a running delegation’s first step and text live, labelled as the subagent’s and read as still delegating, then its result from await_task as the stored version, in one group with one answer and no duplicates', {
+    tag: ['@spec-16', '@spec-25', '@stage-f', '@stage-g', '@slow'],
   }, async ({ page, agentScript, release, reached, workerStack }) => {
     const answer = 'The live listing is done.'
     const liveWork = { steps: [{ command: 'echo listing' }], text: 'Counting the files now.', hold: 'subagent' }
@@ -184,15 +157,21 @@ test.describe('Delegation', () => {
     await reached('resume')
     await expect(running).toBeVisible()
     await expect(steps).toContainText('Counting')
+    await expect(mainOf(page)).not.toContainText(/timed out|failed/)
     await release('subagent')
     await delegationsFinished(workerStack, researchChatId)
     await release('resume')
     await expect(messageItemsOf(page).filter({ hasText: answer })).toBeVisible()
     const finished = mainOf(page).getByRole('button', { name: /^Delegated to Mistral Small · 1 step · / })
+    await expect(finished).toHaveCount(1)
     await expect(finished).toHaveAttribute('aria-expanded', 'true')
+    await expect(mainOf(page).getByRole('button', { name: /^Used (delegate|await_task)/ })).toHaveCount(0)
+    await expect(mainOf(page)).not.toContainText(/validation|There is no task/)
     await expect(steps).toContainText('$ echo listing')
     await expect(steps).not.toContainText('Counting')
     await expect(messageItemsOf(page).filter({ has: steps })).toContainText('Counting the files now.')
+    await expect(messageItemsOf(page).filter({ has: steps })).not.toContainText('is still running')
     await expect(mainOf(page).getByText('Counting the files now.')).toHaveCount(1)
+    await expect(messageItemsOf(page).filter({ hasText: answer })).toHaveCount(1)
   })
 })
