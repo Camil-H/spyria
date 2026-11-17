@@ -40,19 +40,6 @@ type BrowserView = { receive(message: unknown): void; close(): void }
 const readyTimeoutMilliseconds = 5000
 const readableRetryMilliseconds = 100
 const commandOutputIntervalMilliseconds = 100
-const recordRetryDelaysMilliseconds = [100, 1000, 5000]
-
-const withRecordRetries = async <Result>(record: () => Promise<Result>): Promise<Result> => {
-  for (const delay of recordRetryDelaysMilliseconds) {
-    try {
-      return await record()
-    } catch (error) {
-      if (error instanceof DomainError) throw error
-      await Bun.sleep(delay)
-    }
-  }
-  return record()
-}
 const slowViewerBytes = 4 * 1024 * 1024
 const slowViewerCloseCode = 4008
 const notSignedInCloseCode = 4001
@@ -132,7 +119,6 @@ export const createAgentBridge = ({
     turn.span.end()
   }
   const bridgeOf = (database: Database) => {
-    const eventsReadAgain = new Set<string>()
     const sockets = new Map<
       string,
       {
@@ -304,7 +290,6 @@ export const createAgentBridge = ({
         drainingPromptId: null as MessageId | null,
         endedPromptId: null as string | null,
         isClosed: false,
-        isRecordLost: false,
         questions: new Map<string, object>(),
         workspace: undefined as object | undefined,
         commandOutputs: new Map<string, string>(),
@@ -316,15 +301,12 @@ export const createAgentBridge = ({
           )
         },
       }
-      const isCurrentSocket = () => !chatSocket.isClosed && sockets.get(keyOf(chat)) === chatSocket
-      const forgetAndReopen = () => {
+      const closed = () => {
+        ready.resolve()
+        if (chatSocket.isClosed || sockets.get(keyOf(chat)) !== chatSocket) return
         sockets.delete(keyOf(chat))
         if (chatSocket.promptId) reopenLater(chat, chatSocket.promptId)
         else forgetStreamOf(chat)
-      }
-      const closed = () => {
-        ready.resolve()
-        if (isCurrentSocket()) forgetAndReopen()
       }
       sockets.set(keyOf(chat), chatSocket)
       if (promptId)
@@ -336,17 +318,11 @@ export const createAgentBridge = ({
         }, logFailure(chat))
       const shownPromptIdOf = () => chatSocket.replyToId ?? chatSocket.promptId
       const record = (event: AgentEvent, turnPromptId?: MessageId) => {
-        const eventKey = `${keyOf(chat)}/${event.id}`
         const promptAtEvent = chatSocket.promptId
         const shownAtEvent = turnPromptId ?? shownPromptIdOf()
         recording = recording
-          .then(() =>
-            chatSocket.isRecordLost
-              ? undefined
-              : withRecordRetries(() => handlers.recordEvent(chat, event, turnPromptId)),
-          )
+          .then(() => handlers.recordEvent(chat, event, turnPromptId))
           .then((recorded) => {
-            eventsReadAgain.delete(eventKey)
             if (recorded?.isReplyStored && shownAtEvent) broadcast(chat, { promptId: shownAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
             chatSocket.promptId = recorded.promptId
@@ -356,23 +332,14 @@ export const createAgentBridge = ({
             forgetStreamOf(chat)
             chatSocket.streamedText = ''
           })
-          .catch((error) => {
-            const isReadAgain = !(error instanceof DomainError) && !eventsReadAgain.has(eventKey)
+          .catch((error) =>
             log.error({
               event: 'agent.event.record_failed',
-              body: isReadAgain
-                ? 'Recording an agent event failed: the events are read again from the agent'
-                : 'Recording an agent event failed: it is skipped',
+              body: 'Recording an agent event failed',
               attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
               error,
-            })
-            if (!isReadAgain) return eventsReadAgain.delete(eventKey)
-            eventsReadAgain.add(eventKey)
-            chatSocket.isRecordLost = true
-            if (!isCurrentSocket()) return
-            chatSocket.close()
-            forgetAndReopen()
-          })
+            }),
+          )
       }
       const unsentOutputs = new Set<string>()
       let outputTimer: ReturnType<typeof setTimeout> | undefined

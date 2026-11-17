@@ -53,7 +53,7 @@ import {
 import { joinRunningTurn, promptAgent, startAgentSession } from '../operations/prompt-agent.ts'
 import { applyPullRequestEvent, publishBranch } from '../operations/publish-branch.ts'
 import { readRuntimeMedia, readWorkspace, snapshotWorkspace, wakeWorkspace } from '../operations/read-workspace.ts'
-import { recordAgentEvent } from '../operations/record-agent-event.ts'
+import { recordAgentEventEndingLostTurns } from '../operations/record-agent-event.ts'
 import { answerToolApproval } from '../operations/request-tool-approval.ts'
 import { restartAgentSession } from '../operations/restart-session.ts'
 import { promptWaitingChats } from '../operations/retry-agent.ts'
@@ -187,7 +187,7 @@ export const createAgentHandlers = ({
       if (contextUsage)
         await recordContextSize(dependenciesOf(chat.workspaceId), { chat, model: undefined, ...contextUsage })
       if (!isStoredAgentEvent(event)) return undefined
-      const recorded = await recordAgentEvent(
+      const recorded = await recordAgentEventEndingLostTurns(
         { transactor: transactorOf(chat.workspaceId) },
         { ...chat, event, turnPromptId },
       )
