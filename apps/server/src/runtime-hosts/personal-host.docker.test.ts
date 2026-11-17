@@ -1,23 +1,10 @@
 import { afterAll, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
-import { harnesses, runtimeHostId } from '@spyria/kernel'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
+import { harnesses } from '@spyria/kernel'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
+import { startDockerTestHost } from '../testing/docker-runtime-host.ts'
 import { requireTestHarnesses, testHarnessesVolume } from '../testing/harnesses.ts'
-import {
-  acme,
-  aliceInAcme,
-  rejectionOf,
-  sessionTokenOf,
-  testAuthSettings,
-  testSecretsKeyring,
-  waitFor,
-} from '../testing/testing.ts'
-import { createRuntimeHostGateway } from './gateway.ts'
+import { acme, rejectionOf, waitFor } from '../testing/testing.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
@@ -29,75 +16,30 @@ if (!spyriaImage || docker('image', 'inspect', spyriaImage).exitCode !== 0)
   throw new Error('Spyria image missing: run bun run agent:build')
 requireTestHarnesses()
 
-const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
-const prefix = `${deployment}-`
-const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const testDatabase = await createTestDatabase()
-const gateway = createRuntimeHostGateway({
-  secretsKeyring: testSecretsKeyring,
-  databases: () => [testDatabase.database],
+const { gateway, hostId, prefix, readyRuntime, cleanup } = await startDockerTestHost({
+  database: testDatabase.database,
   spyriaAgentImage: spyriaImage,
+  personal: true,
+  environment: {
+    SPYRIA_HOST_HEARTBEAT_MS: '200',
+    SPYRIA_HARNESSES_VOLUME: testHarnessesVolume,
+    SPYRIA_HARNESS_REGISTRY: 'http://127.0.0.1:9',
+  },
 })
-const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-let hostProcess: ReturnType<typeof Bun.spawn> | undefined
-
-const removeDockerObjects = () => {
-  for (const [kind, remove] of [
-    ['ps -aq', 'rm -f'],
-    ['volume ls -q', 'volume rm -f'],
-    ['network ls -q', 'network rm'],
-  ] as const) {
-    const names = dockerText(...kind.split(' '), '--filter', `name=^${prefix}`)
-      .split('\n')
-      .filter(Boolean)
-    if (names.length > 0) docker(...remove.split(' '), ...names)
-  }
-}
 
 afterAll(async () => {
-  hostProcess?.kill()
-  await hostProcess?.exited
-  removeDockerObjects()
-  void server.stop(true)
+  await cleanup()
   await testDatabase.drop()
-  rmSync(stateDirectory, { recursive: true, force: true })
 }, databaseDropTimeoutMilliseconds)
 
 const hostRow = async (id: string) =>
   (await testDatabase.database.$client`select status, capacity from runtime_hosts where id = ${id}`)[0]
-const startPersonalHost = async (id: string, url: string) => {
-  hostProcess = Bun.spawn([process.execPath, hostProgram, '--personal', url], {
-    env: {
-      ...process.env,
-      SPYRIA_HOST_STATE_DIR: stateDirectory,
-      SPYRIA_DEPLOYMENT: deployment,
-      SPYRIA_HOST_HEARTBEAT_MS: '200',
-      SPYRIA_HARNESSES_VOLUME: testHarnessesVolume,
-      SPYRIA_HARNESS_REGISTRY: 'http://127.0.0.1:9',
-    },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  })
-  await waitFor(async () => (await hostRow(id))?.status === 'online', 30_000)
-}
 
 test("a real spyria-host --personal runs Spyria's image with the credentials volume, relays only spyria-agent's routes, lists the real adapter models without a login and reports the sign-in", async () => {
-  const added = await app.request('/api/runtime-hosts', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(testDatabase.database, acme, aliceInAcme.userId)}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ personal: true }),
-  })
-  const { id, code } = (await added.json()) as { id: string; code: string }
-  const claimUrl = `http://localhost:${server.port}/h/${code}`
-  await startPersonalHost(id, claimUrl)
-  expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: [] })
+  expect((await hostRow(hostId))?.capacity).toMatchObject({ personal: true, signedIn: [] })
 
-  const host = { workspaceId: acme, hostId: runtimeHostId(id) }
+  const host = { workspaceId: acme, hostId }
   await gateway.prepare(host, spyriaImage)
   const runtime = { ...host, runtimeId: 'personal-smoke' }
   const apiKey = gateway.sandboxProvider.apiKeyOf(runtime)
@@ -108,14 +50,7 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
     (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
   ).toContainEqual([`${prefix}cred-claude-code`, '/home/spyria/.claude'])
   await gateway.sandboxProvider.start(runtime)
-  const transport = gateway.sandboxProvider.connect(runtime)
-  const isReady = () =>
-    transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-      (response) => response.status === 200,
-      () => false,
-    )
-  for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-    if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
+  const transport = await readyRuntime(runtime)
   const headers = { 'x-session-api-key': apiKey, 'content-type': 'application/json' }
   const startSession = async (command: string[]) => {
     const created = await transport.fetch({
@@ -194,8 +129,8 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
 
   await waitFor(
     async () =>
-      ((await hostRow(id))?.capacity as { signedIn?: string[] } | undefined)?.signedIn?.includes('claude-code') ===
+      ((await hostRow(hostId))?.capacity as { signedIn?: string[] } | undefined)?.signedIn?.includes('claude-code') ===
       true,
   )
-  expect((await hostRow(id))?.capacity).toMatchObject({ personal: true, signedIn: ['claude-code'] })
+  expect((await hostRow(hostId))?.capacity).toMatchObject({ personal: true, signedIn: ['claude-code'] })
 }, 180_000)
