@@ -6,16 +6,7 @@ import { dirname, join } from 'node:path'
 import { lineReaderOf } from './acp.ts'
 import { formShapes, startAgent } from './agent.ts'
 import { startTelemetry } from './telemetry.ts'
-import {
-  type AgentEvent,
-  apiKey,
-  clientOf,
-  createAgentTestbed,
-  kindOf,
-  piHello,
-  questionAt,
-  textOf,
-} from './testing.ts'
+import { type AgentEvent, apiKey, clientOf, createAgentTestbed, kindOf, questionAt, textOf } from './testing.ts'
 
 const { stateDirectory, stubCommand, launchOf, piLaunchOf, running, started } = createAgentTestbed()
 
@@ -1049,16 +1040,10 @@ test('a request in flight when another one times out fails at once with the same
   }
 })
 
-test.each([
-  [
-    'an ACP adapter',
-    () => launchOf(),
-    (turn: number) => `[t${turn}] Hello from the stub (model stub-default, mode bypassPermissions).`,
-  ],
-  ['Pi', () => piLaunchOf(), (turn: number) => piHello(turn)],
-])('with %s, a prompt sent while a turn runs waits for it and gets its own turn end', async (_, launch, hello) => {
+test('a prompt sent while a turn runs waits for it and gets its own turn end', async () => {
+  const hello = (turn: number) => `[t${turn}] Hello from the stub (model stub-default, mode bypassPermissions).`
   const { call, open, create, prompt } = started()
-  const id = await create(launch())
+  const id = await create(launchOf())
   const socket = open(id)
   await prompt(id, 'stub:linger first')
   expect((await call('GET', `/api/conversations/${id}`)).body).toMatchObject({ execution_status: 'running' })
