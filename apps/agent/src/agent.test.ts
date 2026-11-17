@@ -901,14 +901,14 @@ test.each([
     const lines: Record<string, unknown>[] = []
     const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
     try {
-      const { call } = started({ requestTimeoutMilliseconds: 2000 })
+      const { call } = started({ requestTimeoutMilliseconds: 400 })
       const silentLaunch = launch()
       silentLaunch.agent.acp_command = ['env', `STUB_SILENT=${method}`, ...(silentLaunch.agent.acp_command as string[])]
       const { status, body } = await call('POST', '/api/conversations', silentLaunch)
       expect(status).toBe(201)
       expect(body).toMatchObject({
         execution_status: 'error',
-        error: `The agent did not respond within 2 seconds. It reported: Waiting on ${method}`,
+        error: `The agent did not respond within 0.4 seconds. It reported: Waiting on ${method}`,
       })
       const pid = Number(readFileSync(join(stateDirectory, 'silent.pid'), 'utf8'))
       for (const deadline = Date.now() + 5_000; isAlive(pid) && Date.now() < deadline; ) await Bun.sleep(10)
@@ -947,7 +947,7 @@ test.each([
 )
 
 test('an interrupt naming a prompt that waits for the session to start stops only that prompt, not a later one also waiting', async () => {
-  const { call, open, create } = started({ requestTimeoutMilliseconds: 1500 })
+  const { call, open, create } = started({ requestTimeoutMilliseconds: 500 })
   const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
   const socket = open(id)
@@ -971,7 +971,7 @@ test('an interrupt naming a prompt that waits for the session to start stops onl
 })
 
 test('a Stop naming no prompt stops every prompt waiting for the session to start', async () => {
-  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 1500 })
+  const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 500 })
   const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
   const socket = open(id)
@@ -994,10 +994,10 @@ test('a restart while a timed-out adapter is still stopping brings the conversat
   const { call, open, create, prompt } = started({ requestTimeoutMilliseconds: 300 })
   const silentOnce = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(
-    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=1500'),
+    silentOn('session/set_config_option', launchOf(), `STUB_SILENT_ONCE=${silentOnce}`, 'STUB_EXIT_DELAY_MS=700'),
   )
   const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-  await Bun.sleep(700)
+  await Bun.sleep(500)
   const restarted = await call('POST', `/api/conversations/${id}/restart`)
   await switching
   expect(restarted.body).toMatchObject({ execution_status: 'idle' })
@@ -1013,9 +1013,9 @@ test('a conversation deleted while its timed-out adapter is still stopping logs 
   const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
   try {
     const { call, create } = started({ requestTimeoutMilliseconds: 300 })
-    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=1500'))
+    const id = await create(silentOn('session/set_config_option', launchOf(), 'STUB_EXIT_DELAY_MS=700'))
     const switching = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-    await Bun.sleep(700)
+    await Bun.sleep(500)
     expect((await call('DELETE', `/api/conversations/${id}`)).status).toBe(200)
     await switching
     await Bun.sleep(200)
@@ -1029,19 +1029,19 @@ test('a request in flight when another one times out fails at once with the same
   const lines: Record<string, unknown>[] = []
   const telemetry = startTelemetry({ write: (line) => void lines.push(JSON.parse(line)) })
   try {
-    const { call, create } = started({ requestTimeoutMilliseconds: 1_000 })
+    const { call, create } = started({ requestTimeoutMilliseconds: 500 })
     const id = await create(silentOn('session/set_config_option', launchOf()))
     const first = call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-large' })
-    await Bun.sleep(900)
+    await Bun.sleep(400)
     const secondSentAt = performance.now()
     const second = await call('POST', `/api/conversations/${id}/switch_acp_model`, { model: 'stub-default' })
-    expect(performance.now() - secondSentAt).toBeLessThan(700)
+    expect(performance.now() - secondSentAt).toBeLessThan(350)
     const timedOut = {
-      error: 'The agent did not respond within 1 second. It reported: Waiting on session/set_config_option',
+      error: 'The agent did not respond within 0.5 seconds. It reported: Waiting on session/set_config_option',
     }
     expect((await first).body).toStrictEqual(timedOut)
     expect(second.body).toStrictEqual(timedOut)
-    await Bun.sleep(1_200)
+    await Bun.sleep(700)
     const failures = lines.filter((line) => line['event.name'] === 'agent.adapter_failed')
     expect(failures.map((failure) => failure['adapter.unanswered_method'])).toStrictEqual(['session/set_config_option'])
   } finally {
