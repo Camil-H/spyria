@@ -6,7 +6,7 @@ Organizations want different shapes of access: a reader who can follow a chat, a
 
 ## Decision
 
-- The server checks **permissions**, never role names. Chats have seven (`chat.read`, `chat.post`, `session.configure`, `tools.manage`, `members.invite`, `members.manage`, `chat.admin`); workspaces have ten (`members.invite`, `members.manage`, `roles.manage`, `sso.manage`, `github.manage`, `tools.manage`, `runtimes.manage`, `costs.view`, `budgets.manage`, `audit.view`).
+- The server checks **permissions**, never role names. Chats have seven (`chat.read`, `chat.post`, `session.configure`, `tools.manage`, `members.invite`, `members.manage`, `chat.admin`); workspaces have twelve (`members.invite`, `members.manage`, `roles.manage`, `sso.manage`, `github.manage`, `tools.manage`, `providers.manage`, `runtimes.manage`, `costs.view`, `budgets.manage`, `audit.view`, `audit.manage`).
 - A role is a row naming a set of permissions. Built-in chat roles are Owner, Editor, Prompter and Reader; built-in workspace roles are Admin and Member. Admins can add custom roles of both kinds.
 - A member can grant only a role whose permissions they hold.
 

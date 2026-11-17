@@ -13,6 +13,7 @@ export const workspacePermissions = [
   'costs.view',
   'budgets.manage',
   'audit.view',
+  'audit.manage',
 ] as const
 export type WorkspacePermission = (typeof workspacePermissions)[number]
 export type WorkspaceRole = Readonly<{ id: string; name: string; permissions: readonly WorkspacePermission[] }>
@@ -30,6 +31,7 @@ export const workspacePermissionLabels: Record<WorkspacePermission, string> = {
   'costs.view': 'View costs',
   'budgets.manage': 'Manage budgets',
   'audit.view': 'View the audit log',
+  'audit.manage': 'Change how long audit records are kept',
 }
 
 export const adminRoleId = 'admin'

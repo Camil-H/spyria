@@ -50,6 +50,7 @@ A workspace role is a named set of permissions. Two are built in and cannot be c
 | `costs.view` | View costs |
 | `budgets.manage` | Manage budgets |
 | `audit.view` | View the audit log |
+| `audit.manage` | Change how long audit records are kept |
 
 Rules that hold whatever the role:
 
@@ -237,6 +238,6 @@ At the bottom of **Workspace settings**, an Admin finds **Delete workspace**. It
 
 The log records metadata only, with one exception: a **Deleted a message** record shows the text the message had when it was deleted, in any chat, private ones included, since that text is no longer shown in the chat itself. It never shows the body of a message that is still in a chat. Filter by person (which also lists what was done on their behalf), group and date range; **Export CSV** downloads the filtered records.
 
-**Keep audit records**, under **Retention** at the top of the page, is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events, tool call records and the texts of deleted messages older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
+**Keep audit records**, under **Retention** at the top of the page, is changed by members with `audit.manage` (others only read it). It is Forever by default, or a number of days (1 to 36,500). A daily job deletes workspace events, tool call records and the texts of deleted messages older than that. Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view. Changing the retention is itself recorded.
 
 Related: [Security](../architecture/security.md), [Operations](../guides/operations.md).
