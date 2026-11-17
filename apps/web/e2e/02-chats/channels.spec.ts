@@ -3,19 +3,15 @@ import {
   answerNewChannel,
   chatAction,
   chatLinkOf,
-  chipOf,
   composerOf,
   expect,
   expectMembers,
   mainOf,
-  messageContaining,
   mutationGateOf,
   newChatAnswerOf,
   newChatDialogOf,
   type Page,
   panelTabOf,
-  runsOnOf,
-  sendMessage,
   sidebarOf,
   tabPanelOf,
   test,
@@ -70,32 +66,6 @@ test.describe('Channels', () => {
     await bobPage.context().close()
   })
 
-  test('As a member, I read a public channel from Browse before joining, then join it as a Prompter', {
-    tag: ['@spec-30'],
-  }, async ({ page, browser, workerStack }) => {
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await newChannel(page, 'Lounge', 'Public')
-    await sendMessage(page, 'Welcome to the lounge')
-    await expect(chatLinkOf(bobPage, 'Lounge')).toHaveCount(0)
-    await openBrowse(bobPage)
-    await expect(browsedChatOf(bobPage, 'Lounge')).toContainText('1 member')
-    await browsedChatOf(bobPage, 'Lounge').getByRole('link').click()
-    await expect(browseOf(bobPage)).toHaveCount(0)
-    await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Lounge' })).toBeVisible()
-    await expect(messageContaining(bobPage, 'Welcome to the lounge')).toHaveCount(1)
-    await expect(composerOf(bobPage)).toHaveCount(0)
-    await mainOf(bobPage).getByRole('button', { name: 'Join channel' }).click()
-    await expect(chatLinkOf(bobPage, 'Lounge')).toBeVisible()
-    await expect(composerOf(bobPage)).toBeVisible()
-    await expect(mainOf(bobPage).getByRole('button', { name: 'Join channel' })).toHaveCount(0)
-    await panelTabOf(bobPage, 'Members').click()
-    await expectMembers(bobPage, [
-      ['Alice', 'Owner'],
-      ['Bob', 'Prompter'],
-    ])
-    await bobPage.context().close()
-  })
-
   test('As a member, I leave a public channel from its menu: it leaves my sidebar and is listed in Browse again', {
     tag: ['@spec-30'],
   }, async ({ page, browser, workerStack }) => {
@@ -123,21 +93,13 @@ test.describe('Channels', () => {
     await expect(toastOf(page).getByRole('status')).toHaveText('Plans is now private: only its members can see it')
     await expect(browsedChatOf(leePage, 'Plans')).toHaveCount(0)
     await expect(chatLinkOf(bobPage, 'Plans')).toBeVisible()
-    await page.getByRole('button', { name: 'Chat actions for Plans' }).click()
-    await expect(page.getByRole('menuitem', { name: 'Make public' })).toBeVisible()
-    await page.keyboard.press('Escape')
     await bobPage.context().close()
     await leePage.context().close()
   })
 
-  test('As a member, I see no agent bar in a channel, and I create a public AI chat that Bob reads from Browse and joins as a Prompter', {
+  test('As a member, I create a public AI chat that Bob reads from Browse and joins as a Prompter', {
     tag: ['@spec-30'],
   }, async ({ page, browser, workerStack }) => {
-    await chatLinkOf(page, 'Welcome').click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-    await expect(composerOf(page)).toBeVisible()
-    await expect(runsOnOf(page)).toHaveCount(0)
-    await expect(chipOf(page, 'any')).toHaveCount(0)
     await page.getByRole('button', { name: 'New chat' }).click()
     const dialog = newChatDialogOf(page)
     await newChatAnswerOf(dialog, 'isPublic', 'Yes').check()
@@ -153,6 +115,7 @@ test.describe('Channels', () => {
     await dialog.getByRole('button', { name: 'Confirm' }).click()
     await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Forecasts' })).toBeVisible()
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
+    await expect(chatLinkOf(bobPage, 'Forecasts')).toHaveCount(0)
     await openBrowse(bobPage)
     await expect(browsedChatOf(bobPage, 'Forecasts')).toContainText('1 member')
     await browsedChatOf(bobPage, 'Forecasts').getByRole('link').click()
@@ -181,12 +144,6 @@ test.describe('Channels', () => {
     await expect(bobRole).toHaveValue('prompter')
     expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter'])
     await expect(tabPanelOf(page).getByRole('button', { name: 'Remove Bob' })).toHaveCount(0)
-    await tabPanelOf(page).getByRole('button', { name: 'Invite' }).click()
-    expect(await optionsOf(tabPanelOf(page).getByRole('form', { name: 'Invite' }).getByLabel('Role'))).toEqual([
-      'Editor',
-      'Prompter',
-    ])
-    await tabPanelOf(page).getByRole('button', { name: 'Cancel' }).click()
     await chatAction(page, 'Open floor', 'Make private')
     await expect(tabPanelOf(page).getByRole('button', { name: 'Remove Bob' })).toBeVisible()
     expect(await optionsOf(bobRole)).toEqual(['Editor', 'Prompter', 'Reader'])

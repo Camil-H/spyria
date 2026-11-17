@@ -13,6 +13,7 @@ import {
   openChat,
   type Page,
   postMessages,
+  runsOnOf,
   sendButtonOf,
   sendMessage,
   test,
@@ -394,6 +395,8 @@ test.describe('Messaging', () => {
       await expect(mainOf(page)).not.toContainText('GPT-5')
       await expect(mainOf(page)).not.toContainText('Claude Sonnet 5.5')
       await expect(mainOf(page).getByRole('img', { name: 'Git branch' })).toHaveCount(0)
+      await expect(runsOnOf(page)).toHaveCount(0)
+      await expect(chipOf(page, 'any')).toHaveCount(0)
       await expect(messageItemsOf(page)).toHaveCount(2)
       await expect(messageItemsOf(page).nth(0)).toContainText('Bob')
       await expect(messageItemsOf(page).nth(0)).toContainText('09:00')
