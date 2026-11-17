@@ -35,11 +35,11 @@ jobs:
       - if: always()
         run: |
           bun scripts/test-coverage.ts save unit .check/coverage-unit/lcov.info
-          gzip -9c tests/baseline/unit.coverage.txt | base64 -w0 | fold -w 7999 | bash .github/notices.sh "unit covered lines"
+          gzip -9c tests/baseline/unit.coverage.txt | base64 -w0 | fold -w 3799 | bash .github/notices.sh "unit covered lines"
       - if: always()
         run: |
           bun scripts/test-coverage.ts save integration .check/coverage-integration/lcov.info
-          gzip -9c tests/baseline/integration.coverage.txt | base64 -w0 | fold -w 7999 | bash .github/notices.sh "integration covered lines"
+          gzip -9c tests/baseline/integration.coverage.txt | base64 -w0 | fold -w 3799 | bash .github/notices.sh "integration covered lines"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
