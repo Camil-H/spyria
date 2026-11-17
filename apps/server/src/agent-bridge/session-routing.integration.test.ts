@@ -43,16 +43,20 @@ const decisionsOf = (chat: ChatId) =>
 const logsOf = (chat: ChatId, minimum: number) => gatewayLogsOf(gateway, `metadata_chat=${chat}`, minimum)
 const routing = (chat: ChatId, member: { workspaceId: string; userId: string }, fields: Record<string, unknown>) =>
   mutate(member, 'conversation.updateChatRouting', { workspaceId: acme, chatId: chat, ...fields })
-const routerLogsOf = async (chat: ChatId) =>
-  (await logsOf(chat, 2)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
+const routerLogsOf = async (chat: ChatId, minimum = 2) =>
+  (await logsOf(chat, minimum)).filter((log) => log.metadata.role === 'router').map((log) => log.model)
 
-test('the first prompt is classified once, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
-  const { launches } = await fakeAgent()
+test('the first prompt is classified once, while its runtime starts, on the prompter’s cheapest model with role router, and the session runs on the routed model', async () => {
+  const { host, launches } = await fakeAgent()
+  const releaseStart = host.hold('start')
   const chat = await newRuntimeChat()
   routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
-  expect(await answered(await prompt(chat, 'Refactor the whole billing architecture'))).toEqual([
-    { kind: 'agent', body: 'Understood, working on it.' },
-  ])
+  const question = await prompt(chat, 'Refactor the whole billing architecture')
+  expect(await routerLogsOf(chat, 1)).toEqual(['mistral-small-latest'])
+  expect(launches()).toHaveLength(0)
+
+  releaseStart()
+  expect(await answered(question)).toEqual([{ kind: 'agent', body: 'Understood, working on it.' }])
   expect(launches()[0]?.agent).toMatchObject({
     acp_model: 'spyria/mistral/mistral-large-latest',
     acp_thought_level: 'high',
@@ -90,26 +94,6 @@ test('the first prompt is classified once, on the prompter’s cheapest model wi
     'mistral-large-latest',
     'mistral-large-latest',
   ])
-})
-
-test('the first prompt is classified while its runtime starts, once, and the session then runs on the routed model', async () => {
-  const { host, launches } = await fakeAgent()
-  const releaseStart = host.hold('start')
-  const chat = await newRuntimeChat()
-  routeWith({ tier: 'large', confidence: 'high', effort: 'high' })
-  const question = await prompt(chat, 'Refactor the whole billing architecture')
-  const routerCalls = (await logsOf(chat, 1)).filter((log) => log.metadata.role === 'router')
-  expect(routerCalls.map((log) => log.model)).toEqual(['mistral-small-latest'])
-  expect(launches()).toHaveLength(0)
-
-  releaseStart()
-  expect(await answered(question)).toEqual([{ kind: 'agent', body: 'Understood, working on it.' }])
-  expect(launches()[0]?.agent).toMatchObject({
-    acp_model: 'spyria/mistral/mistral-large-latest',
-    acp_thought_level: 'high',
-  })
-  expect(await routerLogsOf(chat)).toEqual(['mistral-small-latest'])
-  expect(await decisionsOf(chat)).toHaveLength(1)
 })
 
 test('a lost conversation is routed again for the new session', async () => {
