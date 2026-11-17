@@ -8,8 +8,17 @@ import { gitIn, startGitHubStack } from './testing/github-stack.ts'
 import { alice, bob, lee, rpcOf, runtimeTurn, textOf } from './testing/testing.ts'
 
 setDefaultTimeout(40_000)
-const { stack, fakeGitHub, request, configureGitHubApp, connectGitHub, newDevChat, promptAndWait, runtimeWorkspaceOf } =
-  await startGitHubStack({ routing: true })
+const {
+  stack,
+  fakeGitHub,
+  request,
+  configureGitHubApp,
+  connectGitHub,
+  disconnectGitHub,
+  newDevChat,
+  promptAndWait,
+  runtimeWorkspaceOf,
+} = await startGitHubStack({ routing: true })
 const { app, database } = stack
 const webhookSecret = 'whsec-pull-requests-0123'
 const noGitHubAccount = 'Connect your GitHub account in your profile to push'
@@ -82,8 +91,13 @@ const guestToolCall = async (host: AgentHost, token: string, name: string, input
   const { result } = JSON.parse(answer.body)
   return { isError: result.isError, text: textOf(result) }
 }
+const pullRequestNumberIn = (text: string) => Number(/#(\d+)/.exec(text)?.[1])
+const fakePullRequestOf = (authorToken: string, number: number) =>
+  fakeGitHub.pullRequests.find((known) => known.authorToken === authorToken && known.number === number)
 
 test('a member whose GitHub access allows it pushes and opens a pull request with their own GitHub token passed only to git, as the Changes panel’s check shows; a member with Read, a reader and a member without GitHub are refused', async () => {
+  for (const member of [alice, bob]) await disconnectGitHub(member)
+  fakeGitHub.pullRequests.splice(0)
   const { launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
   const { id, branch } = await newDevChat({
     participants: [
@@ -225,7 +239,8 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   const { host } = await stack.agentHost('Agent tools host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
-  await connectGitHub(alice)
+  await disconnectGitHub(bob)
+  const aliceToken = await connectGitHub(alice)
   stack.setFakeLlmScript({
     steps: [{ tool: 'open_pull_request', arguments: { title: 'Agent totals', body: 'Opened by the agent.' } }],
     text: 'The pull request is open.',
@@ -235,7 +250,10 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   expect(toolStep).toMatchObject({ name: 'open_pull_request' })
   expect(toolStep?.result).toStartWith('Opened pull request #')
   expect((await cardOf(id))?.step).toMatchObject({ title: 'Agent totals', state: 'open' })
-  expect(fakeGitHub.pullRequests.at(-1)).toMatchObject({ title: 'Agent totals', body: 'Opened by the agent.' })
+  expect(fakePullRequestOf(aliceToken, pullRequestNumberIn(String(toolStep?.result)))).toMatchObject({
+    title: 'Agent totals',
+    body: 'Opened by the agent.',
+  })
   expect(await toolCallRows(id)).toEqual([
     {
       prompter_id: alice,
@@ -307,7 +325,7 @@ test('a signed webhook updates the card’s checks; a bad signature, a duplicate
   await committedWorkspace(id)
   await connectGitHub(alice)
   const opened = await publish(alice, id, 'pull_request', { title: 'Webhook totals', body: '' })
-  const number = Number(/#(\d+)/.exec(opened.body.text)?.[1])
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const repository = { full_name: 'acme/app' }
   const suite = (conclusion: string) => ({
@@ -349,7 +367,7 @@ test('webhooks arriving together all land, and one GitHub sends again after a fa
   await committedWorkspace(id)
   await connectGitHub(alice)
   const opened = await publish(alice, id, 'pull_request', { title: 'Racing totals', body: '' })
-  const number = Number(/#(\d+)/.exec(opened.body.text)?.[1])
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const repository = { full_name: 'acme/app' }
   const stepOf = async () => (await cardOf(id))?.step
@@ -394,13 +412,14 @@ test('the agent changes the title and description of the open pull request and t
   const { host } = await stack.agentHost('Pull request update host', { routesModelCalls: true })
   const { id } = await newDevChat()
   await committedWorkspace(id)
-  await connectGitHub(alice)
+  const aliceToken = await connectGitHub(alice)
   stack.setFakeLlmScript({ steps: [{ tool: 'update_pull_request', arguments: { title: 'Too early' } }], text: 'Done.' })
   expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
     { name: 'update_pull_request', result: 'This chat has no open pull request: open one first' },
   ])
-  expect((await publish(alice, id, 'pull_request', { title: 'Fix totals', body: 'First draft' })).status).toBe(200)
-  const opened = fakeGitHub.pullRequests.at(-1)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Fix totals', body: 'First draft' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   stack.setFakeLlmScript({
     steps: [{ tool: 'update_pull_request', arguments: { title: 'Fix the totals', body: 'Totals now add up.' } }],
     text: 'Updated.',
@@ -408,12 +427,12 @@ test('the agent changes the title and description of the open pull request and t
   expect(toolResultsOf(await promptAndWait(id, 'Retitle the pull request'))).toEqual([
     {
       name: 'update_pull_request',
-      result: `Updated pull request #${opened?.number}: ${fakeGitHub.urls.webUrl}/acme/app/pull/${opened?.number}`,
+      result: `Updated pull request #${number}: ${fakeGitHub.urls.webUrl}/acme/app/pull/${number}`,
     },
   ])
-  expect(fakeGitHub.pullRequests.at(-1)).toMatchObject({ title: 'Fix the totals', body: 'Totals now add up.' })
+  expect(fakePullRequestOf(aliceToken, number)).toMatchObject({ title: 'Fix the totals', body: 'Totals now add up.' })
   expect((await cardOf(id))?.step).toMatchObject({ title: 'Fix the totals', state: 'open' })
-  expect(fakeGitHub.apiRequests).toContain(`PATCH /repos/acme/app/pulls/${opened?.number}`)
+  expect(fakeGitHub.apiRequests).toContain(`PATCH /repos/acme/app/pulls/${number}`)
   expect((await toolCallRows(id)).map(({ tool, read_only, status }) => ({ tool, read_only, status }))).toEqual([
     { tool: 'update_pull_request', read_only: false, status: 'refused' },
     { tool: 'update_pull_request', read_only: false, status: 'succeeded' },
@@ -436,8 +455,9 @@ test('any prompter’s agent reads review threads and issues of the chat’s rep
   const { id } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
-  expect((await publish(alice, id, 'pull_request', { title: 'Reviewed totals' })).status).toBe(200)
-  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Reviewed totals' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   fakeGitHub.reviewThreads.push(
     {
       repository: 'acme/app',
@@ -577,8 +597,9 @@ test('any prompter’s agent reads the checks of a pull request’s head with re
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
   await connectGitHub(alice)
-  expect((await publish(alice, id, 'pull_request', { title: 'Checked totals' })).status).toBe(200)
-  const number = Number(fakeGitHub.pullRequests.at(-1)?.number)
+  const opened = await publish(alice, id, 'pull_request', { title: 'Checked totals' })
+  expect(opened.status).toBe(200)
+  const number = pullRequestNumberIn(opened.body.text)
   const headSha = fakeGitHub.branchHeadOf('acme/app', branch)
   const firstRunId = fakeGitHub.checkRuns.length + 1
   const run = { repository: 'acme/app', headSha, annotations: [] }
