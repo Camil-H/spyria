@@ -84,7 +84,7 @@ resource "google_cloud_run_v2_service" "server" {
     containers {
       name       = "zero-cache"
       image      = module.settings.zero_image
-      depends_on = ["server"]
+      depends_on = ["server", "configure"]
       resources {
         cpu_idle = false
         limits   = { cpu = local.size.zero_cpu, memory = local.size.zero_memory }

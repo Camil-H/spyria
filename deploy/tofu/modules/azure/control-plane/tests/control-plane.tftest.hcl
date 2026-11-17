@@ -87,6 +87,10 @@ run "the_control_plane_runs_one_server_with_public_ingress_and_keeps_the_rest_in
     error_message = "zero-cache keeps its replica on local storage"
   }
   assert {
+    condition     = azurerm_container_app.zero.template[0].init_container[0].name == "wait-for-database" && azurerm_container_app.zero.template[0].init_container[0].env[0].name == "ZERO_UPSTREAM_DB" && strcontains(join(" ", azurerm_container_app.zero.template[0].init_container[0].command), "pg_publication where pubname = 'spyria_zero'")
+    error_message = "zero-cache starts only once the server's migrations created its publication and the gateway's configuration granted replication, since each runs in its own app"
+  }
+  assert {
     condition     = module.settings.zero_environment.ZERO_QUERY_URL == "https://${azurerm_container_app.server.ingress[0].fqdn}/api/query" && azurerm_container_app.zero.ingress[0].allow_insecure_connections
     error_message = "zero-cache calls the server over HTTPS, and the server calls the internal apps over plain HTTP inside the environment"
   }

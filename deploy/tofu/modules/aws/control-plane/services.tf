@@ -19,6 +19,7 @@ locals {
     migrate        = ["DATABASE_URL"]
     server         = nonsensitive(keys(module.settings.server_secrets))
     zero           = nonsensitive(keys(module.settings.zero_secrets))
+    zero_wait      = ["ZERO_UPSTREAM_DB"]
     gateway        = [for name in nonsensitive(keys(module.settings.gateway_secrets)) : name if name != "PGPASSWORD"]
     gateway_config = ["BIFROST_DB_PASSWORD", "PGPASSWORD"]
   } : service => [for name in names : { name = name, valueFrom = "${aws_secretsmanager_secret.settings.arn}:${name}::" }] }
@@ -56,7 +57,7 @@ resource "aws_iam_role" "execution" {
 
 resource "aws_iam_role_policy_attachment" "execution" {
   role       = aws_iam_role.execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 data "aws_iam_policy_document" "read_settings" {
@@ -145,12 +146,22 @@ resource "aws_ecs_task_definition" "zero" {
   }
   container_definitions = jsonencode([
     {
+      name             = "wait-for-database"
+      image            = module.settings.postgres_client_image
+      essential        = false
+      entryPoint       = []
+      command          = module.settings.zero_wait_command
+      secrets          = local.secrets_of.zero_wait
+      logConfiguration = { logDriver = "awslogs", options = local.log_options }
+    },
+    {
       name             = "zero-cache"
       image            = module.settings.zero_image
       essential        = true
       portMappings     = [{ containerPort = 4848, protocol = "tcp" }]
       environment      = local.environment_of.zero
       secrets          = local.secrets_of.zero
+      dependsOn        = [{ containerName = "wait-for-database", condition = "SUCCESS" }]
       mountPoints      = [{ sourceVolume = "replica", containerPath = "/data" }]
       logConfiguration = { logDriver = "awslogs", options = local.log_options }
     },
@@ -227,5 +238,10 @@ resource "aws_ecs_service" "service" {
       container_port   = 3000
     }
   }
-  depends_on = [aws_lb_listener.https, aws_secretsmanager_secret_version.settings]
+  depends_on = [
+    aws_lb_listener.https,
+    aws_secretsmanager_secret_version.settings,
+    aws_iam_role_policy.read_settings,
+    aws_iam_role_policy_attachment.execution,
+  ]
 }
