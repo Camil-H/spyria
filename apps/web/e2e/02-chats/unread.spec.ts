@@ -6,6 +6,7 @@ import {
   messageContaining,
   messageItemsOf,
   openChat,
+  postMessages,
   research,
   sendMessage,
   sidebarOf,
@@ -14,27 +15,11 @@ import {
   unreadIconOf,
 } from './fixtures'
 
-const agentStoppedWithError = async (workerStack: WorkerStack, chatId: string) => {
-  await workerStack.database.$client.begin(async (sql) => {
-    await sql`select 1 from chats where id = ${chatId} for update`
-    await sql`
-      with agent_rows as (
-        select id, kind, body, greatest(
-          (select coalesce(max(seq), 0) from events where chat_id = ${chatId}),
-          (select coalesce(max(seq), 0) from messages where chat_id = ${chatId})
-        ) + number as seq
-        from (values (1, 'reply-before-failure', 'agent', 'Looking into it.'),
-          (2, 'failure-notice', 'notice', 'The agent stopped with an error')) as row (number, id, kind, body)
-      ), posted as (
-        insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-        select 'workspace-acme', ${chatId}, id, seq, 'message.posted', null,
-          jsonb_build_object('kind', kind, 'body', body, 'replyToId', null), now()
-        from agent_rows
-      )
-      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-      select 'workspace-acme', ${chatId}, id, seq, kind, null, body, now() from agent_rows`
-  })
-}
+const agentStoppedWithError = (workerStack: WorkerStack, chatId: string) =>
+  postMessages(workerStack, chatId, [
+    { id: 'reply-before-failure', kind: 'agent', authorId: null, body: 'Looking into it.' },
+    { id: 'failure-notice', kind: 'notice', authorId: null, body: 'The agent stopped with an error' },
+  ])
 
 const makeAliceAdminOf = async (workerStack: WorkerStack, chatId: string) => {
   await workerStack.database.$client`

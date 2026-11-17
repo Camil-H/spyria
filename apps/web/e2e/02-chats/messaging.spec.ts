@@ -9,8 +9,10 @@ import {
   messageActionsOf,
   messageContaining,
   messageItemsOf,
+  numberedMessages,
   openChat,
   type Page,
+  postMessages,
   sendButtonOf,
   sendMessage,
   test,
@@ -82,22 +84,7 @@ test.describe('Messaging', () => {
     })
 
     await test.step('scrolls the newest message into view when opening a chat and after sending', async () => {
-      await workerStack.database.$client.begin(async (sql) => {
-        await sql`select 1 from chats where id = 'chat-welcome' for update`
-        await sql`
-        with fillers as (
-          select 'filler-' || number as id, 'Filler ' || number as body,
-            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
-          from generate_series(1, 29) as number
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
-          from fillers
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
-      })
+      await postMessages(workerStack, 'chat-welcome', numberedMessages('filler-', 'Filler ', 29))
       await expect(messageContaining(page, 'Filler 29')).toHaveCount(1)
       await sendMessage(page, 'Filler 30')
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
@@ -138,22 +125,7 @@ test.describe('Messaging', () => {
     })
 
     await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
-      await workerStack.database.$client.begin(async (sql) => {
-        await sql`select 1 from chats where id = 'chat-welcome' for update`
-        await sql`
-        with fillers as (
-          select 'later-' || number as id, 'Later ' || number as body,
-            (select max(seq) from events where chat_id = 'chat-welcome') + number as seq
-          from generate_series(1, 20) as number
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-welcome', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), now()
-          from fillers
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-welcome', id, seq, 'member', 'member-alice', body, now() from fillers`
-      })
+      await postMessages(workerStack, 'chat-welcome', numberedMessages('later-', 'Later ', 20))
       await expect(messageContaining(page, 'Later 20')).toHaveCount(1)
       await openChat(page, 'Standup')
       await openChat(page, 'Welcome')
@@ -171,27 +143,11 @@ test.describe('Messaging', () => {
     page,
     workerStack,
   }) => {
-    await workerStack.database.$client.begin(async (sql) => {
-      await sql`select 1 from chats where id = 'chat-standup' for update`
-      await sql`
-        with posted_messages as (
-          select 'standup-older-' || number as id, 'Last month ' || number as body,
-            timestamptz '2026-09-01T00:00:00Z' + number * interval '1 minute' as created_at, number
-          from generate_series(1, 2) as number
-          union all
-          select 'standup-recent-' || number, 'This week ' || number, now(), 2 + number
-          from generate_series(1, 30) as number
-        ), numbered as (
-          select *, (select max(seq) from events where chat_id = 'chat-standup') + number as seq from posted_messages
-        ), posted as (
-          insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
-          select 'workspace-acme', 'chat-standup', id, seq, 'message.posted', 'member-alice',
-            jsonb_build_object('kind', 'member', 'body', body, 'replyToId', null), created_at
-          from numbered
-        )
-        insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
-        select 'workspace-acme', 'chat-standup', id, seq, 'member', 'member-alice', body, created_at from numbered`
-    })
+    await postMessages(workerStack, 'chat-standup', [
+      { id: 'standup-older-1', body: 'Last month 1', createdAt: '2026-09-01T00:01:00Z' },
+      { id: 'standup-older-2', body: 'Last month 2', createdAt: '2026-09-01T00:02:00Z' },
+      ...numberedMessages('standup-recent-', 'This week ', 30),
+    ])
     await openChat(page, 'Standup')
     await expect(messageContaining(page, 'This week 30')).toBeInViewport()
     await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
