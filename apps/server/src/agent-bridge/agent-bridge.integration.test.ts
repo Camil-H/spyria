@@ -607,11 +607,7 @@ test('a member without an LLM key cannot prompt a runtime chat, and still posts 
   expect(await send('chat-welcome')).toEqual(succeeded)
 })
 
-const queuedPrompt = async (
-  chat: string,
-  authorId: string,
-  beforeTurn: (sql: typeof database.$client) => unknown = () => undefined,
-) => {
+const queuedPrompt = async (chat: string, authorId: string, beforeTurn: (sql: typeof database.$client) => unknown) => {
   const promptId = `message-${crypto.randomUUID()}`
   await database.$client.begin(async (sql) => {
     await sql`
@@ -628,15 +624,25 @@ const queuedPrompt = async (
   return promptId
 }
 
-test('a prompt whose author has no LLM key at turn time ends with Spyria’s notice without reaching the agent', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
-  const promptId = await queuedPrompt(chat, bob)
-  await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob has no LLM key in this workspace' }])
-  expect(relay.prompts).toEqual([])
-  expect(await turnOf(chat)).toBeNull()
-})
+test.each<[string, (sql: typeof database.$client, chat: string) => unknown, string]>([
+  ['whose author has no LLM key', () => undefined, 'Bob has no LLM key in this workspace'],
+  [
+    'whose prompter was removed after posting',
+    (sql, chat) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
+    'Bob can no longer prompt in this chat',
+  ],
+])(
+  'a prompt %s is refused at turn time with Spyria’s notice, without reaching the agent',
+  async (_, beforeTurn, notice) => {
+    const { relay } = await agentHost()
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
+    const promptId = await queuedPrompt(chat, bob, (sql) => beforeTurn(sql, chat))
+    await answered(promptId)
+    expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: notice }])
+    expect(relay.prompts).toEqual([])
+    expect(await turnOf(chat)).toBeNull()
+  },
+)
 
 test('a model failure recorded by the relay shows as the error at the turn end, after the agent’s text', async () => {
   const { relay } = await agentHost()
@@ -652,20 +658,6 @@ test('a model failure recorded by the relay shows as the error at the turn end, 
     type: 'error',
     message: 'The LLM key of Alice was refused',
   })
-})
-
-test('a prompter removed after posting is refused at turn time with Spyria’s notice, without reaching the agent', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'prompter' }] })
-  const promptId = await queuedPrompt(
-    chat,
-    bob,
-    (sql) => sql`delete from chat_participants where chat_id = ${chat} and user_id = ${bob}`,
-  )
-  await answered(promptId)
-  expect(await repliesTo(promptId)).toEqual([{ kind: 'notice', body: 'Bob can no longer prompt in this chat' }])
-  expect(relay.prompts).toEqual([])
-  expect(await turnOf(chat)).toBeNull()
 })
 
 test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
