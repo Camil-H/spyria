@@ -1,32 +1,18 @@
 import { afterAll, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { zeroDrizzle } from '@rocicorp/zero/server/adapters/drizzle'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { schema } from '@spyria/db/zero'
-import { chatId, runtimeHostId } from '@spyria/kernel'
+import { chatId } from '@spyria/kernel'
 import {
   createRuntimeJobs,
   createRuntimeTransactor,
   ensureRuntimeRunning,
   removeChatRuntime,
 } from '@spyria/runtime/server'
-import { websocket } from 'hono/bun'
-import { createApp } from '../app.ts'
 import { startJobWorker } from '../job-worker.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
-import {
-  acme,
-  aliceInAcme,
-  openSharedTestApp,
-  rejectionOf,
-  sessionTokenOf,
-  testAuthSettings,
-  testSecretsKeyring,
-  waitFor,
-} from '../testing/testing.ts'
-import { createRuntimeHostGateway } from './gateway.ts'
+import { startDockerTestHost } from '../testing/docker-runtime-host.ts'
+import { acme, openSharedTestApp, rejectionOf, waitFor } from '../testing/testing.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
@@ -39,61 +25,20 @@ const hasImage = hasDocker && spyriaImage !== '' && docker('image', 'inspect', s
 const skipReason = !hasDocker ? 'Docker is unavailable' : "Spyria's runtime image is not built (bun run agent:build)"
 if (!hasImage) console.warn(`Skipping the runtime host Docker test: ${skipReason}`)
 
-const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
-const prefix = `${deployment}-`
-const hostProgram = new URL('../../../host/src/main.ts', import.meta.url).pathname
-const stateDirectory = mkdtempSync(join(tmpdir(), 'spyria-test-host-'))
 const shared = await openSharedTestApp()
 const testDatabase = await createTestDatabase()
 await testDatabase.database.transaction(await shared.seededGatewayKeys())
-const gateway = createRuntimeHostGateway({
-  secretsKeyring: testSecretsKeyring,
-  databases: () => [testDatabase.database],
-  spyriaAgentImage: spyriaImage,
-})
-const app = createApp({ database: testDatabase.database, ...testAuthSettings, runtimeHosts: gateway })
-const server = Bun.serve({ port: 0, fetch: app.fetch, websocket })
-let hostProcess: ReturnType<typeof Bun.spawn> | undefined
-
-const removeDockerObjects = () => {
-  const containers = dockerText('ps', '-aq', '--filter', `name=^${prefix}`).split('\n').filter(Boolean)
-  if (containers.length > 0) docker('rm', '-f', ...containers)
-  const volumes = dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}`).split('\n').filter(Boolean)
-  if (volumes.length > 0) docker('volume', 'rm', '-f', ...volumes)
-  const networks = dockerText('network', 'ls', '-q', '--filter', `name=^${prefix}`).split('\n').filter(Boolean)
-  if (networks.length > 0) docker('network', 'rm', ...networks)
+let dockerHostStarted: ReturnType<typeof startDockerTestHost> | undefined
+const dockerHost = () => {
+  dockerHostStarted ??= startDockerTestHost({ database: testDatabase.database, spyriaAgentImage: spyriaImage })
+  return dockerHostStarted
 }
 
 afterAll(async () => {
-  hostProcess?.kill()
-  await hostProcess?.exited
-  if (hasDocker) removeDockerObjects()
-  void server.stop(true)
+  await (await dockerHostStarted)?.cleanup()
   await testDatabase.drop()
-  rmSync(stateDirectory, { recursive: true, force: true })
 }, databaseDropTimeoutMilliseconds)
 
-const connectHost = async () => {
-  const added = await app.request('/api/runtime-hosts', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${await sessionTokenOf(testDatabase.database, acme, aliceInAcme.userId)}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ name: 'Docker test host' }),
-  })
-  const { id, code } = (await added.json()) as { id: string; code: string }
-  hostProcess = Bun.spawn([process.execPath, hostProgram, `http://localhost:${server.port}/h/${code}`], {
-    env: { ...process.env, SPYRIA_HOST_STATE_DIR: stateDirectory, SPYRIA_DEPLOYMENT: deployment },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  })
-  await waitFor(
-    async () =>
-      (await testDatabase.database.$client`select status from runtime_hosts where id = ${id}`)[0]?.status === 'online',
-  )
-  return id
-}
 const dockerOperatingSystem = () => dockerText('info', '-f', '{{.OperatingSystem}}')
 const addressOf = (name = '') =>
   dockerText('inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', name)
@@ -105,19 +50,14 @@ const reaches = (from = '', url: string) =>
     '-e',
     `fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(3000) }).then(() => console.log('reached'), (error) => console.log('blocked', error.cause?.code ?? error.name))`,
   )
-let connectedHostId: ReturnType<typeof connectHost> | undefined
-const hostId = () => {
-  connectedHostId ??= connectHost()
-  return connectedHostId
-}
 
 test.skipIf(!hasImage)(
   "spyria-host creates a hardened runtime from Spyria's image, relays HTTP to spyria-agent, then stops and removes it with its volumes",
   async () => {
     const startedAt = performance.now()
-    const id = await hostId()
+    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
     const provider = gateway.sandboxProvider
-    const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'docker-test' }
+    const runtime = { workspaceId: acme, hostId, runtimeId: 'docker-test' }
     const apiKey = provider.apiKeyOf(runtime)
     const containerName = `${prefix}rt-docker-test`
     expect((await rejectionOf(provider.create({ ...runtime, image: 'docker.io/library/alpine:3' }))).message).toContain(
@@ -162,14 +102,7 @@ test.skipIf(!hasImage)(
 
     await provider.start(runtime)
     expect(await provider.status(runtime)).toBe('running')
-    const transport = provider.connect(runtime)
-    const isReady = () =>
-      transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-        (response) => response.status === 200,
-        () => false,
-      )
-    for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-      if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
+    const transport = await readyRuntime(runtime)
     const unauthenticated = await transport.fetch({ method: 'GET', path: '/api/conversations/unknown' })
     expect(unauthenticated.status).toBe(401)
     const authenticated = await transport.fetch({
@@ -204,7 +137,8 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   "a runtime of another deployment on the same Docker daemon is out of this host's reach, even when its name extends this deployment's",
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, deployment } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const otherDeploymentRuntime = `${deployment}-rt-rt-other`
     docker(
       ...[
@@ -230,24 +164,15 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   'two runtimes on one host cannot reach each other, while spyria-host relays to both',
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const provider = gateway.sandboxProvider
     const runtimes = ['isolated-a', 'isolated-b'].map((runtimeId) => ({ ...host, runtimeId }))
     for (const runtime of runtimes) {
       await provider.create({ ...runtime, image: spyriaImage })
       await provider.start(runtime)
     }
-    const isReady = (runtime: (typeof runtimes)[number]) =>
-      provider
-        .connect(runtime)
-        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
-        .then(
-          (response) => response.status === 200,
-          () => false,
-        )
-    for (const runtime of runtimes)
-      for (const deadline = Date.now() + 30_000; !(await isReady(runtime)); await Bun.sleep(100))
-        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
+    for (const runtime of runtimes) await readyRuntime(runtime)
     const [first, second] = runtimes.map(({ runtimeId }) => `${prefix}rt-${runtimeId}`)
     expect(docker('exec', String(first), 'getent', 'hosts', String(second)).exitCode).not.toBe(0)
     expect(reaches(first, `http://${addressOf(first)}:8000/ready`)).toBe('reached')
@@ -262,20 +187,14 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   'a runtime reaches the internet and a port the machine publishes on every interface, but not one published on 127.0.0.1 nor a service on another Docker network',
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const provider = gateway.sandboxProvider
     const runtime = { ...host, runtimeId: 'reachability' }
     const runtimeContainer = `${prefix}rt-reachability`
     await provider.create({ ...runtime, image: spyriaImage })
     await provider.start(runtime)
-    const transport = provider.connect(runtime)
-    const isReady = () =>
-      transport.fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 }).then(
-        (response) => response.status === 200,
-        () => false,
-      )
-    for (const deadline = Date.now() + 30_000; !(await isReady()); await Bun.sleep(100))
-      if (Date.now() > deadline) throw new Error('spyria-agent was not ready within 30 s')
+    await readyRuntime(runtime)
     expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
 
     const service = `${prefix}service`
@@ -322,7 +241,8 @@ test.skipIf(!hasImage)(
   "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image; prepare refuses another image",
   async () => {
     const startedAt = performance.now()
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     expect((await rejectionOf(gateway.prepare(host, 'docker.io/library/alpine:3'))).message).toContain('refused')
     const foreignImage = await rejectionOf(
       gateway.prepare(
@@ -399,30 +319,19 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   'a runtime holds its Docker network only while it runs: stop releases it, start recreates it and relays again',
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const provider = gateway.sandboxProvider
     const runtimes = ['cycle-a', 'cycle-b', 'cycle-c'].map((runtimeId) => ({ ...host, runtimeId }))
     const runtimeNetworks = () =>
       dockerText('network', 'ls', '--format', '{{.Name}}', '--filter', `name=^${prefix}rt-cycle-`)
         .split('\n')
         .filter(Boolean)
-    const readyOf = (runtime: (typeof runtimes)[number]) =>
-      provider
-        .connect(runtime)
-        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
-        .then(
-          (response) => response.status === 200,
-          () => false,
-        )
-    const ready = async (runtime: (typeof runtimes)[number]) => {
-      for (const deadline = Date.now() + 30_000; !(await readyOf(runtime)); await Bun.sleep(100))
-        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
-    }
     for (const runtime of runtimes) {
       await provider.create({ ...runtime, image: spyriaImage })
       await provider.start(runtime)
     }
-    for (const runtime of runtimes) await ready(runtime)
+    for (const runtime of runtimes) await readyRuntime(runtime)
     expect(runtimeNetworks()).toHaveLength(3)
     for (let cycle = 0; cycle < 3; cycle++) {
       for (const runtime of runtimes) await provider.stop(runtime)
@@ -430,7 +339,7 @@ test.skipIf(!hasImage)(
       for (const runtime of runtimes) await provider.start(runtime)
       expect(runtimeNetworks()).toHaveLength(3)
     }
-    for (const runtime of runtimes) await ready(runtime)
+    for (const runtime of runtimes) await readyRuntime(runtime)
     for (const runtime of runtimes) await provider.stop(runtime)
     expect(runtimeNetworks()).toEqual([])
     for (const runtime of runtimes) await provider.remove(runtime)
@@ -442,7 +351,8 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   "removing a runtime whose container is gone removes its network and volumes, never another deployment's objects of the same runtime id",
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const runtime = { ...host, runtimeId: 'orphaned' }
     const otherPrefix = `spyria-test-other-${crypto.randomUUID().slice(0, 8)}-`
     const otherObjects = { network: `${otherPrefix}rt-orphaned-net`, volume: `${otherPrefix}rt-orphaned-ws` }
@@ -469,9 +379,9 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   'recreating a runtime replaces its container on the image given but keeps its volumes and the files in them',
   async () => {
-    const id = await hostId()
+    const { gateway, hostId, prefix } = await dockerHost()
     const provider = gateway.sandboxProvider
-    const runtime = { workspaceId: acme, hostId: runtimeHostId(id), runtimeId: 'docker-recreate' }
+    const runtime = { workspaceId: acme, hostId, runtimeId: 'docker-recreate' }
     const containerName = `${prefix}rt-docker-recreate`
     const inWorkspaceVolume = (...command: string[]) =>
       dockerText(
@@ -502,23 +412,15 @@ test.skipIf(!hasImage)(
 test.skipIf(!hasImage)(
   'a snapshot copies a running runtime’s project and home into a volume that the next runtimes of the repository mount read-only, and pruning removes it once nothing uses it',
   async () => {
-    const host = { workspaceId: acme, hostId: runtimeHostId(await hostId()) }
+    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
+    const host = { workspaceId: acme, hostId }
     const provider = gateway.sandboxProvider
     const setupSnapshot = { repository: 'acme/app', setupCommand: 'bun install' }
     const [source, reader] = ['snapshot-source', 'snapshot-reader'].map((runtimeId) => ({ ...host, runtimeId }))
-    const isReady = (runtime: typeof host & { runtimeId: string }) =>
-      provider
-        .connect(runtime)
-        .fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })
-        .then(
-          (response) => response.status === 200,
-          () => false,
-        )
     const started = async (runtime: typeof host & { runtimeId: string }) => {
       await provider.create({ ...runtime, image: spyriaImage, setupSnapshot })
       await provider.start(runtime)
-      for (const deadline = Date.now() + 30_000; !(await isReady(runtime)); await Bun.sleep(100))
-        if (Date.now() > deadline) throw new Error(`${runtime.runtimeId} was not ready within 30 s`)
+      await readyRuntime(runtime)
       return `${prefix}rt-${runtime.runtimeId}`
     }
     if (!source || !reader) throw new Error('Two runtimes are needed')
@@ -532,7 +434,9 @@ test.skipIf(!hasImage)(
     )
     await provider.snapshot({ ...source, setupSnapshot })
     expect(await provider.status(source)).toBe('running')
-    expect(await isReady(source)).toBe(true)
+    expect(
+      (await provider.connect(source).fetch({ method: 'GET', path: '/ready', timeoutMilliseconds: 1000 })).status,
+    ).toBe(200)
     const snapshots = dockerText('volume', 'ls', '-q', '--filter', `name=^${prefix}snapshot-`).split('\n')
     expect(snapshots).toHaveLength(1)
 
