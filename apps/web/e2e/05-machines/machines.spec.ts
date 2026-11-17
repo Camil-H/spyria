@@ -1,34 +1,8 @@
-import { expect, openProfile, type Page } from '../fixtures'
-import { hostsSectionOf, hostTest, machineSectionOf, machineToolOf, openSettings, urlOf } from './fixtures'
+import { expect, type Page } from '../fixtures'
+import { hostsSectionOf, hostTest, openSettings, urlOf } from './fixtures'
 
 hostTest.describe('Machines', () => {
   hostTest.use({ runtimeHost: false })
-
-  hostTest.describe(() => {
-    hostTest.use({ signedInAs: 'member-bob' })
-
-    hostTest(
-      'As a member, I see my machine and its Remove above Claude Code and Codex, each with its sign-in state',
-      async ({ page, pair }) => {
-        await page.goto('/')
-        await openProfile(page, 'My machine')
-        await machineSectionOf(page).getByRole('button', { name: 'Add my machine' }).click()
-        const dialog = page.getByRole('dialog', { name: 'Add my machine' })
-        const command = await dialog.getByRole('textbox', { name: 'Command' }).inputValue()
-        await dialog.getByRole('button', { name: 'Close' }).click()
-        pair(urlOf(command), { personal: true, signedIn: ['codex'] })
-        await expect(machineToolOf(page, 'Codex')).toHaveText('CodexSigned in')
-        await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeNot signed inSet up')
-        const [removeBottom, toolsTop] = await Promise.all([
-          machineSectionOf(page)
-            .getByRole('button', { name: 'Remove' })
-            .evaluate((button) => button.getBoundingClientRect().bottom),
-          machineToolOf(page, 'Claude Code').evaluate((button) => button.getBoundingClientRect().top),
-        ])
-        expect(removeBottom).toBeLessThanOrEqual(toolsTop)
-      },
-    )
-  })
 
   const hostRowOf = (page: Page, hostName: string) =>
     hostsSectionOf(page).getByRole('listitem').filter({ hasText: hostName })

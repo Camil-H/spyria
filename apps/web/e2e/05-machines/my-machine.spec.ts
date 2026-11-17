@@ -101,6 +101,13 @@ test.describe('My machine', () => {
       await expect(machineSectionOf(page).getByRole('button', { name: 'Set up Codex' })).toHaveCount(0)
       await expect(machineToolOf(page, 'Claude Code')).toHaveText('Claude CodeNot signed inSet up')
       await expect(machineSectionOf(page)).not.toContainText('Signed in to')
+      const [removeBottom, toolsTop] = await Promise.all([
+        machineSectionOf(page)
+          .getByRole('button', { name: 'Remove' })
+          .evaluate((button) => button.getBoundingClientRect().bottom),
+        machineToolOf(page, 'Claude Code').evaluate((tool) => tool.getBoundingClientRect().top),
+      ])
+      expect(removeBottom).toBeLessThanOrEqual(toolsTop)
     })
 
     test('As a member without a machine, I use Claude Code through one command that starts my machine and signs in, and the dialog closes once Claude Code is ready', {
