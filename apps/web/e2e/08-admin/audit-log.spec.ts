@@ -89,7 +89,7 @@ test.describe('Audit log', () => {
     await expect(details).toContainText(['Research', 'CRM', 'update', 'No', 'approved', 'Alice', 'Alice', 'succeeded'])
   })
 
-  test('As a member who can view the audit log, I filter by person and type, and a date range leaves out older rows', {
+  test('As a member who can view the audit log, I filter by person and type, and a date range leaves out older rows, then I export the filtered rows as CSV with a header', {
     tag: ['@spec-44'],
   }, async ({ page, workerStack }) => {
     await workerStack.database.$client`
@@ -113,15 +113,6 @@ test.describe('Audit log', () => {
     const yesterday = new Date(Date.now() - 24 * 3_600_000).toISOString().slice(0, 10)
     await filtersOf(page).getByLabel('From').fill(yesterday)
     await expect(recordOf(page, /old@example\.com/)).toHaveCount(0)
-    await expect(recordsOf(page)).toHaveCount(2)
-  })
-
-  test('As a member who can view the audit log, I export the filtered rows as CSV with a header', {
-    tag: ['@spec-44'],
-  }, async ({ page, workerStack }) => {
-    await inviteNinaAndRemoveBob(page, workerStack)
-    await filtersOf(page).getByRole('combobox', { name: 'Type' }).selectOption('Members')
-    await expect(recordOf(page, toolCallText)).toHaveCount(0)
     await expect(recordsOf(page)).toHaveCount(2)
     const shownTexts = await recordsOf(page).allTextContents()
 
