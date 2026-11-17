@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { startAgentStack, waitFor } from '../testing/testing.ts'
+import { captureConsole, startAgentStack, waitFor } from '../testing/testing.ts'
 
 setDefaultTimeout(30_000)
 const { database, agentBridge, newRuntimeChat, prompt, openStream, holds, holdUrl, turnOf, ...stack } =
@@ -26,4 +26,34 @@ test('after a server restart mid-turn, viewers get the reply so far as a snapsho
   expect(texts.slice(1).every((frame) => !frame.isSnapshot)).toBe(true)
   const [reply] = await stack.repliesTo(question)
   expect(texts.map((frame) => frame.text).join('')).toBe(reply?.body ?? '')
+})
+
+test('an agent event whose recording keeps failing is recorded again, and read again from the agent when retries run out, so the turn still ends with its reply', async () => {
+  await stack.agentHost('Failing record host', { holdUrl })
+  const chat = await newRuntimeChat()
+  await database.$client.unsafe('create sequence turn_end_record_failures')
+  await database.$client.unsafe(
+    `create function refuse_turn_end_records() returns trigger language plpgsql as $$ begin
+       if new.type = 'agent.event' and new.payload->'event'->'update'->>'sessionUpdate' = 'turn_end'
+         and nextval('turn_end_record_failures') <= 4 then raise exception 'The turn end record is refused'; end if;
+       return new; end $$`,
+  )
+  await database.$client.unsafe(
+    'create trigger refuse_turn_end_records before insert on events for each row execute function refuse_turn_end_records()',
+  )
+  const capturedConsole = captureConsole()
+  try {
+    const question = await prompt(chat, 'Say hello')
+    await stack.answered(question)
+    await waitFor(async () => (await turnOf(chat)) === null, 20_000)
+    expect((await stack.repliesTo(question)).length).toBeGreaterThan(0)
+  } finally {
+    capturedConsole.restore()
+    await database.$client.unsafe('drop trigger refuse_turn_end_records on events')
+    await database.$client.unsafe('drop function refuse_turn_end_records')
+    await database.$client.unsafe('drop sequence turn_end_record_failures')
+  }
+  const turnEnds = await database.$client`
+    select id from events where chat_id = ${chat} and payload->'event'->'update'->>'sessionUpdate' = 'turn_end'`
+  expect(turnEnds).toHaveLength(1)
 })

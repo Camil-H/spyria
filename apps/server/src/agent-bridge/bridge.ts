@@ -40,6 +40,19 @@ type BrowserView = { receive(message: unknown): void; close(): void }
 const readyTimeoutMilliseconds = 5000
 const readableRetryMilliseconds = 100
 const commandOutputIntervalMilliseconds = 100
+const recordRetryDelaysMilliseconds = [100, 1000, 5000]
+
+const withRecordRetries = async <Result>(record: () => Promise<Result>): Promise<Result> => {
+  for (const delay of recordRetryDelaysMilliseconds) {
+    try {
+      return await record()
+    } catch (error) {
+      if (error instanceof DomainError) throw error
+      await Bun.sleep(delay)
+    }
+  }
+  return record()
+}
 const slowViewerBytes = 4 * 1024 * 1024
 const slowViewerCloseCode = 4008
 const notSignedInCloseCode = 4001
@@ -290,6 +303,7 @@ export const createAgentBridge = ({
         drainingPromptId: null as MessageId | null,
         endedPromptId: null as string | null,
         isClosed: false,
+        isRecordLost: false,
         questions: new Map<string, object>(),
         workspace: undefined as object | undefined,
         commandOutputs: new Map<string, string>(),
@@ -321,7 +335,11 @@ export const createAgentBridge = ({
         const promptAtEvent = chatSocket.promptId
         const shownAtEvent = turnPromptId ?? shownPromptIdOf()
         recording = recording
-          .then(() => handlers.recordEvent(chat, event, turnPromptId))
+          .then(() =>
+            chatSocket.isRecordLost
+              ? undefined
+              : withRecordRetries(() => handlers.recordEvent(chat, event, turnPromptId)),
+          )
           .then((recorded) => {
             if (recorded?.isReplyStored && shownAtEvent) broadcast(chat, { promptId: shownAtEvent, storedId: event.id })
             if (!recorded || chatSocket.promptId !== promptAtEvent) return
@@ -332,14 +350,19 @@ export const createAgentBridge = ({
             forgetStreamOf(chat)
             chatSocket.streamedText = ''
           })
-          .catch((error) =>
+          .catch((error) => {
             log.error({
               event: 'agent.event.record_failed',
-              body: 'Recording an agent event failed',
+              body: 'Recording an agent event failed: the events are read again from the agent',
               attributes: { 'workspace.id': chat.workspaceId, 'chat.id': chat.chatId },
               error,
-            }),
-          )
+            })
+            chatSocket.isRecordLost = true
+            opened.then(
+              (socket) => socket.close(),
+              () => {},
+            )
+          })
       }
       const unsentOutputs = new Set<string>()
       let outputTimer: ReturnType<typeof setTimeout> | undefined
