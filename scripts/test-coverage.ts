@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 
 export type CoveredLines = Map<string, Set<number>>
 
@@ -98,7 +99,7 @@ export const compareCoverage = (
   }
 }
 
-const baselineFileOf = (layer: string) => new URL(`../tests/baseline/${layer}.coverage.txt`, import.meta.url).pathname
+const baselineFileOf = (layer: string) => new URL(`../.check/coverage-baseline/${layer}.coverage.txt`, import.meta.url).pathname
 
 const run = (
   command: string | undefined,
@@ -111,7 +112,10 @@ const run = (
       'Usage: bun scripts/test-coverage.ts save|compare <layer> <lcov.info> [<lcov.info of another layer>...]',
     )
   const current = coveredLinesOfLcov(readFileSync(lcovFile, 'utf8'))
-  if (command === 'save') return writeFileSync(baselineFileOf(layer), formatCoveredLines(current))
+  if (command === 'save') {
+    mkdirSync(dirname(baselineFileOf(layer)), { recursive: true })
+    return writeFileSync(baselineFileOf(layer), formatCoveredLines(current))
+  }
   const otherLayers = coveredLinesOfLcov(otherLcovFiles.map((file) => readFileSync(file, 'utf8')).join('\n'))
   const baselineFile = baselineFileOf(layer)
   const baseline = existsSync(baselineFile) ? parseCoveredLines(readFileSync(baselineFile, 'utf8')) : new Map()
