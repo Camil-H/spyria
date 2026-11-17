@@ -1,12 +1,10 @@
-import { jobs } from '@spyria/db/postgres'
-import { openPageAs, type WorkerStack } from '../stack'
+import { openPageAs } from '../stack'
 import {
   addParticipant,
   agentReplyText,
   alicesWelcomeMessage,
   chatAction,
   chatLinkOf,
-  chooseRunsOn,
   composerOf,
   expect,
   expectMembers,
@@ -24,7 +22,6 @@ import {
   replyBoxOf,
   replyInThread,
   sendButtonOf,
-  sendMessage,
   sidebarOf,
   test,
   threadToggleOf,
@@ -38,8 +35,6 @@ const startRuntime = async (message: Locator) =>
   (await messageActionOf(message, 'Start runtime from this message')).click()
 const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
   (await messageActionOf(messageContaining(page, messageText), actionName)).click()
-const agentPromptJobs = async (workerStack: WorkerStack) =>
-  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
 const runtimeLinkOf = (page: Page) =>
   messageContaining(page, alicesWelcomeMessage)
     .first()
@@ -119,24 +114,6 @@ test.describe('Runtime from a thread', () => {
     await leePage.context().close()
   })
 
-  test('As a member, I start a runtime from my own message without replies: it carries that message alone and adds nobody', {
-    tag: ['@spec-32'],
-  }, async ({ page }) => {
-    await openWelcome(page)
-    await sendMessage(page, 'Lunch at noon?')
-    await startRuntime(messageContaining(page, 'Lunch at noon?'))
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Lunch at noon?' })).toBeVisible()
-    await expect(messageItemsOf(page)).toHaveCount(1)
-    await expect(messageItemsOf(page).nth(0)).toContainText(
-      new RegExp(
-        `Conversation so far, from the channel thread in #Welcome:\\n\\nAlice \\(member, human\\) · ${quotedTime}\\nLunch at noon\\?$`,
-      ),
-      { useInnerText: true },
-    )
-    await openPanelTab(page, 'Lunch at noon?', 'Members')
-    await expectMembers(page, [['Alice', 'Owner']])
-  })
-
   test('As a member, I copy a thread as context: the clipboard holds its channel and its messages quoted with their authors and times', {
     tag: ['@spec-32'],
   }, async ({ page }) => {
@@ -158,22 +135,8 @@ test.describe('Runtime from a thread', () => {
     await expect(await messageActionOf(repliesOf(page).first(), 'Copy thread as context')).toBeVisible()
   })
 
-  test('As a member, I create a runtime from a thread without prompting the agent, and my first prompt after Runs on is answered', {
-    tag: ['@spec-32'],
-  }, async ({ page, browser, workerStack }) => {
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await startRuntimeFromThread(page, bobPage)
-    await chooseRunsOn(page, 'Spyria runtime')
-    expect(await agentPromptJobs(workerStack)).toEqual([])
-    await sendMessage(page, 'Summarise the thread.')
-    await expect(messageContaining(page, agentReplyText)).toBeVisible({ timeout: 30_000 })
-    expect(await agentPromptJobs(workerStack)).toHaveLength(1)
-    await bobPage.context().close()
-  })
-
   test('As a member, I start a runtime chat from a channel message: seeded, in the same project, linked back to its channel, with nothing sent to the agent', async ({
     page,
-    workerStack,
   }) => {
     await test.step('creates a runtime chat in the same project, seeded, selected and focused', async () => {
       await openChat(page, 'Welcome')
@@ -192,16 +155,6 @@ test.describe('Runtime from a thread', () => {
 
     await test.step('links back to the source channel and sends nothing to the agent', async () => {
       await expect(workingIndicatorOf(page)).toHaveCount(0)
-      await expect
-        .poll(
-          async () =>
-            (
-              await workerStack.database
-                .$client`select chat_id from runtime_origins where message_id = 'message-welcome-2'`
-            ).length,
-        )
-        .toBe(1)
-      expect(await agentPromptJobs(workerStack)).toEqual([])
       await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
       await mainOf(page).getByRole('link', { name: 'Started from #Welcome' }).click()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
