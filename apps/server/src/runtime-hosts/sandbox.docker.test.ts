@@ -135,7 +135,7 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  'two runtimes on one host cannot reach each other, while spyria-host relays to both',
+  'two runtimes on one host cannot reach each other, while spyria-host relays to both; a runtime reaches the internet and a port the machine publishes on every interface, but not one published on 127.0.0.1 nor a service on another Docker network',
   async () => {
     const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
     const host = { workspaceId: acme, hostId }
@@ -149,26 +149,11 @@ test.skipIf(!hasImage)(
     const [first, second] = runtimes.map(({ runtimeId }) => `${prefix}rt-${runtimeId}`)
     expect(docker('exec', String(first), 'getent', 'hosts', String(second)).exitCode).not.toBe(0)
     expect(reaches(first, `http://${addressOf(first)}:8000/ready`)).toBe('reached')
-    if (dockerOperatingSystem() === 'OrbStack')
+    const operatingSystem = dockerOperatingSystem()
+    if (operatingSystem === 'OrbStack')
       console.warn('OrbStack accepts traffic between Docker networks: the address check between runtimes is skipped')
     else expect(reaches(first, `http://${addressOf(second)}:8000/ready`)).toStartWith('blocked')
-    for (const runtime of runtimes) await provider.remove(runtime)
-  },
-  90_000,
-)
-
-test.skipIf(!hasImage)(
-  'a runtime reaches the internet and a port the machine publishes on every interface, but not one published on 127.0.0.1 nor a service on another Docker network',
-  async () => {
-    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
-    const host = { workspaceId: acme, hostId }
-    const provider = gateway.sandboxProvider
-    const runtime = { ...host, runtimeId: 'reachability' }
-    const runtimeContainer = `${prefix}rt-reachability`
-    await provider.create({ ...runtime, image: spyriaImage })
-    await provider.start(runtime)
-    await readyRuntime(runtime)
-    expect(reaches(runtimeContainer, 'https://example.com/')).toBe('reached')
+    expect(reaches(first, 'https://example.com/')).toBe('reached')
 
     const service = `${prefix}service`
     const serviceNetwork = `${prefix}services-net`
@@ -193,21 +178,20 @@ test.skipIf(!hasImage)(
       )
     await waitFor(async () => (await serviceAnswer()) === 'service')
     expect(reaches(service, `http://${addressOf(service)}:8080/`)).toBe('reached')
-    const operatingSystem = dockerOperatingSystem()
     if (operatingSystem === 'OrbStack' || operatingSystem === 'Docker Desktop')
       console.warn(`${operatingSystem} forwards host.docker.internal to the machine's loopback: that check is skipped`)
     else {
-      expect(reaches(runtimeContainer, `http://host.docker.internal:${everyInterfacePort}/`)).toBe('reached')
-      expect(reaches(runtimeContainer, `http://host.docker.internal:${loopbackPort}/`)).toStartWith('blocked')
+      expect(reaches(first, `http://host.docker.internal:${everyInterfacePort}/`)).toBe('reached')
+      expect(reaches(first, `http://host.docker.internal:${loopbackPort}/`)).toStartWith('blocked')
     }
     if (operatingSystem === 'OrbStack')
       console.warn('OrbStack accepts traffic between Docker networks: the address check of the service is skipped')
-    else expect(reaches(runtimeContainer, `http://${addressOf(service)}:8080/`)).toStartWith('blocked')
-    await provider.remove(runtime)
+    else expect(reaches(first, `http://${addressOf(service)}:8080/`)).toStartWith('blocked')
+    for (const runtime of runtimes) await provider.remove(runtime)
     docker('rm', '-f', service)
     docker('network', 'rm', serviceNetwork)
   },
-  90_000,
+  150_000,
 )
 
 test.skipIf(!hasImage)(
