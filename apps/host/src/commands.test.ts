@@ -330,6 +330,11 @@ test("two deployments on one Docker daemon never count or manage each other's ru
   expect(await runnerOf('spyria').run({ op: 'list' })).toEqual(['a'])
   expect(await runnerOf('spyria-rt').run({ op: 'list' })).toEqual(['b'])
   await expect(runnerOf('spyria').run({ op: 'status', runtimeId: 'rt-b' })).rejects.toThrow('not a managed runtime')
+  expect(
+    await runnerOf('spyria')
+      .run({ op: 'remove', runtimeId: 'rt-b' })
+      .catch((error: Error) => error.message),
+  ).toBe('refused: not a managed runtime')
   expect(await runnerOf('spyria-rt').run({ op: 'status', runtimeId: 'b' })).toBe('running')
   expect(await runnerOf('spyria').run({ op: 'status', runtimeId: 'c' })).toBe('missing')
 })
