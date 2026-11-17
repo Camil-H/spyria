@@ -457,13 +457,16 @@ test('the routing read tells a member whether a workspace host of their workspac
     testDatabase.database.$client`
       insert into runtime_hosts (workspace_id, id, name, status, running_runtimes, created_by, owner_id, created_at)
       values (${workspace}, ${id}, ${id}, ${status}, 0, ${alice}, ${ownerId}, now())`
-  await addHost(acme, 'host-acme-offline', 'offline', null)
-  await addHost(acme, 'host-bob-machine', 'online', bob)
-  await addHost(globex, 'host-globex-online', 'online', null)
-  expect(await spyriaRuntimeAvailableFor(bob)).toBe(false)
-  await testDatabase.database.$client`update runtime_hosts set status = 'online' where id = 'host-acme-offline'`
-  expect(await spyriaRuntimeAvailableFor(bob)).toBe(true)
-  expect(await spyriaRuntimeAvailableFor(alice)).toBe(true)
-  await testDatabase.database.$client`
-    delete from runtime_hosts where id in ('host-acme-offline', 'host-bob-machine', 'host-globex-online')`
+  try {
+    await addHost(acme, 'host-acme-offline', 'offline', null)
+    await addHost(acme, 'host-bob-machine', 'online', bob)
+    await addHost(globex, 'host-globex-online', 'online', null)
+    expect(await spyriaRuntimeAvailableFor(bob)).toBe(false)
+    await testDatabase.database.$client`update runtime_hosts set status = 'online' where id = 'host-acme-offline'`
+    expect(await spyriaRuntimeAvailableFor(bob)).toBe(true)
+    expect(await spyriaRuntimeAvailableFor(alice)).toBe(true)
+  } finally {
+    await testDatabase.database.$client`
+      delete from runtime_hosts where id in ('host-acme-offline', 'host-bob-machine', 'host-globex-online')`
+  }
 })
