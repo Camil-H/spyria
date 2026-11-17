@@ -44,6 +44,11 @@ export const clientOf = (port: number) => {
       content: [{ type: 'text', text }],
       run: true,
     })
+  const promptWithId = (conversationId: string, text: string, promptId: string) =>
+    call('POST', `/api/conversations/${conversationId}/events`, {
+      content: [{ type: 'text', text }],
+      prompt_id: promptId,
+    })
   const attach = async (conversationId: string, id: string, name: string, content: string) => {
     const { body } = await call('POST', `/api/conversations/${conversationId}/attachments`, {
       id,
@@ -58,7 +63,7 @@ export const clientOf = (port: number) => {
       content: [{ type: 'text', text }, ...attachments.map((attachment) => ({ type: 'attachment', ...attachment }))],
       run: true,
     })
-  return { call, open, create, prompt, attach, promptWith }
+  return { call, open, create, prompt, promptWithId, attach, promptWith }
 }
 
 export const kindOf = (kind: string) => (event: AgentEvent) => event.update.sessionUpdate === kind

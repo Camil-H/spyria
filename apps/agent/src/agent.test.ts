@@ -272,14 +272,12 @@ test('a conversation stays running while a later prompt runs after an earlier on
 })
 
 test('a prompt sent again with its id runs once: while it runs the repeat is ignored, once ended the repeat resends its turn end', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
-  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  expect((await promptWithId(id, 'stub:long', 'prompt-1')).status).toBe(200)
   await socket.until((event) => event.update.status === 'in_progress')
-  expect((await promptWithId('stub:long', 'prompt-1')).status).toBe(200)
+  expect((await promptWithId(id, 'stub:long', 'prompt-1')).status).toBe(200)
   await call('POST', `/api/conversations/${id}/interrupt`, {})
   await socket.until(kindOf('turn_end'))
   expect(socket.events.find(kindOf('turn_end'))?.update).toEqual({
@@ -288,9 +286,9 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
     promptId: 'prompt-1',
   })
 
-  await promptWithId('hello', 'prompt-2')
+  await promptWithId(id, 'hello', 'prompt-2')
   await socket.until(kindOf('turn_end'), 2)
-  await promptWithId('hello', 'prompt-2')
+  await promptWithId(id, 'hello', 'prompt-2')
   await socket.until(kindOf('turn_end'), 3)
   expect(textOf(socket.events)).toBe('[t1] [t2] Hello from the stub (model stub-default, mode bypassPermissions).')
   expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update.promptId)).toEqual([
@@ -301,15 +299,13 @@ test('a prompt sent again with its id runs once: while it runs the repeat is ign
 })
 
 test('an interrupt naming a prompt that already ended cancels nothing, one naming the running prompt cancels it', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
-  await promptWithId('hello', 'prompt-ended')
+  await promptWithId(id, 'hello', 'prompt-ended')
   await socket.until(kindOf('turn_end'))
-  await promptWithId('stub:long', 'prompt-running')
+  await promptWithId(id, 'stub:long', 'prompt-running')
   await socket.until((event) => event.update.status === 'in_progress')
 
   expect((await interrupt('prompt-ended')).status).toBe(200)
@@ -326,15 +322,13 @@ test('an interrupt naming a prompt that already ended cancels nothing, one namin
 })
 
 test('an interrupt naming a prompt queued behind the running one ends only that prompt, and the running prompt goes on', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const interrupt = (promptId: string) => call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: promptId })
-  await promptWithId('stub:long', 'prompt-running')
+  await promptWithId(id, 'stub:long', 'prompt-running')
   await socket.until((event) => event.update.status === 'in_progress')
-  await promptWithId('hello', 'prompt-queued')
+  await promptWithId(id, 'hello', 'prompt-queued')
 
   expect((await interrupt('prompt-queued')).status).toBe(200)
   await socket.until(kindOf('turn_end'))
@@ -350,7 +344,7 @@ test('an interrupt naming a prompt queued behind the running one ends only that 
     stopReason: 'cancelled',
     promptId: 'prompt-running',
   })
-  await promptWithId('hello', 'prompt-after')
+  await promptWithId(id, 'hello', 'prompt-after')
   await socket.until(kindOf('turn_end'), 3)
   expect(socket.events.filter(kindOf('turn_end')).at(-1)?.update).toEqual({
     sessionUpdate: 'turn_end',
@@ -360,14 +354,12 @@ test('an interrupt naming a prompt queued behind the running one ends only that 
 })
 
 test('stopping a prompt queued behind one waiting on a question leaves that question open, and its answer still reaches the adapter', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
-  await promptWithId('stub:ask', 'prompt-asking')
+  await promptWithId(id, 'stub:ask', 'prompt-asking')
   const questionId = await questionAt(socket, 1)
-  await promptWithId('hello', 'prompt-queued')
+  await promptWithId(id, 'hello', 'prompt-queued')
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-queued' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
@@ -385,20 +377,18 @@ test('stopping a prompt queued behind one waiting on a question leaves that ques
 })
 
 test('an interrupt naming a prompt never received ends its turn as cancelled at once, and a late delivery of it only repeats that turn end', async () => {
-  const { call, open, create } = started()
+  const { call, open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const cancelledTurnEnd = { sessionUpdate: 'turn_end', stopReason: 'cancelled', promptId: 'prompt-unsent' }
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-unsent' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
   expect(socket.events.find(kindOf('turn_end'))?.update).toEqual(cancelledTurnEnd)
 
-  expect((await promptWithId('hello', 'prompt-unsent')).status).toBe(200)
+  expect((await promptWithId(id, 'hello', 'prompt-unsent')).status).toBe(200)
   await socket.until(kindOf('turn_end'), 2)
-  await promptWithId('hello', 'prompt-next')
+  await promptWithId(id, 'hello', 'prompt-next')
   await socket.until(kindOf('turn_end'), 3)
   expect(socket.events.filter(kindOf('turn_end')).map(({ update }) => update)).toEqual([
     cancelledTurnEnd,
@@ -409,18 +399,16 @@ test('an interrupt naming a prompt never received ends its turn as cancelled at 
 })
 
 test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
-  const { call, open, create } = started()
+  const { open, create, promptWithId } = started()
   const id = await create(launchOf())
   const socket = open(id)
-  const promptWithId = (promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text: 'hello' }], prompt_id: promptId })
   for (let index = 0; index <= 50; index++) {
-    await promptWithId(`prompt-${index}`)
+    await promptWithId(id, 'hello', `prompt-${index}`)
     await socket.until(kindOf('turn_end'), index + 1)
   }
-  await promptWithId('prompt-1')
+  await promptWithId(id, 'hello', 'prompt-1')
   await socket.until(kindOf('turn_end'), 52)
-  await promptWithId('prompt-0')
+  await promptWithId(id, 'hello', 'prompt-0')
   await socket.until(kindOf('turn_end'), 53)
   expect(
     socket.events
@@ -938,17 +926,15 @@ test.each([
 )
 
 test('an interrupt naming a prompt that waits for the session to start stops only that prompt, not a later one also waiting', async () => {
-  const { call, open, create } = started({ requestTimeoutMilliseconds: 500 })
+  const { call, open, create, promptWithId } = started({ requestTimeoutMilliseconds: 500 })
   const reloading = join(stateDirectory, `silent-once-${crypto.randomUUID()}`)
   const id = await create(silentOn('session/load', launchOf(), `STUB_SILENT_ONCE=${reloading}`))
   const socket = open(id)
-  const promptWithId = (text: string, promptId: string) =>
-    call('POST', `/api/conversations/${id}/events`, { content: [{ type: 'text', text }], prompt_id: promptId })
   const restarting = call('POST', `/api/conversations/${id}/restart`)
   for (const deadline = Date.now() + 5_000; !existsSync(reloading); await Bun.sleep(10))
     if (Date.now() > deadline) throw new Error('The session did not start reloading')
-  await promptWithId('hello', 'prompt-stopped')
-  await promptWithId('hello', 'prompt-next')
+  await promptWithId(id, 'hello', 'prompt-stopped')
+  await promptWithId(id, 'hello', 'prompt-next')
 
   expect((await call('POST', `/api/conversations/${id}/interrupt`, { prompt_id: 'prompt-stopped' })).status).toBe(200)
   await socket.until(kindOf('turn_end'))
