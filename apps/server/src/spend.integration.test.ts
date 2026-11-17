@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'bun:test'
+import { beforeAll, expect, test } from 'bun:test'
 import { seedSpend } from '@spyria/db/testing'
 import { alice, asMember, bob, lee, openSharedTestApp } from './testing/testing.ts'
 
@@ -30,10 +30,7 @@ const reportOf = async (path: string, userId = alice) => {
 const rowsOf = (rows: Row[] | undefined) =>
   (rows ?? []).map(({ name, costMicros, requests }) => [name, costMicros, requests])
 
-beforeEach(async () => {
-  await openSharedTestApp()
-  await database.transaction((transaction) => seedSpend(transaction))
-})
+beforeAll(() => database.transaction((transaction) => seedSpend(transaction)))
 
 test('members are refused the workspace spend; their own usage is open to them', async () => {
   expect(await asMember(bob, 'GET', '/api/spend')).toEqual({
@@ -132,19 +129,23 @@ test('own cost per merged PR counts the PRs of the chats I prompted in, against 
       cost_micros, status, turn_id, session_id, called_at)
     values ('workspace-acme', 'call-bob-invoice', 'chat-invoice-bug', 'member-bob', 'gpt-5', 'openai', 400, 100, 7000,
       'success', 'turn-bob-invoice', 'session-bob-invoice', now())`
-  const pullsOf = async (userId: typeof alice) => (await reportOf('/api/spend/mine', userId)).mergedPulls
-  expect(await pullsOf(alice)).toMatchObject({
-    costMicros: 60_000,
-    perPullMicros: 60_000,
-    pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 60_000 }],
-  })
-  expect(await pullsOf(bob)).toMatchObject({
-    costMicros: 7000,
-    perPullMicros: 7000,
-    pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 7000 }],
-  })
-  expect(await pullsOf(lee)).toMatchObject({ pulls: [], perPullMicros: null })
-  expect((await reportOf('/api/spend')).mergedPulls).toMatchObject({ costMicros: 67_000 })
+  try {
+    const pullsOf = async (userId: typeof alice) => (await reportOf('/api/spend/mine', userId)).mergedPulls
+    expect(await pullsOf(alice)).toMatchObject({
+      costMicros: 60_000,
+      perPullMicros: 60_000,
+      pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 60_000 }],
+    })
+    expect(await pullsOf(bob)).toMatchObject({
+      costMicros: 7000,
+      perPullMicros: 7000,
+      pulls: [{ chatName: 'Invoice bug', number: 7, costMicros: 7000 }],
+    })
+    expect(await pullsOf(lee)).toMatchObject({ pulls: [], perPullMicros: null })
+    expect((await reportOf('/api/spend')).mergedPulls).toMatchObject({ costMicros: 67_000 })
+  } finally {
+    await database.$client`delete from model_calls where id = 'call-bob-invoice'`
+  }
 })
 
 test('own usage holds only the requester’s calls, whatever member the request names', async () => {
