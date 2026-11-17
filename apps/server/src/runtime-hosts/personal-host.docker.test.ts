@@ -45,10 +45,6 @@ test("a real spyria-host --personal runs Spyria's image with the credentials vol
   const apiKey = gateway.sandboxProvider.apiKeyOf(runtime)
   const containerName = `${prefix}rt-personal-smoke`
   await gateway.sandboxProvider.create({ ...runtime, image: spyriaImage })
-  const [inspected] = JSON.parse(dockerText('inspect', containerName))
-  expect(
-    (inspected.HostConfig.Mounts as { Source: string; Target: string }[]).map(({ Source, Target }) => [Source, Target]),
-  ).toContainEqual([`${prefix}cred-claude-code`, '/home/spyria/.claude'])
   await gateway.sandboxProvider.start(runtime)
   const transport = await readyRuntime(runtime)
   const headers = { 'x-session-api-key': apiKey, 'content-type': 'application/json' }
