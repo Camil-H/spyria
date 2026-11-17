@@ -1,6 +1,6 @@
 import { useQuery } from '@spyria/db/react'
 import { useSession } from '@spyria/session'
-import { iconButtonClass, useNotify } from '@spyria/ui'
+import { formatClockTime, iconButtonClass, useNotify } from '@spyria/ui'
 import { ChevronsDownUp, ChevronsUpDown, FileDiff, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -119,7 +119,8 @@ const ChangesTab = ({ workspaceId, chatId, actionsSlot }: TabProps) => {
           {commit && (
             <div className="-mt-1.5 flex flex-col gap-1 text-xs text-muted">
               <span>
-                {commit.author} · {commit.committedAt.slice(11, 16)} UTC
+                {commit.author}
+                {commit.committedAt && ` · ${formatClockTime(new Date(commit.committedAt))}`}
               </span>
               {commit.body && <p className="whitespace-pre-wrap break-words text-ink">{commit.body}</p>}
             </div>

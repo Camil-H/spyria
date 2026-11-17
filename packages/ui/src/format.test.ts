@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { formatCost, formatTokens } from './format.ts'
+import { formatClockTime, formatCost, formatTokens } from './format.ts'
 
 test.each([
   ['tokens 0', formatTokens(0), '0'],
@@ -14,4 +14,11 @@ test.each([
   ['a cost in dollars', formatCost(1_234_560_000), '$1,234.56'],
 ])('%s reads %p', (_, formatted, expected) => {
   expect(formatted).toBe(expected)
+})
+
+test('a clock time reads in the given time zone', () => {
+  const at = new Date('2026-10-01T22:30:00Z')
+  expect(formatClockTime(at, 'UTC')).toBe('22:30')
+  expect(formatClockTime(at, 'Europe/Paris')).toBe('00:30')
+  expect(formatClockTime(at, 'America/New_York')).toBe('18:30')
 })

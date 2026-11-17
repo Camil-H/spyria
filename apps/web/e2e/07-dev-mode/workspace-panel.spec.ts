@@ -95,7 +95,7 @@ test.describe('Workspace panel', () => {
     const notStaged = tabPanelOf(page).getByRole('region', { name: 'Not staged', exact: true })
     await expect(notStaged.getByRole('button', { name: /^src\/new\.ts/ })).toContainText(/Added \+1 [−-]0/)
     const commit = tabPanelOf(page).getByRole('region', { name: /^Commit [0-9a-f]{7}$/ })
-    await expect(commit).toContainText(/Pi Agent · \d\d:\d\d UTC/)
+    await expect(commit).toContainText(/Pi Agent · \d\d:\d\d/)
     await expect(commit).toContainText('The total was off by one.')
     await expect(commit.getByRole('button', { name: /^src\/app\.ts/ })).toContainText(/Modified \+1 [−-]1/)
   })

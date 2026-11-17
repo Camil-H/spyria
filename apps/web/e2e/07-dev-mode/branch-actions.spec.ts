@@ -59,7 +59,7 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText('No uncommitted files')
     await expect(commits).toHaveCount(1)
     await expect(commits.first()).toContainText('Fix the totals')
-    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
+    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d/)
     await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
     await expect(headerButtonOf(page, 'Commit')).toHaveAttribute('title', 'Nothing to commit')
     await expect(headerButtonOf(page, 'Push')).toBeEnabled()
@@ -94,7 +94,7 @@ test.describe('Branch actions', () => {
 
     await expect(commits).toHaveCount(2)
     await expect(commits.first()).toContainText('Raise the total')
-    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
+    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d/)
   })
 
   test('As a chat owner, I see a toast confirm Refresh that fades on its own unless I hover it, and a refused Push stays until I dismiss it', {
