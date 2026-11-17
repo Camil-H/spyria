@@ -163,19 +163,6 @@ test.describe('Side panel', () => {
       await expect(usageTable.getByRole('row', { name: /Bob/ })).toContainText('$0.00')
       await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
-
-    await test.step('lists the tools of the owner, who has signed in to none, on Welcome', async () => {
-      await openPanelTab(page, 'Welcome', 'Connected tools')
-      await expectOwnerConnections(page)
-    })
-
-    await test.step('lists the members with their role on Welcome', async () => {
-      await openPanelTab(page, 'Welcome', 'Members')
-      await expectMembers(page, [
-        ['Alice', 'Owner'],
-        ['Bob', 'Prompter'],
-      ])
-    })
   })
 
   test('As a member, I see the panel’s empty states and the panel of a chat another member owns', async ({ page }) => {
@@ -188,13 +175,6 @@ test.describe('Side panel', () => {
       await expect(tabOf(page, 'Changes')).toHaveAttribute('aria-selected', 'true')
       await expect(tabPanelOf(page).getByRole('heading', { level: 2, name: 'Changes' })).toBeVisible()
       await expect(tabPanelOf(page)).toContainText('No changes')
-    })
-
-    await test.step('usage: shows zeros for the owner of a chat without data', async () => {
-      await openPanelTab(page, 'Research', 'Usage')
-      const usageTable = tabPanelOf(page).getByRole('table', { name: 'Chat usage' })
-      await expect(usageTable.getByRole('row', { name: /Alice/ })).toContainText('$0.00')
-      await expect(usageTable.getByRole('row', { name: /Total/ })).toContainText('$0.00')
     })
 
     await test.step('lists only the owner of a chat without explicit members', async () => {

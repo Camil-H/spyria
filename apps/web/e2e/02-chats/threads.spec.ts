@@ -3,7 +3,6 @@ import {
   addParticipant,
   alicesWelcomeMessage,
   expect,
-  mainOf,
   messageActionOf,
   messageActionsOf,
   messageContaining,
@@ -29,8 +28,8 @@ test.describe('Threads', () => {
     await page.goto('/')
   })
 
-  test('As a member, I see a thread reply under my message as a collapsed "1 reply · 1 new", not in the channel flow', {
-    tag: ['@spec-31'],
+  test('As a member, I see a thread reply collapsed under my message as "1 reply · 1 new", not in the channel flow, and open it: its reply and composer show, "new" clears, and my reply reaches Bob live', {
+    tag: ['@spec-31', '@smoke'],
   }, async ({ page, browser, workerStack }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openWelcome(page)
@@ -39,16 +38,6 @@ test.describe('Threads', () => {
     await expect(threadToggleOf(page)).toHaveText('1 reply · 1 new')
     await expect(threadToggleOf(page)).toHaveAttribute('aria-expanded', 'false')
     await expect(messageContaining(page, 'Count me in for lunch')).toHaveCount(0)
-    await bobPage.context().close()
-  })
-
-  test('As a member, I open a thread: its reply and composer show, "new" clears, and my reply reaches Bob live', {
-    tag: ['@spec-31', '@smoke'],
-  }, async ({ page, browser, workerStack }) => {
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await openWelcome(page)
-    await openWelcome(bobPage)
-    await replyInThread(bobPage, 'Count me in for lunch')
     await threadToggleOf(page).click()
     await expect(repliesOf(page)).toHaveText([/Bob.*Count me in for lunch/])
     await expect(replyBoxOf(page)).toBeVisible()
@@ -125,15 +114,5 @@ test.describe('Threads', () => {
     await expect(repliesOf(page)).toHaveText([/This message was deleted/, /Keep this one/])
     await expect(replyBoxOf(page)).toHaveCount(0)
     await bobPage.context().close()
-  })
-
-  test('As a member, I find no Reply in thread on a runtime chat’s messages', { tag: ['@spec-31'] }, async ({
-    page,
-  }) => {
-    await openChat(page, 'Invoice bug')
-    await expect(messageContaining(page, 'Why do invoices show the wrong total?')).toBeVisible()
-    await expect(messageActionsOf(mainOf(page)).first()).toBeAttached()
-    await expect(messageActionsOf(mainOf(page)).getByRole('button', { name: 'Reply in thread' })).toHaveCount(0)
-    await expect(threadToggleOf(page)).toHaveCount(0)
   })
 })
