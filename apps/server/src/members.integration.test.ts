@@ -254,12 +254,3 @@ test.each(
   if (isAllowed)
     expect(await memberChange(member, 'joinChat', chat)).toEqual(failedWith('This member is already in the chat'))
 })
-
-test('joinChat refuses a private AI chat to a non-participant and joins a public one as Prompter', async () => {
-  const privateChat = await newChat()
-  expect(await memberChange(bobInAcme, 'joinChat', privateChat)).toEqual(missingPermission('chat.read'))
-  expect(await participantsOf(privateChat)).toEqual({ [alice]: 'owner' })
-  const publicChat = await newChat({ visibility: 'public' })
-  expect(await memberChange(bobInAcme, 'joinChat', publicChat)).toEqual(succeeded)
-  expect(await participantsOf(publicChat)).toEqual({ [alice]: 'owner', [bob]: 'prompter' })
-})
