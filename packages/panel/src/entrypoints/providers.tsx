@@ -5,7 +5,7 @@ import { createWorkspaceReadings, type WorkspaceReadings } from './workspace-rea
 
 export const minimumPanelWidth = 280
 export const panelToggleLabelOf = (isOpen: boolean) => (isOpen ? 'Hide panel' : 'Show panel')
-export const minimumChatWidth = 320
+const minimumChatWidth = 320
 export const panelWidthVariable = '--panel-width'
 
 type PanelState = {
