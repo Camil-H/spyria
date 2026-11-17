@@ -18,9 +18,11 @@ import {
 import { hostVersion, hostProtocolVersion as protocolVersion } from './protocol.ts'
 import { proxyOf, takeProxySettings, webSocketThrough } from './proxy.ts'
 import { createRelay, type Frame, frameTextOf, messageOf } from './relay.ts'
+import { readSecretFiles } from './secret-files.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
 
+readSecretFiles(process.env)
 const proxySettings = takeProxySettings(process.env)
 const givenArguments = process.argv.slice(2)
 const isPersonal = givenArguments.includes('--personal')
