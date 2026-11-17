@@ -97,22 +97,6 @@ test.describe('Models', () => {
     await expect(messageItemsOf(page).filter({ hasText: 'Context holds 2 prompts.' })).toHaveCount(1)
   })
 
-  test('As a prompter, I find no separate default model: nothing to pick before the first prompt, then the chip shows the main model', {
-    tag: ['@spec-25', '@stage-f'],
-  }, async ({ page }) => {
-    await newRuntimeChat(page, 'One model')
-    await openSession(page)
-    await expect(sessionOf(page).getByLabel('Subagents')).toBeVisible()
-    await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
-    await expect(sessionOf(page).getByLabel('Main model')).toHaveCount(0)
-    await page.keyboard.press('Escape')
-    await promptAndWait(page, 'Start on the main model', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Mistral Medium (medium)')
-    await openSession(page)
-    await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('mistral/mistral-medium-latest')
-    await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
-  })
-
   test('As a member whose keys reach another provider, I am refused in a session on a model my keys cannot reach', {
     tag: ['@spec-15'],
   }, async ({ page, browser, workerStack, agentScript }) => {
@@ -189,13 +173,21 @@ test.describe('Models', () => {
     await expectModelMetered(page, workerStack, 'Mistral Large')
   })
 
-  test('As a prompter, I change the effort, set between the main model and the subagents, and the next turn runs on the same model at that effort with the context kept', {
-    tag: ['@spec-25', '@stage-h'],
+  test('As a prompter, I find no separate default model and nothing to pick before the first prompt, then change the effort, set between the main model and the subagents, and the next turn runs on the same model at that effort with the context kept', {
+    tag: ['@spec-25', '@stage-f', '@stage-h'],
   }, async ({ page, agentScript }) => {
     const chatId = await newRuntimeChat(page, 'Effort')
+    await openSession(page)
+    await expect(sessionOf(page).getByLabel('Subagents')).toBeVisible()
+    await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
+    await expect(sessionOf(page).getByLabel('Main model')).toHaveCount(0)
+    await page.keyboard.press('Escape')
     await promptAndWait(page, 'Start at medium', 1)
+    await expect(chipOf(page, 'routed')).toHaveText('Mistral Medium (medium)')
     await agentScript(chatId, { text: 'Effort $reasoningEffort with $userMessages prompts.' })
     await openSession(page)
+    await expect(sessionOf(page).getByLabel('Main model')).toHaveValue('mistral/mistral-medium-latest')
+    await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
     const labels = sessionOf(page).locator('label')
     await expect(labels.filter({ hasText: /^(Main model|Effort|Subagents)/ })).toHaveText([
       /^Main model/,
