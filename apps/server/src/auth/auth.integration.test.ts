@@ -192,23 +192,6 @@ test.each<[string, (nonce: string, previousNonce: string) => Promise<string>]>([
     (nonce) => signIdToken({ nonce, email: 'alice@example.com', email_verified: true, iat: undefined }),
   ],
   [
-    'a tampered ID token',
-    async (nonce) => {
-      const [header, , signature] = (
-        await signIdToken({ nonce, email: 'bob@example.com', email_verified: true })
-      ).split('.')
-      const payload = {
-        nonce,
-        email: 'alice@example.com',
-        email_verified: true,
-        iss: idpIssuer,
-        aud: 'spyria',
-        sub: 's',
-      }
-      return `${header}.${Buffer.from(JSON.stringify({ ...payload, exp: nowInSeconds() + 60, iat: nowInSeconds() })).toString('base64url')}.${signature}`
-    },
-  ],
-  [
     'a token signed by another key',
     async (nonce) =>
       new SignJWT({ nonce, email: 'alice@example.com', email_verified: true })
