@@ -1,6 +1,13 @@
 import { expect, test } from 'bun:test'
 import { browserBodyOf } from './browsers.ts'
-import { type Command, containerBodyOf, createCommandRunner, parseCommand, relayUrlOf } from './commands.ts'
+import {
+  type Command,
+  containerBodyOf,
+  createCommandRunner,
+  parseCommand,
+  RuntimeMissing,
+  relayUrlOf,
+} from './commands.ts'
 import { type Docker, DockerError } from './docker.ts'
 import { harnessEnvironment } from './harnesses.ts'
 
@@ -320,6 +327,22 @@ test('stop and remove of a runtime whose container is gone still release its net
       createCommandRunner({ docker: unmanagedDocker, prefix: 'spyria-' }).run({ op, runtimeId: 'runtime-2' }),
     ).rejects.toThrow('not a managed runtime')
   expect(unmanagedCalls.filter((call) => call.method !== 'GET')).toEqual([])
+})
+
+test('relaying to a runtime whose container is gone fails as missing, naming the runtime; an unmanaged container is only refused', async () => {
+  const missingDocker = (async () => {
+    throw new DockerError(404, 'No such container')
+  }) as Docker
+  const missing = await createCommandRunner({ docker: missingDocker, prefix: 'spyria-' })
+    .originOf('runtime-1')
+    .catch((error) => error)
+  expect(missing).toBeInstanceOf(RuntimeMissing)
+  expect(missing.runtimeId).toBe('runtime-1')
+  const unmanaged = await createCommandRunner({ docker: recordingDocker().docker, prefix: 'spyria-' })
+    .originOf('runtime-2')
+    .catch((error) => error)
+  expect(unmanaged).not.toBeInstanceOf(RuntimeMissing)
+  expect(unmanaged.message).toBe('refused: not a managed runtime')
 })
 
 test("two deployments on one Docker daemon never count or manage each other's runtimes, even when one name prefixes the other", async () => {

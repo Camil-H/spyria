@@ -100,12 +100,12 @@ const isHttpAnswer = (frame: Frame) =>
   (isHttpStatus(frame.status) && isTextRecord(frame.headers) && (frame.chunked === true || isText(frame.body)))
 const relayFrameChecks: Record<string, (frame: Frame) => boolean> = {
   res: (frame) => isRequestId(frame.id) && isOptionalText(frame.error),
-  http_res: (frame) => isRequestId(frame.sid) && isHttpAnswer(frame),
+  http_res: (frame) => isRequestId(frame.sid) && isHttpAnswer(frame) && isOptionalText(frame.missingRuntimeId),
   http_body: (frame) => isRequestId(frame.sid) && isText(frame.data),
   http_end: (frame) => isRequestId(frame.sid),
   ws_open: (frame) => isRequestId(frame.sid),
   ws_msg: (frame) => isRequestId(frame.sid) && isText(frame.data),
-  ws_close: (frame) => isRequestId(frame.sid) && isOptionalText(frame.error),
+  ws_close: (frame) => isRequestId(frame.sid) && isOptionalText(frame.error) && isOptionalText(frame.missingRuntimeId),
   gw_req: (frame) =>
     isRequestId(frame.sid) &&
     isText(frame.method) &&
@@ -291,6 +291,19 @@ export const createRuntimeHostGateway = ({
     sendTo(connection, { type: 'ws_ack', sid, bytes: received })
   }
 
+  const recordRuntimeMissing = async (connection: Connection, frame: Frame) => {
+    const { identified } = connection
+    if (!identified || typeof frame.missingRuntimeId !== 'string') return
+    await identified.handlers.runtimeMissing(identified.host, frame.missingRuntimeId).catch((error) =>
+      log.error({
+        event: 'runtime_host.runtime_missing_unrecorded',
+        body: 'Recording a runtime whose container is missing failed',
+        attributes: hostAttributesOf(identified.host),
+        error,
+      }),
+    )
+  }
+
   const settle = (connection: Connection, frame: Frame) => {
     const requestId = Number(frame.id ?? frame.sid)
     if (frame.type === 'res' || frame.type === 'http_res') {
@@ -349,6 +362,7 @@ export const createRuntimeHostGateway = ({
     if (sessionFrame?.type === 'heartbeat')
       return inOrder(identified.token, () => identified.handlers.heartbeat(identified.host, sessionFrame))
     if (!isRelayFrame) return refuseFrame(connection, frame)
+    await recordRuntimeMissing(connection, frame)
     settle(connection, frame)
   }
 

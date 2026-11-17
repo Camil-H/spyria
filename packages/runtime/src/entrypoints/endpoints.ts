@@ -17,6 +17,7 @@ import { markHostOffline } from '../operations/mark-host-offline.ts'
 import { reconcileHostRuntimes } from '../operations/reconcile-host-runtimes.ts'
 import { recordHostHeartbeat } from '../operations/record-host-heartbeat.ts'
 import { recordHostHello } from '../operations/record-host-hello.ts'
+import { recordRuntimeMissing } from '../operations/record-runtime-missing.ts'
 import { renewClaimCode } from '../operations/renew-claim-code.ts'
 
 const dependenciesOf = (tx: Transaction) => ({ transactor: createZeroTransactor(tx) })
@@ -131,4 +132,6 @@ export const createHostSessionHandlers = (
     ),
   discardUnknown: (host: ConnectedHost, provider: SandboxProvider) =>
     discardUnknownRuntimes({ transactor: createTransactingZeroTransactor(transact), provider }, host),
+  runtimeMissing: (host: ConnectedHost, runtimeId: string) =>
+    transact((tx) => recordRuntimeMissing(dependenciesOf(tx), { ...host, runtimeId, now: Date.now() })),
 })

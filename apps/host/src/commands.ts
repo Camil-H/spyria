@@ -28,6 +28,12 @@ export class Refused extends Error {
   }
 }
 
+export class RuntimeMissing extends Refused {
+  constructor(readonly runtimeId: string) {
+    super('the runtime container is missing')
+  }
+}
+
 const digestPattern = /^sha256:[a-f0-9]{64}$/
 const publishedAgentImageOf = (images: string) => `${images}/spyria-agent`
 const isAcceptedImage = (image: string, images?: string) =>
@@ -651,7 +657,11 @@ export const createCommandRunner = ({
   return {
     run,
     originOf: async (runtimeId: string) => {
-      const networks = Object.values((await managedContainer(runtimeId)).NetworkSettings?.Networks ?? {})
+      const container = await managedContainer(runtimeId).catch((error) => {
+        ignoringMissing(error)
+        throw new RuntimeMissing(runtimeId)
+      })
+      const networks = Object.values(container.NetworkSettings?.Networks ?? {})
       const address = networks.find((network) => network.IPAddress)?.IPAddress
       if (!address) throw new Refused('runtime is not running')
       return `http://${address}:${spyriaAgentPort}`

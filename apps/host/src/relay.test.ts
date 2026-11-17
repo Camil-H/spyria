@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import type { BrowserStreamListener } from './browsers.ts'
+import { RuntimeMissing } from './commands.ts'
 import { bodyFramesOf, createRelay, frameTextOf, relayChunkBytes } from './relay.ts'
 import { nextFrameOf, waitFor } from './testing.ts'
 
@@ -26,6 +27,7 @@ const relayTo = (
   const sent: Record<string, unknown>[] = []
   const relay = createRelay({
     addressOf: async (runtimeId) => {
+      if (runtimeId === 'runtime-gone') throw new RuntimeMissing(runtimeId)
       if (runtimeId !== 'runtime-1') throw new Error('refused: not a managed runtime')
       return `http://localhost:${agent.port}`
     },
@@ -53,6 +55,24 @@ test('answers an error for an unmanaged runtime instead of relaying', async () =
   const { relay, nextOf } = relayTo(spyriaAgent)
   await relay.handle({ type: 'http', sid: 2, runtimeId: 'other', method: 'GET', path: '/' })
   expect(await nextOf('http_res')).toEqual({ type: 'http_res', sid: 2, error: 'refused: not a managed runtime' })
+})
+
+test('a call or a stream to a runtime whose container is missing names that runtime, so Spyria can mark it stopped', async () => {
+  const { relay, nextOf } = relayTo(spyriaAgent)
+  await relay.handle({ type: 'http', sid: 4, runtimeId: 'runtime-gone', method: 'GET', path: '/' })
+  expect(await nextOf('http_res')).toEqual({
+    type: 'http_res',
+    sid: 4,
+    error: 'refused: the runtime container is missing',
+    missingRuntimeId: 'runtime-gone',
+  })
+  await relay.handle({ type: 'ws_connect', sid: 5, runtimeId: 'runtime-gone', path: '/sockets/events/1' })
+  expect(await nextOf('ws_close')).toEqual({
+    type: 'ws_close',
+    sid: 5,
+    error: 'refused: the runtime container is missing',
+    missingRuntimeId: 'runtime-gone',
+  })
 })
 
 test('relays a WebSocket stream both ways and closes it', async () => {

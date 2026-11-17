@@ -1,5 +1,5 @@
 import { type BrowserStream, type BrowserStreamListener, browserKeyPattern } from './browsers.ts'
-import { Refused, relayUrlOf } from './commands.ts'
+import { Refused, RuntimeMissing, relayUrlOf } from './commands.ts'
 import { isAllowedOnPersonalHost, isMediaHoldingSecret, redacted } from './personal.ts'
 import { contextOf, traceHeadersOf, withSpan } from './telemetry.ts'
 
@@ -24,6 +24,10 @@ const timeoutOf = (requested: unknown) =>
     : maximumTimeoutMilliseconds
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const failureOf = (error: unknown) => ({
+  error: messageOf(error),
+  ...(error instanceof RuntimeMissing && { missingRuntimeId: error.runtimeId }),
+})
 
 export const relayChunkBytes = 256 * 1024
 const maximumRelayedBodyBytes = 256 * 1024 * 1024
@@ -125,7 +129,7 @@ export const createRelay = ({
         return send({ type: 'http_res', sid, error: 'refused: this file holds a secret' })
       answer(sid, frame, response, body)
     } catch (error) {
-      send({ type: 'http_res', sid, error: messageOf(error) })
+      send({ type: 'http_res', sid, ...failureOf(error) })
     }
   }
   const receiveHttp = (sid: number, frame: Frame) => {
@@ -219,7 +223,7 @@ export const createRelay = ({
       }
     } catch (error) {
       openingSids.delete(sid)
-      send({ type: 'ws_close', sid, error: messageOf(error) })
+      send({ type: 'ws_close', sid, ...failureOf(error) })
     }
   }
   const openBrowserStream = async (sid: number, frame: Frame) => {
@@ -255,7 +259,7 @@ export const createRelay = ({
     } catch (error) {
       openingSids.delete(sid)
       streams.delete(sid)
-      send({ type: 'ws_close', sid, error: messageOf(error) })
+      send({ type: 'ws_close', sid, ...failureOf(error) })
     }
   }
   const openFileStream = async (sid: number, frame: Frame) => {
@@ -286,7 +290,7 @@ export const createRelay = ({
     } catch (error) {
       if (streams.get(sid) === stream && !reading.signal.aborted) {
         streams.delete(sid)
-        send({ type: 'ws_close', sid, error: messageOf(error) })
+        send({ type: 'ws_close', sid, ...failureOf(error) })
       }
     }
   }
