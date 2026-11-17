@@ -384,9 +384,16 @@ const withPolledRun = <Result>(
 
 const judgeCommands = (dependencies: Dependencies, job: ChecksJob, results: CheckResult[], head: string | null) =>
   withPolledRun(dependencies, job, async (unitOfWork, loop) => {
+    const { checkedHead } = loop.step
+    if (head !== null && checkedHead !== null && head !== checkedHead)
+      return moveOn(unitOfWork, loop, restarted(loop.step), 0)
     const group = commandGroupAt(loop.step.pipeline, loop.step.position)
     const failing = group.filter((_, offset) => results[offset]?.exitCode !== 0)
-    const step = { ...loop.step, checksRunId: null, ...(head !== null && { checkedHead: head }) }
+    const step = {
+      ...loop.step,
+      checksRunId: null,
+      ...(checkedHead === null && head !== null && { checkedHead: head }),
+    }
     const passing = group.filter((index) => !failing.includes(index))
     const judged = withOutcomes(
       step,

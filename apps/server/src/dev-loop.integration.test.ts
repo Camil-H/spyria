@@ -327,6 +327,20 @@ test('As a chat owner, Stop stops the quality gates while it runs a command, and
   ).toContain(false)
 })
 
+test('As a chat owner, a commit made while the checks run starts the gates again instead of counting as checked', async () => {
+  const marker = join(tmpdir(), `spyria-dev-loop-commit-${crypto.randomUUID()}`)
+  const commitOnce = `[ -e ${marker} ] || (touch ${marker} && git -c user.name=Alice -c user.email=alice@example.com commit -q --allow-empty -m 'Commit during the checks')`
+  expect(await setDevLoop(alice, settingsWith([commandStep('Totals', commitOnce)]))).toEqual(succeeded)
+  await stack.agentHost('Moving head host', { routesModelCalls: true })
+  await connectGitHub(alice)
+  const { id } = await newDevChat()
+  await readyChat(id)
+  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
+  await stack.prompt(id, 'Fix the totals')
+  await loopStateIs(id, 'done')
+  expect((await loopOf(id))?.step).toMatchObject({ round: 2, rounds: [0], outcomes: ['passed'] })
+})
+
 test('As a chat owner whose agent does not fix what the review found, the next review checks it again and sends it back, then hands over after the review’s fixes', async () => {
   expect(await setDevLoop(alice, settingsWith([{ kind: 'review', fixes: 2 }]))).toEqual(succeeded)
   await stack.agentHost('Unfixed review host', { routesModelCalls: true })
