@@ -666,13 +666,13 @@ export const createApp = ({
     .post(chatPublishPathOf(':chatId', ':action{push|pull_request}'), async (context) => {
       const { title, body } = ((await context.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
       const { workspaceId, userId } = context.get('zeroContext')
-      const publication = await agentBridge.forDatabase(context.get('database')).publishBranch({
+      const { isRefused, text } = await agentBridge.forDatabase(context.get('database')).publishBranch({
         chat: { workspaceId, chatId: chatId(context.req.param('chatId') ?? '') },
         actor: memberActor(userId),
         action: context.req.param('action') as PublishAction,
         draft: { title: typeof title === 'string' ? title : '', body: typeof body === 'string' ? body : '' },
       })
-      return context.json(publication, publication.isRefused ? 403 : 200)
+      return context.json({ isRefused, text }, isRefused ? 403 : 200)
     })
     .get(chatGitHubToolsPathOf(':chatId'), async (context) => {
       const { workspaceId, userId } = context.get('zeroContext')

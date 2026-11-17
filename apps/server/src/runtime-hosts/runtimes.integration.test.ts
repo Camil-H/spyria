@@ -307,20 +307,25 @@ test('a stop or a removal that runs out of attempts while its host is disconnect
   await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
   await database.$client`update runtimes set host_online = true where host_id = ${host.id}`
   const capturedConsole = captureConsole()
-  await zeroDatabase.transaction((tx) =>
-    stopChatRuntime(
-      { transactor: createRuntimeTransactor(tx) },
-      { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
-    ),
-  )
-  expect(await archive(removingChat)).toEqual(succeeded)
-  await waitFor(async () => (await jobsOf('runtime.stop', stopping.id)).some((job) => job.state === 'failed'), 15_000)
-  await waitFor(async () => (await jobsOf('runtime.remove', removing.id)).some((job) => job.state === 'failed'), 15_000)
-  capturedConsole.restore()
-  expect((await runtimeOf(stoppingChat)).state).toBe('stopping')
-  expect((await runtimeOf(removingChat)).state).toBe('removing')
-
-  await host.connect()
+  try {
+    await zeroDatabase.transaction((tx) =>
+      stopChatRuntime(
+        { transactor: createRuntimeTransactor(tx) },
+        { workspaceId: acme, chatId: stoppingChat, now: Date.now() },
+      ),
+    )
+    expect(await archive(removingChat)).toEqual(succeeded)
+    await waitFor(async () => (await jobsOf('runtime.stop', stopping.id)).some((job) => job.state === 'failed'), 15_000)
+    await waitFor(
+      async () => (await jobsOf('runtime.remove', removing.id)).some((job) => job.state === 'failed'),
+      15_000,
+    )
+    expect((await runtimeOf(stoppingChat)).state).toBe('stopping')
+    expect((await runtimeOf(removingChat)).state).toBe('removing')
+  } finally {
+    capturedConsole.restore()
+    await host.connect()
+  }
   await runtimeIn(stoppingChat, 'stopped')
   await runtimeIn(removingChat, 'removed')
   expect(host.containers.get(stopping.id)?.running).toBe(false)
@@ -333,14 +338,17 @@ test('after a server restart, a start that runs before the host reconnects leave
   const runtime = await stoppedRuntime(chat)
   await host.disconnect()
   await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
+  await database.$client`update runtimes set host_online = true where host_id = ${host.id}`
   const capturedConsole = captureConsole()
-  await ensure(chat)
-  await waitFor(async () => (await jobsOf('runtime.start', runtime.id)).some((job) => job.state === 'done'), 15_000)
-  capturedConsole.restore()
-  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, state: 'stopped', failure: null })
-  expect(await jobsOf('runtime.discard', runtime.id)).toEqual([])
-
-  await host.connect()
+  try {
+    await ensure(chat)
+    await waitFor(async () => (await jobsOf('runtime.start', runtime.id)).some((job) => job.state === 'done'), 15_000)
+    expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, state: 'stopped', failure: null })
+    expect(await jobsOf('runtime.discard', runtime.id)).toEqual([])
+  } finally {
+    capturedConsole.restore()
+    await host.connect()
+  }
   await ensure(chat)
   await runtimeIn(chat, 'running')
   expect((await runtimeOf(chat)).id).toBe(runtime.id)
