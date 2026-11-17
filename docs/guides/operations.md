@@ -63,7 +63,7 @@ It is refused once a workspace exists.
 
 ## Account providers
 
-The Google, Microsoft and OIDC apps that people sign in to their account with are settings of the deployment ([who can join and sign-in](./who-can-join.md)). To add one, or replace a client id or secret, for example when a secret expires, run `spyria setup` again: an empty answer keeps a saved app and `-` removes it. An install made by hand sets them in `.env.prod` ([manual install](./self-hosting.md#account-providers)), a cloud deployment in `terraform.tfvars` ([clouds](./cloud.md)); the server reads them when it restarts.
+The Google, Microsoft and OIDC apps that people sign in to their account with are settings of the deployment ([who can join and sign-in](./who-can-join.md)). To add one, or replace a client id or secret, for example when a secret expires, run `spyria setup` again: an empty answer keeps a saved app and `-` removes it. An install made by hand sets them in `.env.prod` ([manual install](./self-hosting.md#account-providers)), or the client secrets in their files when they are [read from files](#secrets-in-files), a cloud deployment in `terraform.tfvars` ([clouds](./cloud.md)); the server reads them when it restarts.
 
 A workspace that enforces SSO with the deployment's Google or Microsoft app signs in through it too, so the server refuses to start while such a workspace exists without that app's settings, naming the provider: set them again rather than removing them.
 
@@ -94,14 +94,14 @@ The empty `SPYRIA_SECRETS_KEY` counts as unset, so the value Compose would other
 
 ## Rotation intervals
 
-Recommended intervals for each secret of a deployment. Rotate any of them at once when it may have leaked, and when someone who held it leaves.
+Recommended intervals for each secret of a deployment. Rotate any of them at once when it may have leaked, and when someone who held it leaves. Setting a new value means writing it where the service reads the secret: in `.env` (`.env.prod` on an install made by hand), or in its file when it is [read from a file](#secrets-in-files).
 
 | Secret | Rotate | How, and what it costs |
 |---|---|---|
 | `SPYRIA_SECRETS_KEY` | Every 12 months | [Rotating the secrets key](#rotating-the-secrets-key): no downtime, runtimes move to the new key as they restart. |
 | `SPYRIA_TOKEN_SECRET` | Every 12 months | Set a new value and restart the server. Members stay signed in: their sessions are not signed with it, and their 15-minute session tokens are renewed from them. A sign-in, GitHub connection or GitHub App creation in progress during the restart starts over. |
 | `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_SECRET`, `SPYRIA_OIDC_CLIENT_SECRET` | Every 12 months, and before the provider expires it (the Microsoft Entra admin center offers at most 24 months) | Add a second secret at the provider, set it ([account providers](#account-providers)) and restart the server, then delete the old one at the provider. |
-| `SPYRIA_POSTGRES_PASSWORD`, `SPYRIA_GATEWAY_DB_PASSWORD` | Every 12 months | The role keeps the password it was created with: change it in Postgres first (`\password spyria` in `spyria compose exec postgres psql -U spyria`, `\password bifrost` for the gateway's, so the new value stays out of the shell history), then in `.env`, then run `spyria compose up -d`, which restarts the services that use it, Postgres included, for a few seconds. |
+| `SPYRIA_POSTGRES_PASSWORD`, `SPYRIA_GATEWAY_DB_PASSWORD` | Every 12 months | The role keeps the password it was created with: change it in Postgres first (`\password spyria` in `spyria compose exec postgres psql -U spyria`, `\password bifrost` for the gateway's, so the new value stays out of the shell history), then where the services read it (`.env`, or the file of `DATABASE_URL_FILE` and `POSTGRES_PASSWORD_FILE` when they are read from files), then run `spyria compose up -d`, which restarts the services that use it, Postgres included, for a few seconds. |
 | `SPYRIA_ZERO_ADMIN_PASSWORD` | Every 12 months | Set a new value and run `spyria compose up -d zero-cache`. |
 | `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Every 12 months | The server and the gateway share it: set a new value, run `spyria compose up -d gateway server`, then check that `/health` does not list `gateway` as failing. |
 | `OTEL_EXPORTER_OTLP_HEADERS`, `CLOUDFLARE_TUNNEL_TOKEN` | As the collector's or Cloudflare's policy says | Issue a new token there, set it, restart the services that use it. |
@@ -115,7 +115,7 @@ Recommended intervals for each secret of a deployment. Rotate any of them at onc
 
 `SPYRIA_SECRETS_KEY` seals the stored secrets (SSO client secrets, GitHub App credentials, members' GitHub tokens) and derives the key the server uses to reach each runtime. To replace it, for example when it may have leaked:
 
-1. In `.env` (`.env.prod` on an install made by hand), move the current value of `SPYRIA_SECRETS_KEY` into `SPYRIA_PREVIOUS_SECRETS_KEYS` (comma-separated after any key already there), and set `SPYRIA_SECRETS_KEY` to a new value of at least 32 characters, for example from `openssl rand -hex 32`.
+1. In `.env` (`.env.prod` on an install made by hand), move the current value of `SPYRIA_SECRETS_KEY` into `SPYRIA_PREVIOUS_SECRETS_KEYS` (comma-separated after any key already there), and set `SPYRIA_SECRETS_KEY` to a new value of at least 32 characters, for example from `openssl rand -hex 32`. When they are [read from files](#secrets-in-files), do the same in the files: write the current key into the file of `SPYRIA_PREVIOUS_SECRETS_KEYS_FILE` and the new one into the file of `SPYRIA_SECRETS_KEY_FILE`: the override blanks their values from `.env`, so editing `.env` would change nothing.
 2. Restart the server with `spyria compose up -d server`. It now seals with the new key and still opens what the previous keys sealed; running runtimes keep answering.
 3. Seal every stored secret again with the new key:
 
@@ -124,7 +124,7 @@ Recommended intervals for each secret of a deployment. Rotate any of them at onc
    ```
 
    It says how many secrets it sealed again, and how many running runtimes still use a previous key. A runtime moves to the new key the next time it starts, and an idle runtime stops after an hour; run the command again later until it reports none. A runtime in use all along never goes idle: **Stop runtime** in its chat's runtime menu stops it, and the next prompt starts it on the new key.
-4. Remove `SPYRIA_PREVIOUS_SECRETS_KEYS` and run `spyria compose up -d server` again.
+4. Remove `SPYRIA_PREVIOUS_SECRETS_KEYS` (or `SPYRIA_PREVIOUS_SECRETS_KEYS_FILE` and its file) and run `spyria compose up -d server` again.
 
 Keep the previous key with the backups taken before step 3: the secrets in them are sealed with it. The cloud modules generate `SPYRIA_SECRETS_KEY` and do not take a previous key yet, so a cloud deployment cannot rotate it this way.
 
