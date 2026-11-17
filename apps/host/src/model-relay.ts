@@ -42,6 +42,14 @@ export const createModelRelay = ({
         body: redact(await request.text()),
       }
       if (!send(frame)) fail(sid)
+      request.signal.addEventListener(
+        'abort',
+        () => {
+          if (pending.get(sid)?.body !== undefined || !pending.delete(sid)) return
+          send({ type: 'gw_cancel', sid })
+        },
+        { once: true },
+      )
       return head
     },
     handle: (frame: Frame) => {
