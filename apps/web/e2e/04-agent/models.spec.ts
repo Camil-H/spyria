@@ -114,33 +114,22 @@ test.describe('Models', () => {
     await bobPage.context().close()
   })
 
-  test('As a prompter, I see how full the agent’s context is next to the model once it has answered', {
-    tag: ['@spec-15'],
-  }, async ({ page }) => {
-    await newRuntimeChat(page, 'Context')
-    const context = mainOf(page).getByRole('button', { name: /^Context: / })
-    await expect(context).toHaveCount(0)
-    await promptAndWait(page, 'How full are you?', 1)
-    await expect(context).toHaveAccessibleName(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
-    await context.focus()
-    await expect(page.getByRole('tooltip')).toHaveText(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
-  })
-
-  test('As a prompter, I compact the conversation from the context circle and see the context shrink', {
+  test('As a prompter, I see how full the agent’s context is once it has answered, compact the conversation from the context circle and see the context shrink', {
     tag: ['@spec-15'],
   }, async ({ page }) => {
     await newRuntimeChat(page, 'Compacted')
+    const context = mainOf(page).getByRole('button', { name: /^Context: / })
+    await expect(context).toHaveCount(0)
     await promptAndWait(page, 'Fill your context', 1)
-    await mainOf(page)
-      .getByRole('button', { name: /^Context: / })
-      .click()
+    await expect(context).toHaveAccessibleName(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
+    await context.focus()
+    await expect(page.getByRole('tooltip')).toHaveText(/^Context: (\d+% full, 2 of [\d,]+|2) tokens$/)
+    await context.click()
     await page.getByRole('menuitem', { name: 'Compact the conversation' }).click()
     await expect(
       messageItemsOf(page).filter({ hasText: 'Compacted the earlier conversation into a summary' }),
     ).toBeVisible()
-    await expect(mainOf(page).getByRole('button', { name: /^Context: / })).toHaveAccessibleName(
-      'Context: 16% full, 32,000 of 200,000 tokens',
-    )
+    await expect(context).toHaveAccessibleName('Context: 16% full, 32,000 of 200,000 tokens')
   })
 
   test('As a prompter, I switch the model by hand: I am warned about the reread, the history stays, every viewer sees the new model and the chat’s Usage tab meters both models', {
