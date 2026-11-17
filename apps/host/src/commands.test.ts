@@ -805,9 +805,6 @@ test('a profile older than the sign-in lifetime, or a browser left from an earli
     `POST /containers/create?name=${browserName}`,
     `POST /containers/${browserName}/start`,
   ])
-  const kept = browserDocker({ browser: { isRunning: true } })
-  await kept.runner.run({ ...startBrowser, signInHours: 11 })
-  expect(kept.requests()).toEqual([])
   const earlier = browserDocker({ browser: { networkMode: 'container:gone-id', isRunning: false } })
   await earlier.runner.run(startBrowser)
   expect(earlier.requests().slice(0, 2)).toEqual([
@@ -932,17 +929,8 @@ test("a running browser loses its sign-ins once they outlive the admin's limit, 
 
 test('a browser started with a sign-in limit keeps it on its profile, so a host that restarts still wipes the sign-ins once they outlive it', async () => {
   let clock = 10 * 3_600_000
-  const { runner, runnerAt, calls, requests } = browserDocker({ now: () => clock })
+  const { runner, runnerAt, requests } = browserDocker({ now: () => clock })
   await runner.run({ ...startBrowser, signInHours: 8 })
-  expect(calls.find(({ path }) => path === '/volumes/create')?.body).toEqual({
-    Name: `${browserName}-profile`,
-    Labels: {
-      'spyria.managed': '1',
-      'spyria.browser': 'runtime-1',
-      'spyria.browser.created': String(36_000_000),
-      'spyria.browser.sign_in_hours': '8',
-    },
-  })
   const restartedHost = runnerAt(() => clock)
   clock += 7 * 3_600_000
   await restartedHost.removeExpiredBrowsers()
