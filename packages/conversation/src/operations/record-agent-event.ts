@@ -143,13 +143,14 @@ export const recordAgentEventEndingLostTurns = (dependencies: Dependencies, inpu
       attributes: { 'workspace.id': input.workspaceId, 'chat.id': input.chatId },
       error,
     })
-    await dependencies.transactor.run(async (unitOfWork) => {
+    const stillActivePromptId = await dependencies.transactor.run(async (unitOfWork) => {
       const activePromptId = await unitOfWork.agentTurns.lock(input.chatId)
-      const promptId = input.turnPromptId ?? activePromptId
-      if (promptId)
-        await closeAgentTurn(unitOfWork, input.chatId, promptId, (hasReply) =>
-          turnEndNoticeOf(projected.outcome, hasReply),
-        )
+      const isOwnTurn = activePromptId !== null && (input.turnPromptId ?? activePromptId) === activePromptId
+      if (!isOwnTurn) return activePromptId
+      await closeAgentTurn(unitOfWork, input.chatId, activePromptId, (hasReply) =>
+        turnEndNoticeOf(projected.outcome, hasReply),
+      )
+      return null
     })
-    return { promptId: null, isReplyStored: false, expiredSignIn: undefined }
+    return { promptId: stillActivePromptId, isReplyStored: false, expiredSignIn: undefined }
   })
