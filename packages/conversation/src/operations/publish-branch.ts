@@ -27,7 +27,7 @@ import { githubRefusalOf } from './github-access.ts'
 
 type Dependencies = Pick<AgentDependencies, 'transactor' | 'runtimes' | 'agentClient' | 'checkouts'>
 type Input = { chat: AgentChat; actor: Actor; action: PublishAction; draft: PullRequestDraft }
-export type Publication = { isRefused: boolean; text: string }
+export type Publication = { isRefused: boolean; text: string; head?: string | null }
 
 const refused = (text: string): Publication => ({ isRefused: true, text })
 
@@ -105,6 +105,7 @@ const pushAndRecord = async (
   await recordPullRequest({ transactor }, { chat, actor, step, cardId: openPullRequest && card?.id })
   return {
     isRefused: false,
+    head: pushed.head ?? null,
     text: openPullRequest
       ? `Pushed ${pushed.branch} to pull request #${step.number} (${step.commits} commits): ${step.url}`
       : `Opened pull request #${step.number}: ${step.url}`,

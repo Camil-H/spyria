@@ -306,7 +306,7 @@ const publish = async (dependencies: Dependencies, job: LoopJob, loop: Loop) => 
       {
         ...current.step,
         pullRequestNumber: pullRequest?.number ?? null,
-        pushedHead: pullRequest?.headSha ?? null,
+        pushedHead: published.head ?? pullRequest?.headSha ?? null,
         publishedAt: Date.now(),
       },
       [[current.step.position, 'passed']],

@@ -150,6 +150,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   await loopStateIs(id, 'waiting_for_ci')
   const opened = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)
   const firstHead = String((await loopOf(id))?.step.pushedHead)
+  if (opened) opened.laggingHead = firstHead
   expect(opened).toMatchObject({ title: 'Fix totals', body: 'The totals add up again' })
   expect((await loopOf(id))?.step).toMatchObject({
     position: 3,
@@ -177,6 +178,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   }, 60_000)
   const secondHead = fakeGitHub.branchHeadOf('acme/app', branch)
   expect((await loopOf(id))?.step.pushedHead).toBe(secondHead)
+  if (opened) delete opened.laggingHead
   pushCheckRun(secondHead, 'unit', 'success')
   await loopStateIs(id, 'done')
   const ready = `Ready for your review on pull request #${opened?.number}: Totals, Code review and CI passed`
