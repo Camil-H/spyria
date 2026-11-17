@@ -1,6 +1,6 @@
 import { DomainError, errorKind } from '@spyria/kernel'
 
-export class OnboardingError extends DomainError {}
+class OnboardingError extends DomainError {}
 
 export const NotOwnOnboarding = errorKind(
   'not_own_onboarding',
