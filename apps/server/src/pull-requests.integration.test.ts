@@ -98,7 +98,7 @@ const fakePullRequestOf = (authorToken: string, number: number) =>
 test('a member whose GitHub access allows it pushes and opens a pull request with their own GitHub token passed only to git, as the Changes panel’s check shows; a member with Read, a reader and a member without GitHub are refused', async () => {
   for (const member of [alice, bob]) await disconnectGitHub(member)
   fakeGitHub.pullRequests.splice(0)
-  const { launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
+  const { relay, launches } = await stack.agentHost('Pull request host', { routesModelCalls: true })
   const { id, branch } = await newDevChat({
     participants: [
       { memberId: bob, roleId: 'prompter' },
@@ -193,6 +193,8 @@ test('a member whose GitHub access allows it pushes and opens a pull request wit
     await database.$client`select actor, payload from events where chat_id = ${id} and type = 'message.step_changed'`
   expect(changed).toMatchObject({ actor: alice, payload: { step: { commits: 2 } } })
 
+  expect(relay.requests.some(({ path }) => path === '/api/workspace/bundle')).toBe(true)
+  expect(JSON.stringify(relay.requests)).not.toContain(aliceToken)
   expect(readFileSync(join(workspace, '.git/config'), 'utf8')).not.toContain(aliceToken)
   expect(
     launches()
