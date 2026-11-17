@@ -165,4 +165,4 @@ Each member of a chat has their own browser with their own sign-ins, and only th
 
 The browser's own container shares only the runtime's network, so `localhost` reaches the app the agent runs there, but the agent's shell cannot read your browser's cookies or profile. Your workspace may block internal networks, the host machine and sites, and may record the addresses your browser visits in the audit log (never the pages' contents). See [Admin](./admin.md#browser).
 
-A file of the project the agent opens with `open_page`, such as an HTML report it built, is listed for everyone in the chat under **Files the agent opened**, the newest shown at once; an HTML file runs its scripts in an isolated frame.
+A file of the project the agent opens with `open_page`, such as an HTML report it built, is listed for everyone in the chat under **Files the agent opened**, an icon in the Browser tab's header row that reads **Back to your browser** while a file or the list shows, and the newest one shows at once; an HTML file runs its scripts in an isolated frame.
