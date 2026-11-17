@@ -8,6 +8,7 @@ import {
   alice,
   bob,
   globex,
+  issueTestSession,
   openSessionWith,
   queryWith,
   testAuthSettings,
@@ -403,20 +404,16 @@ test("a member sees by device where they are signed in to a workspace, never a s
 })
 
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
-  const [aliceInAcme] = await openSessions(database, 'member-alice', acme)
-  const [bobInAcme] = await openSessions(database, 'member-bob', acme)
-  if (!aliceInAcme || !bobInAcme) throw new Error('missing session')
-  const bearerOf = async (session: typeof aliceInAcme) =>
-    `Bearer ${(await issueSessionToken(testAuthSettings.tokenSecret, session)).token}`
-  const openFor = async (session: typeof aliceInAcme | undefined) =>
-    app.request('/auth/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(session && { authorization: await bearerOf(session) }) },
-      body: JSON.stringify({ workspaceId: globex }),
-    })
-  expect((await openFor(undefined)).status).toBe(401)
-  expect((await openFor(bobInAcme)).status).toBe(403)
-  const opened = await openFor(aliceInAcme)
+  const withoutToken = await app.request('/auth/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ workspaceId: globex }),
+  })
+  expect(withoutToken.status).toBe(401)
+  const bobInAcme = await issueTestSession(database, acme, bob)
+  expect((await openSessionWith(app, bobInAcme.token, globex)).status).toBe(403)
+  const aliceInAcme = await issueTestSession(database, acme, alice)
+  const opened = await openSessionWith(app, aliceInAcme.token, globex)
   expect(opened.status).toBe(200)
   expect(cookieHeaderOf(opened)).toContain(`spyria_s_${globex}=`)
   expect((await queryWith(app, ((await opened.json()) as { token: string }).token)).status).toBe(200)
