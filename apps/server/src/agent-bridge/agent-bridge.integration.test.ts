@@ -735,68 +735,69 @@ test.each([
   },
 )
 
-test('signing out closes the stream of that session at once and leaves the other sessions of the member streaming', async () => {
-  const chat = await newRuntimeChat()
-  const signedOut = await issueTestSession(database, acme, alice)
-  const signedOutViewer = await openStream(chat, { token: signedOut.token })
-  const otherViewer = await openStream(chat)
-  await Promise.all([signedOutViewer.subscribed, otherViewer.subscribed])
-  const logout = await app.request('/auth/logout', {
-    method: 'POST',
-    headers: {
-      origin: testAuthSettings.appOrigin,
-      'x-spyria-csrf': '1',
-      'content-type': 'application/json',
-      cookie: `spyria_s_${acme}=${signedOut.sessionId}`,
-    },
-    body: JSON.stringify({ workspaceId: acme }),
-  })
-  expect(logout.status).toBe(204)
-  expect(await signedOutViewer.closed).toBe(4001)
-  await otherViewer.resubscribe()
-})
-
-test('a stream closes once its session ends by any path, such as an SSO change or an operator command deleting it, and other sessions stream on', async () => {
-  const chat = await newRuntimeChat()
-  const ending = await issueTestSession(database, acme, alice)
-  const endingViewer = await openStream(chat, { token: ending.token })
-  const otherViewer = await openStream(chat)
-  await Promise.all([endingViewer.subscribed, otherViewer.subscribed])
-  await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId}`
-  expect(await endingViewer.closed).toBe(4001)
-  await otherViewer.resubscribe()
-})
-
-test.each<[string, (bobToken: string) => Promise<unknown>, unknown]>([
+type EndingSession = { sessionId: string; token: string }
+test.each<[string, (ending: EndingSession) => Promise<unknown>, unknown, boolean]>([
   [
-    'signs out everywhere',
-    async (bobToken) =>
+    'signing out',
+    async (ending) =>
       (
-        await app.request('/auth/sign-out-everywhere', {
+        await app.request('/auth/logout', {
           method: 'POST',
-          headers: { authorization: `Bearer ${bobToken}` },
+          headers: {
+            origin: testAuthSettings.appOrigin,
+            'x-spyria-csrf': '1',
+            'content-type': 'application/json',
+            cookie: `spyria_s_${acme}=${ending.sessionId}`,
+          },
+          body: JSON.stringify({ workspaceId: acme }),
         })
       ).status,
     204,
+    false,
   ],
   [
-    'is signed out everywhere by an admin',
+    'deleting the session, as an SSO change or an operator command does',
+    async (ending) =>
+      (
+        await database.$client`delete from sessions where workspace_id = ${acme} and id = ${ending.sessionId} returning id`
+      ).length,
+    1,
+    false,
+  ],
+  [
+    'signing out everywhere',
+    async (ending) =>
+      (
+        await app.request('/auth/sign-out-everywhere', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${ending.token}` },
+        })
+      ).status,
+    204,
+    true,
+  ],
+  [
+    'an admin ending every session of the member',
     () => mutate(aliceInAcme, 'workspace.endMemberSessions', { workspaceId: acme, memberId: bob }),
     succeeded,
+    true,
   ],
-])('every stream of a member who %s closes at once, and other members stream on', async (_, signOut, outcome) => {
-  const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
-  const bobToken = await sessionTokenOf(database, acme, bob)
-  const bobViewers = [
-    await openStream(chat, { token: bobToken }),
-    await openStream(chat, { token: await sessionTokenOf(database, acme, bob) }),
-  ]
-  const aliceViewer = await openStream(chat)
-  await Promise.all([...bobViewers, aliceViewer].map((viewer) => viewer.subscribed))
-  expect(await signOut(bobToken)).toEqual(outcome)
-  for (const viewer of bobViewers) expect(await viewer.closed).toBe(4001)
-  await aliceViewer.resubscribe()
-})
+])(
+  '%s closes the streams of the sessions it ends at once, and other sessions and members stream on',
+  async (_, endSession, outcome, endsEverySessionOfTheMember) => {
+    const chat = await newRuntimeChat({ participants: [{ memberId: bob, roleId: 'reader' }] })
+    const ending = await issueTestSession(database, acme, bob)
+    const endingViewer = await openStream(chat, { token: ending.token })
+    const otherSessionViewer = await openStream(chat, { token: await sessionTokenOf(database, acme, bob) })
+    const aliceViewer = await openStream(chat)
+    await Promise.all([endingViewer, otherSessionViewer, aliceViewer].map((viewer) => viewer.subscribed))
+    expect(await endSession(ending)).toEqual(outcome)
+    expect(await endingViewer.closed).toBe(4001)
+    if (endsEverySessionOfTheMember) expect(await otherSessionViewer.closed).toBe(4001)
+    else await otherSessionViewer.resubscribe()
+    await aliceViewer.resubscribe()
+  },
+)
 
 test('a stream closes when its token expires and stays open when a renewed token arrives first', async () => {
   const chat = await newRuntimeChat()
