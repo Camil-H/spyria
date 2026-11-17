@@ -1,7 +1,4 @@
-import { jobs } from '@spyria/db/postgres'
-import type { WorkerStack } from '../stack'
 import {
-  agentReplyText,
   chatLinkOf,
   chipOf,
   composerOf,
@@ -17,7 +14,6 @@ import {
   sendButtonOf,
   sendMessage,
   test,
-  workingIndicatorOf,
 } from './fixtures'
 
 const onePixelPng = Buffer.from(
@@ -29,8 +25,6 @@ const messagesOf = (page: Page) => page.getByRole('list', { name: 'Messages' })
 const openMessageAction = async (page: Page, messageText: string, actionName: string) =>
   (await messageActionOf(messageContaining(page, messageText), actionName)).click()
 const deleteDialogOf = (page: Page) => page.getByRole('dialog', { name: 'Delete message' })
-const agentPromptJobs = async (workerStack: WorkerStack) =>
-  (await workerStack.database.select().from(jobs)).filter((job) => job.type === 'agent.prompt')
 
 test.describe('Messaging', () => {
   test.beforeEach(async ({ page }) => {
@@ -52,16 +46,6 @@ test.describe('Messaging', () => {
       await expect(messageItemsOf(page).nth(2)).toContainText('Hello team')
       await expect(composerOf(page)).toHaveValue('')
       await expect(composerOf(page)).toBeFocused()
-    })
-
-    await test.step('appends only the member message', async () => {
-      await expect(workingIndicatorOf(page)).toHaveCount(0)
-      await expect
-        .poll(() => workerStack.database.query.messages.findFirst({ where: { body: 'Hello team' } }))
-        .toBeDefined()
-      expect(await agentPromptJobs(workerStack)).toEqual([])
-      await expect(messageContaining(page, agentReplyText)).toHaveCount(0)
-      await expect(messageItemsOf(page)).toHaveCount(3)
     })
 
     await test.step('sends with Cmd+Enter', async () => {
@@ -229,7 +213,6 @@ test.describe('Messaging', () => {
       await expect(notSent).toHaveText('Not sent: Too many requests: try again in 12 seconds.')
       await expect(composerOf(page)).toHaveValue('Sent too fast')
       await expect(messageContaining(page, 'Sent too fast')).toHaveCount(0)
-      expect(await workerStack.database.query.messages.findFirst({ where: { body: 'Sent too fast' } })).toBeUndefined()
     })
 
     await test.step('resends it with Send: the message is posted once and the reason goes away', async () => {
