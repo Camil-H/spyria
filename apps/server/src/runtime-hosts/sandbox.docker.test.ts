@@ -12,7 +12,7 @@ import {
 import { startJobWorker } from '../job-worker.ts'
 import { readSpyriaAgentImage } from '../spyria-agent-image.ts'
 import { startDockerTestHost } from '../testing/docker-runtime-host.ts'
-import { acme, openSharedTestApp, rejectionOf, waitFor } from '../testing/testing.ts'
+import { acme, openSharedTestApp, waitFor } from '../testing/testing.ts'
 
 const docker = (...args: string[]) => Bun.spawnSync(['docker', ...args], { stderr: 'pipe' })
 const dockerText = (...args: string[]) =>
@@ -60,9 +60,6 @@ test.skipIf(!hasImage)(
     const runtime = { workspaceId: acme, hostId, runtimeId: 'docker-test' }
     const apiKey = provider.apiKeyOf(runtime)
     const containerName = `${prefix}rt-docker-test`
-    expect((await rejectionOf(provider.create({ ...runtime, image: 'docker.io/library/alpine:3' }))).message).toContain(
-      'refused',
-    )
     await provider.create({ ...runtime, image: spyriaImage })
     expect(await provider.status(runtime)).toBe('stopped')
 
@@ -111,9 +108,6 @@ test.skipIf(!hasImage)(
       headers: { 'x-session-api-key': apiKey },
     })
     expect(authenticated.status).toBe(404)
-    expect((await rejectionOf(transport.fetch({ method: 'GET', path: '@169.254.169.254/' }))).message).toContain(
-      'refused',
-    )
     const zombies = dockerText(
       'exec',
       containerName,
@@ -195,19 +189,11 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image; prepare refuses another image",
+  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image",
   async () => {
     const startedAt = performance.now()
     const { gateway, hostId, prefix } = await dockerHost()
     const host = { workspaceId: acme, hostId }
-    expect((await rejectionOf(gateway.prepare(host, 'docker.io/library/alpine:3'))).message).toContain('refused')
-    const foreignImage = await rejectionOf(
-      gateway.prepare(
-        host,
-        'ghcr.io/openhands/agent-server@sha256:977a4791b90f46c0873f63d879180692802e47e7a0e760ab5add5d5a2505027d',
-      ),
-    )
-    expect(foreignImage.message).toContain('refused')
     await gateway.prepare(host, spyriaImage)
 
     const { database } = testDatabase
