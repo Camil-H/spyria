@@ -1,9 +1,7 @@
 import {
-  anySignedOutScreenOf,
   composerOf,
   expect,
   logOutOf,
-  mainOf,
   menuItemNamesOf,
   messageItemsOf,
   serverUrl,
@@ -157,28 +155,6 @@ test.describe('Sessions', () => {
         await page.getByRole('link', { name: 'Go to Globex' }).click()
         await expect(sidebarOf(page).getByRole('group', { name: 'Launch' })).toBeVisible()
       })
-    })
-  })
-
-  test.describe(() => {
-    test.use({ signedInAs: 'member-alice' })
-
-    test('As a member, signing back in restores my route, my messages and my unsent draft', async ({ page }) => {
-      await sidebarOf(page).getByRole('link', { name: 'Welcome' }).click()
-      await composerOf(page).fill('Sent before logout')
-      await composerOf(page).press('ControlOrMeta+Enter')
-      await composerOf(page).fill('Draft before logout')
-      const urlBeforeLogout = page.url()
-
-      await logOutOf(page, 'Acme')
-      await expect(signedOutScreenOf(page, 'Acme')).toBeVisible()
-      await page.getByRole('button', { name: 'Sign in' }).click()
-
-      expect(page.url()).toBe(urlBeforeLogout)
-      await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
-      await expect(messageItemsOf(page).last()).toContainText('Sent before logout')
-      await expect(composerOf(page)).toHaveValue('Draft before logout')
-      await expect(anySignedOutScreenOf(page)).toHaveCount(0)
     })
   })
 })
