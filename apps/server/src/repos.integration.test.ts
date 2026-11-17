@@ -252,8 +252,13 @@ test('a dev chat needs a granted repository and an existing base branch, and sto
   expect(await request(bob, 'GET', '/api/github/repositories')).toMatchObject({
     body: { repositories: [{ fullName: 'acme/app' }, { fullName: 'acme/docs' }] },
   })
-  expect(await request(bob, 'GET', '/api/github/branches?repository=acme/app')).toMatchObject({
-    body: { branches: ['main', 'release'] },
+  expect(await withGitHubCalls(() => request(bob, 'GET', '/api/github/branches?repository=acme/app'))).toMatchObject({
+    result: { body: { branches: ['main', 'release'] } },
+    githubCalls: [
+      'GET /repos/acme/app/installation',
+      'POST /app/installations/77/access_tokens',
+      'GET /repos/acme/app/branches',
+    ],
   })
   for (const outside of ['acme/../app', 'acme/secret', ''])
     expect(
