@@ -1,9 +1,9 @@
 import { afterAll, expect, test } from 'bun:test'
-import { workspacePermissions } from '@spyria/kernel'
 import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
 import { type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
+import { fakeIdpSignInOf } from '../testing/sign-in.ts'
 import { openSharedTestApp, requestMutationWith, testAuthSettings, workspaceEventsOf } from '../testing/testing.ts'
 import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
 import { issueSessionToken } from './session-tokens.ts'
@@ -39,30 +39,7 @@ await database.$client`
   insert into users (id, email) values (${ana}, 'ana@umbrella.com'), (${ben}, 'ben@umbrella.com'),
     (${carl}, 'carl@gmail.com'), (${dee}, 'dee@tyrell.com')`
 
-const addWorkspace = async (workspaceId: string, adminId: string, memberIds: string[] = []) => {
-  await database.$client`
-    insert into workspaces (workspace_id, name, created_by, created_at) values (${workspaceId}, ${workspaceId}, ${adminId}, now())`
-  await database.$client`
-    insert into workspace_roles (workspace_id, id, name, built_in)
-    values (${workspaceId}, 'admin', 'Admin', true), (${workspaceId}, 'member', 'Member', true)`
-  await database.$client`
-    insert into workspace_role_permissions (workspace_id, role_id, permission)
-    select ${workspaceId}, 'admin', unnest(${database.$client.array([...workspacePermissions])}::text[])`
-  await database.$client`
-    insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${adminId}, 'admin', 'Admin')`
-  for (const memberId of memberIds)
-    await database.$client`
-      insert into memberships (workspace_id, user_id, role, display_name)
-      values (${workspaceId}, ${memberId}, 'member', ${memberId})`
-}
-const enforceSso = async (workspaceId: string, idp: FakeIdp) => {
-  const clientId = `spyria-${workspaceId}`
-  idp.clientSecrets[clientId] = `${workspaceId}-secret`
-  const encryptedClientSecret = await createSecretBox(secretsKeyring).seal(`${workspaceId}-secret`)
-  await database.$client`
-    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
-    values (${workspaceId}, 'oidc', ${idp.issuer}, ${clientId}, ${encryptedClientSecret}, now())`
-}
+const { addWorkspace, enforceSso, callbackAfter } = fakeIdpSignInOf({ database, secretsKeyring, app })
 
 await addWorkspace('umbrella', ana, [carl])
 await enforceSso('umbrella', umbrellaIdp)
@@ -111,30 +88,12 @@ const claimAndVerify = async (workspaceId: string, userId: string, domain: strin
   return claimAs(workspaceId, userId, '/verify', domain)
 }
 
-const cookieHeaderOf = (response: Response) =>
-  response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(';')[0] ?? '')
-    .filter((cookie) => !cookie.endsWith('='))
-    .join('; ')
-let codeCount = 0
-const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload, cookie = '') => {
-  const started = await app.request(`/auth/login?${loginQuery}`, { headers: { cookie } })
+const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload) => {
+  const started = await app.request(`/auth/login?${loginQuery}`)
   const location = new URL(started.headers.get('location') ?? 'http://nowhere.invalid')
   if (location.origin !== idp.origin) return { status: started.status, page: await started.text(), workspaceIds: [] }
-  const code = `code-${++codeCount}`
-  idp.claimsByCode.set(code, { nonce: location.searchParams.get('nonce') ?? '', ...claims })
-  const response = await app.request(`/auth/callback?code=${code}&state=${location.searchParams.get('state')}`, {
-    headers: { cookie: cookieHeaderOf(started) },
-  })
-  const { sessions } = (await (
-    await app.request('/auth/sessions', { headers: { cookie: cookieHeaderOf(response) } })
-  ).json()) as { sessions: { workspaceId: string }[] }
-  return {
-    status: response.status,
-    page: await response.text(),
-    workspaceIds: sessions.map(({ workspaceId }) => workspaceId).toSorted(),
-  }
+  const { status, page, sessions } = await callbackAfter(idp, started, claims)
+  return { status, page, workspaceIds: sessions.map(({ workspaceId }) => workspaceId).toSorted() }
 }
 const providersOf = async (email: string) =>
   ((await (await app.request(`/auth/providers?email=${encodeURIComponent(email)}`)).json()) as { providers: unknown[] })

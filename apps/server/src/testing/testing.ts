@@ -190,6 +190,20 @@ export const requestMutationWith = async (
   return ((await response.json()) as { mutations: { result: unknown }[] }).mutations[0]?.result
 }
 
+export const queryWith = (app: RequestingApp, token: string) =>
+  app.request('/api/query', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
+  })
+
+export const openSessionWith = (app: RequestingApp, token: string, workspaceId: string) =>
+  app.request('/auth/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ workspaceId }),
+  })
+
 const integrationGatewayPort = 4880
 const integrationAppPort = 4882
 const integrationFakeMcpPort = 4883

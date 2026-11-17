@@ -15,7 +15,9 @@ import {
   jobDone,
   lee,
   newChat,
+  openSessionWith,
   openSharedTestApp,
+  queryWith,
   removeFromAcme,
   sendTo,
   succeeded,
@@ -51,12 +53,6 @@ const membershipOf = async (userId: string) =>
   (
     await database.$client`select role, removed_at from memberships where workspace_id = ${acme} and user_id = ${userId}`
   )[0]
-const queryAs = (token: string) =>
-  app.request('/api/query', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', [{ id: 'chats', name: 'chats', args: [] }]]),
-  })
 const renewWith = (sessionId: string) =>
   app.request('/auth/renew', {
     method: 'POST',
@@ -213,11 +209,11 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
     resultOf(member, 'workspace.endMemberSessions', { workspaceId: acme, memberId })
 
   expect(await endSessionsOf(bobInAcme, alice)).toEqual(cannotManageMembers)
-  expect((await queryAs(aliceToken)).status).toBe(200)
+  expect((await queryWith(app, aliceToken)).status).toBe(200)
 
   expect(await endSessionsOf(aliceInAcme, bob)).toEqual(succeeded)
   for (const { token, sessionId } of bobSessions) {
-    expect((await queryAs(token)).status).toBe(401)
+    expect((await queryWith(app, token)).status).toBe(401)
     expect((await renewWith(sessionId)).status).toBe(401)
   }
   expect(await membershipOf(bob)).toEqual({ role: 'member', removed_at: null })
@@ -226,20 +222,14 @@ test('an admin signs a member out everywhere in the workspace, which is recorded
     actorId: alice,
     payload: { memberId: bob },
   })
-  expect((await queryAs(aliceToken)).status).toBe(200)
-  const openFrom = (token: string, workspaceId: string) =>
-    app.request('/auth/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ workspaceId }),
-    })
-  expect((await openFrom(bobInGlobex.token, acme)).status).toBe(403)
-  const relayedThroughGlobex = await openFrom(bobInGlobex.token, globex)
+  expect((await queryWith(app, aliceToken)).status).toBe(200)
+  expect((await openSessionWith(app, bobInGlobex.token, acme)).status).toBe(403)
+  const relayedThroughGlobex = await openSessionWith(app, bobInGlobex.token, globex)
   expect(relayedThroughGlobex.status).toBe(200)
   const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
-  expect((await openFrom(relayedToken, acme)).status).toBe(403)
-  expect((await queryAs(bobInGlobex.token)).status).toBe(200)
-  expect((await queryAs((await issueTestSession(database, acme, bob)).token)).status).toBe(200)
+  expect((await openSessionWith(app, relayedToken, acme)).status).toBe(403)
+  expect((await queryWith(app, bobInGlobex.token)).status).toBe(200)
+  expect((await queryWith(app, (await issueTestSession(database, acme, bob)).token)).status).toBe(200)
   await database.$client`delete from memberships where workspace_id = ${globex} and user_id = ${bob}`
 })
 
@@ -270,10 +260,10 @@ test('removing a member ends their sessions, participations, keys and connection
   })
   const bobsRuntimeChat = await newChat({ ownerId: bob, participants: [{ memberId: alice, roleId: 'prompter' }] })
   const bobSession = await issueTestSession(database, acme, bob)
-  expect((await queryAs(bobSession.token)).status).toBe(200)
+  expect((await queryWith(app, bobSession.token)).status).toBe(200)
   expect(await removeFromAcme(app, database, bob)).toEqual(succeeded)
 
-  expect((await queryAs(bobSession.token)).status).toBe(401)
+  expect((await queryWith(app, bobSession.token)).status).toBe(401)
   expect((await renewWith(bobSession.sessionId)).status).toBe(401)
   expect((await membershipOf(bob))?.removed_at).not.toBeNull()
   expect(await database.$client`select 1 from sessions where user_id = ${bob}`).toHaveLength(0)

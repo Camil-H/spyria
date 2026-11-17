@@ -1,13 +1,12 @@
 import { afterAll, expect, test } from 'bun:test'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
-import { workspacePermissions } from '@spyria/kernel'
 import { microsoftPersonalAccountsTenantId } from '@spyria/workspace/server'
 import { serializeSigned } from 'hono/utils/cookie'
-import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
-import { commonPath, type FakeIdp, startFakeIdp } from '../testing/fake-idp.ts'
+import { commonPath, startFakeIdp } from '../testing/fake-idp.ts'
 import { runOperator } from '../testing/operator.ts'
+import { cookieHeaderOf, fakeIdpSignInOf } from '../testing/sign-in.ts'
 import {
   acme,
   alice,
@@ -15,6 +14,8 @@ import {
   captureLogs,
   globex,
   lee,
+  openSessionWith,
+  queryWith,
   rejectionOf,
   sessionTokenOf,
   testAuthSettings,
@@ -61,29 +62,10 @@ afterAll(async () => {
   await testDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
 
-const addWorkspace = async (workspaceId: string, adminId: string = alice) => {
-  await database.$client`
-    insert into workspaces (workspace_id, name, created_by, created_at) values (${workspaceId}, ${workspaceId}, ${adminId}, now())`
-  await database.$client`
-    insert into workspace_roles (workspace_id, id, name, built_in)
-    values (${workspaceId}, 'admin', 'Admin', true), (${workspaceId}, 'member', 'Member', true)`
-  await database.$client`
-    insert into workspace_role_permissions (workspace_id, role_id, permission)
-    select ${workspaceId}, 'admin', unnest(${database.$client.array([...workspacePermissions])}::text[])`
-  await database.$client`
-    insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${adminId}, 'admin', 'Admin')`
-}
+const { addWorkspace, enforceSso, callbackAfter, signInThrough } = fakeIdpSignInOf({ database, secretsKeyring, app })
 const addMember = (workspaceId: string, userId: string) =>
   database.$client`
     insert into memberships (workspace_id, user_id, role, display_name) values (${workspaceId}, ${userId}, 'member', ${userId})`
-const enforceSso = async (workspaceId: string, idp: FakeIdp, { preset = 'oidc', issuer = idp.issuer } = {}) => {
-  const clientId = `spyria-${workspaceId}`
-  idp.clientSecrets[clientId] = `${workspaceId}-secret`
-  const encryptedClientSecret = await createSecretBox(secretsKeyring).seal(`${workspaceId}-secret`)
-  await database.$client`
-    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, updated_at)
-    values (${workspaceId}, ${preset}, ${issuer}, ${clientId}, ${encryptedClientSecret}, now())`
-}
 const invite = (workspaceId: string, email: string, { expiresIn = '7 days' } = {}) =>
   database.$client`
     insert into invitations (workspace_id, id, email, role, invited_by, created_at, expires_at)
@@ -102,39 +84,6 @@ await enforceSso('hooli', hooliIdp)
 await addWorkspace('stark')
 await addMember('stark', bob)
 
-const cookieHeaderOf = (response: Response) =>
-  response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(';')[0] ?? '')
-    .filter((cookie) => !cookie.endsWith('='))
-    .join('; ')
-const sessionsOf = async (cookie: string, server = app) =>
-  (await (await server.request('/auth/sessions', { headers: { cookie } })).json()) as {
-    userId?: string
-    sessions: { workspaceId: string; token: string }[]
-  }
-let codeCount = 0
-const callbackAfter = async (idp: FakeIdp, started: Response, claims: JWTPayload, server = app) => {
-  const location = new URL(started.headers.get('location') ?? '')
-  expect(location.origin).toBe(idp.origin)
-  const code = `code-${++codeCount}`
-  idp.claimsByCode.set(code, { nonce: location.searchParams.get('nonce') ?? '', ...claims })
-  const response = await server.request(`/auth/callback?code=${code}&state=${location.searchParams.get('state')}`, {
-    headers: { cookie: cookieHeaderOf(started) },
-  })
-  const cookie = cookieHeaderOf(response)
-  return {
-    status: response.status,
-    page: await response.text(),
-    cookie,
-    authorizationEndpoint: location.origin + location.pathname,
-    clientId: location.searchParams.get('client_id'),
-    loginHint: location.searchParams.get('login_hint'),
-    ...(await sessionsOf(cookie, server)),
-  }
-}
-const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload, server = app) =>
-  callbackAfter(idp, await server.request(`/auth/login?${loginQuery}`), claims, server)
 const workspaceIdsOf = (signedIn: { sessions: { workspaceId: string }[] }) =>
   signedIn.sessions.map(({ workspaceId }) => workspaceId)
 const identitiesOf = async (subject: string) => [
@@ -163,18 +112,6 @@ const renewStatus = async (workspaceId: string, cookie: string) =>
       body: JSON.stringify({ workspaceId }),
     })
   ).status
-const openSessionWith = (token: string, workspaceId: string) =>
-  app.request('/auth/sessions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspaceId }),
-  })
-const queryWith = (token: string) =>
-  app.request('/api/query', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: JSON.stringify(['transform', []]),
-  })
 const sessionCookieOf = async (workspaceId: string, userId: string, providerWorkspaceId: string | null = null) => {
   const [session] = await openSessions(database, userId, workspaceId, providerWorkspaceId)
   if (!session) throw new Error(`${userId} has no session in ${workspaceId}`)
@@ -428,7 +365,7 @@ test('an account in no workspace hears so and creates one as its Admin, from thi
       where workspace_id = ${issued.workspaceId}`),
   ]).toEqual([{ name: 'Olive Co', created_by: oliveId, user_id: oliveId, role: 'admin' }])
   expect(JSON.parse((await readSso(issued.workspaceId, oliveId)).body)).toEqual({ settings: null })
-  expect((await queryWith(issued.token)).status).toBe(200)
+  expect((await queryWith(app, issued.token)).status).toBe(200)
 })
 
 test('a generic OIDC provider that does not confirm the address is refused with the reason, and the invite stays pending', async () => {
@@ -523,8 +460,8 @@ test("a workspace's own provider opens only that workspace, and its session can 
     { workspace_id: 'hooli', issuer: hooliIdp.issuer, user_id: 'member-theo' },
   ])
   const hooliToken = throughHooli.sessions[0]?.token ?? ''
-  expect((await queryWith(hooliToken)).status).toBe(200)
-  const widened = await openSessionWith(hooliToken, acme)
+  expect((await queryWith(app, hooliToken)).status).toBe(200)
+  const widened = await openSessionWith(app, hooliToken, acme)
   expect(widened.status).toBe(403)
   expect(cookieHeaderOf(widened)).not.toContain('spyria_s_')
 
@@ -533,7 +470,7 @@ test("a workspace's own provider opens only that workspace, and its session can 
     email: 'theo@example.com',
   })
   expect(workspaceIdsOf(throughAccount)).toEqual([acme])
-  expect((await openSessionWith(throughAccount.sessions[0]?.token ?? '', 'hooli')).status).toBe(403)
+  expect((await openSessionWith(app, throughAccount.sessions[0]?.token ?? '', 'hooli')).status).toBe(403)
   const renamedAtHooli = await signInThrough(hooliIdp, 'workspace=hooli', {
     sub: 'theo-hooli',
     email: 'theo.new@example.com',
@@ -549,13 +486,13 @@ test('a session keeps how it was opened: once its workspace starts or stops enfo
   const accountToken = await sessionTokenOf(database, 'vandelay', alice)
   await enforceSso('vandelay', hooliIdp)
   expect(await renewStatus('vandelay', throughAccount)).toBe(401)
-  expect((await queryWith(accountToken)).status).toBe(401)
+  expect((await queryWith(app, accountToken)).status).toBe(401)
   const throughSso = await sessionCookieOf('vandelay', alice, 'vandelay')
   const ssoToken = await sessionTokenOf(database, 'vandelay', alice)
-  expect((await queryWith(ssoToken)).status).toBe(200)
+  expect((await queryWith(app, ssoToken)).status).toBe(200)
   await database.$client`delete from workspace_sso where workspace_id = 'vandelay'`
   expect(await renewStatus('vandelay', throughSso)).toBe(401)
-  expect((await openSessionWith(ssoToken, acme)).status).toBe(401)
+  expect((await openSessionWith(app, ssoToken, acme)).status).toBe(401)
 })
 
 test('the invites of a workspace with its own SSO are accepted only through its provider, at the invited address', async () => {
@@ -639,7 +576,7 @@ test("a workspace provider asserting someone else's address gets at most a sessi
   expect(forged.userId).toBe(alice)
   expect(workspaceIdsOf(forged)).toEqual(['evil'])
   for (const workspaceId of [acme, globex, 'stark'])
-    expect((await openSessionWith(forged.sessions[0]?.token ?? '', workspaceId)).status).toBe(403)
+    expect((await openSessionWith(app, forged.sessions[0]?.token ?? '', workspaceId)).status).toBe(403)
   expect(await accountIdentitiesOf('forged-alice')).toEqual([])
   expect(await accountIdentitiesOf('alice-account')).toEqual([{ issuer: accountIdp.issuer, user_id: alice }])
 })
@@ -759,8 +696,8 @@ test('once its admin confirms Setup SSO, the workspace signs in only through its
     { workspace_id: 'stark', issuer: starkIdp.issuer, user_id: alice },
   ])
   expect(await renewStatus('stark', aliceCookie)).toBe(401)
-  expect((await queryWith(bobToken)).status).toBe(401)
-  expect((await openSessionWith(confirmed.sessions[0]?.token ?? '', acme)).status).toBe(403)
+  expect((await queryWith(app, bobToken)).status).toBe(401)
+  expect((await openSessionWith(app, confirmed.sessions[0]?.token ?? '', acme)).status).toBe(403)
 
   const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
     select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = 'stark'`
@@ -1226,8 +1163,8 @@ test('workspaces signing in through the same app of a provider offer one button,
     { workspace_id: 'piper', issuer: hooliIdp.issuer, user_id: 'member-vic' },
   ])
   for (const { token, workspaceId } of signedIn.sessions) {
-    expect((await queryWith(token)).status).toBe(200)
-    expect((await openSessionWith(token, 'gavin')).status).toBe(403)
+    expect((await queryWith(app, token)).status).toBe(200)
+    expect((await openSessionWith(app, token, 'gavin')).status).toBe(403)
     expect(workspaceId).not.toBe('gavin')
   }
 
