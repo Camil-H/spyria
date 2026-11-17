@@ -59,12 +59,8 @@ export type PostedMessage = {
   authorId?: string | null
   createdAt?: string
 }
-export const numberedMessages = (idPrefix: string, bodyPrefix: string, count: number, createdAt?: string) =>
-  Array.from({ length: count }, (_, index) => ({
-    id: `${idPrefix}${index + 1}`,
-    body: `${bodyPrefix}${index + 1}`,
-    createdAt,
-  }))
+export const numberedMessages = (idPrefix: string, bodyPrefix: string, count: number) =>
+  Array.from({ length: count }, (_, index) => ({ id: `${idPrefix}${index + 1}`, body: `${bodyPrefix}${index + 1}` }))
 export const postMessages = (workerStack: WorkerStack, chatId: string, messages: PostedMessage[]) => {
   const rows = messages.map((message, index) => ({
     id: message.id,
