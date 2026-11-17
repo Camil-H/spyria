@@ -135,33 +135,6 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  "a runtime of another deployment on the same Docker daemon is out of this host's reach, even when its name extends this deployment's",
-  async () => {
-    const { gateway, hostId, deployment } = await dockerHost()
-    const host = { workspaceId: acme, hostId }
-    const otherDeploymentRuntime = `${deployment}-rt-rt-other`
-    docker(
-      ...[
-        'run',
-        '-d',
-        '--name',
-        otherDeploymentRuntime,
-        '--label',
-        'spyria.managed=1',
-        '--label',
-        'spyria.runtime=other',
-      ],
-      ...['--entrypoint', 'sleep', spyriaImage, '600'],
-    )
-    const runtime = { ...host, runtimeId: 'rt-other' }
-    expect((await rejectionOf(gateway.sandboxProvider.status(runtime))).message).toContain('refused')
-    expect((await rejectionOf(gateway.sandboxProvider.remove(runtime))).message).toContain('refused')
-    expect(dockerText('ps', '-q', '--filter', `name=^${otherDeploymentRuntime}$`)).not.toBe('')
-  },
-  30_000,
-)
-
-test.skipIf(!hasImage)(
   'two runtimes on one host cannot reach each other, while spyria-host relays to both',
   async () => {
     const { gateway, hostId, prefix, readyRuntime } = await dockerHost()

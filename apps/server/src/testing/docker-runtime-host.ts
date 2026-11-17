@@ -110,7 +110,6 @@ export const startDockerTestHost = async ({
     app,
     agentBridge,
     hostId,
-    deployment,
     prefix,
     hostOutput: () => hostOutputChunks.join(''),
     readyRuntime,
