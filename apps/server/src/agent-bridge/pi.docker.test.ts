@@ -323,6 +323,7 @@ test("Pi in Spyria's image runs a command with its output, asks through Spyria's
     ])
     pi.close()
   } finally {
+    setFakeLlmScript(undefined)
     await telemetry.stop()
   }
 })
