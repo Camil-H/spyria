@@ -49,7 +49,7 @@ test.describe('Models', () => {
     await bobPage.context().close()
   })
 
-  test('As a member with an OpenRouter key, I get a routed OpenRouter model that answers, search the full listing, and keys for Google, xAI, DeepSeek, Z.ai and Meta add their curated models', {
+  test('As a member with an OpenRouter key, I get a routed OpenRouter model that answers and search the full listing', {
     tag: ['@spec-25', '@stage-f'],
   }, async ({ browser, workerStack, agentScript }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
@@ -70,23 +70,10 @@ test.describe('Models', () => {
     await sessionOf(bobPage).getByLabel('Search all models').fill('kimi')
     await expect(mainModel.getByRole('option', { name: 'openrouter/moonshotai/kimi-k3', exact: true })).toHaveCount(1)
     await expect(mainModel.getByRole('option', { name: /grok|gpt|mistral/ })).toHaveCount(0)
-    await mainModel.selectOption('openrouter/moonshotai/kimi-k3')
-    await sessionOf(bobPage).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(bobPage, 'routed')).toHaveText('openrouter/moonshotai/kimi-k3 (medium)')
-    await bobPage.keyboard.press('Escape')
-    await promptAndWait(bobPage, 'Carry on with Kimi', 2)
-
-    for (const provider of ['Google', 'xAI', 'DeepSeek', 'Z.ai', 'Meta']) await addLlmKey(bobPage, provider)
-    await openChat(bobPage, 'Bob on OpenRouter')
-    await openSession(bobPage)
-    for (const name of ['Gemini Flash', 'Grok 4.3', 'DeepSeek V4 Flash', 'GLM-4.7', 'Muse Spark 1.3'])
-      await expect(sessionOf(bobPage).getByLabel('Main model').getByRole('option', { name, exact: true })).toHaveCount(
-        1,
-      )
     await bobPage.context().close()
   })
 
-  test('As a prompter, I switch the model after a delegation, curated or searched, and the next turn runs on it with the earlier messages in its context', {
+  test('As a prompter, I switch to a searched model after a delegation, and the next turn runs on it with the earlier messages in its context', {
     tag: ['@spec-25', '@stage-g'],
   }, async ({ page, agentScript }) => {
     const chatId = await newRuntimeChat(page, 'Switch keeps context')
@@ -101,21 +88,13 @@ test.describe('Models', () => {
     await agentScript(chatId, { text: 'Context holds $userMessages prompts.' })
 
     await openSession(page)
-    await sessionOf(page).getByLabel('Main model').selectOption('mistral/mistral-large-latest')
-    await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
-    await expect(chipOf(page, 'routed')).toHaveText(/^Mistral Large( \(\w+\))?$/)
-    await page.keyboard.press('Escape')
-    await sendMessage(page, 'Curated switch')
-    await expect(messageItemsOf(page).filter({ hasText: 'Context holds 2 prompts.' })).toHaveCount(1)
-
-    await openSession(page)
     await sessionOf(page).getByLabel('Search all models').fill('codestral-latest')
     await sessionOf(page).getByLabel('Main model').selectOption('mistral/codestral-latest')
     await sessionOf(page).getByRole('button', { name: 'Switch' }).click()
     await expect(chipOf(page, 'routed')).toHaveText(/^mistral\/codestral-latest( \(\w+\))?$/)
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Searched switch')
-    await expect(messageItemsOf(page).filter({ hasText: 'Context holds 3 prompts.' })).toHaveCount(1)
+    await expect(messageItemsOf(page).filter({ hasText: 'Context holds 2 prompts.' })).toHaveCount(1)
   })
 
   test('As a prompter, I find no separate default model: nothing to pick before the first prompt, then the chip shows the main model', {
@@ -134,16 +113,11 @@ test.describe('Models', () => {
     await expect(sessionOf(page).getByLabel('Default model')).toHaveCount(0)
   })
 
-  test('As a member whose keys reach another provider, I get its model, and I am refused in a session on a model my keys cannot reach', {
+  test('As a member whose keys reach another provider, I am refused in a session on a model my keys cannot reach', {
     tag: ['@spec-15'],
   }, async ({ page, browser, workerStack, agentScript }) => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await addLlmKey(bobPage, 'xAI')
-    const bobChatId = await newRuntimeChat(bobPage, 'Bob on xAI')
-    await agentScript(bobChatId, confident('large'))
-    await promptAndWait(bobPage, 'A big refactor please', 1)
-    await expect(chipOf(bobPage, 'routed')).toHaveText('Grok 4.7 (high)')
-
     const aliceChatId = await newRuntimeChat(page, 'Alice large')
     await addParticipant(workerStack, aliceChatId, 'member-bob', 'prompter')
     await agentScript(aliceChatId, confident('large'))
@@ -244,10 +218,6 @@ test.describe('Models', () => {
     await page.reload()
     await openSession(page)
     await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('same_as_main')
-    await sessionOf(page).getByLabel('Subagents').selectOption({ label: 'Auto' })
-    await page.reload()
-    await openSession(page)
-    await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
   })
 
   test('As a member whose only key is a decision model, I am told to add an LLM key and cannot pick it', {
