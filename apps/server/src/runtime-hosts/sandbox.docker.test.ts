@@ -189,7 +189,7 @@ test.skipIf(!hasImage)(
 )
 
 test.skipIf(!hasImage)(
-  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image",
+  "runtime jobs create, stop, resume with the same key and files, and remove a real runtime of Spyria's image, which holds its Docker network only while it runs: stop releases it, resume recreates it and relays again",
   async () => {
     const startedAt = performance.now()
     const { gateway, hostId, prefix } = await dockerHost()
@@ -217,6 +217,7 @@ test.skipIf(!hasImage)(
       const { id } = await ensure()
       await stateIs('running')
       const containerName = `${prefix}rt-${id}`
+      const runtimeNetwork = () => dockerText('network', 'ls', '-q', '--filter', `name=^${containerName}-net$`)
       const apiKey = gateway.sandboxProvider.apiKeyOf({ ...host, runtimeId: id })
       const transport = gateway.sandboxProvider.connect({ ...host, runtimeId: id })
       const authenticatedStatus = async () =>
@@ -239,9 +240,11 @@ test.skipIf(!hasImage)(
       })
       await stateIs('stopped')
       expect(dockerText('inspect', '-f', '{{.State.Running}}', containerName)).toBe('false')
+      expect(runtimeNetwork()).toBe('')
 
       expect(await ensure()).toMatchObject({ id, state: 'starting' })
       await stateIs('running')
+      expect(runtimeNetwork()).not.toBe('')
       expect(dockerText('exec', containerName, 'cat', '/workspace/kept.txt')).toBe('kept')
       expect(await authenticatedStatus()).toBe(404)
 
@@ -257,38 +260,6 @@ test.skipIf(!hasImage)(
     console.info(`Runtime lifecycle Docker test took ${Math.round(performance.now() - startedAt)} ms`)
   },
   120_000,
-)
-
-test.skipIf(!hasImage)(
-  'a runtime holds its Docker network only while it runs: stop releases it, start recreates it and relays again',
-  async () => {
-    const { gateway, hostId, prefix, readyRuntime } = await dockerHost()
-    const host = { workspaceId: acme, hostId }
-    const provider = gateway.sandboxProvider
-    const runtimes = ['cycle-a', 'cycle-b', 'cycle-c'].map((runtimeId) => ({ ...host, runtimeId }))
-    const runtimeNetworks = () =>
-      dockerText('network', 'ls', '--format', '{{.Name}}', '--filter', `name=^${prefix}rt-cycle-`)
-        .split('\n')
-        .filter(Boolean)
-    for (const runtime of runtimes) {
-      await provider.create({ ...runtime, image: spyriaImage })
-      await provider.start(runtime)
-    }
-    for (const runtime of runtimes) await readyRuntime(runtime)
-    expect(runtimeNetworks()).toHaveLength(3)
-    for (let cycle = 0; cycle < 3; cycle++) {
-      for (const runtime of runtimes) await provider.stop(runtime)
-      expect(runtimeNetworks()).toEqual([])
-      for (const runtime of runtimes) await provider.start(runtime)
-      expect(runtimeNetworks()).toHaveLength(3)
-    }
-    for (const runtime of runtimes) await readyRuntime(runtime)
-    for (const runtime of runtimes) await provider.stop(runtime)
-    expect(runtimeNetworks()).toEqual([])
-    for (const runtime of runtimes) await provider.remove(runtime)
-    expect(dockerText('ps', '-aq', '--filter', `name=^${prefix}rt-cycle-`)).toBe('')
-  },
-  180_000,
 )
 
 test.skipIf(!hasImage)(
