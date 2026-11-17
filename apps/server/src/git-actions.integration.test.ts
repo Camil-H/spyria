@@ -14,6 +14,7 @@ const {
   request,
   configureGitHubApp,
   connectGitHub,
+  disconnectGitHub,
   newDevChat: newGitHubDevChat,
   runtimeWorkspaceOf,
 } = await startGitHubStack({ routing: true })
@@ -44,6 +45,7 @@ const agentCommit = (workspace: string, total: number) => {
 
 test('only the owner commits and updates from base; prompters and editors are refused, as is a commit with nothing to commit; the author comes from GitHub, else Spyria', async () => {
   await stack.agentHost('Git roles host')
+  await disconnectGitHub(alice)
   const { id, branch } = await newDevChat(baseBranchOf('roles'), [
     { memberId: bob, roleId: 'prompter' },
     { memberId: lee, roleId: 'editor' },
@@ -147,6 +149,7 @@ test('commit and update are refused while an agent turn runs and while the runti
 
 test('update from base merges the base’s new commit from a thin bundle of the base only; no token reaches spyria-agent or the runtime', async () => {
   const { relay } = await stack.agentHost('Git update host')
+  await connectGitHub(alice)
   const baseBranch = baseBranchOf('merge')
   const { id, branch } = await newDevChat(baseBranch)
   const { workspace } = await runtimeWorkspaceOf(id)
