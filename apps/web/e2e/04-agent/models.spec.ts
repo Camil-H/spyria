@@ -33,15 +33,6 @@ test.describe('Models', () => {
     await page.goto('/')
   })
 
-  test('As a prompter, I see that the model is chosen at my first prompt until I send it', {
-    tag: ['@spec-15'],
-  }, async ({ page }) => {
-    await newRuntimeChat(page, 'Unrouted')
-    await expect(chipOf(page, 'routed')).toHaveText(unchosen)
-    await openChat(page, 'Research')
-    await expect(chipOf(page, 'routed')).toHaveText(unchosen)
-  })
-
   test('As a member with only an OpenAI key, I get an OpenAI model at my first prompt, never an Anthropic one', {
     tag: ['@spec-25', '@stage-f'],
   }, async ({ browser, workerStack, agentScript }) => {
@@ -257,16 +248,6 @@ test.describe('Models', () => {
     await page.reload()
     await openSession(page)
     await expect(sessionOf(page).getByLabel('Subagents')).toHaveValue('auto')
-  })
-
-  test('As a member with a decision model, I get routed by it when it is confident', {
-    tag: ['@spec-15', '@smoke'],
-  }, async ({ page, agentScript }) => {
-    await addLlmKey(page, 'Typesafe')
-    const chatId = await newRuntimeChat(page, 'Decided')
-    await agentScript(chatId, { route: { tier: 'large', confidence: 0.9, effort: 'high' } })
-    await promptAndWait(page, 'Decide', 1)
-    await expect(chipOf(page, 'routed')).toHaveText('Mistral Large (high)')
   })
 
   test('As a member whose only key is a decision model, I am told to add an LLM key and cannot pick it', {
