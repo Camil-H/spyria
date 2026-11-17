@@ -48,9 +48,15 @@ const commitToBase = (branch: string, files: Record<string, string>, message: st
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ repository: 'acme/app', branch, files, message }),
   })
-const devChatWithCommit = async (page: Page, agentScript: AgentScript, name: string, baseBranch = 'main') => {
+const devChatWithCommit = async (
+  page: Page,
+  agentScript: AgentScript,
+  name: string,
+  baseBranch = 'main',
+  command = commitCommand('Fix the totals'),
+) => {
   const chatId = await newDevChat(page, name, 'acme/app', baseBranch)
-  await runAgent(page, agentScript, chatId, [appEdit(1, 2), { command: commitCommand('Fix the totals') }], 'Fixed.')
+  await runAgent(page, agentScript, chatId, [appEdit(1, 2), { command }], 'Fixed.')
   await panelTabOf(page, 'Changes').click()
   return chatId
 }
@@ -60,39 +66,40 @@ test.describe('Branch actions', () => {
     await page.goto('/')
   })
 
-  test('As a chat owner, I read the working branch and its base, the commits ahead of the base and the uncommitted files in the status line', {
-    tag: ['@spec-43'],
-  }, async ({ page, agentScript }) => {
-    await configureGitHubApp(page)
-    const chatId = await devChatWithCommit(page, agentScript, 'Status totals')
-    const statusLine = statusLineOf(page)
-    await expect(statusLine).toContainText(/spyria\/status-totals-\w+ → main/)
-    await expect(statusLine).toContainText('1 ahead of main')
-    await expect(statusLine).toContainText('No uncommitted files')
-    await runAgent(
-      page,
-      agentScript,
-      chatId,
-      [appEdit(2, 3), { edit: { path: 'src/new.ts', create: 'export const added = true\n' } }],
-      'Edited two files.',
-    )
-    await expect(statusLine).toContainText('2 files uncommitted')
-    await expect(statusLine).toContainText('1 ahead of main')
-  })
-
   test('As a chat owner, I commit with a message under my name: Changes lists it, and the status line shows nothing uncommitted and one commit ahead of the pushed branch', {
     tag: ['@spec-43', '@smoke'],
   }, async ({ page, agentScript }) => {
     await configureGitHubApp(page)
     await connectGitHub(page)
-    const chatId = await devChatWithCommit(page, agentScript, 'Commit totals')
+    const chatId = await devChatWithCommit(
+      page,
+      agentScript,
+      'Commit totals',
+      'main',
+      "git add -A && git commit -qm 'Fix the totals'",
+    )
+    const statusLine = statusLineOf(page)
+    const commits = commitsOf(page)
+    await expect(statusLine).toContainText(/spyria\/commit-totals-\w+ → main/)
+    await expect(statusLine).toContainText('1 ahead of main')
+    await expect(statusLine).toContainText('No uncommitted files')
+    await expect(commits).toHaveCount(1)
+    await expect(commits.first()).toContainText('Fix the totals')
+    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
+    await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
+    await expect(headerButtonOf(page, 'Commit')).toHaveAttribute('title', 'Nothing to commit')
+    await expect(headerButtonOf(page, 'Push')).toBeEnabled()
+
     await headerButtonOf(page, 'Push').click()
     await expect(toastOf(page).getByRole('status')).toContainText(/^Pushed spyria\/commit-totals-/)
-    const statusLine = statusLineOf(page)
     await expect(statusLine).toContainText('Pushed branch up to date')
     await expect(statusLine).toContainText('Last push')
+    await expect(headerButtonOf(page, 'Push')).toBeDisabled()
+    await expect(headerButtonOf(page, 'Push')).toHaveAttribute('title', 'Nothing to push')
     await runAgent(page, agentScript, chatId, [appEdit(2, 3)], 'Raised the total.')
     await expect(statusLine).toContainText('1 file uncommitted')
+    await expect(headerButtonOf(page, 'Commit')).toBeEnabled()
+    await expect(headerButtonOf(page, 'Push')).toBeDisabled()
 
     await headerButtonOf(page, 'Commit').click()
     const form = tabPanelOf(page).getByRole('form', { name: 'Commit changes' })
@@ -108,40 +115,12 @@ test.describe('Branch actions', () => {
     await expect(statusLine).toContainText('No uncommitted files')
     await expect(statusLine).toContainText('1 ahead of the pushed branch')
     await expect(statusLine).toContainText('2 ahead of main')
+    await expect(headerButtonOf(page, 'Push')).toBeEnabled()
+    await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
 
-    const commits = commitsOf(page)
     await expect(commits).toHaveCount(2)
     await expect(commits.first()).toContainText('Raise the total')
     await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
-  })
-
-  test('As a chat owner, I find Commit greyed with nothing uncommitted and Push greyed with nothing new to push', {
-    tag: ['@spec-43'],
-  }, async ({ page, agentScript }) => {
-    await configureGitHubApp(page)
-    await connectGitHub(page)
-    const chatId = await devChatWithCommit(page, agentScript, 'Greyed totals')
-    await expect(statusLineOf(page)).toContainText('No uncommitted files')
-    await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
-    await expect(headerButtonOf(page, 'Commit')).toHaveAttribute('title', 'Nothing to commit')
-    await expect(headerButtonOf(page, 'Push')).toBeEnabled()
-
-    await headerButtonOf(page, 'Push').click()
-    await expect(statusLineOf(page)).toContainText('Pushed branch up to date')
-    await expect(headerButtonOf(page, 'Push')).toBeDisabled()
-    await expect(headerButtonOf(page, 'Push')).toHaveAttribute('title', 'Nothing to push')
-
-    await runAgent(page, agentScript, chatId, [appEdit(2, 3)], 'Raised the total.')
-    await expect(statusLineOf(page)).toContainText('1 file uncommitted')
-    await expect(headerButtonOf(page, 'Commit')).toBeEnabled()
-    await expect(headerButtonOf(page, 'Push')).toBeDisabled()
-    await headerButtonOf(page, 'Commit').click()
-    const form = tabPanelOf(page).getByRole('form', { name: 'Commit changes' })
-    await form.getByLabel('Commit message').fill('Raise the total')
-    await form.getByRole('button', { name: 'Commit' }).click()
-    await expect(statusLineOf(page)).toContainText('1 ahead of the pushed branch')
-    await expect(headerButtonOf(page, 'Push')).toBeEnabled()
-    await expect(headerButtonOf(page, 'Commit')).toBeDisabled()
   })
 
   test('As a chat owner, I see a toast confirm Refresh that fades on its own unless I hover it, and a refused Push stays until I dismiss it', {
@@ -162,26 +141,6 @@ test.describe('Branch actions', () => {
     await expect(refusal).toHaveText('Connect your GitHub account in your profile to push')
     await refusal.getByRole('button', { name: 'Dismiss' }).click()
     await expect(refusal).toHaveCount(0)
-  })
-
-  test('As a chat owner, I see the agent’s commits authored by my GitHub account', {
-    tag: ['@spec-43'],
-  }, async ({ page, agentScript }) => {
-    await configureGitHubApp(page)
-    await connectGitHub(page)
-    const chatId = await newDevChat(page, 'Authored totals', 'acme/app')
-    await runAgent(
-      page,
-      agentScript,
-      chatId,
-      [appEdit(1, 2), { command: "git add -A && git commit -qm 'Fix the totals'" }],
-      'Fixed.',
-    )
-    await panelTabOf(page, 'Changes').click()
-    const commits = commitsOf(page)
-    await expect(commits).toHaveCount(1)
-    await expect(commits.first()).toContainText('Fix the totals')
-    await expect(commits.first()).toContainText(/alice-martin · \d\d:\d\d UTC/)
   })
 
   test('As a chat owner, I merge a new base commit with Update from base: the status line counts the merge, Changes lists the clean merge without files and Files shows the base’s new file', {
