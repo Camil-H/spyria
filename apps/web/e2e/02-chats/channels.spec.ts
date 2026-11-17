@@ -112,6 +112,7 @@ test.describe('Channels', () => {
     await openBrowse(bobPage)
     await expect(browsedChatOf(bobPage, 'Forecasts')).toContainText('1 member')
     await browsedChatOf(bobPage, 'Forecasts').getByRole('link').click()
+    await expect(browseOf(bobPage)).toHaveCount(0)
     await expect(mainOf(bobPage).getByRole('heading', { level: 1, name: 'Forecasts' })).toBeVisible()
     await expect(composerOf(bobPage)).toHaveCount(0)
     await mainOf(bobPage).getByRole('button', { name: 'Join chat' }).click()
