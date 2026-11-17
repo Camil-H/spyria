@@ -43,7 +43,10 @@ export const createModelRelay = ({
       }
       if (!send(frame)) fail(sid)
       const cancel = () => {
-        if (pending.get(sid)?.body !== undefined || !pending.delete(sid)) return
+        const stream = pending.get(sid)
+        if (!stream || stream.body !== undefined) return
+        pending.delete(sid)
+        stream.resolveHead(new Response(null, { status: 499 }))
         send({ type: 'gw_cancel', sid })
       }
       if (request.signal.aborted) cancel()
