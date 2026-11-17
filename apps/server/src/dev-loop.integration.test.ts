@@ -1,4 +1,7 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
+import { writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { type ChatId, chatId, type DevLoopSettings, type DevLoopStepConfig } from '@spyria/kernel'
 import { maximumJobAttempts } from './job-worker.ts'
 import { startGitHubStack } from './testing/github-stack.ts'
@@ -227,8 +230,20 @@ test('As a chat owner, a command that keeps failing ends with the agent saying w
   expect(await noticesOf(id)).toContain('Never still failed after 1 attempt to fix: over to you')
 })
 
+const heldCommandReleases: (() => void)[] = []
+afterEach(() => {
+  for (const release of heldCommandReleases.splice(0)) release()
+})
+const heldCommand = () => {
+  const releaseFile = join(tmpdir(), `spyria-dev-loop-release-${crypto.randomUUID()}`)
+  const release = () => writeFileSync(releaseFile, '')
+  heldCommandReleases.push(release)
+  return { command: `while [ ! -e ${releaseFile} ]; do sleep 0.05; done`, release }
+}
+
 test('As a member, writing in the chat stops the quality gates; another memberâ€™s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop, and a pipeline must make sense', async () => {
-  const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
+  const held = heldCommand()
+  const slow = settingsWith([commandStep('Slow', `${held.command} && exit 1`, 2)])
   expect(await setDevLoop(bob, slow)).toEqual(failedWith('Your workspace role does not allow this: Connect GitHub'))
   expect(await setDevLoop(alice, settingsWith([commandStep('Lint', 'bun run lint', 11)]))).toEqual(
     failedWith(
@@ -246,6 +261,7 @@ test('As a member, writing in the chat stops the quality gates; another memberâ€
   await loopStateIs(id, 'running')
   const leesPrompt = await stack.prompt(id, 'Wait, use the ledger instead', { workspaceId: acme, userId: lee })
   expect((await loopOf(id))?.step).toMatchObject({ state: 'stopped', outcome: 'Stopped: Lee wrote in the chat' })
+  held.release()
   await stack.answered(leesPrompt)
   await waitFor(async () => (await stack.turnOf(id)) === null, 20_000)
   expect((await loopOf(id))?.step.state).toBe('stopped')
@@ -268,8 +284,9 @@ test('As a member, writing in the chat stops the quality gates; another memberâ€
 })
 
 test('As a chat owner, Stop stops the quality gates while it runs a command, and turning the loop off stops the loops still running', async () => {
-  const slow = settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)])
-  expect(await setDevLoop(alice, slow)).toEqual(succeeded)
+  const held = heldCommand()
+  const slowSteps = [commandStep('Slow', `${held.command} && exit 1`, 2)]
+  expect(await setDevLoop(alice, settingsWith(slowSteps))).toEqual(succeeded)
   await stack.agentHost('Stopped loop host', { routesModelCalls: true })
   await connectGitHub(alice)
   const stoppedChat = await newDevChat()
@@ -290,8 +307,9 @@ test('As a chat owner, Stop stops the quality gates while it runs a command, and
   stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
   await stack.prompt(turnedOffChat.id, 'Fix the totals')
   await loopStateIs(turnedOffChat.id, 'running')
-  expect(await setDevLoop(alice, settingsWith([commandStep('Slow', 'sleep 3 && exit 1', 2)], false))).toEqual(succeeded)
+  expect(await setDevLoop(alice, settingsWith(slowSteps, false))).toEqual(succeeded)
   await loopStateIs(turnedOffChat.id, 'stopped')
+  held.release()
   expect((await loopOf(turnedOffChat.id))?.step.outcome).toBe(
     'Stopped: quality gates were turned off for this repository',
   )
@@ -367,7 +385,8 @@ test('As a chat owner whose agent does not fix what the review found, the next r
 })
 
 test('As a chat owner, the quality gates card shows each command of a group pass or fail as soon as it finishes while the next one runs, and the verdict waits for the last command', async () => {
-  const commands = [commandStep('Quick', 'true'), commandStep('Broken', 'exit 1', 0), commandStep('Slow', 'sleep 3')]
+  const held = heldCommand()
+  const commands = [commandStep('Quick', 'true'), commandStep('Broken', 'exit 1', 0), commandStep('Slow', held.command)]
   expect(await setDevLoop(alice, settingsWith(commands))).toEqual(succeeded)
   await stack.agentHost('Command progress host', { routesModelCalls: true })
   await connectGitHub(alice)
@@ -382,6 +401,7 @@ test('As a chat owner, the quality gates card shows each command of a group pass
   }, 60_000)
   const midRun = (await loopOf(id))?.step
   expect(midRun).toMatchObject({ state: 'running', position: 0, outcomes: ['passed', 'failed', null] })
+  held.release()
 
   await loopStateIs(id, 'stopped')
   expect((await loopOf(id))?.step).toMatchObject({
