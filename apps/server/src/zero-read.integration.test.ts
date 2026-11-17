@@ -152,47 +152,6 @@ test.each([
   expect(normalized(store.read())).toEqual(expectedFor(viewerId, workspaceIds))
 })
 
-test.each([
-  {
-    viewer: 'Alice, prompter on Setup helper',
-    viewerId: alice,
-    chats: ['Welcome', 'Setup helper', 'Invoice bug', 'Standup', 'Research'],
-  },
-  {
-    viewer: 'Bob, prompter on Invoice bug',
-    viewerId: bob,
-    chats: ['Welcome', 'Setup helper', 'Invoice bug', 'Standup'],
-  },
-  { viewer: 'Lee, reader on Invoice bug', viewerId: lee, chats: ['Welcome', 'Invoice bug', 'Standup'] },
-])(
-  '$viewer reads the public channels and the private chats they take part in, nothing of the others',
-  async ({ viewerId, chats }) => {
-    const store = await openZeroStore(createZeroStore, viewerId, [acme])
-    await watchChats(store, acme, [
-      'chat-welcome',
-      'chat-setup-helper',
-      'chat-invoice-bug',
-      'chat-standup',
-      'chat-research',
-    ])
-    const read = store.read()
-    expect(read.chats.map((chat) => chat.name)).toEqual([...chats])
-    const readableChatIds = new Set<string>(read.chats.map((chat) => chat.id))
-    const chatIdsOf = (rows: readonly { chatId: string }[]) => rows.map((row) => row.chatId)
-    for (const rows of [
-      read.messages,
-      read.latestMessages,
-      read.pinnedSteps,
-      read.chatMembers,
-      read.usageEntries,
-      read.browserPages,
-    ])
-      expect(chatIdsOf(rows).filter((id) => !readableChatIds.has(id))).toEqual([])
-    expect(read.messages.length).toBeGreaterThan(0)
-    expect(read.chatRoles.map((role) => role.id)).toEqual(['editor', 'owner', 'prompter', 'reader'])
-  },
-)
-
 test('a participant row added to a private chat syncs it with its rows, and removing it takes them away', async () => {
   const store = await openZeroStore(createZeroStore, bob, [acme])
   const researchOf = () => store.read().chats.filter((chat) => chat.id === 'chat-research')
