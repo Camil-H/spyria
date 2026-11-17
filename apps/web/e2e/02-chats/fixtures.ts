@@ -8,6 +8,8 @@ export const looseChatsOf = (page: Page) => sidebarOf(page).getByRole('group', {
 export const chatRowIn = (group: Locator, chatName: string) => group.getByRole('link', { name: chatName })
 export const draftIconOf = (page: Page, chatName: string) =>
   chatLinkOf(page, chatName).getByRole('img', { name: 'Has unsent draft' })
+export const chatMenuButtonOf = (page: Page, chatName: string) =>
+  page.getByRole('button', { name: `Chat actions for ${chatName}` })
 
 export type PostedMessage = {
   id: string

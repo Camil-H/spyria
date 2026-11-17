@@ -1,7 +1,11 @@
 import type { WorkerStack } from '../stack'
 import {
   agentReplyText,
+  boundingBoxOf,
   chatLinkOf,
+  chatMenuButtonOf,
+  composerOf,
+  draftIconOf,
   expect,
   messageContaining,
   messageItemsOf,
@@ -100,12 +104,15 @@ test.describe('Unread', () => {
     })
   })
 
-  test('As a member, the unread icon of a runtime chat shows when its agent stopped with an error, and a channel keeps the plain icon', async ({
+  test('As a member, the unread icon of a runtime chat shows when its agent stopped with an error, beside my draft and distinct from it, and a channel keeps the plain icon', async ({
     page,
     workerStack,
   }) => {
     await makeAliceAdminOf(workerStack, 'chat-standup')
-    await openChat(page, 'Welcome')
+    await openChat(page, 'Research')
+    await composerOf(page).fill('Draft for later')
+    await chatLinkOf(page, 'Welcome').click()
+    await expect(draftIconOf(page, 'Research')).toBeVisible()
     await agentStoppedWithError(workerStack, research)
 
     await test.step('names the error in the icon and its tooltip', async () => {
@@ -124,5 +131,23 @@ test.describe('Unread', () => {
       await expect(unreadIconOf(page, 'Standup')).toHaveAccessibleName('Unread messages')
       expect(await colorOf('Research')).not.toBe(await colorOf('Standup'))
     })
+
+    await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
+      const unreadBox = await boundingBoxOf(unreadIconOf(page, 'Research'))
+      const draftBox = await boundingBoxOf(draftIconOf(page, 'Research'))
+      const menuButtonBox = await boundingBoxOf(chatMenuButtonOf(page, 'Research'))
+      expect(unreadBox.x + unreadBox.width).toBeLessThanOrEqual(draftBox.x)
+      expect(draftBox.x + draftBox.width).toBeLessThanOrEqual(menuButtonBox.x)
+    })
+
+    for (const colorScheme of ['light', 'dark'] as const)
+      await test.step(`distinguishes the agent status icon from the pencil in ${colorScheme} mode`, async () => {
+        await page.emulateMedia({ colorScheme })
+        const colorOf = (iconName: string) =>
+          chatLinkOf(page, 'Research')
+            .getByRole('img', { name: iconName })
+            .evaluate((icon) => getComputedStyle(icon).color)
+        expect(await colorOf('Unread messages')).not.toBe(await colorOf('Has unsent draft'))
+      })
   })
 })

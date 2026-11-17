@@ -2,19 +2,16 @@ import { openMenu, signedOutScreenOf } from '../01-access/fixtures'
 import {
   boundingBoxOf,
   chatLinkOf,
-  composerOf,
   expect,
   mainOf,
-  openChat,
   type Page,
   projectGroupOf,
-  sendMessage,
   sidebarOf,
   switcherOf,
   test,
   unreadIconOf,
 } from '../fixtures'
-import { chatRowIn, draftIconOf, looseChatsOf } from './fixtures'
+import { chatMenuButtonOf, chatRowIn, looseChatsOf } from './fixtures'
 
 const dialogOf = (page: Page, dialogName: string) => page.getByRole('dialog', { name: dialogName })
 const cancelDialog = async (page: Page, dialogName: string) => {
@@ -23,8 +20,6 @@ const cancelDialog = async (page: Page, dialogName: string) => {
 }
 const logoutDialogOf = (page: Page, workspaceName: string) =>
   page.getByRole('dialog', { name: `Log out of ${workspaceName}` })
-const menuButtonOf = (page: Page, chatName: string) =>
-  page.getByRole('button', { name: `Chat actions for ${chatName}` })
 const makeAliceAdminOf = async (
   workerStack: Parameters<Parameters<typeof test>[2]>[0]['workerStack'],
   chatId: string,
@@ -267,7 +262,7 @@ test.describe('Sidebar', () => {
     await test.step('places the icon at the right end of the row, before the menu button', async () => {
       const iconBox = await boundingBoxOf(unreadIconOf(page, 'Standup'))
       const nameBox = await boundingBoxOf(chatLinkOf(page, 'Standup').getByText('Standup', { exact: true }))
-      const menuButtonBox = await boundingBoxOf(menuButtonOf(page, 'Standup'))
+      const menuButtonBox = await boundingBoxOf(chatMenuButtonOf(page, 'Standup'))
       expect(iconBox.x).toBeGreaterThan(nameBox.x + nameBox.width)
       expect(iconBox.x + iconBox.width).toBeLessThanOrEqual(menuButtonBox.x)
     })
@@ -286,43 +281,6 @@ test.describe('Sidebar', () => {
     await test.step('shows a tooltip on hover and exposes the icon as an image', async () => {
       await unreadIconOf(page, 'Standup').hover()
       await expect(page.getByRole('tooltip', { name: 'Unread messages' })).toBeVisible()
-    })
-  })
-
-  test.describe(() => {
-    test.use({ runtimeHost: true, warmRuntimes: true })
-
-    test('As a member, I see the unread and draft icons side by side before the menu button, distinct in light and dark mode', async ({
-      page,
-      workerStack,
-    }) => {
-      await makeAliceAdminOf(workerStack, 'chat-setup-helper')
-      await openChat(page, 'Setup helper')
-      await sendMessage(page, 'Question to the agent')
-      await composerOf(page).fill('Draft for later')
-      await chatLinkOf(page, 'Welcome').click()
-      await expect(
-        chatLinkOf(page, 'Setup helper').getByRole('img', { name: 'Unread messages · The agent is done' }),
-      ).toBeVisible()
-      await expect(draftIconOf(page, 'Setup helper')).toBeVisible()
-
-      await test.step('shows the agent status icon left of the pencil, both before the menu button', async () => {
-        const unreadBox = await boundingBoxOf(unreadIconOf(page, 'Setup helper'))
-        const draftBox = await boundingBoxOf(draftIconOf(page, 'Setup helper'))
-        const menuButtonBox = await boundingBoxOf(menuButtonOf(page, 'Setup helper'))
-        expect(unreadBox.x + unreadBox.width).toBeLessThanOrEqual(draftBox.x)
-        expect(draftBox.x + draftBox.width).toBeLessThanOrEqual(menuButtonBox.x)
-      })
-
-      for (const colorScheme of ['light', 'dark'] as const)
-        await test.step(`distinguishes the agent status icon from the pencil in ${colorScheme} mode`, async () => {
-          await page.emulateMedia({ colorScheme })
-          const colorOf = (iconName: string) =>
-            chatLinkOf(page, 'Setup helper')
-              .getByRole('img', { name: iconName })
-              .evaluate((icon) => getComputedStyle(icon).color)
-          expect(await colorOf('Unread messages')).not.toBe(await colorOf('Has unsent draft'))
-        })
     })
   })
 })
