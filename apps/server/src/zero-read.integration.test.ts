@@ -482,8 +482,8 @@ test('a member reads the newest reply by someone else, not deleted, of each thre
     type: 'channel',
     visibility: 'private',
     participants: [
-      { memberId: bob, roleId: 'member' },
-      { memberId: lee, roleId: 'member' },
+      { memberId: bob, roleId: 'prompter' },
+      { memberId: lee, roleId: 'prompter' },
     ],
   })
   const aliceStore = await openZeroStore(createZeroStore, alice, [acme])

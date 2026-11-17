@@ -76,7 +76,7 @@ test.describe('Threads', () => {
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openWelcome(bobPage)
     await sendMessage(bobPage, 'Bob starts a thread')
-    await openWelcome(page)
+    await openChat(page, 'Welcome')
     await expect(messageContaining(page, 'Bob starts a thread')).toBeVisible()
     await openChat(page, 'Invoice bug')
     await (await messageActionOf(messageContaining(bobPage, 'Bob starts a thread'), 'Reply in thread')).click()
