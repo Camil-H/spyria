@@ -1,4 +1,4 @@
-import { expect, setDefaultTimeout, test } from 'bun:test'
+import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { type ChatId, reachableModelsOf, withPricesOf } from '@spyria/kernel'
 import {
   acme,
@@ -19,6 +19,13 @@ import {
 setDefaultTimeout(40_000)
 const { database, app, gateway, llmGateway, setFakeLlmScript, mutate, prompt, repliesTo, ...stack } =
   await startAgentStack({ routing: true })
+const seededCredentialIds = (
+  await database.$client<{ id: string }[]>`select id from llm_credentials where workspace_id = ${acme}`
+).map(({ id }) => id)
+afterEach(async () => {
+  await database.$client`
+    delete from llm_credentials where workspace_id = ${acme} and id <> all(${seededCredentialIds}::text[])`
+})
 const newRuntimeChat = (ownerId = alice, participants: { memberId: string; roleId: string }[] = []) =>
   stack.newRuntimeChat({ ownerId, participants })
 
@@ -227,7 +234,6 @@ test.each(chatAccessRows(['reader', 'prompter', 'editor', 'owner', 'public']))(
   },
 )
 
-let decisionModelKey: Promise<void> | undefined
 type RoutingRow = {
   title: string
   decisionModel?: boolean
@@ -280,10 +286,7 @@ test.each<RoutingRow>([
   { title: 'a timed-out decision model', decisionModel: true, route: 'slow', model: 'mistral/mistral-medium-latest' },
 ])('after $title the first prompt routes to $model', async (row) => {
   const { launches } = await fakeAgent()
-  if (row.decisionModel) {
-    decisionModelKey ??= addLlmKey(alice, 'Typesafe')
-    await decisionModelKey
-  }
+  if (row.decisionModel) await addLlmKey(alice, 'Typesafe')
   const chat = await newRuntimeChat()
   routeWith(row.route)
   const startedAt = Date.now()
