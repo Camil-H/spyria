@@ -143,47 +143,36 @@ test('Restart session ends a running turn and reloads the same session; Stop run
   expect((await runtimeOf(chat)).state).toBe('running')
 })
 
-test('a re-run of a restart does not interrupt a later turn: it waits for that turn to end', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat()
-  const first = await prompt(chat, 'Hello')
-  await answered(first)
-  await turnIs(chat, null)
-  const later = await prompt(chat, 'stub:linger Later work')
-  await holds.reached('linger')
+test.each<[string, 'first' | null]>([
+  ['re-run for an earlier prompt', 'first'],
+  ['asked while the chat was idle', null],
+])(
+  'a restart %s does not interrupt a prompt that started since: it waits for that turn to end, then restarts the session once',
+  async (_, restartedPrompt) => {
+    const { relay } = await agentHost()
+    const chat = await newRuntimeChat()
+    const first = await prompt(chat, 'Hello')
+    await answered(first)
+    await turnIs(chat, null)
+    const conversationId = await conversationIdOf(chat)
+    const restartedPromptId = restartedPrompt === 'first' ? first : null
+    const later = await prompt(chat, 'stub:linger Later work')
+    await holds.reached('linger')
 
-  expect(await restartSessionJob(chat, first)).toEqual({ retryInMilliseconds: 1000 })
-  expect(relay.interrupts).toEqual([])
-  expect(restartRequestsOf(relay)).toEqual([])
-  expect(await turnOf(chat)).toBe(later)
+    expect(await restartSessionJob(chat, restartedPromptId)).toEqual({ retryInMilliseconds: 1000 })
+    expect(relay.interrupts).toEqual([])
+    expect(restartRequestsOf(relay)).toEqual([])
+    expect(await turnOf(chat)).toBe(later)
 
-  await holds.release('linger')
-  await answered(later)
-  expect(await repliesTo(later)).toEqual([agentReply(2)])
-})
-
-test('a restart asked while the chat was idle waits for a prompt that started since, then restarts the session once it ends', async () => {
-  const { relay } = await agentHost()
-  const chat = await newRuntimeChat()
-  const first = await prompt(chat, 'Hello')
-  await answered(first)
-  await turnIs(chat, null)
-  const conversationId = await conversationIdOf(chat)
-  const later = await prompt(chat, 'stub:linger Later work')
-  await holds.reached('linger')
-
-  expect(await restartSessionJob(chat, null)).toEqual({ retryInMilliseconds: 1000 })
-  expect(relay.interrupts).toEqual([])
-  expect(restartRequestsOf(relay)).toEqual([])
-
-  await holds.release('linger')
-  await answered(later)
-  await turnIs(chat, null)
-  expect(await restartSessionJob(chat, null)).toBeUndefined()
-  expect(restartRequestsOf(relay)).toEqual([`/api/conversations/${conversationId}/restart`])
-  expect(relay.interrupts).toEqual([])
-  expect(await repliesTo(later)).toEqual([agentReply(2)])
-})
+    await holds.release('linger')
+    await answered(later)
+    await turnIs(chat, null)
+    expect(await restartSessionJob(chat, restartedPromptId)).toBeUndefined()
+    expect(restartRequestsOf(relay)).toEqual([`/api/conversations/${conversationId}/restart`])
+    expect(relay.interrupts).toEqual([])
+    expect(await repliesTo(later)).toEqual([agentReply(2)])
+  },
+)
 
 test.each([
   ['no turn', false],
