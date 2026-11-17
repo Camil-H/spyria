@@ -1,4 +1,4 @@
-import { openPageAs, runtimeStateOf } from '../stack'
+import { openPageAs } from '../stack'
 import {
   addParticipant,
   agentReplyText,
@@ -14,6 +14,7 @@ import {
   openChat,
   type Page,
   research,
+  runtimeStatusOf,
   sendButtonOf,
   sendMessage,
   machineTest as test,
@@ -37,9 +38,9 @@ test.describe('Conversation', () => {
 
     test('As a prompter, my first prompt starts the agent, shown working until its reply arrives', {
       tag: ['@spec-09'],
-    }, async ({ page, workerStack }) => {
-      expect(await runtimeStateOf(workerStack, research)).toBeUndefined()
+    }, async ({ page }) => {
       await openChat(page, 'Research')
+      await expect(runtimeStatusOf(page)).toHaveText('Not started')
       await sendMessage(page, 'Find the latest pricing')
 
       await expect(workingIndicatorOf(page)).toBeVisible()
@@ -47,27 +48,11 @@ test.describe('Conversation', () => {
       await expect(workingIndicatorOf(page)).toHaveCount(0)
       await expect(messageItemsOf(page).nth(0)).toContainText('Find the latest pricing')
       await expect(messageItemsOf(page).nth(1)).toContainText('Agent')
-      expect(await runtimeStateOf(workerStack, research)).toBe('running')
+      await expect(runtimeStatusOf(page)).toHaveText('Ready')
     })
   })
 
-  test('As a prompter, my prompt and its reply stay after a reload, and the chat is not unread for me', {
-    tag: ['@spec-09'],
-  }, async ({ page }) => {
-    await openChat(page, 'Research')
-    await sendMessage(page, 'Remember this')
-    await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-
-    await page.reload()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Research' })).toBeVisible()
-    await expect(messageItemsOf(page)).toHaveCount(2)
-    await expect(messageItemsOf(page).nth(0)).toContainText('Remember this')
-    await expect(messageItemsOf(page).nth(1)).toContainText(agentReplyText)
-    await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
-  })
-
-  test('As a prompter, I reload during a turn and see my prompt, then the reply once it completes, without a duplicate', {
+  test('As a prompter, I reload during a turn and see my prompt, then the reply once it completes, without a duplicate, and the chat is not unread for me', {
     tag: ['@spec-09'],
   }, async ({ page, agentScript, release }) => {
     await agentScript(research, { hold: 'answer' })
@@ -76,11 +61,15 @@ test.describe('Conversation', () => {
     await expect(messageContaining(page, 'Understood,')).toHaveCount(1)
 
     await page.reload()
+    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Research' })).toBeVisible()
     await expect(messageContaining(page, 'Stream through a reload')).toHaveCount(1)
     await release('answer')
     await expect(messageContaining(page, agentReplyText)).toHaveCount(1)
     await expect(workingIndicatorOf(page)).toHaveCount(0)
     await expect(messageItemsOf(page)).toHaveCount(2)
+    await expect(messageItemsOf(page).nth(0)).toContainText('Stream through a reload')
+    await expect(messageItemsOf(page).nth(1)).toContainText(agentReplyText)
+    await expect(unreadIconOf(page, 'Research')).toHaveCount(0)
   })
 
   test('As a prompter, I send while the agent works and get one reply per message, in order', async ({ page }) => {

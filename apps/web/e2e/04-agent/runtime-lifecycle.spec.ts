@@ -11,6 +11,7 @@ import {
   openChat,
   type Page,
   research,
+  runtimeStatusOf,
   sendMessage,
   machineTest as test,
   unreadIconOf,
@@ -19,7 +20,6 @@ import {
 
 test.describe('Runtime lifecycle', () => {
   const heldScript = { hold: 'answer' }
-  const runtimeStatusOf = (page: Page) => mainOf(page).getByRole('status', { name: 'Runtime' })
   const stopButtonOf = (page: Page) => mainOf(page).getByRole('button', { name: 'Stop' })
   const runtimeMenuOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Runtime actions' })
   const retryButtonOf = (page: Page) => runtimeStatusOf(page).getByRole('button', { name: 'Could not start · Retry' })
