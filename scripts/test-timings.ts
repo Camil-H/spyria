@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { basename, isAbsolute } from 'node:path'
 
-type Timed = { title: string; seconds: number }
+type Timed = { title: string; file: string; seconds: number }
 type Spec = {
   title: string
   file: string
@@ -21,6 +22,13 @@ const report = (name: string, wallSeconds: number, tests: Timed[]) => {
   )
   for (const test of tests.toSorted((first, second) => second.seconds - first.seconds).slice(0, 20))
     console.log(`  ${test.seconds.toFixed(1).padStart(6)} s  ${test.title}`)
+  const files = [...Map.groupBy(tests, (test) => test.file)].map(([file, fileTests]) => ({
+    file,
+    seconds: fileTests.reduce((total, test) => total + test.seconds, 0),
+  }))
+  console.log(`\n${name} files by summed duration:`)
+  for (const { file, seconds } of files.toSorted((first, second) => second.seconds - first.seconds).slice(0, 30))
+    console.log(`  ${seconds.toFixed(1).padStart(6)} s  ${file}`)
 }
 
 const reportE2e = (path: string) => {
@@ -32,7 +40,7 @@ const reportE2e = (path: string) => {
         const seconds = test.results.reduce((total, result) => total + result.duration, 0) / 1000
         const tests =
           testsByProject.get(test.projectName) ?? testsByProject.set(test.projectName, []).get(test.projectName)
-        tests?.push({ title: `${spec.file}:${spec.line} ${spec.title}`, seconds })
+        tests?.push({ title: `${spec.file}:${spec.line} ${spec.title}`, file: spec.file, seconds })
       }
     for (const child of suite.suites ?? []) walk(child)
   }
@@ -45,6 +53,7 @@ const reportIntegration = (path: string, name: string) => {
   const xml = readFileSync(path, 'utf8')
   const tests = [...xml.matchAll(/<testcase [^>]*>/g)].map(([tag]) => ({
     title: `${attributeOf(tag, 'file')} ${attributeOf(tag, 'name')}`,
+    file: attributeOf(tag, 'file'),
     seconds: Number(attributeOf(tag, 'time')),
   }))
   report(name, Number(attributeOf(/<testsuites [^>]*>/.exec(xml)?.[0] ?? '', 'time')), tests)
@@ -52,8 +61,8 @@ const reportIntegration = (path: string, name: string) => {
 
 const files = process.argv.slice(2)
 for (const file of files.length > 0 ? files : ['integration.xml', 'e2e-results.json']) {
-  const path = `${checkDirectory}${file}`
+  const path = isAbsolute(file) ? file : `${checkDirectory}${file}`
   if (!existsSync(path)) continue
   if (file.endsWith('.json')) reportE2e(path)
-  else reportIntegration(path, file.replace(/\.xml$/, ''))
+  else reportIntegration(path, basename(file).replace(/\.xml$/, ''))
 }
