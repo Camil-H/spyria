@@ -119,12 +119,6 @@ export const withSpan = <Result>(
     }
   })
 
-export const traceHeadersOf = (activeContext: Context = context.active()) => {
-  const carrier: Record<string, string> = {}
-  propagation.inject(activeContext, carrier)
-  return carrier
-}
-
 export const contextOf = ({ traceparent, tracestate }: Carrier) =>
   typeof traceparent === 'string'
     ? propagation.extract(ROOT_CONTEXT, { traceparent, ...(typeof tracestate === 'string' && { tracestate }) })
