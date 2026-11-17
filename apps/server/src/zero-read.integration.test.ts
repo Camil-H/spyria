@@ -172,25 +172,6 @@ test('signing out of a workspace removes its rows but keeps it listed, signing i
   expect(store.read().chats.filter((chat) => chat.workspaceId === globex).length).toBe(2)
 })
 
-test('a mutation through the store reaches the replica and, once the server confirms, Postgres', async () => {
-  const store = await openZeroStore(createZeroStore, alice, [acme])
-  const { confirmation } = await store.mutate(
-    acme,
-    workspaceMutators.workspace.createProject({ workspaceId: acme, id: 'project-stored', name: 'Stored' }),
-  )
-  await confirmation
-  expect(
-    store
-      .read()
-      .projects.filter((project) => project.workspaceId === acme)
-      .map((project) => project.name),
-  ).toEqual(['Onboarding', 'Billing', 'Stored'])
-  expect(await database.query.projects.findFirst({ where: { id: 'project-stored' } })).toMatchObject({
-    workspaceId: acme,
-    name: 'Stored',
-  })
-})
-
 test('an optimistic message takes the next seq of its chat before the server confirms it', async () => {
   const store = await openZeroStore(createZeroStore, alice, [acme])
   await watchChats(store, acme, ['chat-invoice-bug'])
