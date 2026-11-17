@@ -111,7 +111,7 @@ test('deleting a workspace ends its sessions, tokens and sign-ins at once, keeps
     await database.$client`
       insert into jobs (workspace_id, id, type, payload, run_at, attempts, state)
       values (${globex}, 'sweep-while-deleted', 'sessions.sweep', '{}', now(), 0, 'queued')`
-    await Bun.sleep(50)
+    await Bun.sleep(300)
     expect(await jobStateOf(globex, 'sweep-while-deleted')).toBe('queued')
     expect(
       (
