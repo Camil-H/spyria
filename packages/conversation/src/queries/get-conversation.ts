@@ -306,7 +306,7 @@ const withLoopCardAfterItsRound = (items: readonly ConversationItem[], card: Con
   ]
 }
 
-export const withLoopCardsAfterTheirRound = (items: readonly ConversationItem[]) =>
+const withLoopCardsAfterTheirRound = (items: readonly ConversationItem[]) =>
   items
     .flatMap((item) => (item.type === 'message' && item.message.step?.type === 'dev_loop' ? [item.message] : []))
     .reduce(withLoopCardAfterItsRound, items)

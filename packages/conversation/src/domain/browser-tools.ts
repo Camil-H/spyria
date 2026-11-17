@@ -25,13 +25,13 @@ export const browserSnapshotTool = toolOf(
   'browser_snapshot',
   "Read the page open in the browser of the member who prompted you, as an accessibility tree giving each element a ref, such as e5, to act on. Take a new snapshot after the page changes: refs only hold for the latest one. The browser has the member's own sign-ins.",
 )
-export const browserClickTool = toolOf(
+const browserClickTool = toolOf(
   'browser_click',
   "Click an element of the member's browser by its ref.",
   { ref: refProperty, double: { type: 'boolean', description: 'A double click' } },
   ['ref'],
 )
-export const browserTypeTool = toolOf(
+const browserTypeTool = toolOf(
   'browser_type',
   'Type text key by key into an element, as a person would, for fields that react to each key.',
   {
@@ -41,19 +41,19 @@ export const browserTypeTool = toolOf(
   },
   ['ref', 'text'],
 )
-export const browserFillTool = toolOf(
+const browserFillTool = toolOf(
   'browser_fill',
   'Replace the value of a field at once.',
   { ref: refProperty, value: { type: 'string' } },
   ['ref', 'value'],
 )
-export const browserPressTool = toolOf(
+const browserPressTool = toolOf(
   'browser_press',
   'Press a key or a combination, such as Enter, Escape, ArrowDown or Control+A, on an element or on the page.',
   { key: { type: 'string' }, ref: refProperty },
   ['key'],
 )
-export const browserRunJavaScriptTool = toolOf(
+const browserRunJavaScriptTool = toolOf(
   'browser_run_javascript',
   "Run a JavaScript expression in the page, such as document.title, or an async function called at once, (async () => { … })(), and read its result as JSON. It runs with the member's sign-ins: use it to read, and act through clicks and fields instead when you can.",
   { expression: { type: 'string' } },

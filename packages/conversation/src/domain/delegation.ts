@@ -4,7 +4,7 @@ import { type Answers, confidenceThreshold } from './decisions.ts'
 
 const efforts = ['small', 'medium', 'large']
 
-export const delegateTool = {
+const delegateTool = {
   name: 'delegate',
   description: 'Hand a self-contained task to a subagent; it shares your workspace and returns its final answer.',
   inputSchema: {

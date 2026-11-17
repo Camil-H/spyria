@@ -24,7 +24,7 @@ export const budgetPeriodAdjectives: Readonly<Record<BudgetPeriod, string>> = {
   week: 'weekly',
   month: 'monthly',
 }
-export const budgetUsedUpNoticeOf = (period: BudgetPeriod, memberName: string) =>
+const budgetUsedUpNoticeOf = (period: BudgetPeriod, memberName: string) =>
   `${memberName}'s ${budgetPeriodAdjectives[period]} AI budget is used up; a member with the Manage budgets permission can raise it in Workspace settings`
 export const modelNotAllowedNoticeOf = (model: string) => `${model} is not allowed in this workspace`
 export const genericModelCallNoticeOf = (status: number) => `The model call failed (error ${status})`

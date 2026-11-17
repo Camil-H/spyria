@@ -2,8 +2,8 @@ const timestampPrefix = /^\d{4}-\d\d-\d\dT[\d:.]+Z ?/
 const colorCodes = new RegExp(`${String.fromCharCode(27)}\\[[\\d;]*[A-Za-z]`, 'g')
 const errorMarker = '##[error]'
 const stepStartMarker = '##[group]Run '
-export const logExcerptLines = 100
-export const logExcerptCharacters = 10_000
+const logExcerptLines = 100
+const logExcerptCharacters = 10_000
 
 const cleanedLinesOf = (log: string) =>
   log

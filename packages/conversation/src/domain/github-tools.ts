@@ -9,7 +9,7 @@ export type ReviewThread = {
   isOutdated: boolean
   comments: ThreadComment[]
 }
-export type IssueState = 'open' | 'closed' | 'all'
+type IssueState = 'open' | 'closed' | 'all'
 export type IssueFilter = { state: IssueState; labels: string[]; search: string }
 export type IssueSummary = {
   number: number

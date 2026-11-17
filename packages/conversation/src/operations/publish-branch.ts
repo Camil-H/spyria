@@ -31,7 +31,7 @@ export type Publication = { isRefused: boolean; text: string }
 
 const refused = (text: string): Publication => ({ isRefused: true, text })
 
-export const recordPullRequest = (
+const recordPullRequest = (
   { transactor }: { transactor: ConversationTransactor },
   { chat, actor, step, cardId }: { chat: AgentChat; actor: Actor; step: PullRequestStep; cardId?: MessageId },
 ) =>

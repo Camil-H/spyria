@@ -30,7 +30,7 @@ export type PublicChatReading = Readonly<{ chatId: ChatId; beforeId: MessageId |
 
 export const publicChatsListed = 100
 export const publicChatHitsListed = 20
-export const publicChatMessagesRead = 40
+const publicChatMessagesRead = 40
 export const publicChatMessagesFetched = publicChatMessagesRead + 1
 const minimumQueryLength = 2
 const maximumQueryLength = 200
@@ -125,7 +125,7 @@ export const publicChatReadingOf = (input: unknown): PublicChatReading | Refusal
   }
 }
 
-export const authorNameOf = (message: PublicChatMessage, memberName: (memberId: MemberId) => string) =>
+const authorNameOf = (message: PublicChatMessage, memberName: (memberId: MemberId) => string) =>
   isDevLoopPrompt(message) ? devLoopAuthorName : message.authorId ? memberName(message.authorId) : 'Agent'
 
 export const authorIdsOf = (messages: readonly PublicChatMessage[]) => [

@@ -17,7 +17,7 @@ export type QuestionAnswer = z.infer<typeof questionAnswer>
 
 export const questionAnswerOf = (body: unknown) => questionAnswer.safeParse(body).data
 
-export const cappedBodyOf = async (request: Request, maximumBytes: number) => {
+const cappedBodyOf = async (request: Request, maximumBytes: number) => {
   if (Number(request.headers.get('content-length') ?? 0) > maximumBytes) throw new AttachmentTooLarge()
   const chunks: Uint8Array[] = []
   let size = 0

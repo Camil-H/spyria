@@ -1,4 +1,4 @@
-export type StreamedBlock = { offset: number; text: string }
+type StreamedBlock = { offset: number; text: string }
 
 const openingFenceOf = (line: string) => /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]
 
