@@ -15,6 +15,7 @@ import {
   membersSectionOf,
   messageContaining,
   messageItemsOf,
+  onePixelPng,
   openChat,
   openProfile,
   openSettings,
@@ -22,6 +23,7 @@ import {
   panelTabOf,
   pendingInvitesOf,
   sendMessage,
+  settingsLinkOf,
   sidebarOf,
   signedOutScreenOf,
   signInThroughProvider,
@@ -39,7 +41,6 @@ const bobsChatName = "Bob's runtime"
 const memberRowOf = (page: Page, name: string) =>
   membersSectionOf(page).getByRole('list', { name: 'Members' }).getByRole('listitem').filter({ hasText: name })
 const sectionOf = (page: Page, sectionName: string) => mainOf(page).getByRole('region', { name: sectionName })
-const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
 
 const removeMember = async (page: Page, name: string) => {
   await chooseMemberAction(page, name, 'Remove from workspace')
@@ -300,10 +301,6 @@ test.describe('Team', () => {
       page,
     }) => {
       const pictureSection = sectionOf(page, 'Profile picture')
-      const onePixelPng = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-        'base64',
-      )
       const chooseFileAfter = async (click: () => Promise<void>, file: Parameters<FileChooser['setFiles']>[0]) => {
         const fileChooser = page.waitForEvent('filechooser')
         await click()

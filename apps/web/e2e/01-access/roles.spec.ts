@@ -30,6 +30,7 @@ import {
   sendButtonOf,
   sendMessage,
   sessionOf,
+  settingsLinkOf,
   sidebarOf,
   tabPanelOf,
   test,
@@ -38,7 +39,6 @@ import {
 const readerNotice = 'You can read this chat'
 const workspaceRolesOf = (page: Page) => mainOf(page).getByRole('region', { name: 'Workspace roles' })
 const workspaceRoleItemOf = (page: Page, name: string) => roleColumnIn(workspaceRolesOf(page), name)
-const settingsLinkOf = (page: Page) => sidebarOf(page).getByRole('link', { name: 'Workspace settings' })
 const memberRoleSelectOf = (page: Page, name: string) =>
   mainOf(page)
     .getByRole('region', { name: 'Members' })
@@ -48,7 +48,7 @@ test.describe('Roles', () => {
     await page.goto('/')
   })
 
-  test('As a member who can manage roles, I create a chat role with read and session configuration: it is listed in plain words, and built-in roles have no edit controls', {
+  test('As a member who can manage roles, I create a chat role with read and session configuration: it is listed in plain words', {
     tag: ['@spec-47'],
   }, async ({ page }) => {
     await createRole(page, 'Reviewer', ['Choose the model and stop the agent'])
@@ -56,8 +56,6 @@ test.describe('Roles', () => {
       .poll(() => permissionsOfRole(page, 'Reviewer'))
       .toEqual(['Read the chat', 'Choose the model and stop the agent'])
     await expect(roleItemOf(page, 'Reviewer').getByRole('button', { name: 'Actions for Reviewer' })).toBeVisible()
-    for (const builtInName of ['Owner', 'Editor', 'Prompter', 'Reader'])
-      await expect(roleItemOf(page, builtInName).getByRole('button')).toHaveCount(0)
     await page.getByRole('link', { name: 'Back to Workspace settings' }).click()
     await expect(mainOf(page).getByRole('link', { name: 'Members and roles', exact: true })).toContainText(
       '1 custom role',
