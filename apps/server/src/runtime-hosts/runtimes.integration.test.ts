@@ -273,6 +273,25 @@ test('a runtime whose host drops while it starts goes back to stopped on that ho
   expect(host.commands.filter(({ runtimeId }) => runtimeId === runtime.id).map(({ op }) => op)).not.toContain('remove')
 })
 
+test('after a server restart, a start that runs before the host reconnects leaves a runtime that already ran stopped, and it starts there once the host returns', async () => {
+  const host = await fakeHost('Restarted server host')
+  const chat = await newRuntimeChat()
+  const runtime = await stoppedRuntime(chat)
+  await host.disconnect()
+  await database.$client`update runtime_hosts set status = 'online' where id = ${host.id}`
+  const capturedConsole = captureConsole()
+  await ensure(chat)
+  await waitFor(async () => (await jobsOf('runtime.start', runtime.id)).some((job) => job.state === 'done'), 15_000)
+  capturedConsole.restore()
+  expect(await runtimeOf(chat)).toMatchObject({ id: runtime.id, state: 'stopped', failure: null })
+  expect(await jobsOf('runtime.discard', runtime.id)).toEqual([])
+
+  await host.connect()
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  expect((await runtimeOf(chat)).id).toBe(runtime.id)
+})
+
 test('the sweep stops runtimes idle for more than an hour only, and touchRuntime postpones it', async () => {
   const host = await fakeHost('Sweeping host')
   const [idleChat, activeChat, touchedChat] = [await newRuntimeChat(), await newRuntimeChat(), await newRuntimeChat()]

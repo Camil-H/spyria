@@ -2,7 +2,7 @@ import { log, type RuntimeId, type WorkspaceId } from '@spyria/kernel'
 import type { SandboxLocation, SandboxProvider } from '../contracts/sandbox-provider.ts'
 import type { RuntimeTransactor } from '../contracts/transactor.ts'
 import { isAgentOutOfDate } from '../domain/agent-version.ts'
-import { AgentOutOfDate, HarnessInstallFailed } from '../domain/errors.ts'
+import { AgentOutOfDate, HarnessInstallFailed, HostNotConnected } from '../domain/errors.ts'
 import {
   failedBringUpOf,
   installFailureOf,
@@ -84,8 +84,9 @@ export const bringUpRuntime = async (
         : runtime.state === 'creating'
           ? 'create_failed'
           : 'start_failed'
+    const isHostGone = error instanceof HostNotConnected
     const overtaken = await recordIfUnchanged(transactor, started, ({ runtimes }, current) =>
-      runtimes.save(failedBringUpOf(current, now, failure)),
+      runtimes.save(failedBringUpOf(isHostGone ? { ...current, hostOnline: false } : current, now, failure)),
     )
     await (overtaken ? cleanUpOvertaken(provider, sandbox, overtaken) : provider.stop(sandbox)).catch(() => {})
     log.error({
