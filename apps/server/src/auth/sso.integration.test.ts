@@ -1135,7 +1135,7 @@ test('with the Microsoft app of this Spyria, a workspace is created and signed i
   }
 })
 
-test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured', async () => {
+test('the server refuses to start when workspaces sign in through an app of this deployment that is no longer configured; a workspace awaiting its purge does not hold up the start', async () => {
   await addWorkspace('wayne')
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
@@ -1145,9 +1145,6 @@ test('the server refuses to start when workspaces sign in through an app of this
   expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
     'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
   )
-})
-
-test('a workspace awaiting its purge does not hold up the start for an app it used', async () => {
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'wayne'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })
