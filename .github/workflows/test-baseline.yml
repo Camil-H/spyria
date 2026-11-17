@@ -29,7 +29,7 @@ jobs:
       - if: always()
         run: |
           for layer in unit integration; do
-            { bun scripts/test-coverage.ts compare "$layer" ".check/coverage-$layer/lcov.info" || true; } > "$RUNNER_TEMP/$layer-report.txt"
+            { bun scripts/test-coverage.ts compare "$layer" ".check/coverage-$layer/lcov.info" .check/coverage-*/lcov.info || true; } > "$RUNNER_TEMP/$layer-report.txt"
           done
           cat "$RUNNER_TEMP"/*-report.txt | bash .github/notices.sh coverage
       - if: always()
