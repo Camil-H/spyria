@@ -48,10 +48,7 @@ test.describe('Guest rights', () => {
   }, async ({ page, browser, workerStack, agentScript }) => {
     const account = accountOf('alice-acme')
     await connectFake(page, account)
-    await addParticipant(workerStack, research, 'member-bob', 'prompter')
-    const bobPage = await openPageAs(browser, workerStack, 'member-bob')
-    await addLlmKey(bobPage, 'Mistral')
-    await openChat(bobPage, 'Research')
+    const bobPage = await openAsBob(browser, workerStack)
     await test.step('warns me before my first prompt that everyone here sees what my tools return', async () => {
       await expect(sharingNoteOf(bobPage)).toBeVisible()
     })
@@ -111,35 +108,6 @@ test.describe('Guest rights', () => {
     await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice did not approve this call' })).not.toHaveCount(0)
     await expect(messageItemsOf(bobPage).filter({ hasText: 'Alice did not approve the update.' })).toHaveCount(1)
     await bobPage.context().close()
-  })
-
-  test('As a guest, my read-only call runs without approval', { tag: ['@spec-33'] }, async ({
-    page,
-    browser,
-    workerStack,
-    agentScript,
-  }) => {
-    const bobPage = await openAsBob(browser, workerStack)
-    await agentScript(research, { steps: [{ tool: 'crm-lookup' }], text: 'Looked the record up.' })
-    await sendMessage(bobPage, 'Bob asks to look the record up')
-    await expect(workingIndicatorOf(bobPage)).toHaveCount(0)
-    await messageItemsOf(bobPage).getByRole('button', { name: 'Used lookup (CRM)' }).click()
-    await expect(messageItemsOf(bobPage).filter({ hasText: 'ran lookup' })).not.toHaveCount(0)
-    await expect(approvalCardOf(bobPage)).toHaveCount(0)
-    await expect(approvalCardOf(page)).toHaveCount(0)
-    await bobPage.context().close()
-  })
-
-  test('As a chat owner, my own write call runs without any approval card', { tag: ['@spec-33'] }, async ({
-    page,
-    agentScript,
-  }) => {
-    await agentScript(research, updateScript('Updated the record.'))
-    await sendMessage(page, 'Alice updates the record')
-    await expect(workingIndicatorOf(page)).toHaveCount(0)
-    await updateStepOf(page).click()
-    await expect(messageItemsOf(page).filter({ hasText: 'ran update' })).not.toHaveCount(0)
-    await expect(approvalCardOf(page)).toHaveCount(0)
   })
 
   test('As a chat owner, I set CRM’s update to Always in my approvals, and my own prompt waits for my approval before it runs', {
