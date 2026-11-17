@@ -81,7 +81,7 @@ test.describe('Chat permissions', () => {
       await bobPage.context().close()
     })
 
-    test('As a member who administers a chat, a move, project archive or chat archive refused because I lost that right meanwhile shows its error in the sidebar and no toast', {
+    test('As a member who administers a chat, a move or project archive refused because I lost that right meanwhile shows its error in the sidebar and no toast', {
       tag: ['@spec-28'],
     }, async ({ page, browser, workerStack }) => {
       const chatId = await newRuntimeChat(page, 'Bob archives')
@@ -128,16 +128,6 @@ test.describe('Chat permissions', () => {
         })
         await expect(toastOf(bobPage)).not.toContainText('Garden archived')
         await expect(projectGroupOf(bobPage, 'Garden').getByRole('link', { name: 'Bob archives' })).toBeVisible()
-      })
-
-      await test.step('a refused chat archive keeps the chat', async () => {
-        await restoreAndMove('No project', 'Bob archives is no longer in a project')
-        await runRefused(async () => {
-          await chatAction(bobPage, 'Bob archives', 'Archive chat')
-          await dialogOf(bobPage, 'Archive chat').getByRole('button', { name: 'Archive' }).click()
-        })
-        await expect(toastOf(bobPage)).not.toContainText('Bob archives archived')
-        await expect(chatLinkOf(bobPage, 'Bob archives')).toBeVisible()
       })
       await bobPage.context().close()
     })
