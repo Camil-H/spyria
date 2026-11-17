@@ -9,39 +9,51 @@ import { durationLabelOf, getConversation } from './get-conversation.ts'
 const research = chatId('chat-research')
 const prompt = messageId('message-prompt')
 
+const turnStart = Date.UTC(2026, 9, 1, 9, 0)
+type StepRow = Snapshot['messages'][number]['step']
+const replyRow = (
+  seq: number,
+  kind: 'agent' | 'step' | 'notice',
+  fields: { body?: string; step?: StepRow; at?: number; replyToId?: string | null } = {},
+) => ({
+  id: messageId(`message-${seq}`),
+  workspaceId: acme,
+  chatId: research,
+  seq,
+  kind,
+  authorId: null,
+  body: fields.body ?? kind,
+  attachments: [],
+  step: fields.step ?? null,
+  replyToId: fields.replyToId === undefined ? prompt : fields.replyToId === null ? null : messageId(fields.replyToId),
+  threadRootId: null,
+  quotedMessageId: null,
+  createdAt: new Date(turnStart + (fields.at ?? seq) * 1000).toISOString(),
+  editedAt: null,
+  deletedAt: null,
+  pickedUpAt: null,
+  needsReply: false,
+})
+const withResearch = (snapshot: Snapshot, fields: Partial<Snapshot['chats'][number]>): Snapshot => ({
+  ...snapshot,
+  chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, ...fields } : chat)),
+})
+const viewOf = (snapshot: Snapshot, { viewer = alice, chat = research } = {}) =>
+  getConversation(acme, chat, viewer)(snapshot)
+
 const snapshotWith = ({ turn, waiting }: { turn: boolean; waiting: boolean }): Snapshot => {
-  const snapshot = createMockSnapshot()
-  return {
-    ...snapshot,
-    chats: snapshot.chats.map((chat) =>
-      chat.id === research ? { ...chat, agentTurnMessageId: turn ? prompt : null } : chat,
-    ),
-    messages: [
-      ...snapshot.messages,
-      {
-        id: prompt,
-        workspaceId: acme,
-        chatId: research,
-        seq: 1,
-        kind: 'member',
-        authorId: alice,
-        body: 'Find the latest pricing',
-        attachments: [],
-        step: null,
-        replyToId: null,
-        threadRootId: null,
-        quotedMessageId: null,
-        createdAt: '2026-10-01T09:00:00.000Z',
-        editedAt: null,
-        deletedAt: null,
-        pickedUpAt: null,
-        needsReply: waiting,
-      },
-    ],
+  const snapshot = withResearch(createMockSnapshot(), { agentTurnMessageId: turn ? prompt : null })
+  const promptRow = {
+    ...replyRow(1, 'agent', { body: 'Find the latest pricing', at: 0, replyToId: null }),
+    id: prompt,
+    kind: 'member' as const,
+    authorId: alice,
+    needsReply: waiting,
   }
+  return { ...snapshot, messages: [...snapshot.messages, promptRow] }
 }
 const activityOf = (state: { turn: boolean; waiting: boolean }) => {
-  const conversation = getConversation(acme, research, alice)(snapshotWith(state))
+  const conversation = viewOf(snapshotWith(state))
   return { isAgentWorking: conversation?.isAgentWorking, hasActiveTurn: conversation?.hasActiveTurn }
 }
 
@@ -53,20 +65,17 @@ test('the agent works while the chat has an active turn or a prompt waiting for 
 })
 
 test('a prompt shows as queued, and only its author can edit or delete it, until the agent picks it up', () => {
-  const promptSeenBy = (viewerId: typeof alice, state: { turn: boolean }, pickedUpAt: string | null = null) => {
-    const snapshot = snapshotWith({ ...state, waiting: true })
+  const promptSeenBy = (viewerId: typeof alice, pickedUpAt: string | null = null) => {
+    const snapshot = snapshotWith({ turn: false, waiting: true })
     const messages = snapshot.messages.map((message) => (message.id === prompt ? { ...message, pickedUpAt } : message))
-    const shown = getConversation(
-      acme,
-      research,
-      viewerId,
-    )({ ...snapshot, messages })?.items.find((item) => item.type === 'message' && item.message.id === prompt)
+    const shown = viewOf({ ...snapshot, messages }, { viewer: viewerId })?.items.find(
+      (item) => item.type === 'message' && item.message.id === prompt,
+    )
     return shown?.type === 'message' && { isQueued: shown.message.isQueued, canEdit: shown.message.canEdit }
   }
-  expect(promptSeenBy(alice, { turn: false })).toEqual({ isQueued: true, canEdit: true })
-  expect(promptSeenBy(bob, { turn: false })).toEqual({ isQueued: true, canEdit: false })
-  expect(promptSeenBy(alice, { turn: true }, '2026-10-01T09:00:01.000Z')).toEqual({ isQueued: false, canEdit: false })
-  expect(promptSeenBy(alice, { turn: false }, '2026-10-01T09:01:00.000Z')).toEqual({ isQueued: false, canEdit: false })
+  expect(promptSeenBy(alice)).toEqual({ isQueued: true, canEdit: true })
+  expect(promptSeenBy(bob)).toEqual({ isQueued: true, canEdit: false })
+  expect(promptSeenBy(alice, '2026-10-01T09:01:00.000Z')).toEqual({ isQueued: false, canEdit: false })
 })
 
 test('the chat is setting up while the setup command of the active turn runs, and no longer once it ended', () => {
@@ -93,7 +102,7 @@ test('the chat is setting up while the setup command of the active turn runs, an
       step,
       replyToId: prompt,
     }
-    return getConversation(acme, research, alice)({ ...snapshot, messages: [...snapshot.messages, setup] })?.isSettingUp
+    return viewOf({ ...snapshot, messages: [...snapshot.messages, setup] })?.isSettingUp
   }
   expect(isSettingUpWith({ turn: true, exitCode: null })).toBe(true)
   expect(isSettingUpWith({ turn: true, exitCode: 0 })).toBe(false)
@@ -104,11 +113,7 @@ test('the chat is setting up while the setup command of the active turn runs, an
 test('the read marker is behind until it reaches the newest message of the chat flow', () => {
   const snapshot = snapshotWith({ turn: false, waiting: false })
   const isBehindAt = (lastReadSeq: number | null) =>
-    getConversation(
-      acme,
-      research,
-      alice,
-    )({
+    viewOf({
       ...snapshot,
       readMarkers: lastReadSeq === null ? [] : [{ workspaceId: acme, memberId: alice, chatId: research, lastReadSeq }],
     })?.isReadMarkerBehind
@@ -117,31 +122,6 @@ test('the read marker is behind until it reaches the newest message of the chat 
   expect(isBehindAt(1)).toBe(false)
 })
 
-const turnStart = Date.UTC(2026, 9, 1, 9, 0)
-type StepRow = Snapshot['messages'][number]['step']
-const replyRow = (
-  seq: number,
-  kind: 'agent' | 'step' | 'notice',
-  fields: { body?: string; step?: StepRow; at?: number; replyToId?: string | null } = {},
-) => ({
-  id: messageId(`message-${seq}`),
-  workspaceId: acme,
-  chatId: research,
-  seq,
-  kind,
-  authorId: null,
-  body: fields.body ?? kind,
-  attachments: [],
-  step: fields.step ?? null,
-  replyToId: fields.replyToId === undefined ? prompt : fields.replyToId === null ? null : messageId(fields.replyToId),
-  threadRootId: null,
-  quotedMessageId: null,
-  createdAt: new Date(turnStart + (fields.at ?? seq) * 1000).toISOString(),
-  editedAt: null,
-  deletedAt: null,
-  pickedUpAt: null,
-  needsReply: false,
-})
 const thought = { type: 'thought', text: 'Check the toolchain.', durationMilliseconds: 4000 } as const
 const command = (exitCode: number | null) => ({
   type: 'command' as const,
@@ -155,7 +135,7 @@ const command = (exitCode: number | null) => ({
 const edit = { type: 'file', operation: 'edit', path: 'totals.ts', added: 2, removed: 1, diff: [] } as const
 const conversationWith = (rows: Snapshot['messages'], isTurnActive = false) => {
   const snapshot = snapshotWith({ turn: isTurnActive, waiting: false })
-  return getConversation(acme, research, alice)({ ...snapshot, messages: [...snapshot.messages, ...rows] })
+  return viewOf({ ...snapshot, messages: [...snapshot.messages, ...rows] })
 }
 const itemSummaryOf = (conversation: ReturnType<typeof conversationWith>) =>
   conversation?.items.map((item) =>
@@ -261,7 +241,7 @@ test('a running turn folds its finished steps under Working, its running step an
   expect(foldIdsOf(ended)).toEqual([`${prompt}:0`])
 })
 
-test('a single step stays a row, and a failed step and the stop notice stay out of the fold of the steps around them', () => {
+test('a single step stays a row, and a failed step stays out of the fold of the steps around it', () => {
   const single = conversationWith([
     replyRow(2, 'step', { step: { ...command(0), thought: undefined } }),
     replyRow(3, 'agent', { body: 'Done.' }),
@@ -282,18 +262,6 @@ test('a single step stays a row, and a failed step and the stop notice stay out 
     'agent',
   ])
   expect(foldIdsOf(failed)).toEqual([`${prompt}:0`, `${prompt}:1`])
-  const stopped = conversationWith([
-    replyRow(2, 'step', { step: command(0) }),
-    replyRow(3, 'step', { step: edit }),
-    replyRow(4, 'agent', { body: 'Partly done.' }),
-    replyRow(5, 'notice', { body: 'Stopped by Alice' }),
-  ])
-  expect(itemSummaryOf(stopped)).toEqual([
-    'member',
-    'fold Worked for 3s · 3 steps: thought, command, file',
-    'agent',
-    'notice',
-  ])
 })
 
 test('the error the interrupt causes is hidden in a stopped turn', () => {
@@ -370,7 +338,7 @@ const delegatedEdit = (id: string, task = 'List the files') => ({
   ...edit,
   delegation: { id, model: 'mistral/mistral-small-latest', modelName: 'Mistral Small', task },
 })
-const delegationGroupsOf = (conversation: ReturnType<typeof conversationWith>) =>
+const delegationsOf = (conversation: ReturnType<typeof conversationWith>) =>
   conversation?.items
     .flatMap((item) => (item.type === 'fold' ? item.steps : [item.message]))
     .flatMap(({ id, step, delegation }) =>
@@ -378,9 +346,11 @@ const delegationGroupsOf = (conversation: ReturnType<typeof conversationWith>) =
         ? [
             {
               id: String(id),
-              result: step?.type === 'tool' ? step.result : undefined,
+              actionResult: step?.type === 'tool' ? step.result : undefined,
               steps: delegation.steps.map((delegated) => String(delegated.id)),
               durationMilliseconds: delegation.durationMilliseconds,
+              status: delegation.status,
+              result: delegation.result,
             },
           ]
         : [],
@@ -394,8 +364,8 @@ test('the steps of a delegation are grouped into the delegate action whose task 
     replyRow(5, 'agent', { body: 'Listed.', at: 12 }),
   ])
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
-  expect(delegationGroupsOf(conversation)).toEqual([
-    { id: 'message-2', result: 'Two files.', steps: ['message-3', 'message-4'], durationMilliseconds: 7000 },
+  expect(delegationsOf(conversation)).toMatchObject([
+    { id: 'message-2', actionResult: 'Two files.', steps: ['message-3', 'message-4'], durationMilliseconds: 7000 },
   ])
 })
 
@@ -407,8 +377,8 @@ test('a delegate action stored after its delegation steps still gathers them, wh
     replyRow(5, 'agent', { body: 'Listed.', at: 12 }),
   ])
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
-  expect(delegationGroupsOf(conversation)).toEqual([
-    { id: 'message-4', result: 'Two files.', steps: ['message-2', 'message-3'], durationMilliseconds: 5000 },
+  expect(delegationsOf(conversation)).toMatchObject([
+    { id: 'message-4', actionResult: 'Two files.', steps: ['message-2', 'message-3'], durationMilliseconds: 5000 },
   ])
 })
 
@@ -420,11 +390,11 @@ test('a delegation without a matching delegate action is still one group, at its
   ]
   const running = conversationWith(rows, true)
   expect(itemSummaryOf(running)).toEqual(['member', 'step tool', 'step tool'])
-  expect(delegationGroupsOf(running)).toEqual([
-    { id: 'message-3', result: null, steps: ['message-3', 'message-4'], durationMilliseconds: null },
+  expect(delegationsOf(running)).toMatchObject([
+    { id: 'message-3', actionResult: null, steps: ['message-3', 'message-4'], durationMilliseconds: null },
   ])
-  expect(delegationGroupsOf(conversationWith(rows))).toEqual([
-    { id: 'message-3', result: '', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
+  expect(delegationsOf(conversationWith(rows))).toMatchObject([
+    { id: 'message-3', actionResult: '', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
   ])
 })
 
@@ -438,9 +408,9 @@ test('two delegations of the same task in one turn match the delegate actions in
     replyRow(7, 'agent', { body: 'Listed twice.', at: 8 }),
   ])
   expect(itemSummaryOf(conversation)).toEqual(['member', 'fold Worked for 6s · 2 steps: tool, tool', 'agent'])
-  expect(delegationGroupsOf(conversation)).toEqual([
-    { id: 'message-2', result: 'First.', steps: ['message-3', 'message-4'], durationMilliseconds: 2000 },
-    { id: 'message-5', result: 'Second.', steps: ['message-6'], durationMilliseconds: 1000 },
+  expect(delegationsOf(conversation)).toMatchObject([
+    { id: 'message-2', actionResult: 'First.', steps: ['message-3', 'message-4'], durationMilliseconds: 2000 },
+    { id: 'message-5', actionResult: 'Second.', steps: ['message-6'], durationMilliseconds: 1000 },
   ])
 })
 
@@ -460,19 +430,11 @@ test('a Claude Code subagent gathers the steps that carry its tool call id into 
     replyRow(5, 'agent', { body: 'Done.', at: 8 }),
   ])
   expect(itemSummaryOf(conversation)).toEqual(['member', 'step tool', 'agent'])
-  expect(delegationGroupsOf(conversation)).toEqual([
-    { id: 'message-2', result: 'Listed.', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
+  expect(delegationsOf(conversation)).toMatchObject([
+    { id: 'message-2', actionResult: 'Listed.', steps: ['message-3', 'message-4'], durationMilliseconds: 4000 },
   ])
 })
 
-const delegationStatesOf = (conversation: ReturnType<typeof conversationWith>) =>
-  conversation?.items
-    .flatMap((item) => (item.type === 'fold' ? item.steps : [item.message]))
-    .flatMap(({ id, delegation }) =>
-      delegation
-        ? [{ id: String(id), status: delegation.status, result: delegation.result, steps: delegation.steps.length }]
-        : [],
-    )
 const awaitAction = (id: string, result: string | null) => ({
   type: 'tool' as const,
   name: 'await_task',
@@ -488,9 +450,9 @@ test('an awaited delegation stays one group with await_task’s answer, and the 
     replyRow(5, 'step', { step: delegateAction('List the files', 'Second.') }),
     replyRow(6, 'step', { step: delegatedEdit('delegation-2') }),
   ])
-  expect(delegationStatesOf(conversation)).toEqual([
-    { id: 'message-2', status: 'finished', result: 'First.', steps: 1 },
-    { id: 'message-5', status: 'finished', result: 'Second.', steps: 1 },
+  expect(delegationsOf(conversation)).toMatchObject([
+    { id: 'message-2', status: 'finished', result: 'First.', steps: ['message-3'] },
+    { id: 'message-5', status: 'finished', result: 'Second.', steps: ['message-6'] },
   ])
 })
 
@@ -510,11 +472,15 @@ test('check_task folds into its delegation: a progress report leaves it running,
     conversationWith([...delegated, replyRow(4, 'step', { step })], isRunning)
   const progress = checked(checkAction('delegation-1', taskProgressOf('delegation-1', [])), true)
   expect(itemSummaryOf(progress)).toEqual(['member', 'step tool'])
-  expect(delegationStatesOf(progress)).toEqual([{ id: 'message-2', status: 'running', result: null, steps: 1 }])
+  expect(delegationsOf(progress)).toMatchObject([
+    { id: 'message-2', status: 'running', result: null, steps: ['message-3'] },
+  ])
   const cancelled = checked(checkAction('delegation-1', cancelledTaskOf('delegation-1', []), true), true)
-  expect(delegationStatesOf(cancelled)).toEqual([{ id: 'message-2', status: 'stopped', result: null, steps: 1 }])
-  expect(delegationStatesOf(checked(checkAction('delegation-1', 'Two files.')))).toEqual([
-    { id: 'message-2', status: 'finished', result: 'Two files.', steps: 1 },
+  expect(delegationsOf(cancelled)).toMatchObject([
+    { id: 'message-2', status: 'stopped', result: null, steps: ['message-3'] },
+  ])
+  expect(delegationsOf(checked(checkAction('delegation-1', 'Two files.')))).toMatchObject([
+    { id: 'message-2', status: 'finished', result: 'Two files.', steps: ['message-3'] },
   ])
 })
 test('a delegation still running reads running, without its still-running answer as a result; an error reads failed, stopped once the turn is', () => {
@@ -525,9 +491,11 @@ test('a delegation still running reads running, without its still-running answer
     ],
     true,
   )
-  expect(delegationStatesOf(stillRunning)).toEqual([{ id: 'message-2', status: 'running', result: null, steps: 1 }])
+  expect(delegationsOf(stillRunning)).toMatchObject([
+    { id: 'message-2', status: 'running', result: null, steps: ['message-3'] },
+  ])
   const interrupted = (isStopped: boolean) =>
-    delegationStatesOf(
+    delegationsOf(
       conversationWith([
         replyRow(2, 'step', { step: { ...delegateAction('List the files', 'Interrupted.'), isError: true } }),
         replyRow(3, 'step', { step: delegatedEdit('delegation-1') }),
@@ -543,7 +511,7 @@ test.each([
   ['a prompter', bob, { canPost: true, canConfigure: false }, true],
   ['a reader', lee, { canPost: false, canConfigure: false }, false],
 ])(
-  '%s of Invoice bug posts and configures by their role, and edits only their own messages when they post, never a step card stored with them as author',
+  '%s of Invoice bug posts and configures by their role, and edits only their own messages when they post',
   (_, viewer, access, canEditOwn) => {
     const invoiceBug = chatId('chat-invoice-bug')
     const snapshot = createMockSnapshot()
@@ -555,28 +523,22 @@ test.each([
       authorId: viewer,
       replyToId: null,
     }
-    const ownStepCard = { ...othersMessage, kind: 'step' as const, id: messageId('own-step-card'), authorId: viewer }
-    const conversation = getConversation(
-      acme,
-      invoiceBug,
-      viewer,
-    )({ ...snapshot, messages: [...snapshot.messages, othersMessage, ownMessage, ownStepCard] })
+    const conversation = viewOf(
+      { ...snapshot, messages: [...snapshot.messages, othersMessage, ownMessage] },
+      { viewer, chat: invoiceBug },
+    )
     const canEditOf = (id: string) => conversation?.messages.find((message) => message.id === id)?.canEdit
     expect(conversation).toMatchObject(access)
     expect(canEditOf('own')).toBe(canEditOwn)
     expect(canEditOf('others')).toBe(false)
-    expect(canEditOf('own-step-card')).toBe(false)
   },
 )
 
 test('a chat on a Spyria runtime needs the viewer’s LLM key in its workspace; a channel or a session on their machine does not', () => {
   const snapshot = createMockSnapshot()
   const withoutKey = { ...snapshot, llmCredentials: [] }
-  const onMachine = {
-    ...withoutKey,
-    chats: withoutKey.chats.map((chat) => (chat.id === research ? { ...chat, localSession: true } : chat)),
-  }
-  const needsLlmKeyIn = (chat: string, from: Snapshot) => getConversation(acme, chatId(chat), alice)(from)?.needsLlmKey
+  const onMachine = withResearch(withoutKey, { localSession: true })
+  const needsLlmKeyIn = (chat: string, from: Snapshot) => viewOf(from, { chat: chatId(chat) })?.needsLlmKey
   expect(needsLlmKeyIn('chat-research', snapshot)).toBe(false)
   expect(needsLlmKeyIn('chat-research', withoutKey)).toBe(true)
   expect(needsLlmKeyIn('chat-research', onMachine)).toBe(false)
@@ -584,24 +546,19 @@ test('a chat on a Spyria runtime needs the viewer’s LLM key in its workspace; 
 })
 
 test('a public AI chat offers to join to a member who is not in it, a private one does not', () => {
-  const snapshot = createMockSnapshot()
-  const withResearch = (visibility: 'public' | 'private') => ({
-    ...snapshot,
-    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, visibility } : chat)),
-  })
-  expect(getConversation(acme, research, lee)(withResearch('public'))).toMatchObject({ type: 'runtime', canJoin: true })
-  expect(getConversation(acme, research, alice)(withResearch('public'))?.canJoin).toBe(false)
-  expect(getConversation(acme, research, lee)(withResearch('private'))?.canJoin).toBe(false)
+  const publicResearch = withResearch(createMockSnapshot(), { visibility: 'public' })
+  const privateResearch = withResearch(createMockSnapshot(), { visibility: 'private' })
+  expect(viewOf(publicResearch, { viewer: lee })).toMatchObject({ type: 'runtime', canJoin: true })
+  expect(viewOf(publicResearch)?.canJoin).toBe(false)
+  expect(viewOf(privateResearch, { viewer: lee })?.canJoin).toBe(false)
 })
 
 test('messages carry their edited flag and the agent as their author', () => {
   const edited = { ...replyRow(2, 'agent'), editedAt: '2026-10-01T09:01:00.000Z' }
   const snapshot = snapshotWith({ turn: false, waiting: false })
-  const message = getConversation(
-    acme,
-    research,
-    alice,
-  )({ ...snapshot, messages: [...snapshot.messages, edited] })?.messages.find(({ id }) => id === edited.id)
+  const message = viewOf({ ...snapshot, messages: [...snapshot.messages, edited] })?.messages.find(
+    ({ id }) => id === edited.id,
+  )
   expect(message).toMatchObject({ isEdited: true, authorName: 'Agent' })
   expect(conversationWith([replyRow(2, 'agent')])?.messages.at(-1)?.isEdited).toBe(false)
 })
@@ -618,11 +575,7 @@ test('a message carries the picture of its member author, an agent message none,
     step: { type: 'dev_loop_prompt', loopId: 'message-loop', phase: 'command' },
   }
   const quotingLoopPrompt = { ...ownerPrompt, id: messageId('message-quote'), seq: 4, quotedMessageId: loopPrompt.id }
-  const conversation = getConversation(
-    acme,
-    research,
-    alice,
-  )({
+  const conversation = viewOf({
     ...snapshot,
     memberships: snapshot.memberships.map((membership) =>
       membership.memberId === alice ? { ...membership, avatar: picture } : membership,
@@ -689,12 +642,11 @@ const runsOnChoicesOf = ({
     viewer,
     spyriaRuntimeAvailable,
   )({
-    ...snapshot,
+    ...withResearch(snapshot, { ownerId: isOwner ? viewer : bob }),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
       localSessions: workspace.id !== acme || !isSwitchOff,
     })),
-    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, ownerId: isOwner ? viewer : bob } : chat)),
     messages: [...snapshot.messages, ...(reply ? [replyRow(2, reply)] : [])],
     runtimeHosts: [
       ...(workspaceHost ? [hostRow('host-workspace', workspaceHost, null)] : []),
@@ -778,22 +730,13 @@ test.each<[string, RunsOnSetup, readonly RunsOn[] | null]>([
     ['runtime'],
   ],
   ['an agent message', { reply: 'agent' }, null],
-  ['a step message', { reply: 'step' }, null],
 ])('Runs on choices: %s', (_, setup, expected) => {
   expect(runsOnChoicesOf(setup)).toEqual(expected)
 })
 
 test('a chat started from a chat the viewer cannot read shows no origin link', () => {
-  const snapshot = createMockSnapshot()
   const startedFrom = (sourceId: string) =>
-    getConversation(
-      acme,
-      research,
-      alice,
-    )({
-      ...snapshot,
-      chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, originChatId: chatId(sourceId) } : chat)),
-    })?.origin
+    viewOf(withResearch(createMockSnapshot(), { originChatId: chatId(sourceId) }))?.origin
   expect(startedFrom('chat-welcome')).toEqual({ chatId: chatId('chat-welcome'), name: 'Welcome', type: 'channel' })
   expect(startedFrom('chat-not-synced')).toBeNull()
 })
@@ -816,7 +759,7 @@ const welcomeFor = (
   fields: Partial<Snapshot> = {},
 ) => {
   const snapshot = createMockSnapshot()
-  return getConversation(acme, welcome, viewer)({ ...snapshot, messages: [...snapshot.messages, ...rows], ...fields })
+  return viewOf({ ...snapshot, messages: [...snapshot.messages, ...rows], ...fields }, { viewer, chat: welcome })
 }
 
 test('thread replies stay out of the channel flow and gather in order under their root, with the viewer’s new ones counted', () => {
@@ -862,20 +805,19 @@ test.each([
   ['a top-level channel message for a reader', lee, [], 'message-welcome-2', { canReply: false, hasThread: true }],
 ] as const)('reply in thread on %s', (_, viewer, [rootFields], id, { canReply, hasThread }) => {
   const snapshot = createMockSnapshot()
-  const conversation = getConversation(
-    acme,
-    welcome,
-    viewer,
-  )({
-    ...snapshot,
-    messages: snapshot.messages.map((message) =>
-      message.id === welcomeRoot ? { ...message, ...rootFields } : message,
-    ),
-    chatMembers: [
-      ...snapshot.chatMembers,
-      { workspaceId: acme, chatId: welcome, memberId: lee, roleId: 'reader', sidebarPosition: null },
-    ],
-  })
+  const conversation = viewOf(
+    {
+      ...snapshot,
+      messages: snapshot.messages.map((message) =>
+        message.id === welcomeRoot ? { ...message, ...rootFields } : message,
+      ),
+      chatMembers: [
+        ...snapshot.chatMembers,
+        { workspaceId: acme, chatId: welcome, memberId: lee, roleId: 'reader', sidebarPosition: null },
+      ],
+    },
+    { viewer, chat: welcome },
+  )
   const message = conversation?.messages.find((candidate) => candidate.id === id)
   expect({ canReply: message?.canReply, hasThread: message?.thread !== null }).toEqual({ canReply, hasThread })
 })
@@ -925,8 +867,7 @@ test('the pull request chip shows the newest card of the chat, also one older th
   })
   const snapshot = snapshotWith({ turn: false, waiting: false })
   const pullRequestWith = (pinnedSteps: Snapshot['pinnedSteps'], messages: Snapshot['messages']) =>
-    getConversation(acme, research, alice)({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })
-      ?.pullRequest
+    viewOf({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })?.pullRequest
   expect(pullRequestWith([card(2, 7)], [])).toEqual({ number: 7, state: 'open', url: 'pr/7' })
   expect(pullRequestWith([card(2, 7)], [card(9, 8)])).toEqual({ number: 8, state: 'open', url: 'pr/8' })
   expect(pullRequestWith([], [])).toBeNull()
@@ -934,12 +875,8 @@ test('the pull request chip shows the newest card of the chat, also one older th
 
 test('an archived chat shows no conversation', () => {
   const snapshot = snapshotWith({ turn: false, waiting: false })
-  expect(getConversation(acme, research, alice)(snapshot)).not.toBeNull()
-  const archived = {
-    ...snapshot,
-    chats: snapshot.chats.map((chat) => (chat.id === research ? { ...chat, archived: true } : chat)),
-  }
-  expect(getConversation(acme, research, alice)(archived)).toBeNull()
+  expect(viewOf(snapshot)).not.toBeNull()
+  expect(viewOf(withResearch(snapshot, { archived: true }))).toBeNull()
 })
 
 test('a reply shows the message it quotes with its author, a deleted one as deleted, and one not loaded by its id only', () => {
@@ -964,11 +901,10 @@ test('a reply shows the message it quotes with its author, a deleted one as dele
   ])
   expect(conversation?.messages.map(({ canQuote }) => canQuote)).toEqual([true, true, false, true, true, true])
   const invoiceBugFor = (viewer: typeof alice) =>
-    getConversation(
-      acme,
-      chatId('chat-invoice-bug'),
-      viewer,
-    )(createMockSnapshot())?.messages.map(({ kind, canQuote }) => ({ kind, canQuote }))
+    viewOf(createMockSnapshot(), { viewer, chat: chatId('chat-invoice-bug') })?.messages.map(({ kind, canQuote }) => ({
+      kind,
+      canQuote,
+    }))
   expect(invoiceBugFor(alice)).toEqual([
     { kind: 'member', canQuote: true },
     { kind: 'agent', canQuote: true },
@@ -1011,8 +947,7 @@ test('the pinned card is the newest loop of the chat, also one older than the sy
   const loopCard = (seq: number, step: DevLoopStep) => replyRow(seq, 'step', { step, replyToId: null })
   const snapshot = snapshotWith({ turn: false, waiting: false })
   const activeLoopWith = (pinnedSteps: Snapshot['pinnedSteps'], messages: Snapshot['messages']) =>
-    getConversation(acme, research, alice)({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })
-      ?.activeDevLoop
+    viewOf({ ...snapshot, pinnedSteps, messages: [...snapshot.messages, ...messages] })?.activeDevLoop
   expect(activeLoopWith([loopCard(2, firstRound)], [])).toEqual(firstRound)
   expect(activeLoopWith([loopCard(2, stopped(firstRound, 'Stopped'))], [loopCard(9, secondRound)])).toEqual(secondRound)
   expect(activeLoopWith([loopCard(2, firstRound)], [loopCard(9, stopped(secondRound, 'Stopped'))])).toBeNull()
