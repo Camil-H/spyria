@@ -16,7 +16,6 @@ import {
   type FakeHost,
   gatewayLogsOf,
   lee,
-  llmGatewayAt,
   mcpCall,
   openSharedTestApp,
   rpcOf,
@@ -89,28 +88,30 @@ test('a relayed call runs on the turn prompter’s virtual key with Spyria’s a
   expect(await failureOf(chatId)).toBeNull()
 })
 
-test.each([['OpenRouter', 'openrouter/anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5.5']])(
-  'a %s key relays %s to its provider with the provider’s model id, recorded with prompter and owner',
-  async (provider, model, providerModel) => {
-    const secret = `fake-key-${provider}-${crypto.randomUUID()}`
-    await addLlmKey(bob, provider, secret)
-    const host = await fakeHost('Relay host')
-    const { chatId, token } = await runtimeTurn(host, bob)
-    const callsBefore = fakeLlmCalls.length
-    const answer = await host.modelCall({
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model, stream: true, messages: [{ role: 'user', content: 'hi' }] }),
-    })
-    expect(answer).toMatchObject({ status: 200, ended: 'gw_end' })
-    expect(answer.body).toContain('data: [DONE]')
-    const posted = fakeLlmBodies.flatMap((body, index) => (index >= callsBefore && body ? [index] : []))
-    expect(posted.map((index) => fakeLlmCalls[index]?.authorization)).toEqual([`Bearer ${secret}`])
-    expect(posted.map((index) => JSON.parse(fakeLlmBodies[index] ?? '{}').model)).toEqual([providerModel])
-    const [log] = await gatewayLogsOf(gateway, `metadata_chat=${chatId}`)
-    expect(log?.model).toBe(providerModel)
-    expect(log?.metadata).toMatchObject({ chat: chatId, prompter: bob, owner: alice })
-  },
-)
+test('an OpenRouter key relays openrouter/anthropic/claude-sonnet-5.5 to its provider with the provider’s model id, recorded with prompter and owner', async () => {
+  const providerModel = 'anthropic/claude-sonnet-5.5'
+  const secret = `fake-key-OpenRouter-${crypto.randomUUID()}`
+  await addLlmKey(bob, 'OpenRouter', secret)
+  const host = await fakeHost('Relay host')
+  const { chatId, token } = await runtimeTurn(host, bob)
+  const callsBefore = fakeLlmCalls.length
+  const answer = await host.modelCall({
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: `openrouter/${providerModel}`,
+      stream: true,
+      messages: [{ role: 'user', content: 'hi' }],
+    }),
+  })
+  expect(answer).toMatchObject({ status: 200, ended: 'gw_end' })
+  expect(answer.body).toContain('data: [DONE]')
+  const posted = fakeLlmBodies.flatMap((body, index) => (index >= callsBefore && body ? [index] : []))
+  expect(posted.map((index) => fakeLlmCalls[index]?.authorization)).toEqual([`Bearer ${secret}`])
+  expect(posted.map((index) => JSON.parse(fakeLlmBodies[index] ?? '{}').model)).toEqual([providerModel])
+  const [log] = await gatewayLogsOf(gateway, `metadata_chat=${chatId}`)
+  expect(log?.model).toBe(providerModel)
+  expect(log?.metadata).toMatchObject({ chat: chatId, prompter: bob, owner: alice })
+})
 
 test('a model call sent right after the host’s hello is relayed once the hello is recorded', async () => {
   const host = await fakeHost('Reconnecting host')
@@ -248,24 +249,7 @@ test('a context-window rejection reaches the agent unchanged and records no turn
   expect(await failureOf(chatId)).toBeNull()
 })
 
-test('an unreachable gateway answers 502 and records Spyria’s notice', async () => {
-  const unreachableApp = createApp({ database, ...testAuthSettings, llmGateway: llmGatewayAt('http://127.0.0.1:9') })
-  const server = Bun.serve({ port: 0, fetch: unreachableApp.fetch, websocket })
-  const hosts = createFakeHosts({ port: Number(server.port), database })
-  try {
-    const host = await hosts.fakeHost('Unreachable gateway host')
-    const { chatId, token } = await runtimeTurn(host, bob)
-    const answer = await host.modelCall({ headers: { authorization: `Bearer ${token}` }, body: completion })
-    expect(answer.status).toBe(502)
-    expect(answer.body).toContain('The model gateway is unreachable')
-    expect(await failureOf(chatId)).toBe('The model gateway is unreachable')
-  } finally {
-    await hosts.disconnectFakeHosts()
-    void server.stop(true)
-  }
-})
-
-test('a model call is retried once when the gateway refuses the connection, never once the gateway has answered', async () => {
+test('a model call is retried once when the gateway refuses the connection, then answers 502 with Spyria’s notice recorded, and never once the gateway has answered', async () => {
   let nextGatewayUrls: string[] = []
   const failingGatewayCalls: string[] = []
   const failingGateway = Bun.serve({
@@ -296,7 +280,10 @@ test('a model call is retried once when the gateway refuses the connection, neve
     expect(await call()).toMatchObject({ status: 200, ended: 'gw_end' })
     expect(await failureOf(chatId)).toBeNull()
     nextGatewayUrls = ['http://127.0.0.1:9', 'http://127.0.0.1:9', 'http://127.0.0.1:9']
-    expect((await call()).status).toBe(502)
+    const unreachable = await call()
+    expect(unreachable.status).toBe(502)
+    expect(unreachable.body).toContain('The model gateway is unreachable')
+    expect(await failureOf(chatId)).toBe('The model gateway is unreachable')
     expect(nextGatewayUrls).toHaveLength(1)
     nextGatewayUrls = [failingGateway.url.origin, failingGateway.url.origin]
     expect((await call()).status).toBe(503)
