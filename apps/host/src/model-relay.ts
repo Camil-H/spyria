@@ -42,14 +42,12 @@ export const createModelRelay = ({
         body: redact(await request.text()),
       }
       if (!send(frame)) fail(sid)
-      request.signal.addEventListener(
-        'abort',
-        () => {
-          if (pending.get(sid)?.body !== undefined || !pending.delete(sid)) return
-          send({ type: 'gw_cancel', sid })
-        },
-        { once: true },
-      )
+      const cancel = () => {
+        if (pending.get(sid)?.body !== undefined || !pending.delete(sid)) return
+        send({ type: 'gw_cancel', sid })
+      }
+      if (request.signal.aborted) cancel()
+      else request.signal.addEventListener('abort', cancel, { once: true })
       return head
     },
     handle: (frame: Frame) => {

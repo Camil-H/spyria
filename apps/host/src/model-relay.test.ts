@@ -88,6 +88,16 @@ test('tells Spyria to cancel when the caller gives up before the answer starts, 
   expect(sent).toEqual([])
 })
 
+test('tells Spyria to cancel a call its caller gave up on while its body was still read', async () => {
+  const { relay, nextOf } = relayCollecting()
+  const caller = new AbortController()
+  const request = new Request(completionRequest(), { signal: caller.signal })
+  caller.abort()
+  void relay.fetch(request)
+  const { sid } = await nextOf('gw_req')
+  expect(await nextOf('gw_cancel')).toEqual({ type: 'gw_cancel', sid })
+})
+
 test('relays spyria-agent’s MCP calls on /mcp with their session headers', async () => {
   const { relay, nextOf } = relayCollecting()
   void relay.fetch(
