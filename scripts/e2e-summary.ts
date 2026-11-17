@@ -6,16 +6,16 @@ export type Suite = { specs?: Spec[]; suites?: Suite[] }
 
 type Failure = { feature: string; line: string }
 
+const failureOf = (spec: Spec): Failure[] => {
+  const statuses = new Set(spec.tests.map((test) => test.status))
+  if (!statuses.has('unexpected') && !statuses.has('flaky')) return []
+  const feature = basename(dirname(spec.file))
+  const flakyNote = statuses.has('unexpected') ? '' : ' (flaky: passed on retry)'
+  return [{ feature, line: `${feature} › ${basename(spec.file)} › ${spec.title}${flakyNote}` }]
+}
+
 const failuresOf = (suite: Suite): Failure[] => [
-  ...(suite.specs ?? []).flatMap((spec) =>
-    spec.tests
-      .filter((test) => test.status === 'unexpected' || test.status === 'flaky')
-      .map((test) => {
-        const feature = basename(dirname(spec.file))
-        const flakyNote = test.status === 'flaky' ? ' (flaky: passed on retry)' : ''
-        return { feature, line: `${feature} › ${basename(spec.file)} › ${spec.title}${flakyNote}` }
-      }),
-  ),
+  ...(suite.specs ?? []).flatMap(failureOf),
   ...(suite.suites ?? []).flatMap(failuresOf),
 ]
 

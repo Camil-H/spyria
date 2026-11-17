@@ -38,6 +38,21 @@ test('failing and flaky tests are listed under their feature folder, features in
   )
 })
 
+test('a test repeated with --repeat-each is listed once however many of its runs failed', () => {
+  const repeated = {
+    file: 'e2e/04-agent/runs.spec.ts',
+    title: 'As a prompter, I stop a run',
+    tests: [
+      { projectName: 'e2e', status: 'unexpected' as const },
+      { projectName: 'e2e', status: 'flaky' as const },
+      { projectName: 'e2e', status: 'unexpected' as const },
+    ],
+  }
+  expect(failuresSummaryOf('e2e repeated tests', { specs: [repeated] })).toBe(
+    '### e2e repeated tests: 1 failing test\n\n**04-agent**\n\n- 04-agent › runs.spec.ts › As a prompter, I stop a run\n',
+  )
+})
+
 test('a failed platform check says the stack is broken rather than a feature', () => {
   const report: Suite = {
     suites: [
