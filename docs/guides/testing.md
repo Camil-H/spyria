@@ -78,6 +78,10 @@ With `--plan <file>`, it runs nothing but the module graph and writes the select
 
 `check:all` writes its full output to `.check/last-check-all.log` and a summary to `.check/last-check-all.json`: the `git stash create` fingerprint (HEAD when the tree is clean), HEAD, the tree hash of the working tree including untracked files, the exit code, and each step's result and duration. `--verify` compares that tree hash with the current tree and exits non-zero when they differ or the run failed, so you can tell whether a green run still applies.
 
+### Removing or merging tests
+
+A test may go only when another test still covers its behaviour and source coverage does not drop. Before the change, run the layer with `--coverage --coverage-reporter=lcov` and `bun scripts/test-coverage.ts save <layer> <lcov.info>`, which keeps the covered lines in `.check/coverage-baseline/`; after it, `bun scripts/test-coverage.ts compare <layer> <lcov.info> [<lcov.info of the other layers>...]` lists covered lines per package and per `apps/server/src` folder, every line now covered only by another layer, and exits non-zero on any line no layer covers any more. `bun scripts/test-timings.ts <report>` ranks the slowest tests and files of a JUnit or Playwright JSON report.
+
 ## CI
 
 CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub Actions' standard runners ([decision 0021](../decisions/0021-ci-on-github-actions-through-develop.md)). Pull requests target `develop`.
