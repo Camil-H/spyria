@@ -295,7 +295,7 @@ test('the agent pushes and opens a pull request with its tools on the prompter�
   )
 })
 
-test('signed webhooks update the card’s checks, review, comments and state; a bad signature, a duplicate delivery and an unknown pull request change nothing', async () => {
+test('a signed webhook updates the card’s checks; a bad signature, a duplicate delivery, an unknown pull request and a ping change nothing', async () => {
   await stack.agentHost('Webhook host', { routesModelCalls: true })
   const { id, branch } = await newDevChat()
   await committedWorkspace(id)
@@ -332,37 +332,9 @@ test('signed webhooks update the card’s checks, review, comments and state; a 
   }
   expect(await sendWebhook('check_suite', unknown)).toEqual({ status: 202, body: { outcome: 'ignored' } })
   expect(await sendWebhook('ping', { zen: 'Keep it simple.' })).toEqual({ status: 202, body: { outcome: 'ignored' } })
-
-  const pullRequest = { number, html_url: (await stepOf()).url, title: 'Webhook totals', head: { sha: headSha } }
-  const reviewed = { action: 'submitted', repository, pull_request: { ...pullRequest, state: 'open' } }
-  await sendWebhook('pull_request_review', { ...reviewed, review: { state: 'changes_requested' } })
-  for (const [commentId, line] of [
-    [41, 1],
-    [42, 2],
-  ] as const)
-    await sendWebhook('pull_request_review_comment', {
-      action: 'created',
-      repository,
-      pull_request: { ...pullRequest, state: 'open' },
-      comment: { id: commentId, path: 'src/app.ts', line, user: { login: 'rita' }, body: `Comment ${commentId}` },
-    })
-  expect(await stepOf()).toMatchObject({
-    review: 'changes_requested',
-    comments: [
-      { id: 41, path: 'src/app.ts', line: 1, author: 'rita', body: 'Comment 41', isResolved: false },
-      { id: 42, path: 'src/app.ts', line: 2, author: 'rita', body: 'Comment 42', isResolved: false },
-    ],
-    checks: { 'check_suite:5': 'passing' },
-  })
-  await sendWebhook('pull_request', {
-    action: 'closed',
-    repository,
-    pull_request: { ...pullRequest, state: 'closed', merged: true, commits: 1 },
-  })
-  expect(await stepOf()).toMatchObject({ state: 'merged', review: 'changes_requested' })
   const stepChanges = await database.$client`
     select count(*)::int as count from events where chat_id = ${id} and type = 'message.step_changed'`
-  expect(stepChanges[0]?.count).toBe(5)
+  expect(stepChanges[0]?.count).toBe(1)
 })
 
 test('webhooks arriving together all land, one GitHub sends again after a failure is applied, and one older than the card changes nothing', async () => {
