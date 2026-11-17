@@ -34,9 +34,7 @@ test.describe('Messaging', () => {
     await page.goto('/')
   })
 
-  test('As a member, I send in a channel, keep a draft per chat and see the newest message scrolled into view', {
-    tag: ['@smoke'],
-  }, async ({ page, workerStack }) => {
+  test('As a member, I send in a channel with the Send button or Cmd+Enter', { tag: ['@smoke'] }, async ({ page }) => {
     await openChat(page, 'Welcome')
 
     await test.step('sends with the Send button, clears the textbox and keeps focus in it', async () => {
@@ -55,6 +53,12 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
       await expect(composerOf(page)).toHaveValue('')
     })
+  })
+
+  test('As a member, I keep a draft per chat, through a reload, until I send it', async ({ page }) => {
+    await openChat(page, 'Welcome')
+    await sendMessage(page, 'Sent from the keyboard')
+    await expect(messageContaining(page, 'Sent from the keyboard')).toBeVisible()
 
     await test.step('keeps each chat messages separate and persistent while switching, with a draft per chat', async () => {
       await composerOf(page).fill('Work in progress')
@@ -82,6 +86,13 @@ test.describe('Messaging', () => {
       await composerOf(page).press('ControlOrMeta+Enter')
       await expect(draftIconOf(page, 'Welcome')).toHaveCount(0)
     })
+  })
+
+  test('As a member, I see the newest message of a long chat scrolled into view and load the earlier ones when scrolling up', async ({
+    page,
+    workerStack,
+  }) => {
+    await openChat(page, 'Welcome')
 
     await test.step('scrolls the newest message into view when opening a chat and after sending', async () => {
       await postMessages(workerStack, 'chat-welcome', numberedMessages('filler-', 'Filler ', 29))
