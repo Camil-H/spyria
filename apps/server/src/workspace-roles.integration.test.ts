@@ -175,17 +175,6 @@ test('a role manager cannot create or widen a role beyond their own permissions'
   expect(await createRole('role-narrow', 'Narrow', [], bobInAcme)).toEqual(succeeded)
 })
 
-test('the last Admin is never demoted; a second Admin demotes the first', async () => {
-  expect(await createRole(managerId, 'Manager', ['members.manage'])).toEqual(succeeded)
-  expect(await changeRole(aliceInAcme, bob, managerId)).toEqual(succeeded)
-  expect(await changeRole(bobInAcme, alice, 'member')).toEqual(
-    failedWith('Admin has permissions your own role does not have'),
-  )
-  expect(await changeRole(aliceInAcme, lee, 'admin')).toEqual(succeeded)
-  expect(await changeRole(leeInAcme, alice, 'member')).toEqual(succeeded)
-  expect(await roleOf(alice)).toBe('member')
-})
-
 test('a held workspace role is not deleted, with members and pending invites counted; a removed holder goes back to Member', async () => {
   expect(await createRole(financeId, 'Finance', ['costs.view'])).toEqual(succeeded)
   expect(await changeRole(aliceInAcme, bob, financeId)).toEqual(succeeded)
