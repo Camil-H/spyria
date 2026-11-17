@@ -107,14 +107,17 @@ test.describe('Workspace panel', () => {
     await panelTabOf(page, 'Changes').click()
     await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified/)
     await panelTabOf(page, 'Files').click()
+    const heldReads: string[] = []
     const release = Promise.withResolvers<void>()
     await page.route(/\/workspace\/(changes|commits|status)\b/, async (route) => {
+      heldReads.push(route.request().url())
       await release.promise
       await route.continue()
     })
     await panelTabOf(page, 'Changes').click()
     await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified/)
     await expect(tabPanelOf(page).getByRole('button', { name: 'Refresh' })).toHaveAttribute('aria-busy', 'true')
+    await expect.poll(() => heldReads.length).toBe(3)
     release.resolve()
     await expect(tabPanelOf(page).getByRole('button', { name: 'Refresh' })).toHaveAttribute('aria-busy', 'false')
     await expect(changeOf(page, 'src/app.ts')).toContainText(/Modified/)
