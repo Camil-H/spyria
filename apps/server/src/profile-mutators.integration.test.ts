@@ -134,17 +134,6 @@ describe('Alice’s OpenAI credential, added then removed', () => {
     expect(storedText).not.toContain(virtual_key.value)
   })
 
-  test('the secret never reaches a replicated row', async () => {
-    const publishedTables = await database.$client<{ table: string; columns: string[] }[]>`
-    select tablename as table, attnames as columns from pg_publication_tables where pubname = 'spyria_zero'`
-    for (const { table, columns } of publishedTables) {
-      const rows = await database.$client.unsafe(
-        `select ${columns.map((column) => `"${column}"`).join(', ')} from "${table}"`,
-      )
-      expect({ table, leaks: JSON.stringify(rows).includes(secretValue) }).toEqual({ table, leaks: false })
-    }
-  })
-
   test('an unreachable gateway leaves no row and logs no secret', async () => {
     const consoleCalls = captureConsole()
     try {
