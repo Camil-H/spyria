@@ -275,7 +275,7 @@ test('a setup script that leaves a service running in the background ends when t
 })
 
 test('a prompt sent while the setup script runs counts as running and reaches the agent once setup ends; Stop while it waits ends the turn without reaching the agent', async () => {
-  const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 1\necho ready\n' })
+  const url = bareRepository('waiting', { '.spyria/setup.sh': 'sleep 0.3\necho ready\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('waiting', url)
   const id = await create(launch)
@@ -305,7 +305,7 @@ test('a prompt sent while the setup script runs counts as running and reaches th
 })
 
 test('a conversation created again while the setup script runs shows the running setup, its end and its notice, and its prompt waits for it', async () => {
-  const url = bareRepository('recreated', { '.spyria/setup.sh': 'echo installing\nsleep 1\nexit 4\n' })
+  const url = bareRepository('recreated', { '.spyria/setup.sh': 'echo installing\nsleep 0.4\nexit 4\n' })
   const { call, open, create, prompt } = started()
   const { launch } = launchIn('recreated', url)
   const first = await create({ ...launch, id: 'first' })
