@@ -1,6 +1,6 @@
 import { DomainError, errorKind } from '@spyria/kernel'
 
-export class UsageError extends DomainError {}
+class UsageError extends DomainError {}
 
 export const InvalidSpendFilter = errorKind('invalid_spend_filter', () => 'The spend filter is not valid', UsageError)
 export const InvalidAuditFilter = errorKind(

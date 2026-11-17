@@ -4,8 +4,8 @@ import { BudgetRoleNotFound, InvalidBudget } from './errors.ts'
 export const budgetPeriods = ['day', 'week', 'month'] as const
 export type BudgetPeriod = (typeof budgetPeriods)[number]
 export type BudgetLimits = Readonly<Record<BudgetPeriod, number | null>>
-export const budgetThresholds = [80, 100] as const
-export type BudgetThreshold = (typeof budgetThresholds)[number]
+const budgetThresholds = [80, 100] as const
+type BudgetThreshold = (typeof budgetThresholds)[number]
 export type MemberPeriodSpend = {
   memberId: MemberId
   name: string
@@ -15,7 +15,7 @@ export type MemberPeriodSpend = {
 }
 export type BudgetProgress = { limitMicros: number | null; spentMicros: number; percent: number | null }
 export type PeriodBudget = BudgetProgress & { period: BudgetPeriod }
-export type MemberBudget = PeriodBudget & { memberId: MemberId; name: string }
+type MemberBudget = PeriodBudget & { memberId: MemberId; name: string }
 export type RoleBudget = { roleId: string; name: string; memberCount: number; limits: BudgetLimits }
 export type BudgetOverview = { roles: readonly RoleBudget[]; overAlertLine: readonly MemberBudget[] }
 export type RoleBudgetChange = { roleId: string; limits: BudgetLimits }
@@ -120,7 +120,7 @@ export const workspaceTotalsOf = (roles: readonly RoleBudget[]) =>
     ]),
   ) as BudgetLimits
 
-export const isOverAlertLine = ({ percent }: BudgetProgress) => percent !== null && percent >= budgetThresholds[0]
+const isOverAlertLine = ({ percent }: BudgetProgress) => percent !== null && percent >= budgetThresholds[0]
 
 export const budgetOverviewOf = (
   roles: readonly RoleBudget[],

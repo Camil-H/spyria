@@ -2,7 +2,7 @@ import type { ActorKind, Integration, MemberId } from '@spyria/kernel'
 import { csvFieldOf } from './csv.ts'
 import { InvalidAuditFilter, InvalidRetention } from './errors.ts'
 
-export const auditKindsByGroup = {
+const auditKindsByGroup = {
   Members: [
     'member.invited',
     'invite.revoked',
@@ -125,7 +125,7 @@ export type AuditRecord = {
   target: string | null
   details: Readonly<Record<string, unknown>>
 }
-export type AuditDetail = { label: string; value: string }
+type AuditDetail = { label: string; value: string }
 export type AuditEntry = {
   key: string
   at: string

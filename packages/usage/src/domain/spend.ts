@@ -4,7 +4,7 @@ export const spendPeriods = ['this_month', 'last_month', 'last_30_days', 'last_9
 export const spendGranularities = ['day', 'week', 'month'] as const
 export type SpendPeriod = (typeof spendPeriods)[number]
 export type SpendGranularity = (typeof spendGranularities)[number]
-export const spendDimensions = ['member', 'project', 'chat', 'model'] as const
+const spendDimensions = ['member', 'project', 'chat', 'model'] as const
 export type SpendDimension = (typeof spendDimensions)[number]
 export type SpendRange = { from: Date; to: Date }
 export type SpendScope = { dimension: SpendDimension; keys: string[] }
@@ -25,7 +25,7 @@ export type SpendDimensionRow = SpendTotals & {
 export type SpendCounts = SpendTotals & { users: number; sessions: number; turns: number }
 export type SpendBucketCounts = SpendCounts & { bucket: string }
 export type SpendRow = SpendTotals & { key: string; name: string; share: number }
-export type SpendScopeChoice = { key: string; name: string }
+type SpendScopeChoice = { key: string; name: string }
 export type SpendChart = { buckets: string[]; series: { key: string; name: string; costs: number[] }[] }
 export const spendFactorNames = [
   'users',
@@ -36,7 +36,7 @@ export const spendFactorNames = [
   'pricePerToken',
 ] as const
 export type SpendFactorName = (typeof spendFactorNames)[number]
-export type SpendFactor = {
+type SpendFactor = {
   name: SpendFactorName
   current: number | null
   previous: number | null
@@ -60,7 +60,7 @@ export type MergedPull = {
 }
 export type MergedPullsTotals = { pulls: MergedPull[]; costMicros: number; perPullMicros: number | null }
 export type MergedPullsPoint = { bucket: string; perPullMicros: number | null }
-export type MergedPullsCost = MergedPullsTotals & { trend: MergedPullsPoint[] }
+type MergedPullsCost = MergedPullsTotals & { trend: MergedPullsPoint[] }
 export type SpendReport = {
   from: string
   to: string
@@ -156,7 +156,7 @@ const addedTotals = (sum: SpendTotals, row: SpendTotals): SpendTotals => ({
   tokens: sum.tokens + row.tokens,
   requests: sum.requests + row.requests,
 })
-export const spendTotalOf = (calls: readonly SpendTotals[]) => calls.reduce(addedTotals, noSpend)
+const spendTotalOf = (calls: readonly SpendTotals[]) => calls.reduce(addedTotals, noSpend)
 
 export const spendRowsOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendRow[] => {
   const dimensionRows = rows.filter((row) => row.dimension === dimension)
@@ -243,7 +243,7 @@ export const mergedPullsCostOf = (pulls: readonly MergedPull[]): MergedPullsTota
   return { pulls: [...pulls], costMicros, perPullMicros: pulls.length === 0 ? null : costMicros / pulls.length }
 }
 
-export const scopeChoicesOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendScopeChoice[] =>
+const scopeChoicesOf = (rows: readonly SpendDimensionRow[], dimension: SpendDimension): SpendScopeChoice[] =>
   spendRowsOf(rows, dimension).map(({ key, name }) => ({ key, name }))
 
 export const mergedPullsTrendOf = (
