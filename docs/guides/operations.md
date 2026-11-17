@@ -67,6 +67,50 @@ The Google, Microsoft and OIDC apps that people sign in to their account with ar
 
 A workspace that enforces SSO with the deployment's Google or Microsoft app signs in through it too, so the server refuses to start while such a workspace exists without that app's settings, naming the provider: set them again rather than removing them.
 
+## Secrets in files
+
+The server, its operator CLI, the migrations of the Compose file and `spyria-host` read each of their secrets from the environment, or from a file when `<NAME>_FILE` holds its path: `SPYRIA_SECRETS_KEY_FILE=/run/secrets/spyria_secrets_key` instead of `SPYRIA_SECRETS_KEY=…`. That is how Docker secrets, Kubernetes secret volumes and vault agents hand them over, so nothing else needs to be set up for them. A trailing newline in the file is dropped. A secret given both ways (a non-empty value and a `_FILE` path) stops the process at start rather than letting one silently win, and so does a file that cannot be read; both errors name the setting.
+
+| Process | Secrets it reads from a file |
+|---|---|
+| Server, operator CLI, migrations (Compose) | `DATABASE_URL`, `SPYRIA_TOKEN_SECRET`, `SPYRIA_SECRETS_KEY`, `SPYRIA_PREVIOUS_SECRETS_KEYS`, `SPYRIA_SETUP_TOKEN`, `SPYRIA_INSTALL_HOST_TOKEN`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_SECRET`, `SPYRIA_OIDC_CLIENT_SECRET`, `SPYRIA_GATEWAY_ADMIN_PASSWORD`, `OTEL_EXPORTER_OTLP_HEADERS` |
+| `spyria-host` | `SPYRIA_HOST_CLAIM_URL`, `OTEL_EXPORTER_OTLP_HEADERS`, `HTTPS_PROXY`, `HTTP_PROXY` |
+
+The other services of the Compose file are not Spyria's: Postgres reads `POSTGRES_PASSWORD_FILE` itself, while zero-cache and the gateway take their secrets from the environment only. `spyria compose` runs the Compose file it installed and nothing else, so an install made by `spyria setup` keeps its secrets in `.env`. On an install made by hand, put the files in an override file and add it to the alias (`-f compose.prod.yml -f compose.secrets.yml`), for example:
+
+```yaml
+services:
+  server:
+    environment:
+      SPYRIA_SECRETS_KEY: ''
+      SPYRIA_SECRETS_KEY_FILE: /run/secrets/spyria_secrets_key
+    secrets: [spyria_secrets_key]
+secrets:
+  spyria_secrets_key:
+    file: ./secrets/spyria_secrets_key
+```
+
+The empty `SPYRIA_SECRETS_KEY` counts as unset, so the value Compose would otherwise take from `.env` does not conflict with the file.
+
+## Rotation intervals
+
+Recommended intervals for each secret of a deployment. Rotate any of them at once when it may have leaked, and when someone who held it leaves.
+
+| Secret | Rotate | How, and what it costs |
+|---|---|---|
+| `SPYRIA_SECRETS_KEY` | Every 12 months | [Rotating the secrets key](#rotating-the-secrets-key): no downtime, runtimes move to the new key as they restart. |
+| `SPYRIA_TOKEN_SECRET` | Every 12 months | Set a new value and restart the server. Members stay signed in: their sessions are not signed with it, and their 15-minute session tokens are renewed from them. A sign-in, GitHub connection or GitHub App creation in progress during the restart starts over. |
+| `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_SECRET`, `SPYRIA_OIDC_CLIENT_SECRET` | Every 12 months, and before the provider expires it (the Microsoft Entra admin center offers at most 24 months) | Add a second secret at the provider, set it ([account providers](#account-providers)) and restart the server, then delete the old one at the provider. |
+| `SPYRIA_POSTGRES_PASSWORD`, `SPYRIA_GATEWAY_DB_PASSWORD` | Every 12 months | The role keeps the password it was created with: change it in Postgres first (`\password spyria` in `spyria compose exec postgres psql -U spyria`, `\password bifrost` for the gateway's, so the new value stays out of the shell history), then in `.env`, then run `spyria compose up -d`, which restarts the services that use it, Postgres included, for a few seconds. |
+| `SPYRIA_ZERO_ADMIN_PASSWORD` | Every 12 months | Set a new value and run `spyria compose up -d zero-cache`. |
+| `SPYRIA_GATEWAY_ADMIN_PASSWORD` | Every 12 months | The server and the gateway share it: set a new value, run `spyria compose up -d gateway server`, then check that `/health` does not list `gateway` as failing. |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `CLOUDFLARE_TUNNEL_TOKEN` | As the collector's or Cloudflare's policy says | Issue a new token there, set it, restart the services that use it. |
+| `SPYRIA_GATEWAY_ENCRYPTION_KEY` | Never, only after a leak | Changing it makes the members' API keys in the gateway unreadable: wipe the gateway's database and have members enter their keys again. |
+| `SPYRIA_GATEWAY_SETUP_TOKEN` | Never, only after a leak | Set a new value, run `spyria compose up -d gateway`, then check that `/health` does not list `gateway` as failing. |
+| `SPYRIA_SETUP_TOKEN`, `SPYRIA_INSTALL_HOST_TOKEN`, `SPYRIA_HOST_CLAIM_URL` | Not needed | One-time: spent once the first workspace exists, or once the host is paired. |
+
+`spyria setup` generates the long-lived secrets from 32 random bytes each, so these intervals limit how long a copied value stays useful rather than how long it resists guessing. The cloud modules generate the secrets in the cloud's secret manager; they cannot rotate `SPYRIA_SECRETS_KEY` yet (see below).
+
 ## Rotating the secrets key
 
 `SPYRIA_SECRETS_KEY` seals the stored secrets (SSO client secrets, GitHub App credentials, members' GitHub tokens) and derives the key the server uses to reach each runtime. To replace it, for example when it may have leaked:
@@ -135,7 +179,7 @@ zero-cache follows Postgres through a logical replication slot. If zero-cache st
 | `<deployment>-gateway-data` | The gateway's local data. | Yes. |
 | `<deployment>-host` | The workspace host's pairing token. | Optional: a lost token means adding the host again. |
 | `<deployment>-zero-data` | zero-cache's replica, rebuilt from Postgres. | No. |
-| `.env` (`.env.prod` on an install made by hand) | Every secret, including `SPYRIA_SECRETS_KEY` (and `SPYRIA_PREVIOUS_SECRETS_KEYS` during a [rotation](#rotating-the-secrets-key)) and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
+| `.env` (`.env.prod` on an install made by hand), and the files of any [secret read from a file](#secrets-in-files) | Every secret, including `SPYRIA_SECRETS_KEY` (and `SPYRIA_PREVIOUS_SECRETS_KEYS` during a [rotation](#rotating-the-secrets-key)) and `SPYRIA_GATEWAY_ENCRYPTION_KEY`. | Yes, separately and securely: without these keys the stored SSO secrets, GitHub App keys and members' API keys cannot be decrypted. |
 
 `spyria restore` reads each file whole before it changes anything, and refuses one it cannot restore completely, such as a truncated file or a plain SQL dump. By hand, a consistent dump of both databases, which `spyria restore` does not take (restore it with `psql` into an empty Postgres):
 

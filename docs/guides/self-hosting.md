@@ -40,7 +40,7 @@ Two deployments can therefore share one Docker daemon without either host seeing
 
 ## Configuration: `.env.prod`
 
-Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose reads only those keys; it sets the gateway URL, the redirect URI (`<origin>/auth/callback`), the auth mode (`sso`) and `SPYRIA_ENV=production` itself. Secrets are letters and digits only (the Postgres password goes into a URL), for example from `openssl rand -hex 32`.
+Copy `.env.example` to `.env.prod` and fill every key marked `[prod]`. Compose reads only those keys; it sets the gateway URL, the redirect URI (`<origin>/auth/callback`), the auth mode (`sso`) and `SPYRIA_ENV=production` itself. Secrets are letters and digits only (the Postgres password goes into a URL), for example from `openssl rand -hex 32`. The server and the host can also read each secret from a file instead, `<NAME>_FILE` holding its path, for Docker secrets or a vault agent ([secrets in files](./operations.md#secrets-in-files)); [rotation intervals](./operations.md#rotation-intervals) lists how often to replace each one.
 
 | Key | Purpose |
 |---|---|
