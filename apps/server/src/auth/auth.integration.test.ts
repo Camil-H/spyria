@@ -416,7 +416,7 @@ test('a session opened from another expires with it, and a session cannot open a
     select opened.expires_at = origin.expires_at as inherited from sessions opened, sessions origin
     where opened.workspace_id = ${globex} and opened.user_id = ${alice}
       and origin.workspace_id = ${acme} and origin.id = ${aliceInAcme.sessionId}`
-  expect(expiries).toEqual([{ inherited: true }])
+  expect([...expiries]).toEqual([{ inherited: true }])
 })
 
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
