@@ -193,7 +193,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   expect(await noticesOf(id)).toContain(ready)
 })
 
-test('As a chat owner, a command that keeps failing ends with the agent saying what it would change, and a command that may not be fixed hands over at once', async () => {
+test('As a chat owner, a command that keeps failing ends with the agent saying what it would change', async () => {
   expect(await setDevLoop(alice, settingsWith([commandStep('Never', 'echo "still broken" && exit 1', 1)]))).toEqual(
     succeeded,
   )
@@ -225,15 +225,6 @@ test('As a chat owner, a command that keeps failing ends with the agent saying w
     outcome: 'Never still failed after 1 attempt to fix: over to you',
   })
   expect(await noticesOf(id)).toContain('Never still failed after 1 attempt to fix: over to you')
-
-  expect(await setDevLoop(alice, settingsWith([commandStep('Strict', 'exit 1', 0)]))).toEqual(succeeded)
-  const strict = await newDevChat()
-  await readyChat(strict.id)
-  stack.setFakeLlmScript({ steps: [committing('one', 'Try once'), finish], text: 'Done.' })
-  await stack.prompt(strict.id, 'Fix the totals')
-  await loopStateIs(strict.id, 'stopped')
-  expect((await loopOf(strict.id))?.step.outcome).toBe('Strict failed: over to you')
-  expect(await loopPromptsOf(strict.id)).toEqual([])
 })
 
 test('As a member, writing in the chat stops the quality gates; another member’s prompt cannot start a loop; members who cannot connect GitHub cannot change the loop, and a pipeline must make sense', async () => {
@@ -397,6 +388,7 @@ test('As a chat owner, the quality gates card shows each command of a group pass
     outcomes: ['passed', 'failed', 'passed'],
     outcome: 'Broken failed: over to you',
   })
+  expect(await loopPromptsOf(id)).toEqual([])
 })
 
 test('As a chat owner, a quality gates job run again after the loop moved on, for an earlier turn or checks run, changes nothing', async () => {
