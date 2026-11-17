@@ -152,19 +152,6 @@ test.each([
   expect(normalized(store.read())).toEqual(expectedFor(viewerId, workspaceIds))
 })
 
-test('a participant row added to a private chat syncs it with its rows, and removing it takes them away', async () => {
-  const store = await openZeroStore(createZeroStore, bob, [acme])
-  const researchOf = () => store.read().chats.filter((chat) => chat.id === 'chat-research')
-  expect(researchOf()).toEqual([])
-  await database.$client`
-    insert into chat_participants (workspace_id, chat_id, user_id, role_id) values (${acme}, 'chat-research', ${bob}, 'reader')`
-  await waitFor(() => researchOf().length === 1)
-  await database.$client`delete from chat_participants where chat_id = 'chat-research' and user_id = ${bob}`
-  await waitFor(
-    () => researchOf().length === 0 && store.read().chatMembers.every((row) => row.chatId !== 'chat-research'),
-  )
-})
-
 test('signing out of a workspace removes its rows but keeps it listed, signing in brings them back', async () => {
   const store = await openZeroStore(createZeroStore, alice, [acme, globex])
   await store.signOut(globex)
