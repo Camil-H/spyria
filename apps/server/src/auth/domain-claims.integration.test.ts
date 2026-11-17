@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, beforeEach, expect, test } from 'bun:test'
 import type { JWTPayload } from 'jose'
 import { createApp } from '../app.ts'
 import { rateBudgets } from '../rate-limits.ts'
@@ -35,17 +35,20 @@ const ana = 'member-ana'
 const ben = 'member-ben'
 const carl = 'member-carl'
 const dee = 'member-dee'
-await database.$client`
-  insert into users (id, email) values (${ana}, 'ana@umbrella.com'), (${ben}, 'ben@umbrella.com'),
-    (${carl}, 'carl@gmail.com'), (${dee}, 'dee@tyrell.com')`
-
 const { addWorkspace, enforceSso, callbackAfter } = fakeIdpSignInOf({ database, secretsKeyring, app })
 
-await addWorkspace('umbrella', ana, [carl])
-await enforceSso('umbrella', umbrellaIdp)
-await addWorkspace('side', ben, [carl])
-await addWorkspace('tyrell', dee, [ben])
-await enforceSso('tyrell', tyrellIdp)
+beforeEach(async () => {
+  await openSharedTestApp()
+  txtRecordsByDomain.clear()
+  await database.$client`
+    insert into users (id, email) values (${ana}, 'ana@umbrella.com'), (${ben}, 'ben@umbrella.com'),
+      (${carl}, 'carl@gmail.com'), (${dee}, 'dee@tyrell.com')`
+  await addWorkspace('umbrella', ana, [carl])
+  await enforceSso('umbrella', umbrellaIdp)
+  await addWorkspace('side', ben, [carl])
+  await addWorkspace('tyrell', dee, [ben])
+  await enforceSso('tyrell', tyrellIdp)
+})
 
 const tokenThrough = async (workspaceId: string, userId: string, providerWorkspaceId: string | null) => {
   const [session] = await openSessions(database, userId, workspaceId, providerWorkspaceId)
@@ -87,6 +90,8 @@ const claimAndVerify = async (workspaceId: string, userId: string, domain: strin
   txtRecordsByDomain.set(domain, [[record ?? '']])
   return claimAs(workspaceId, userId, '/verify', domain)
 }
+const claimUmbrella = () => claimAndVerify('umbrella', ana, 'umbrella.com')
+const openBenSessionThroughTyrell = () => openSessions(database, ben, 'tyrell', 'tyrell')
 
 const signInThrough = async (idp: FakeIdp, loginQuery: string, claims: JWTPayload) => {
   const started = await app.request(`/auth/login?${loginQuery}`)
@@ -139,6 +144,7 @@ test('an Admin claims a domain by a DNS TXT record: the claim waits until Spyria
 })
 
 test('claiming is refused without Setup SSO, to a workspace without its own provider, for what is not a domain, and for a domain another workspace holds', async () => {
+  await claimUmbrella()
   expect(await requestAs(await tokenThrough('tyrell', ben, 'tyrell'), '/api/domain-claims')).toMatchObject({
     status: 403,
     body: { error: 'missing_workspace_permission' },
@@ -155,6 +161,7 @@ test('claiming is refused without Setup SSO, to a workspace without its own prov
 })
 
 test('of two workspaces waiting for the same domain, only the first whose record is found gets it', async () => {
+  await claimUmbrella()
   const tyrellRecord = (await claimAs('tyrell', dee, '', 'tyrell.com')).body.claims?.[0]?.record ?? ''
   const umbrellaRecord =
     (await claimAs('umbrella', ana, '', 'tyrell.com')).body.claims?.find(({ domain }) => domain === 'tyrell.com')
@@ -172,6 +179,7 @@ test('of two workspaces waiting for the same domain, only the first whose record
 })
 
 test('an address at a claimed domain is offered only the providers of its workspaces, the claiming one first, and its own account is refused', async () => {
+  await claimUmbrella()
   expect(await providersOf('ben@umbrella.com')).toEqual([
     { id: 'workspace-0', kind: 'oidc', isWorkspaceSso: true },
     { id: 'workspace-1', kind: 'oidc', isWorkspaceSso: true },
@@ -191,6 +199,7 @@ test('an address at a claimed domain is offered only the providers of its worksp
 })
 
 test('an address at a claimed domain that no workspace invited is told, through the claiming provider, that it needs an invite and cannot create a workspace', async () => {
+  await claimUmbrella()
   const uninvited = await signInThrough(umbrellaIdp, 'provider=workspace-0&email=new@umbrella.com', {
     sub: 'new-umbrella',
     email: 'new@umbrella.com',
@@ -203,6 +212,7 @@ test('an address at a claimed domain that no workspace invited is told, through 
 })
 
 test("through the claiming workspace's provider, an address at its domain opens every workspace it belongs to, except one enforcing a provider of its own", async () => {
+  await claimUmbrella()
   const throughUmbrella = await signInThrough(umbrellaIdp, 'provider=workspace-0&email=ben@umbrella.com', {
     sub: 'ben-umbrella',
     email: 'ben@umbrella.com',
@@ -219,6 +229,7 @@ test("through the claiming workspace's provider, an address at its domain opens 
 })
 
 test('signing in to a workspace without its own SSO, from a browser signed in at a claimed domain, goes to the claiming provider', async () => {
+  await claimUmbrella()
   const [session] = await openSessions(database, ben, 'side', 'umbrella')
   const started = await app.request('/auth/login?workspace=side', {
     headers: { cookie: `spyria_s_side=${session?.sessionId}` },
@@ -229,6 +240,7 @@ test('signing in to a workspace without its own SSO, from a browser signed in at
 })
 
 test("once its workspace claimed a domain, the workspace's provider refuses addresses elsewhere, members included", async () => {
+  await claimUmbrella()
   const outside = await signInThrough(umbrellaIdp, 'workspace=umbrella', {
     sub: 'carl-umbrella',
     email: 'carl@gmail.com',
@@ -249,6 +261,7 @@ test("once its workspace claimed a domain, the workspace's provider refuses addr
 })
 
 test('creating a workspace is refused to an address at a claimed domain and to a session of a provider that claimed none', async () => {
+  await claimUmbrella()
   const createdBy = async (workspaceId: string, providerWorkspaceId: string, id: string) =>
     requestMutationWith(app, await tokenThrough(workspaceId, ben, providerWorkspaceId), 'workspace.createWorkspace', {
       workspaceId,
@@ -265,6 +278,7 @@ test('creating a workspace is refused to an address at a claimed domain and to a
 })
 
 test('invites refuse an address at a domain another workspace claimed, and in a claiming workspace an address outside its domains', async () => {
+  await claimUmbrella()
   expect(await inviteAs('side', ben, 'new@umbrella.com')).toEqual(
     refusal('umbrella.com belongs to another workspace of this Spyria'),
   )
@@ -283,6 +297,7 @@ test('invites refuse an address at a domain another workspace claimed, and in a 
 })
 
 test("an Admin's change of claims is refused when their own address would end up outside the workspace's domains", async () => {
+  await claimUmbrella()
   await addWorkspace('acme-sub', ana)
   await enforceSso('acme-sub', umbrellaIdp)
   expect((await claimAndVerify('acme-sub', ana, 'umbrella.fr')).body).toMatchObject({
@@ -296,15 +311,19 @@ test("an Admin's change of claims is refused when their own address would end up
   })
   expect((await claimAs('umbrella', ana, '/release', 'umbrella.fr')).status).toBe(200)
   expect(await claimsOf('umbrella')).toEqual([{ domain: 'umbrella.com', isVerified: true }])
+  expect((await workspaceEventsOf(database, 'umbrella')).filter(({ type }) => type === 'domain.released')).toEqual([
+    { type: 'domain.released', actorId: ana, payload: { domain: 'umbrella.fr' } },
+  ])
 })
 
 test('releasing a claim frees the domain at once: the sessions its provider opened elsewhere end and own accounts sign in again', async () => {
+  await claimUmbrella()
+  await openBenSessionThroughTyrell()
   const sideToken = await tokenThrough('side', ben, 'umbrella')
   const released = await claimAs('umbrella', ana, '/release', 'umbrella.com')
   expect(released.body).toEqual({ claims: [] })
   expect((await requestAs(sideToken, '/api/workspace-creation')).status).toBe(401)
   expect((await workspaceEventsOf(database, 'umbrella')).filter(({ type }) => type === 'domain.released')).toEqual([
-    { type: 'domain.released', actorId: ana, payload: { domain: 'umbrella.fr' } },
     { type: 'domain.released', actorId: ana, payload: { domain: 'umbrella.com' } },
   ])
   expect(await sessionRowsOf(ben)).not.toContainEqual(expect.objectContaining({ providerWorkspaceId: 'umbrella' }))
@@ -319,6 +338,8 @@ test('releasing a claim frees the domain at once: the sessions its provider open
 })
 
 test('a new issuer for the claiming workspace ends the sessions its former provider opened in other workspaces', async () => {
+  await claimUmbrella()
+  await openBenSessionThroughTyrell()
   const sideToken = await tokenThrough('side', ben, 'umbrella')
   const encryptedClientSecret = await createSecretBox(secretsKeyring).seal('new-umbrella-secret')
   await confirmSsoSettings(
@@ -348,6 +369,8 @@ test('a new issuer for the claiming workspace ends the sessions its former provi
 })
 
 test("stopping a workspace's SSO and deleting the workspace release its claims and end the sessions their providers opened", async () => {
+  await claimUmbrella()
+  await openBenSessionThroughTyrell()
   const sideToken = await tokenThrough('side', ben, 'umbrella')
   const stopped = await requestAs(await tokenThrough('umbrella', ana, 'umbrella'), '/api/sso-settings/stop', {})
   expect(stopped.status).toBe(204)
@@ -356,8 +379,6 @@ test("stopping a workspace's SSO and deleting the workspace release its claims a
   expect(await sessionRowsOf(ben)).toEqual([{ workspaceId: 'tyrell', userId: ben, providerWorkspaceId: 'tyrell' }])
   const events = await workspaceEventsOf(database, 'umbrella')
   expect(events.filter(({ payload }) => payload.domain === 'umbrella.com').map(({ type }) => type)).toEqual([
-    'domain.claimed',
-    'domain.released',
     'domain.claimed',
     'domain.released',
   ])
@@ -383,6 +404,9 @@ test('claiming and checking domains answer 429 past their budget per address', a
     rateLimits: rateBudgets,
     resolveTxt: async () => [],
   })
+  await addWorkspace('acme-sub', ana)
+  await enforceSso('acme-sub', umbrellaIdp)
+  await claimAndVerify('acme-sub', ana, 'umbrella.fr')
   const token = await tokenThrough('acme-sub', ana, 'acme-sub')
   const check = () =>
     limitedApp.request('/api/domain-claims/verify', {
