@@ -299,7 +299,16 @@ test('the sweep stops runtimes idle for more than an hour only, and touchRuntime
 
 test('the sweep removes runtimes stopped for 7 days with their container and volumes, keeping the chat history', async () => {
   const host = await fakeHost('Removing host')
-  const oldChat = chatId('chat-invoice-bug')
+  const oldChat = await newRuntimeChat('Old chat')
+  const promptId = `message-${crypto.randomUUID()}`
+  await database.$client.begin(async (sql) => {
+    await sql`
+      insert into messages (workspace_id, chat_id, id, seq, kind, author_id, body, created_at)
+      values (${acme}, ${oldChat}, ${promptId}, 1, 'member', ${alice}, 'Go', now())`
+    await sql`
+      insert into events (workspace_id, chat_id, id, seq, type, actor, payload, created_at)
+      values (${acme}, ${oldChat}, ${promptId}, 1, 'message.posted', ${alice}, '{}', now())`
+  })
   const recentChat = await newRuntimeChat()
   const old = await stoppedRuntime(oldChat)
   await stoppedRuntime(recentChat)
