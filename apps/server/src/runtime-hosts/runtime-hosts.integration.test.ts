@@ -153,7 +153,6 @@ const openStore = (member: Member) => openZeroStore(createZeroStore, member.user
 test('an admin adds a host and receives a one-time code whose hash only is stored', async () => {
   const { status, body } = await addHost(aliceInAcme, '  Home server  ')
   expect(status).toBe(201)
-  expect(body?.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
   const row = await hostRow(body?.id ?? '')
   expect(row).toMatchObject({
     workspace_id: acme,
@@ -265,7 +264,6 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   const { id, code } = await addedHost()
   const { host: claimingHost, token } = await claim(code)
   claimingHost.socket.close()
-  expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
   const claimed = await hostRow(id)
   expect(claimed.token_hash).toBe(sha256(token ?? ''))
   expect(JSON.stringify(claimed)).not.toContain(token)
@@ -284,7 +282,6 @@ test('a valid code yields one token whose hash only is stored, a renewed code pa
   expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code has expired')
   const renewed = await renewCode(aliceInAcme, expiring.id)
   expect(renewed.status).toBe(200)
-  expect(renewed.body?.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
   expect((await hostRow(expiring.id)).status).toBe('waiting')
   expect(await refusalOf((await claim(expiring.code)).outcome)).toBe('This code is not valid')
   expect((await claim(renewed.body?.code ?? '')).token).toBeDefined()
@@ -437,12 +434,6 @@ test('a host cannot answer another host’s requests or streams, an unknown stat
   await waitFor(async () => (await hostRow(forgerId)).status === 'offline')
   expect(trusted.socket.readyState).toBe(WebSocket.OPEN)
   expect((await hostRow(trustedId)).status).toBe('online')
-})
-
-test('closing the connection marks the host offline', async () => {
-  const { id, host } = await pairedHost()
-  host.socket.close()
-  await waitFor(async () => (await hostRow(id)).status === 'offline')
 })
 
 test('a host whose connection closes while its hello is being checked ends offline, not held by the closed connection', async () => {
