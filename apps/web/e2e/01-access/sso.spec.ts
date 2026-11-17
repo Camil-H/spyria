@@ -194,6 +194,7 @@ test.describe('SSO', () => {
       await page.goto('/')
       await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
       await expect(creationFormOf(page)).toHaveCount(0)
+      await expect(page.getByRole('form', { name: 'Sign in' })).toHaveCount(0)
       await page.goto('/?setup=not-the-token')
       await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
     })

@@ -31,14 +31,6 @@ const signedOutPageOf = async (
 }
 
 test.describe('Sign-in screens', () => {
-  test('As a visitor, I see the sign-in card asking for my email', { tag: ['@spec-37'] }, async ({ browser }) => {
-    const page = await signedOutPageOf(browser, {})
-    await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
-    const form = page.getByRole('form', { name: 'Sign in' })
-    await expect(form.getByRole('textbox', { name: 'Email' })).toBeVisible()
-    await expect(form.getByRole('button', { name: 'Continue' })).toBeVisible()
-  })
-
   test('As a visitor whose email several providers sign in, I choose one by name, or use another address', {
     tag: ['@spec-37'],
   }, async ({ browser }) => {
@@ -99,15 +91,6 @@ test.describe('Sign-in screens', () => {
     isServerDown = false
     await page.getByRole('button', { name: 'Try again' }).click()
     await expect(page.getByRole('heading', { name: 'Sign in to Spyria' })).toBeVisible()
-  })
-
-  test('As a visitor reaching a fresh install without the setup link, I see that it is being set up and cannot create a workspace', {
-    tag: ['@spec-53'],
-  }, async ({ browser }) => {
-    const page = await signedOutPageOf(browser, { isBeingSetUp: true })
-    await expect(page.getByRole('heading', { name: 'This Spyria is being set up' })).toBeVisible()
-    await expect(page.getByRole('form', { name: 'Create a workspace' })).toHaveCount(0)
-    await expect(page.getByRole('form', { name: 'Sign in' })).toHaveCount(0)
   })
 
   test("As the first person on an empty Spyria, I create the workspace with an account of this Spyria or switch to my organization's provider", {
