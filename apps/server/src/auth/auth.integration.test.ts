@@ -395,10 +395,7 @@ test("a member sees by device where they are signed in to a workspace, never a s
   expect((await queryWith(app, bobToken)).status).toBe(200)
 
   expect((await openSessionWith(app, laptopInGlobex.token, acme)).status).toBe(403)
-  const relayedThroughGlobex = await openSessionWith(app, laptopInGlobex.token, globex)
-  expect(relayedThroughGlobex.status).toBe(200)
-  const { token: relayedToken } = (await relayedThroughGlobex.json()) as { token: string }
-  expect((await openSessionWith(app, relayedToken, acme)).status).toBe(403)
+  expect((await openSessionWith(app, laptopInGlobex.token, globex)).status).toBe(403)
   const [laterInGlobex] = await openSessions(database, alice, globex)
   if (!laterInGlobex) throw new Error('missing session')
   const laterToken = (await issueSessionToken(testAuthSettings.tokenSecret, laterInGlobex)).token
@@ -406,6 +403,20 @@ test("a member sees by device where they are signed in to a workspace, never a s
   expect(
     (await sessionsOf((await signInAs('alice@example.com')).cookie)).sessions.map(({ workspaceId }) => workspaceId),
   ).toEqual([acme, globex])
+})
+
+test('a session opened from another expires with it, and a session cannot open another in its own workspace', async () => {
+  const aliceInAcme = await issueTestSession(database, acme, alice)
+  await database.$client`update sessions set expires_at = now() + interval '1 hour'
+    where workspace_id = ${acme} and id = ${aliceInAcme.sessionId}`
+  expect((await openSessionWith(app, aliceInAcme.token, acme)).status).toBe(403)
+  const opened = await openSessionWith(app, aliceInAcme.token, globex)
+  expect(opened.status).toBe(200)
+  const expiries = await database.$client<{ inherited: boolean }[]>`
+    select opened.expires_at = origin.expires_at as inherited from sessions opened, sessions origin
+    where opened.workspace_id = ${globex} and opened.user_id = ${alice}
+      and origin.workspace_id = ${acme} and origin.id = ${aliceInAcme.sessionId}`
+  expect(expiries).toEqual([{ inherited: true }])
 })
 
 test('a new session for another workspace needs a bearer token of a member of both', async () => {
