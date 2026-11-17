@@ -231,28 +231,31 @@ test.skipIf(!hasImage)(
       expect(await authenticatedStatus()).toBe(404)
       expect(docker('exec', containerName, 'sh', '-c', 'echo kept > /workspace/kept.txt').exitCode).toBe(0)
 
-      await database.$client`update runtimes set last_active_at = now() - interval '2 hours' where id = ${id}`
-      await createRuntimeJobs(gateway.sandboxProvider)['runtime.sweep']({
-        workspaceId: acme,
-        payload: {},
-        isLastAttempt: false,
-        transact: (work) => zeroDatabase.transaction(work),
-      })
-      await stateIs('stopped')
-      expect(dockerText('inspect', '-f', '{{.State.Running}}', containerName)).toBe('false')
-      expect(runtimeNetwork()).toBe('')
+      for (let cycle = 0; cycle < 2; cycle++) {
+        await database.$client`update runtimes set last_active_at = now() - interval '2 hours' where id = ${id}`
+        await createRuntimeJobs(gateway.sandboxProvider)['runtime.sweep']({
+          workspaceId: acme,
+          payload: {},
+          isLastAttempt: false,
+          transact: (work) => zeroDatabase.transaction(work),
+        })
+        await stateIs('stopped')
+        expect(dockerText('inspect', '-f', '{{.State.Running}}', containerName)).toBe('false')
+        expect(runtimeNetwork()).toBe('')
 
-      expect(await ensure()).toMatchObject({ id, state: 'starting' })
-      await stateIs('running')
-      expect(runtimeNetwork()).not.toBe('')
-      expect(dockerText('exec', containerName, 'cat', '/workspace/kept.txt')).toBe('kept')
-      expect(await authenticatedStatus()).toBe(404)
+        expect(await ensure()).toMatchObject({ id, state: 'starting' })
+        await stateIs('running')
+        expect(runtimeNetwork()).not.toBe('')
+        expect(dockerText('exec', containerName, 'cat', '/workspace/kept.txt')).toBe('kept')
+        expect(await authenticatedStatus()).toBe(404)
+      }
 
       await zeroDatabase.transaction((tx) =>
         removeChatRuntime({ transactor: createRuntimeTransactor(tx) }, { ...runtimeInput, now: Date.now() }),
       )
       await stateIs('removed')
       expect(dockerText('ps', '-aq', '--filter', `name=^${containerName}$`)).toBe('')
+      expect(runtimeNetwork()).toBe('')
       expect(dockerText('volume', 'ls', '-q', '--filter', `name=^${containerName}`)).toBe('')
     } finally {
       await worker.stop()
