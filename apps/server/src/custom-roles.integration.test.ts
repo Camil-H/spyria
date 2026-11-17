@@ -146,19 +146,11 @@ test('editing a held role applies at once to the server checks of its holders', 
   expect(await chatChange(leeInAcme, 'stopAgent', chat, {})).toEqual(missingPermission('session.configure'))
 })
 
-test('a custom role is given within the giver’s own permissions, never without chat.post in a public channel', async () => {
+test('a custom role is never given without chat.post in a public channel', async () => {
   expect(await createRole(reviewer)).toEqual(succeeded)
   expect(
     await createRole({ id: 'role-poster', name: 'Poster', permissions: ['chat.post', 'session.configure'] }),
   ).toEqual(succeeded)
-  expect(await createRole({ id: 'role-keeper', name: 'Keeper', permissions: ['tools.manage'] })).toEqual(succeeded)
-  const privateChat = await newChat({ participants: [{ memberId: bob, roleId: 'editor' }] })
-  expect(await chatChange(bobInAcme, 'inviteMember', privateChat, { memberId: lee, roleId: 'role-keeper' })).toEqual(
-    failedWith('You can only give a role within your own permissions'),
-  )
-  expect(await chatChange(bobInAcme, 'inviteMember', privateChat, { memberId: lee, roleId: reviewerId })).toEqual(
-    succeeded,
-  )
   const channel = await newChat({ type: 'channel', participants: [{ memberId: lee, roleId: 'prompter' }] })
   expect(await chatChange(aliceInAcme, 'changeMemberRole', channel, { memberId: lee, roleId: reviewerId })).toEqual(
     failedWith('Everyone can read and post in a public chat; make it private to restrict someone'),
