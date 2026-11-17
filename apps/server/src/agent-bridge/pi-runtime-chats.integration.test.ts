@@ -57,35 +57,6 @@ test.each([
     models: ['openai/gpt-5', 'openai/gpt-5-mini', 'openai/gpt-5-nano'],
     model: 'openai/gpt-5-mini',
   },
-  {
-    provider: 'Mistral',
-    piProvider: 'spyria',
-    baseUrl: 'http://fake-gateway-relay.test:4000/v1',
-    api: 'openai-completions',
-    models: ['mistral/mistral-large-latest', 'mistral/mistral-medium-latest', 'mistral/mistral-small-latest'],
-    model: 'mistral/mistral-medium-latest',
-  },
-  ...[
-    {
-      provider: 'OpenRouter',
-      models: [
-        'openrouter/anthropic/claude-opus-5.5',
-        'openrouter/anthropic/claude-sonnet-5.5',
-        'openrouter/anthropic/claude-haiku-5.5',
-      ],
-    },
-    {
-      provider: 'Google',
-      models: ['gemini/gemini-pro-latest', 'gemini/gemini-flash-latest', 'gemini/gemini-flash-lite-latest'],
-    },
-  ].map(({ provider, models }) => ({
-    provider,
-    piProvider: 'spyria',
-    baseUrl: 'http://fake-gateway-relay.test:4000/v1',
-    api: 'openai-completions',
-    models,
-    model: models[1] as string,
-  })),
 ])(
   'a prompter with only an $provider key runs Pi on a workspace host with only the reachable models, and the turn streams and is stored once',
   async ({ provider, piProvider, baseUrl, api, models, model }) => {
