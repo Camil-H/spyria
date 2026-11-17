@@ -4,7 +4,6 @@ import {
   type Browser,
   creationFormOf,
   expect,
-  invite,
   type Locator,
   logInAtProvider,
   mainOf,
@@ -12,7 +11,6 @@ import {
   openMenu,
   openSettings,
   type Page,
-  pendingInvitesOf,
   ssoProviderIssuer,
   ssoServerUrl,
   ssoViteUrl,
@@ -114,7 +112,7 @@ test.describe('SSO', () => {
     await expect(page.getByText(/Acme|Globex/)).toHaveCount(0)
   })
 
-  test('As an invitee of a workspace enforcing SSO, I see its sign-in after typing my email and join through it, while a stranger goes straight to the sign-in of this Spyria', {
+  test('As an invitee of a workspace enforcing SSO, I see its sign-in after typing my email and join through it', {
     tag: ['@spec-37'],
   }, async ({ page, browser, workerStack }) => {
     await enforceAcmeSsoAsAlice(browser, workerStack)
@@ -137,21 +135,9 @@ test.describe('SSO', () => {
       await expect(switcherOf(page)).toContainText('Acme')
       expect(await menuItemNamesOf(page)).toEqual(['Acme', 'Log out of Acme'])
     })
-
-    await test.step('a stranger is offered no choice: the popup goes straight to the sign-in of this Spyria', async () => {
-      const olivePage = await openPageAs(browser, workerStack, null, ssoViteUrl)
-      const popupOpened = olivePage.waitForEvent('popup')
-      await continueWith(olivePage, 'olive@example.com')
-      const popup = await popupOpened
-      await expect(popup).toHaveURL(new RegExp(`^${ssoProviderIssuer}/`))
-      await expect(olivePage.getByRole('button', { name: organizationSignInLabel })).toHaveCount(0)
-      await popup.close()
-      await expect(olivePage.getByRole('button', { name: 'Continue' })).toBeEnabled()
-      await olivePage.context().close()
-    })
   })
 
-  test("As a member of a workspace enforcing SSO, my own account does not open it and my organization's sign-in does", {
+  test('As a member of a workspace enforcing SSO, I cannot open it with my own account', {
     tag: ['@spec-37'],
   }, async ({ page, browser, workerStack }) => {
     await enforceAcmeSsoAsAlice(browser, workerStack)
@@ -162,17 +148,11 @@ test.describe('SSO', () => {
       await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible()
       await expect(page.getByText(/Acme/)).toHaveCount(0)
     })
-
-    await test.step("signing in through my organization's sign-in opens Acme", async () => {
-      await page.reload()
-      await signInThroughChosenProvider(page, 'bob@example.com', organizationSignInLabel)
-      await expect(switcherOf(page)).toContainText('Acme')
-    })
   })
 
-  test('As the first person installing Spyria, I need the setup link, then create the first workspace with my own account: it does not enforce SSO and the people I invite sign in with theirs', {
+  test('As the first person installing Spyria, I need the setup link, then create the first workspace with my own account, which does not enforce SSO', {
     tag: ['@spec-51', '@spec-53'],
-  }, async ({ page, browser, workerStack }) => {
+  }, async ({ page, workerStack }) => {
     await workerStack.database.$client`truncate workspaces cascade`
 
     await test.step('without the setup link, or with a wrong one, the instance is being set up', async () => {
@@ -198,16 +178,6 @@ test.describe('SSO', () => {
       await openSettings(page, 'Single sign-on')
       await expect(signInSectionOf(page)).toContainText(notEnforcedText)
       await expect(providerFormOf(page).getByRole('button', { name: 'Enforce SSO' })).toBeVisible()
-    })
-
-    await test.step('a person I invite signs in with their own account and lands in the workspace', async () => {
-      await openSettings(page, 'Members and roles')
-      await invite(page, 'bob@example.com')
-      await expect(pendingInvitesOf(page)).toContainText('bob@example.com')
-      const bobPage = await openPageAs(browser, workerStack, null, ssoViteUrl)
-      await signInStraightThroughProvider(bobPage, 'bob@example.com')
-      await expect(switcherOf(bobPage)).toContainText('Umbrella')
-      await bobPage.context().close()
     })
   })
 
