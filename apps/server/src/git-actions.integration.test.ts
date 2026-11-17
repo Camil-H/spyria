@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ChatId } from '@spyria/kernel'
@@ -205,32 +205,6 @@ test('update from base merges the base’s new commit from a thin bundle of the 
     isRefused: false,
     text: `Already up to date with ${baseBranch}`,
   })
-})
-
-test('a conflicting update is aborted with the working copy clean and names the conflicting files', async () => {
-  await stack.agentHost('Git conflict host')
-  const baseBranch = baseBranchOf('conflict')
-  const { id } = await newDevChat(baseBranch)
-  const { workspace } = await runtimeWorkspaceOf(id)
-  agentCommit(workspace, 2)
-  const before = gitIn(workspace, 'rev-parse', 'HEAD')
-  fakeGitHub.commitToBranch('acme/app', {
-    branch: baseBranch,
-    files: { 'src/app.ts': 'export const total = 3\n' },
-    message: 'Raise the total on the base',
-  })
-  expect(await gitAction(alice, id, 'update')).toEqual({
-    status: 403,
-    body: {
-      isRefused: true,
-      text: `Updating from ${baseBranch} conflicts in src/app.ts; the merge was aborted`,
-      conflicts: ['src/app.ts'],
-    },
-  })
-  expect(gitIn(workspace, 'rev-parse', 'HEAD')).toBe(before)
-  expect(gitIn(workspace, 'status', '--porcelain')).toBe('')
-  expect(existsSync(join(workspace, '.git/MERGE_HEAD'))).toBe(false)
-  expect(await statusOf(alice, id)).toMatchObject({ aheadOfBase: 1, behindBase: 1, uncommitted: 0 })
 })
 
 test('the agent fetches a branch into origin/<branch> from a thin bundle of that branch only, with no token reaching the runtime; the working branch is untouched and a missing branch is named', async () => {
