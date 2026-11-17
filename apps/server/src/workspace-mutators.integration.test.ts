@@ -90,14 +90,18 @@ test.each([
 })
 
 test('renameProject renames the project', async () => {
+  const projectId = `project-${crypto.randomUUID()}`
+  expect(
+    await resultOf(aliceInAcme, 'workspace.createProject', { workspaceId: acme, id: projectId, name: 'Onboarding' }),
+  ).toEqual(succeeded)
   expect(
     await resultOf(aliceInAcme, 'workspace.renameProject', {
       workspaceId: acme,
-      projectId: 'project-onboarding',
+      projectId,
       name: 'Starting',
     }),
   ).toEqual(succeeded)
-  expect(await projectRow('project-onboarding')).toMatchObject({ name: 'Starting' })
+  expect(await projectRow(projectId)).toMatchObject({ name: 'Starting' })
 })
 
 test('createWorkspace creates the workspace, the caller admin membership with their display name and the built-in chat roles, and no sign-in provider of its own', async () => {
