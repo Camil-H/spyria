@@ -88,7 +88,7 @@ test.describe('Messaging', () => {
     })
   })
 
-  test('As a member, I see the newest message of a long chat scrolled into view and load the earlier ones when scrolling up', async ({
+  test('As a member, I see the newest message of a long chat scrolled into view and go back to it from earlier messages', async ({
     page,
     workerStack,
   }) => {
@@ -134,38 +134,45 @@ test.describe('Messaging', () => {
       await expect(messageContaining(page, 'Filler 30')).toBeInViewport()
       await expect(goToLastMessage).toHaveCount(0)
     })
-
-    await test.step('opens on the newest 50 messages and loads the earlier ones when scrolling up', async () => {
-      await postMessages(workerStack, 'chat-welcome', numberedMessages('later-', 'Later ', 20))
-      await expect(messageContaining(page, 'Later 20')).toHaveCount(1)
-      await openChat(page, 'Standup')
-      await openChat(page, 'Welcome')
-      await expect(messageContaining(page, 'Later 20')).toBeInViewport()
-      await expect(messageItemsOf(page)).toHaveCount(50)
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(0)
-      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
-      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
-      await expect(messageContaining(page, 'Welcome to the team!')).toHaveCount(1)
-      await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
-    })
   })
 
-  test('As a member, I open a chat on its last week of messages and load the older ones when scrolling up', async ({
+  test('As a member, I open a chat on at most its newest 50 messages of the last week and load the older ones when scrolling up', async ({
     page,
     workerStack,
   }) => {
+    const showEarlierMessages = mainOf(page).getByRole('button', { name: 'Show earlier messages' })
+    const thisWeekMessages = numberedMessages('standup-recent-', 'This week ', 60)
     await postMessages(workerStack, 'chat-standup', [
       { id: 'standup-older-1', body: 'Last month 1', createdAt: '2026-09-01T00:01:00Z' },
       { id: 'standup-older-2', body: 'Last month 2', createdAt: '2026-09-01T00:02:00Z' },
-      ...numberedMessages('standup-recent-', 'This week ', 30),
+      ...thisWeekMessages.slice(0, 30),
     ])
-    await openChat(page, 'Standup')
-    await expect(messageContaining(page, 'This week 30')).toBeInViewport()
-    await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
-    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toBeVisible()
-    await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
-    await expect(messageContaining(page, 'Last month 1')).toHaveCount(1)
-    await expect(mainOf(page).getByRole('button', { name: 'Show earlier messages' })).toHaveCount(0)
+
+    await test.step('opens on the messages of the last week only', async () => {
+      await openChat(page, 'Standup')
+      await expect(messageContaining(page, 'This week 30')).toBeInViewport()
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(1)
+      await expect(messageContaining(page, 'Last month 1')).toHaveCount(0)
+      await expect(showEarlierMessages).toBeVisible()
+    })
+
+    await test.step('opens on the newest 50 messages when the last week holds more', async () => {
+      await postMessages(workerStack, 'chat-standup', thisWeekMessages.slice(30))
+      await expect(messageContaining(page, 'This week 60')).toHaveCount(1)
+      await openChat(page, 'Welcome')
+      await openChat(page, 'Standup')
+      await expect(messageContaining(page, 'This week 60')).toBeInViewport()
+      await expect(messageItemsOf(page)).toHaveCount(50)
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(0)
+      await expect(showEarlierMessages).toBeVisible()
+    })
+
+    await test.step('loads the earlier messages when scrolling up', async () => {
+      await messagesOf(page).evaluate((list) => list.parentElement?.scrollTo({ top: 0 }))
+      await expect(messageContaining(page, 'Standup at 10.')).toHaveCount(1)
+      await expect(messageContaining(page, 'Last month 1')).toHaveCount(1)
+      await expect(showEarlierMessages).toHaveCount(0)
+    })
   })
 
   test('As a member, a message refused for sending too fast shows why and I resend it', {
