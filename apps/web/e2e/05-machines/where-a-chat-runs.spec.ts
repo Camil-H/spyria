@@ -10,6 +10,7 @@ import {
   mainOf,
   messageContaining,
   messageItemsOf,
+  mutationGateOf,
   newChatAnswerOf,
   newRuntimeChat,
   openChat,
@@ -196,15 +197,13 @@ test.describe('Where a chat runs', () => {
     test('As a chat owner, my machine offline when I choose it starts nothing and Runs on stays changeable; once online my first prompt starts the session', {
       tag: ['@spec-25'],
     }, async ({ page, workerStack, machine }) => {
+      const gate = await mutationGateOf(page)
       await machine(machineOf)
-      const release = Promise.withResolvers<void>()
-      await page.route('**/api/mutate*', async (route) => {
-        if (route.request().postData()?.includes('updateChatRouting')) await release.promise
-        await route.continue()
-      })
+      gate.hold()
       const chatId = await newRuntimeChat(page, 'Offline when chosen', null)
+      await expect(chipOf(page, 'harness')).toHaveText('Claude Code · subscription')
       await machine({ online: 'false' })
-      release.resolve()
+      gate.release()
       await expect
         .poll(
           async () =>
