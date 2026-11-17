@@ -119,7 +119,11 @@ const run = (
   }
   const otherLayers = coveredLinesOfLcov(otherLcovFiles.map((file) => readFileSync(file, 'utf8')).join('\n'))
   const baselineFile = baselineFileOf(layer)
-  const baseline = existsSync(baselineFile) ? parseCoveredLines(readFileSync(baselineFile, 'utf8')) : new Map()
+  if (!existsSync(baselineFile))
+    throw new Error(
+      `No ${layer} coverage baseline at ${baselineFile}: save one with bun scripts/test-coverage.ts save ${layer} <lcov.info>`,
+    )
+  const baseline = parseCoveredLines(readFileSync(baselineFile, 'utf8'))
   const { lost, moved, areas } = compareCoverage(baseline, current, otherLayers)
   console.log(`${layer} covered source lines, baseline → now:`)
   for (const { area, baseline: before, current: after } of areas)

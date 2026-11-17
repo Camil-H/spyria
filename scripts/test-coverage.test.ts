@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { areaOf, compareCoverage, coveredLinesOfLcov, formatCoveredLines, parseCoveredLines } from './test-coverage.ts'
 
 const lcov = [
@@ -50,4 +53,25 @@ test('an area is a server folder, the server root, or a workspace package', () =
   expect(areaOf('apps/server/src/app.ts')).toBe('apps/server/src')
   expect(areaOf('packages/conversation/src/domain/message.ts')).toBe('packages/conversation')
   expect(areaOf('apps/agent/browser/network-policy.mjs')).toBe('apps/agent')
+})
+
+test('compare without a saved baseline fails, naming the missing baseline, rather than comparing to nothing', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'test-coverage-'))
+  try {
+    const lcovFile = join(directory, 'lcov.info')
+    writeFileSync(lcovFile, lcov)
+    const layer = `missing-${crypto.randomUUID()}`
+    const compared = Bun.spawnSync(
+      ['bun', new URL('./test-coverage.ts', import.meta.url).pathname, 'compare', layer, lcovFile],
+      {
+        stderr: 'pipe',
+        stdout: 'pipe',
+      },
+    )
+    expect(compared.exitCode).not.toBe(0)
+    expect(compared.stderr.toString()).toContain(`No ${layer} coverage baseline at `)
+    expect(compared.stdout.toString()).toBe('')
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
