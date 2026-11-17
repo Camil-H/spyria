@@ -195,6 +195,29 @@ const gitBytes = async (cwd: string, args: string[], env: Record<string, string>
   return { isDone: (await child.exited) === 0, bytes, errors }
 }
 
+const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
+  Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
+
+const commitsLeftOutOf = async (
+  root: string,
+  tip: string,
+  prerequisite: string | null,
+  env: Record<string, string>,
+) => {
+  const fetchedWithoutTip = await git(
+    root,
+    ['for-each-ref', `--no-contains=${tip}`, '--format=%(objectname)', 'refs/remotes/origin', baseRef, pushedRef],
+    env,
+  )
+  const isPrerequisiteWithoutTip =
+    prerequisite !== null &&
+    (await isCommit(root, prerequisite, env)) &&
+    !(await gitBytes(root, ['merge-base', '--is-ancestor', tip, prerequisite], env)).isDone
+  return [
+    ...new Set([...fetchedWithoutTip.split('\n').filter(Boolean), ...(isPrerequisiteWithoutTip ? [prerequisite] : [])]),
+  ]
+}
+
 export const bundleOf = async (
   root: string,
   { branch, prerequisite }: { branch?: unknown; prerequisite?: unknown },
@@ -206,11 +229,10 @@ export const bundleOf = async (
   const tip = (await git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`], env)).trim()
   if (!tip) return { failure: `The branch ${branch} has no commit in the runtime` }
   if (tip === prerequisite) return { bundle: '' }
-  const isAncestor =
-    isPrerequisite && (await gitBytes(root, ['merge-base', '--is-ancestor', prerequisite, tip], env)).isDone
+  const leftOut = await commitsLeftOutOf(root, tip, isPrerequisite ? prerequisite : null, env)
   const bundled = await gitBytes(
     root,
-    ['bundle', 'create', '-', `refs/heads/${branch}`, ...(isAncestor ? [`^${prerequisite}`] : [])],
+    ['bundle', 'create', '-', `refs/heads/${branch}`, ...leftOut.map((commit) => `^${commit}`)],
     env,
   )
   if (!bundled.isDone) return { failure: `The branch could not be bundled: ${bundled.errors.trim()}` }
@@ -281,9 +303,6 @@ export const commitOf = async (
   if (!committed.isDone) return { failure: `The commit failed: ${committed.errors.trim()}` }
   return { sha: (await git(root, ['rev-parse', 'HEAD'], env)).trim() }
 }
-
-const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
-  Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
 
 type FetchedBranch = { branch: string; head: string; bundle: string }
 
