@@ -5,6 +5,9 @@ mock_provider "aws" {
   mock_data "aws_region" {
     defaults = { region = "eu-west-1" }
   }
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
   mock_data "aws_iam_policy_document" {
     defaults = { json = "{}" }
   }
@@ -91,6 +94,14 @@ run "the_control_plane_runs_one_server_behind_the_load_balancer_and_keeps_the_re
   assert {
     condition     = aws_ecs_task_definition.zero.ephemeral_storage[0].size_in_gib == 40 && strcontains(aws_ecs_task_definition.zero.container_definitions, "\"containerPath\":\"/data\"")
     error_message = "zero-cache keeps its SQLite replica on the task's local storage, which network file systems cannot hold"
+  }
+  assert {
+    condition     = one([for container in jsondecode(aws_ecs_task_definition.zero.container_definitions) : container.essential if container.name == "wait-for-database"]) == false && one([for container in jsondecode(aws_ecs_task_definition.zero.container_definitions) : container.dependsOn if container.name == "zero-cache"]) == [{ containerName = "wait-for-database", condition = "SUCCESS" }] && strcontains(join(" ", one([for container in jsondecode(aws_ecs_task_definition.zero.container_definitions) : container.command if container.name == "wait-for-database"])), "pg_publication where pubname = 'spyria_zero'")
+    error_message = "zero-cache starts only once the migrations created its publication and its role may replicate, since its service starts apart from the server's"
+  }
+  assert {
+    condition     = aws_iam_role_policy_attachment.execution.policy_arn == "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+    error_message = "The execution policy is named in the partition the module runs in"
   }
   assert {
     condition     = strcontains(aws_ecs_task_definition.server.container_definitions, "ghcr.io/camil-h/spyria-server:1.2.0")

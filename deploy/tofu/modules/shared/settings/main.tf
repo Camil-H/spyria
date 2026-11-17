@@ -70,6 +70,8 @@ locals {
     max_open_conns = 10
     max_idle_conns = 2
   }
+  zero_publication = "spyria_zero"
+  zero_ready_query = "select 1 from pg_publication where pubname = '${local.zero_publication}' and exists (select 1 from pg_roles member_role where member_role.rolname = current_user and (member_role.rolreplication or exists (select 1 from pg_auth_members membership join pg_roles granted_role on granted_role.oid = membership.roleid where membership.member = member_role.oid and granted_role.rolname = 'rds_replication')))"
 }
 
 output "origin_url" { value = local.origin }
@@ -125,7 +127,7 @@ output "migrate_command" { value = ["bun", "run", "--cwd", "packages/db", "migra
 output "zero_environment" {
   value = {
     ZERO_APP_ID             = "spyria"
-    ZERO_APP_PUBLICATIONS   = "spyria_zero"
+    ZERO_APP_PUBLICATIONS   = local.zero_publication
     ZERO_UPSTREAM_MAX_CONNS = "20"
     ZERO_CVR_MAX_CONNS      = "30"
     ZERO_CHANGE_MAX_CONNS   = "5"
@@ -210,6 +212,22 @@ output "gateway_config_script" {
     await sql.end()
     Bun.serve({ port: 9000, fetch: () => new Response('configured') })
   SCRIPT
+}
+
+output "zero_wait_command" {
+  description = "Waits up to 10 minutes until the migrations created zero-cache's publication and its role may replicate, for the clouds that start zero-cache apart from the server"
+  value = [
+    "sh",
+    "-ec",
+    join("\n", [
+      "for attempt in $(seq 1 300); do",
+      "  psql \"$ZERO_UPSTREAM_DB\" -tAc \"${local.zero_ready_query}\" 2>/dev/null | grep -q 1 && exit 0",
+      "  sleep 2",
+      "done",
+      "echo 'zero-cache waited 10 minutes for the publication ${local.zero_publication} and the replication right' >&2",
+      "exit 1",
+    ]),
+  ]
 }
 
 output "server_command" {

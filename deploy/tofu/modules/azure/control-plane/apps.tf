@@ -146,6 +146,17 @@ resource "azurerm_container_app" "zero" {
       name         = "replica"
       storage_type = "EmptyDir"
     }
+    init_container {
+      name    = "wait-for-database"
+      image   = module.settings.postgres_client_image
+      command = module.settings.zero_wait_command
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      env {
+        name        = "ZERO_UPSTREAM_DB"
+        secret_name = local.vault_secret_of["ZERO_UPSTREAM_DB"]
+      }
+    }
     container {
       name   = "zero-cache"
       image  = module.settings.zero_image

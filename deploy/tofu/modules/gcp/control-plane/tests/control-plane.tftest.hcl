@@ -42,8 +42,8 @@ run "the_control_plane_runs_one_always_allocated_server_behind_the_load_balancer
     error_message = "Postgres 18 with logical decoding, on a private address alone"
   }
   assert {
-    condition     = tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "gateway"]).depends_on) == tolist(["configure"]) && tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).depends_on) == tolist(["server"])
-    error_message = "The gateway starts once its configuration and database exist, and zero-cache once the server has migrated the database"
+    condition     = tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "gateway"]).depends_on) == tolist(["configure"]) && tolist(one([for container in google_cloud_run_v2_service.server.template[0].containers : container if container.name == "zero-cache"]).depends_on) == tolist(["server", "configure"])
+    error_message = "The gateway starts once its configuration and database exist, and zero-cache once the server has migrated the database and configure has granted replication"
   }
   assert {
     condition     = google_cloud_run_v2_service.server.template[0].containers[0].image == "europe-west1-docker.pkg.dev/project/spyria-ghcr/camil-h/spyria-server:1.2.0" && google_artifact_registry_repository.ghcr.mode == "REMOTE_REPOSITORY"
