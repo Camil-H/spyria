@@ -1,6 +1,5 @@
 import { openPageAs } from '../stack'
 import {
-  answerNewChannel,
   chatAction,
   chatLinkOf,
   composerOf,
@@ -8,6 +7,7 @@ import {
   expectMembers,
   mainOf,
   mutationGateOf,
+  newChannel,
   newChatAnswerOf,
   newChatDialogOf,
   type Page,
@@ -18,13 +18,6 @@ import {
   toastOf,
 } from './fixtures'
 
-const newChannel = async (page: Page, name: string, visibility: 'Public' | 'Private') => {
-  await page.getByRole('button', { name: 'New chat' }).click()
-  await answerNewChannel(newChatDialogOf(page), visibility === 'Public' ? 'public' : 'private')
-  await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill(name)
-  await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
-  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
-}
 const browseOf = (page: Page) => page.getByRole('dialog', { name: 'Browse public chats' })
 const browsedChatOf = (page: Page, name: string) => browseOf(page).getByRole('listitem', { name })
 const openBrowse = async (page: Page) => {
@@ -183,12 +176,7 @@ test.describe('Channels', () => {
     tag: ['@spec-42'],
   }, async ({ page, browser, workerStack }) => {
     await newChannel(page, 'Lounge', 'Public')
-    await page.getByRole('button', { name: 'New chat' }).click()
-    await answerNewChannel(newChatDialogOf(page), 'public')
-    await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill('Invoices')
-    await newChatDialogOf(page).getByLabel('Project').selectOption({ label: 'Billing' })
-    await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
-    await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible()
+    await newChannel(page, 'Invoices', 'Public', 'Billing')
 
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openBrowse(bobPage)

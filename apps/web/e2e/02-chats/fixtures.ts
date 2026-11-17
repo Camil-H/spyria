@@ -1,5 +1,15 @@
 import type { Locator, Page } from '@playwright/test'
-import { boundingBoxOf, chatLinkOf, expect, messageActionOf, messageContaining, sidebarOf } from '../fixtures.ts'
+import {
+  answerNewChannel,
+  boundingBoxOf,
+  chatLinkOf,
+  expect,
+  mainOf,
+  messageActionOf,
+  messageContaining,
+  newChatDialogOf,
+  sidebarOf,
+} from '../fixtures.ts'
 import type { WorkerStack } from '../stack.ts'
 
 export * from '../fixtures.ts'
@@ -11,6 +21,14 @@ export const draftIconOf = (page: Page, chatName: string) =>
 export const chatMenuButtonOf = (page: Page, chatName: string) =>
   page.getByRole('button', { name: `Chat actions for ${chatName}` })
 
+export const newChannel = async (page: Page, name: string, visibility: 'Public' | 'Private', projectName?: string) => {
+  await page.getByRole('button', { name: 'New chat' }).click()
+  await answerNewChannel(newChatDialogOf(page), visibility === 'Public' ? 'public' : 'private')
+  await newChatDialogOf(page).getByRole('textbox', { name: 'Chat name' }).fill(name)
+  if (projectName) await newChatDialogOf(page).getByLabel('Project').selectOption({ label: projectName })
+  await newChatDialogOf(page).getByRole('button', { name: 'Confirm' }).click()
+  await expect(mainOf(page).getByRole('heading', { level: 1, name })).toBeVisible()
+}
 export const dragBy = async (page: Page, handle: Locator, horizontalOffset: number) => {
   const handleBox = await boundingBoxOf(handle)
   const handleCenterX = handleBox.x + handleBox.width / 2

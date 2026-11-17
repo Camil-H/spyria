@@ -8,6 +8,7 @@ import {
   expect,
   looseChatsOf,
   mainOf,
+  newChannel,
   newChatAnswerOf,
   newChatDialogOf,
   type Page,
@@ -251,11 +252,7 @@ test.describe('Organize', () => {
     })
 
     await test.step('creates a channel inside a project and selects it', async () => {
-      await page.getByRole('button', { name: 'New chat' }).click()
-      await answerNewChannel(newChatDialogOf(page), 'public')
-      await page.getByRole('textbox', { name: 'Chat name' }).fill('Planning')
-      await page.getByRole('combobox', { name: 'Project' }).selectOption('Billing')
-      await page.getByRole('button', { name: 'Confirm' }).click()
+      await newChannel(page, 'Planning', 'Public', 'Billing')
       await expect(chatRowIn(projectGroupOf(page, 'Billing'), 'Planning')).toBeVisible()
       await expect(mainOf(page).getByRole('heading', { level: 1, name: 'Planning' })).toBeVisible()
       await expect(mainOf(page).getByRole('img', { name: 'Channel' })).toBeVisible()
