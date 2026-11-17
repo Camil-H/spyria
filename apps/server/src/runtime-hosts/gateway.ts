@@ -293,7 +293,8 @@ export const createRuntimeHostGateway = ({
 
   const recordRuntimeMissing = async (connection: Connection, frame: Frame) => {
     const { identified } = connection
-    if (!identified || typeof frame.missingRuntimeId !== 'string') return
+    const isFailure = frame.type === 'http_res' || frame.type === 'ws_close'
+    if (!identified || !isFailure || typeof frame.missingRuntimeId !== 'string') return
     await identified.handlers.runtimeMissing(identified.host, frame.missingRuntimeId).catch((error) =>
       log.error({
         event: 'runtime_host.runtime_missing_unrecorded',
