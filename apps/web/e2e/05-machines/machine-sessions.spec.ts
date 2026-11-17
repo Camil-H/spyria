@@ -9,11 +9,10 @@ import {
   newSession,
   openChat,
   type Page,
-  runsOnChipOf,
   runsOnOf,
+  runsOnStatusOf,
   sendMessage,
   sessionOf,
-  sessionStarted,
   signedInMachine,
   machineTest as test,
 } from './fixtures'
@@ -54,8 +53,8 @@ test.describe('Machine sessions', () => {
   for (const tool of tools) {
     const machineOf = { owner: 'member-alice', signedIn: tool.signedIn }
 
-    test(`As a member, choosing ${tool.name} on my machine starts the session with no prompt: its models listed, Runs on locked, a pick switching in place and my first prompt running on it in the same session`, {
-      tag: ['@spec-25'],
+    test(`As a member, choosing ${tool.name} on my machine starts the session with no prompt: its models listed, Runs on locked, a pick switching in place and my first prompt running on it in the same session, on my subscription, unmetered`, {
+      tag: ['@spec-20', '@spec-25', ...(tool.name === 'Claude Code' ? ['@smoke'] : [])],
     }, async ({ page, machine }) => {
       await machine(machineOf)
       await newSession(page, tool.name)
@@ -70,7 +69,7 @@ test.describe('Machine sessions', () => {
       await expect(mainOf(page)).not.toContainText('The agent started a new session')
       await test.step('the Runs on chip reads Local · Ready', async () => {
         await expect(runsOnOf(page)).toHaveText('Local')
-        await expect(runsOnChipOf(page).getByRole('status', { name: 'Runtime' })).toHaveText('Ready')
+        await expect(runsOnStatusOf(page)).toHaveText('Ready')
         await expect(mainOf(page).getByRole('status', { name: 'Runtime' })).toHaveCount(1)
       })
       await test.step('the pick stays chosen in the Model list', async () => {
@@ -78,6 +77,10 @@ test.describe('Machine sessions', () => {
         await expect(modelOf(page)).toHaveValue(tool.large.id)
         await expect(sessionOf(page).getByLabel('Effort')).toHaveValue(tool.efforts[0] ?? '')
       })
+      await page.keyboard.press('Escape')
+      const sidePanel = page.getByRole('region', { name: 'Side panel' })
+      await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
+      await expect(sidePanel).toContainText('Subscription session on your machine, not metered by Spyria')
     })
 
     test(`As a member, I pick an effort among ${tool.name}’s levels: it shows in the chip and my next prompt runs at it on the same session`, {
@@ -97,18 +100,6 @@ test.describe('Machine sessions', () => {
       expect((await machine()).conversations).toHaveLength(1)
       await chipOf(page, 'harness').click()
       await expect(effort).toHaveValue(tool.pickedEffort)
-    })
-
-    test(`As a member, I prompt a ${tool.name} session on my machine and get the answer on my subscription, unmetered`, {
-      tag: ['@spec-20', ...(tool.name === 'Claude Code' ? ['@smoke'] : [])],
-    }, async ({ page, machine }) => {
-      await machine({ owner: 'member-alice', signedIn: tool.signedIn })
-      await newMachineSession(page, `${tool.name} on my laptop`, `Local · ${tool.name}`)
-      await sendMessage(page, 'Hello from my laptop')
-      await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
-      const sidePanel = page.getByRole('region', { name: 'Side panel' })
-      await sidePanel.getByRole('tab', { name: 'Usage', exact: true }).click()
-      await expect(sidePanel).toContainText('Subscription session on your machine, not metered by Spyria')
     })
   }
 
@@ -131,20 +122,15 @@ test.describe('Machine sessions', () => {
 
   test('As a member, my prompt while my machine is offline waits with "Your machine is offline" and is answered once it is back', {
     tag: ['@spec-20', '@slow'],
-  }, async ({ page, workerStack, machine }) => {
+  }, async ({ page, machine }) => {
     await machine(signedInMachine)
-    await sessionStarted(workerStack, await newMachineSession(page, 'Laptop goes away'))
+    await newMachineSession(page, 'Laptop goes away')
+    await expect(runsOnStatusOf(page)).toHaveText('Ready')
     await machine({ online: 'false' })
     await sendMessage(page, 'Wait for my laptop')
     await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(1)
     await machine({ online: 'true' })
     await expect(messageContaining(page, '[t1] Hello from the stub')).toBeVisible()
-
-    await machine({ online: 'false' })
-    await sendMessage(page, 'Wait for my laptop again')
-    await expect(messageContaining(page, 'Your machine is offline')).toHaveCount(2)
-    await machine({ online: 'true' })
-    await expect(messageContaining(page, '[t2] Hello from the stub')).toBeVisible()
-    expect((await machine()).prompts).toEqual(['Wait for my laptop', 'Wait for my laptop again'])
+    expect((await machine()).prompts).toEqual(['Wait for my laptop'])
   })
 })

@@ -12,8 +12,8 @@ import {
   openProfile,
   openSettings,
   type Page,
+  runsOnStatusOf,
   sendMessage,
-  sessionStarted,
   setUpButtonOf,
   hostTest as test,
   urlOf,
@@ -205,12 +205,10 @@ test.describe('My machine', () => {
 
     test(`As a member whose machine is signed out of ${tool.name}, I get its sign-in notice on a prompt that reaches no agent`, {
       tag: ['@spec-20'],
-    }, async ({ page, workerStack, machine }) => {
+    }, async ({ page, machine }) => {
       await machine({ owner: 'member-alice', signedIn: tool.login })
-      await sessionStarted(
-        workerStack,
-        await newMachineSession(page, `${tool.name} signed out`, `Local · ${tool.name}`),
-      )
+      await newMachineSession(page, `${tool.name} signed out`, `Local · ${tool.name}`)
+      await expect(runsOnStatusOf(page)).toHaveText('Ready')
       await machine({ signedIn: '' })
       await sendMessage(page, 'Answer without a sign-in')
       await expect(
