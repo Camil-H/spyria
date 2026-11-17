@@ -3,6 +3,7 @@ import {
   addParticipant,
   chipOf,
   expect,
+  expectRunsOnLockedLocal,
   mainOf,
   messageContaining,
   newMachineSession,
@@ -39,10 +40,6 @@ test.describe('Machine sessions', () => {
   ]
 
   const modelOf = (page: Page) => sessionOf(page).getByRole('combobox', { name: 'Model' })
-  const expectRunsOnLocked = async (page: Page) => {
-    await expect(runsOnOf(page)).toBeDisabled()
-    await expect(runsOnOf(page)).toHaveText('Local')
-  }
 
   test.use({ runtimeHost: false })
 
@@ -60,7 +57,7 @@ test.describe('Machine sessions', () => {
       await newSession(page, tool.name)
       await chipOf(page, 'harness').click()
       await expect(modelOf(page).getByRole('option')).toHaveText(tool.models)
-      await expectRunsOnLocked(page)
+      await expectRunsOnLockedLocal(page)
       await modelOf(page).selectOption({ label: tool.large.label })
       await expect(chipOf(page, 'harness')).toHaveText(`${tool.name} · ${tool.large.label}`)
       await page.keyboard.press('Escape')

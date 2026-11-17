@@ -11,11 +11,21 @@ import {
   newRuntimeChat,
   openProfile,
   runsOnChipOf,
+  runsOnOf,
+  sessionOf,
 } from '../fixtures.ts'
 import { viteUrl } from '../stack-ports.ts'
 
 export * from '../fixtures.ts'
 
+export const openSession = async (page: Page, chipKind: Parameters<typeof chipOf>[1] = 'routed') => {
+  if (!(await sessionOf(page).isVisible())) await chipOf(page, chipKind).click()
+  await expect(sessionOf(page)).toBeVisible()
+}
+export const expectRunsOnLockedLocal = async (page: Page) => {
+  await expect(runsOnOf(page)).toBeDisabled()
+  await expect(runsOnOf(page)).toHaveText('Local')
+}
 export const runsOnStatusOf = (page: Page) => runsOnChipOf(page).getByRole('status', { name: 'Runtime' })
 export const setUpButtonOf = (page: Page, toolName: string) =>
   machineToolOf(page, toolName).getByRole('button', { name: `Set up ${toolName}` })

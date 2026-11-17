@@ -5,6 +5,7 @@ import {
   chipOf,
   chooseRunsOn,
   expect,
+  expectRunsOnLockedLocal,
   machineSectionOf,
   mainOf,
   messageContaining,
@@ -13,6 +14,7 @@ import {
   newRuntimeChat,
   openChat,
   openProfile,
+  openSession,
   type Page,
   runsOnChoiceOf,
   runsOnOf,
@@ -35,15 +37,7 @@ test.describe('Where a chat runs', () => {
     await expect(runsOnChoiceOf(page).getByRole('radio')).toHaveCount(names.length)
     for (const name of names) await expect(runsOnChoiceOf(page).getByRole('radio', { name })).not.toBeChecked()
   }
-  const openSession = async (page: Page) => {
-    if (!(await sessionOf(page).isVisible())) await chipOf(page, 'any').click()
-    await expect(sessionOf(page)).toBeVisible()
-  }
   const machineOf = { owner: 'member-alice', signedIn: 'claude-code' }
-  const expectRunsOnLockedLocal = async (page: Page) => {
-    await expect(runsOnOf(page)).toBeDisabled()
-    await expect(runsOnOf(page)).toHaveText('Local')
-  }
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
@@ -54,7 +48,7 @@ test.describe('Where a chat runs', () => {
   }, async ({ page, machine, agentScript }) => {
     await machine(signedInMachine)
     const chatId = await newRuntimeChat(page, 'Left on Spyria runtime')
-    await openSession(page)
+    await openSession(page, 'any')
     await expect(runsOnOf(page)).toHaveValue('runtime')
     await page.keyboard.press('Escape')
     await agentScript(chatId, { text: 'Answered on a Spyria runtime.' })
@@ -70,17 +64,17 @@ test.describe('Where a chat runs', () => {
     await addParticipant(workerStack, await newRuntimeChat(page, 'Only Alice chooses'), 'member-bob', 'prompter')
     const bobPage = await openPageAs(browser, workerStack, 'member-bob')
     await openChat(bobPage, 'Only Alice chooses')
-    await openSession(bobPage)
+    await openSession(bobPage, 'any')
     await expectRunsOnLocked(bobPage)
     await bobPage.context().close()
 
-    await openSession(page)
+    await openSession(page, 'any')
     await runsOnOf(page).selectOption({ label: claudeOnMachine })
     await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
     await page.keyboard.press('Escape')
     await sendMessage(page, 'Lock it')
     await expect(messageContaining(page, 'Hello from the stub')).toBeVisible()
-    await openSession(page)
+    await openSession(page, 'any')
     await expect(runsOnOf(page)).toBeDisabled()
     await expect(runsOnOf(page)).toHaveValue('claude-code')
   })
@@ -118,7 +112,7 @@ test.describe('Where a chat runs', () => {
 
   test('As a member, I close the open session chip by clicking outside it', { tag: ['@spec-24'] }, async ({ page }) => {
     await newRuntimeChat(page, 'Click away')
-    await openSession(page)
+    await openSession(page, 'any')
     await mainOf(page).getByRole('heading', { level: 1, name: 'Click away' }).click()
     await expect(sessionOf(page)).toHaveCount(0)
   })
@@ -154,7 +148,7 @@ test.describe('Where a chat runs', () => {
     ])
       await test.step(`a machine ${step} offers ${options.join(' and ') || 'Spyria runtime only'}`, async () => {
         await machine(query)
-        await openSession(page)
+        await openSession(page, 'any')
         await expect(runsOnOf(page).getByRole('option')).toHaveText(['Spyria runtime', ...options])
         if (options.length) await expect(runsOnOf(page)).toBeEnabled()
         else await expectRunsOnLocked(page)
@@ -168,7 +162,7 @@ test.describe('Where a chat runs', () => {
       await page.getByRole('dialog', { name: 'Remove my machine' }).getByRole('button', { name: 'Remove' }).click()
       await expect(machineSection.getByRole('button', { name: 'Add my machine' })).toBeVisible()
       await openChat(page, 'Follows the machine')
-      await openSession(page)
+      await openSession(page, 'any')
       await expectRunsOnLocked(page)
     })
   })
@@ -186,7 +180,7 @@ test.describe('Where a chat runs', () => {
       await expect(messageContaining(page, 'No runtime host is available')).toHaveCount(1)
       await expect(page.getByRole('status', { name: 'Agent is working' })).toHaveCount(0)
       await machine({ online: 'true' })
-      await openSession(page)
+      await openSession(page, 'any')
       await runsOnOf(page).selectOption({ label: claudeOnMachine })
       await expect(chipOf(page, 'any')).toHaveText('Claude Code · subscription')
       await page.keyboard.press('Escape')
