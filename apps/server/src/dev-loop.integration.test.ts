@@ -104,17 +104,21 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
   expect(await setSetupCommands(bob, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
     failedWith('Your workspace role does not allow this: Manage runtime hosts and local sessions'),
   )
-  expect(
-    await setSetupCommands(alice, [
-      { repository: null, command: 'echo default > set-up.txt' },
-      { repository: 'acme/app', command: 'echo set up > set-up.txt' },
-    ]),
-  ).toEqual(succeeded)
   const { launches } = await stack.agentHost('Quality gates host', { routesModelCalls: true })
   await connectGitHub(alice)
   const { id, branch } = await newDevChat()
-  await readyChat(id)
-  expect(launches().map((launch) => launch.repository?.setup_command)).toContain('echo set up > set-up.txt')
+  try {
+    expect(
+      await setSetupCommands(alice, [
+        { repository: null, command: 'echo default > set-up.txt' },
+        { repository: 'acme/app', command: 'echo set up > set-up.txt' },
+      ]),
+    ).toEqual(succeeded)
+    await readyChat(id)
+    expect(launches().map((launch) => launch.repository?.setup_command)).toContain('echo set up > set-up.txt')
+  } finally {
+    expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  }
   stack.setFakeLlmScript({
     steps: [committing('export const total = 3', 'Change the totals'), finish],
     text: 'Done.',
@@ -144,7 +148,7 @@ test('As a chat owner whose agent says its work is done, the repository pipeline
 
   await stack.prompt(id, 'Fix the totals')
   await loopStateIs(id, 'waiting_for_ci')
-  const opened = fakeGitHub.pullRequests.at(-1)
+  const opened = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)
   const firstHead = String((await loopOf(id))?.step.pushedHead)
   expect(opened).toMatchObject({ title: 'Fix totals', body: 'The totals add up again' })
   expect((await loopOf(id))?.step).toMatchObject({
@@ -523,7 +527,7 @@ test('As a chat owner whose base moved under the branch, the quality gates send 
   expect((await loopOf(id))?.step.pushedHead).toBe(mergedHead)
   pushCheckRun(mergedHead, 'unit', 'success')
   await loopStateIs(id, 'done')
-  const number = fakeGitHub.pullRequests.at(-1)?.number
+  const number = fakeGitHub.pullRequests.findLast(({ head }) => head === branch)?.number
   expect((await loopOf(id))?.step).toMatchObject({
     rounds: [0, 1],
     outcome: `Ready for your review on pull request #${number}: CI passed`,
@@ -534,6 +538,7 @@ test('As a chat owner whose base moved under the branch, the quality gates send 
 })
 
 test('As a chat owner, a conflict with the base hands over at once when CI may not be fixed, and when GitHub refuses a push while the open pull request conflicts, without changing the branch', async () => {
+  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
   expect(await setDevLoop(alice, settingsWith([{ kind: 'pull_request' }, { kind: 'ci', fixes: 0 }]))).toEqual(succeeded)
   const { relay } = await stack.agentHost('Strict conflicts host', { routesModelCalls: true })
   const mergesOf = () => relay.requests.filter(({ path }) => path === '/api/workspace/merge').length
@@ -606,11 +611,15 @@ test('As a chat owner whose pull request GitHub still says conflicts, the gates 
   })
   expect(await loopPromptsOf(stale.id)).toEqual([])
 
-  expect(await setSetupCommands(alice, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
-    succeeded,
-  )
   const dirty = await newDevChat()
-  await readyChat(dirty.id)
+  try {
+    expect(await setSetupCommands(alice, [{ repository: 'acme/app', command: 'echo set up > set-up.txt' }])).toEqual(
+      succeeded,
+    )
+    await readyChat(dirty.id)
+  } finally {
+    expect(await setSetupCommands(alice, [])).toEqual(succeeded)
+  }
   stack.setFakeLlmScript({ steps: [committing('export const total = 11', 'Change the totals'), finish], text: 'Done.' })
   await stack.prompt(dirty.id, 'Fix the totals')
   await loopStateIs(dirty.id, 'waiting_for_ci')
@@ -619,7 +628,6 @@ test('As a chat owner whose pull request GitHub still says conflicts, the gates 
   expect((await loopOf(dirty.id))?.step.outcome).toBe(
     'The branch conflicts with main and could not be updated from it (Commit the uncommitted changes before updating from base): over to you',
   )
-  expect(await setSetupCommands(alice, [])).toEqual(succeeded)
 })
 
 test('As a chat owner, the gates check they still run before updating a conflicting branch, say when the merged branch cannot be read, and hand over on the last attempt of an update that keeps failing', async () => {
@@ -655,13 +663,16 @@ test('As a chat owner, the gates check they still run before updating a conflict
       ).length > 0,
   )
   markConflicting(held.branch)
-  expect(await setDevLoop(alice, settingsWith(steps, false))).toEqual(succeeded)
-  await database.$client`
-    update jobs set run_at = now() where type = 'dev_loop.ci' and state = 'queued' and payload->>'loopId' = ${held.loopId}`
-  await loopStateIs(held.id, 'stopped')
-  expect(await outcomeOf(held.id)).toBe('Stopped: quality gates were turned off for this repository')
-  expect(held.mergesSent()).toBe(0)
-  expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+  try {
+    expect(await setDevLoop(alice, settingsWith(steps, false))).toEqual(succeeded)
+    await database.$client`
+      update jobs set run_at = now() where type = 'dev_loop.ci' and state = 'queued' and payload->>'loopId' = ${held.loopId}`
+    await loopStateIs(held.id, 'stopped')
+    expect(await outcomeOf(held.id)).toBe('Stopped: quality gates were turned off for this repository')
+    expect(held.mergesSent()).toBe(0)
+  } finally {
+    expect(await setDevLoop(alice, settingsWith(steps))).toEqual(succeeded)
+  }
 
   const unread = await waitingChatOn('Unread head host', 13)
   fakeGitHub.commitToBranch('acme/app', {
