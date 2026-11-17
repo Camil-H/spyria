@@ -94,7 +94,7 @@ test.describe('GitHub setup', () => {
     await expect(section.getByText(`${appOrigin}/api/github/webhooks`, { exact: true })).toBeVisible()
   })
 
-  test('As a member without the Connect GitHub permission, I see no GitHub settings', {
+  test('As a member without the Connect GitHub permission, I see no GitHub settings, and an AI chat without GitHub access asks me for no repository', {
     tag: ['@spec-39'],
   }, async ({ page, browser, workerStack }) => {
     await configureGitHubApp(page)
@@ -102,6 +102,11 @@ test.describe('GitHub setup', () => {
     await bobPage.goto('/w/workspace-acme/settings/github')
     await expect(mainOf(bobPage).getByText('Your workspace role does not give access to this page')).toBeVisible()
     await expect(githubSectionOf(bobPage)).toHaveCount(0)
+    await bobPage.getByRole('button', { name: 'New chat' }).click()
+    const dialog = newChatDialogOf(bobPage)
+    await answerNewAiChat(dialog)
+    await expect(dialog.getByLabel('Repository')).toHaveCount(0)
+    await expect(dialog.getByLabel('Base branch')).toHaveCount(0)
     await bobPage.context().close()
   })
 
