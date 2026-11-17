@@ -198,21 +198,24 @@ const gitBytes = async (cwd: string, args: string[], env: Record<string, string>
 const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
   Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
 
-const commitsOnGitHubOf = async (root: string, prerequisite: string | null, env: Record<string, string>) => {
-  const fetched = await git(
+const commitsLeftOutOf = async (
+  root: string,
+  tip: string,
+  prerequisite: string | null,
+  env: Record<string, string>,
+) => {
+  const fetchedWithoutTip = await git(
     root,
-    ['for-each-ref', '--format=%(objectname)', 'refs/remotes/origin', baseRef, pushedRef],
+    ['for-each-ref', `--no-contains=${tip}`, '--format=%(objectname)', 'refs/remotes/origin', baseRef, pushedRef],
     env,
   )
-  const isKnown = prerequisite !== null && (await isCommit(root, prerequisite, env))
-  return [...new Set([...fetched.split('\n').filter(Boolean), ...(isKnown ? [prerequisite] : [])])]
-}
-
-const commitsWithoutTipOf = async (root: string, tip: string, commits: string[], env: Record<string, string>) => {
-  const containsTip = await Promise.all(
-    commits.map(async (commit) => (await gitBytes(root, ['merge-base', '--is-ancestor', tip, commit], env)).isDone),
-  )
-  return commits.filter((_, index) => !containsTip[index])
+  const isPrerequisiteWithoutTip =
+    prerequisite !== null &&
+    (await isCommit(root, prerequisite, env)) &&
+    !(await gitBytes(root, ['merge-base', '--is-ancestor', tip, prerequisite], env)).isDone
+  return [
+    ...new Set([...fetchedWithoutTip.split('\n').filter(Boolean), ...(isPrerequisiteWithoutTip ? [prerequisite] : [])]),
+  ]
 }
 
 export const bundleOf = async (
@@ -226,11 +229,10 @@ export const bundleOf = async (
   const tip = (await git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`], env)).trim()
   if (!tip) return { failure: `The branch ${branch} has no commit in the runtime` }
   if (tip === prerequisite) return { bundle: '' }
-  const onGitHub = await commitsOnGitHubOf(root, isPrerequisite ? prerequisite : null, env)
-  const excluded = await commitsWithoutTipOf(root, tip, onGitHub, env)
+  const leftOut = await commitsLeftOutOf(root, tip, isPrerequisite ? prerequisite : null, env)
   const bundled = await gitBytes(
     root,
-    ['bundle', 'create', '-', `refs/heads/${branch}`, ...excluded.map((commit) => `^${commit}`)],
+    ['bundle', 'create', '-', `refs/heads/${branch}`, ...leftOut.map((commit) => `^${commit}`)],
     env,
   )
   if (!bundled.isDone) return { failure: `The branch could not be bundled: ${bundled.errors.trim()}` }

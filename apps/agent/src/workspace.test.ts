@@ -333,16 +333,15 @@ test('a bundle leaves out the history the runtime fetched from GitHub, even when
   git(runtime, 'add', 'light.txt')
   git(runtime, 'commit', '-q', '-m', 'Add light')
   const { call } = started({ workspaceDirectory: runtime })
-  const { status, body } = await call('POST', '/api/workspace/bundle', {
-    branch: 'spyria/light',
-    prerequisite: 'f'.repeat(40),
-  })
-  expect({ status, error: body.error }).toEqual({ status: 200, error: undefined })
-  const file = join(directory, 'light.bundle')
-  writeFileSync(file, Buffer.from(String(body.bundle), 'base64'))
-  expect(statSync(file).size).toBeLessThan(10_000)
-  const prerequisites = Bun.spawnSync(['git', 'bundle', 'verify', file], { cwd: runtime }).stdout.toString()
-  expect(prerequisites).toContain(revisionOf(runtime, 'main'))
+  const prerequisitesOf = async (branch: string) => {
+    const { status, body } = await call('POST', '/api/workspace/bundle', { branch, prerequisite: 'f'.repeat(40) })
+    expect({ status, error: body.error }).toEqual({ status: 200, error: undefined })
+    const file = join(directory, `${branch.replace('/', '-')}.bundle`)
+    writeFileSync(file, Buffer.from(String(body.bundle), 'base64'))
+    expect(statSync(file).size).toBeLessThan(10_000)
+    return Bun.spawnSync(['git', 'bundle', 'verify', file], { cwd: runtime }).stdout.toString()
+  }
+  expect(await prerequisitesOf('spyria/light')).toContain(revisionOf(runtime, 'main'))
 })
 
 const author = { name: 'Alice', email: 'alice@example.com' }
