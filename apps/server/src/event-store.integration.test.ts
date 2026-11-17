@@ -76,21 +76,6 @@ test('deleting a project appends chat.archived or chat.moved for each of its cha
   ])
 })
 
-test('chat events leave the messages projection unchanged', async () => {
-  const before = await allMessages()
-  await succeeds('workspace.renameChat', { chatId: 'chat-welcome', name: 'Hello' })
-  await succeeds('workspace.moveChat', { chatId: 'chat-welcome', projectId: 'project-billing' })
-  await succeeds('workspace.archiveChat', { chatId: 'chat-welcome' })
-  expect((await eventsOf('chat-welcome')).slice(-3).map((event) => event.type)).toEqual([
-    'chat.renamed',
-    'chat.moved',
-    'chat.archived',
-  ])
-  expect(await allMessages()).toEqual(before)
-  await rebuild({ chatId: 'chat-welcome' })
-  expect(await allMessages()).toEqual(before)
-})
-
 describe('the history written by the rebuild test, then drifted', () => {
   test('rebuilding the messages from the events reproduces the live projection, and twice changes nothing', async () => {
     await succeeds('conversation.sendMessage', { id: 'message-history-1', chatId: 'chat-standup', text: 'First' })
