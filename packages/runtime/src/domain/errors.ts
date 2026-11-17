@@ -40,11 +40,11 @@ export const CodeAlreadyUsed = errorKind('code_already_used', () => 'This code w
 export const CodeExpired = errorKind('code_expired', () => 'This code has expired', HostRefused)
 export const HostRemoved = errorKind('host_removed', () => 'This host was removed', HostRefused)
 export const HostNotRegistered = errorKind('host_not_registered', () => 'This host is not registered', HostRefused)
-export const HostNotConnected = errorKind(
-  'host_not_connected',
-  (hostId: string) => `Runtime host ${hostId} is not connected`,
-  RuntimeError,
-)
+export class HostNotConnected extends Error {
+  constructor(readonly hostId: string) {
+    super(`Runtime host ${hostId} is not connected`)
+  }
+}
 export const HostMarkedOffline = errorKind(
   'host_marked_offline',
   () => 'This host was marked offline after missing its heartbeats: say hello again',
