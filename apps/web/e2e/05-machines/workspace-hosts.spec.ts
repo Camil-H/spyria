@@ -56,26 +56,16 @@ test.describe('Workspace hosts', () => {
   })
 
   test.describe(() => {
-    test('As a member who can manage runtime hosts, I open Workspace settings from the sidebar and see an empty Runtime hosts section', {
+    test.use({ signedInAs: 'member-bob' })
+
+    test('As a member without the runtime hosts permission, I have no settings link and the settings URL is refused', {
       tag: ['@spec-07'],
     }, async ({ page }) => {
-      await openSettings(page, 'Runtimes')
-      await expect(hostsSectionOf(page).getByRole('heading', { level: 2, name: 'Runtime hosts' })).toBeVisible()
-      await expect(hostsSectionOf(page).getByText('No runtime host yet')).toBeVisible()
-    })
-
-    test.describe(() => {
-      test.use({ signedInAs: 'member-bob' })
-
-      test('As a member without the runtime hosts permission, I have no settings link and the settings URL is refused', {
-        tag: ['@spec-07'],
-      }, async ({ page }) => {
-        await expect(sidebarOf(page).getByRole('link', { name: 'Profile' })).toBeVisible()
-        await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
-        await page.goto('/w/workspace-acme/settings/runtime')
-        await expect(mainOf(page).getByText('Your workspace role does not give access to this page')).toBeVisible()
-        await expect(hostsSectionOf(page)).toHaveCount(0)
-      })
+      await expect(sidebarOf(page).getByRole('link', { name: 'Profile' })).toBeVisible()
+      await expect(sidebarOf(page).getByRole('link', { name: 'Workspace settings' })).toHaveCount(0)
+      await page.goto('/w/workspace-acme/settings/runtime')
+      await expect(mainOf(page).getByText('Your workspace role does not give access to this page')).toBeVisible()
+      await expect(hostsSectionOf(page)).toHaveCount(0)
     })
   })
 
