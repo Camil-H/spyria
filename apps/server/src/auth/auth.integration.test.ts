@@ -1,4 +1,5 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, beforeEach, expect, test } from 'bun:test'
+import { resetDatabase } from '@spyria/db/postgres'
 import { createTestDatabase, databaseDropTimeoutMilliseconds } from '@spyria/db/testing'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { createApp } from '../app.ts'
@@ -59,6 +60,11 @@ afterAll(async () => {
   await testDatabase.drop()
   await otherDatabase.drop()
 }, databaseDropTimeoutMilliseconds)
+beforeEach(async () => {
+  nextIdToken = ''
+  challengeOfCode.clear()
+  await resetDatabase(database)
+})
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
 
@@ -342,7 +348,6 @@ test('renewal is refused without the CSRF header, from another origin, without a
 })
 
 test("a member sees by device where they are signed in to a workspace, never a session's id, and signs out of it everywhere while their other workspaces and other members stay signed in, without reopening it from them", async () => {
-  await database.$client`delete from sessions where user_id = 'member-alice'`
   const firefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0'
   const login = await startLogin()
   nextIdToken = await signIdToken({
@@ -467,7 +472,6 @@ const dexCallbackUrlOf = async (login: Response) => {
 }
 
 test('signs in through the real Dex form, the first account of a person bound to their address', async () => {
-  await database.$client`delete from account_identities where user_id = 'member-alice'`
   const login = await dexApp.request('/auth/login')
   const callbackUrl = await dexCallbackUrlOf(login)
   const response = await dexApp.request(`/auth/callback${callbackUrl.search}`, {
