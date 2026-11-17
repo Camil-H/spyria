@@ -195,6 +195,26 @@ const gitBytes = async (cwd: string, args: string[], env: Record<string, string>
   return { isDone: (await child.exited) === 0, bytes, errors }
 }
 
+const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
+  Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
+
+const commitsOnGitHubOf = async (root: string, prerequisite: string | null, env: Record<string, string>) => {
+  const fetched = await git(
+    root,
+    ['for-each-ref', '--format=%(objectname)', 'refs/remotes/origin', baseRef, pushedRef],
+    env,
+  )
+  const isKnown = prerequisite !== null && (await isCommit(root, prerequisite, env))
+  return [...new Set([...fetched.split('\n').filter(Boolean), ...(isKnown ? [prerequisite] : [])])]
+}
+
+const commitsWithoutTipOf = async (root: string, tip: string, commits: string[], env: Record<string, string>) => {
+  const containsTip = await Promise.all(
+    commits.map(async (commit) => (await gitBytes(root, ['merge-base', '--is-ancestor', tip, commit], env)).isDone),
+  )
+  return commits.filter((_, index) => !containsTip[index])
+}
+
 export const bundleOf = async (
   root: string,
   { branch, prerequisite }: { branch?: unknown; prerequisite?: unknown },
@@ -206,11 +226,11 @@ export const bundleOf = async (
   const tip = (await git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`], env)).trim()
   if (!tip) return { failure: `The branch ${branch} has no commit in the runtime` }
   if (tip === prerequisite) return { bundle: '' }
-  const isAncestor =
-    isPrerequisite && (await gitBytes(root, ['merge-base', '--is-ancestor', prerequisite, tip], env)).isDone
+  const onGitHub = await commitsOnGitHubOf(root, isPrerequisite ? prerequisite : null, env)
+  const excluded = await commitsWithoutTipOf(root, tip, onGitHub, env)
   const bundled = await gitBytes(
     root,
-    ['bundle', 'create', '-', `refs/heads/${branch}`, ...(isAncestor ? [`^${prerequisite}`] : [])],
+    ['bundle', 'create', '-', `refs/heads/${branch}`, ...excluded.map((commit) => `^${commit}`)],
     env,
   )
   if (!bundled.isDone) return { failure: `The branch could not be bundled: ${bundled.errors.trim()}` }
@@ -281,9 +301,6 @@ export const commitOf = async (
   if (!committed.isDone) return { failure: `The commit failed: ${committed.errors.trim()}` }
   return { sha: (await git(root, ['rev-parse', 'HEAD'], env)).trim() }
 }
-
-const isCommit = async (root: string, sha: string, env: Record<string, string>) =>
-  Boolean(await git(root, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], env))
 
 type FetchedBranch = { branch: string; head: string; bundle: string }
 
