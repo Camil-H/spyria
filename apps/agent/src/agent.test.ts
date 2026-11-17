@@ -408,25 +408,25 @@ test('an interrupt naming a prompt never received ends its turn as cancelled at 
   expect(textOf(socket.events)).toBe('[t1] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
-test('a conversation remembers the last 50 prompt ids: an older one sent again runs again', async () => {
-  const { open, create, promptWithId } = started()
+test('a conversation remembers the last prompt ids, as many as it is set to keep: an older one sent again runs again', async () => {
+  const { open, create, promptWithId } = started({ rememberedPromptCount: 3 })
   const id = await create(launchOf())
   const socket = open(id)
-  for (let index = 0; index <= 50; index++) {
+  for (let index = 0; index <= 3; index++) {
     await promptWithId(id, 'hello', `prompt-${index}`)
     await socket.until(kindOf('turn_end'), index + 1)
   }
   await promptWithId(id, 'hello', 'prompt-1')
-  await socket.until(kindOf('turn_end'), 52)
+  await socket.until(kindOf('turn_end'), 5)
   await promptWithId(id, 'hello', 'prompt-0')
-  await socket.until(kindOf('turn_end'), 53)
+  await socket.until(kindOf('turn_end'), 6)
   expect(
     socket.events
       .filter(kindOf('turn_end'))
       .slice(-2)
       .map(({ update }) => update.promptId),
   ).toEqual(['prompt-1', 'prompt-0'])
-  expect(textOf(socket.events)).toEndWith('[t52] Hello from the stub (model stub-default, mode bypassPermissions).')
+  expect(textOf(socket.events)).toEndWith('[t5] Hello from the stub (model stub-default, mode bypassPermissions).')
 })
 
 test('events are numbered per conversation, resent after a sequence number, from a bounded buffer that says how many it no longer holds', async () => {
