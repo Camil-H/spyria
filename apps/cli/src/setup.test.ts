@@ -6,7 +6,7 @@ import { commandsOf } from './command-table.ts'
 import { installFolderOf, readEnvironment } from './commands.ts'
 import type { DirectHttpsProbes } from './direct-https.ts'
 import type { AzRunner } from './entra.ts'
-import { parseEnvironment, serializeEnvironment } from './environment.ts'
+import { type Environment, parseEnvironment, serializeEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
 
@@ -27,31 +27,47 @@ const cloudflare = Bun.serve({
   },
 })
 const folder = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const reachableDirectly: DirectHttpsProbes = {
+  addressesOf: async () => ['203.0.113.7'],
+  isDockerRootless: () => false,
+  unprivilegedPortStart: () => 1024,
+  isPortInUse: async () => false,
+}
+const forgottenHostPairings: (string | undefined)[] = []
+const withoutDocker = {
+  workspaceExistsIn: () => false,
+  dataVolumesOf: () => [],
+  directHttpsProbes: reachableDirectly,
+  forgetHostPairing: (_folder: string, environment: Environment) =>
+    void forgottenHostPairings.push(environment.SPYRIA_DEPLOYMENT),
+}
 afterAll(() => {
   cloudflare.stop(true)
   rmSync(folder, { recursive: true, force: true })
 })
 const runSetup = (extra: string[], processEnvironment = {}) =>
-  setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0', ...extra]), {
-    cloudflareApiUrl: cloudflare.url.origin,
-    processEnvironment,
-    workspaceExistsIn: () => false,
-    dataVolumesOf: () => [],
-  })
+  setup(
+    parseFlags([
+      ...['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0', '--name', deployment],
+      ...extra,
+    ]),
+    { cloudflareApiUrl: cloudflare.url.origin, processEnvironment, ...withoutDocker },
+  )
 const environment = () => parseEnvironment(readFileSync(join(folder, '.env'), 'utf8'))
 
 test('an unattended setup creates the tunnel and writes the Compose file, the gateway config and a private .env', async () => {
   await runSetup(['--hostname', 'Spyria.Example.com'], {
     SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'api-token',
   })
-  expect(tunnelNames).toEqual(['spyria-spyria.example.com'])
+  expect(tunnelNames).toEqual([`${deployment}-spyria.example.com`])
   expect(readFileSync(join(folder, 'compose.yml'), 'utf8')).toContain('spyria-server:${SPYRIA_VERSION')
   expect(JSON.parse(readFileSync(join(folder, 'bifrost.json'), 'utf8'))).toMatchObject({
     encryption_key: 'env.BIFROST_ENCRYPTION_KEY',
   })
   expect(statSync(join(folder, '.env')).mode & 0o777).toBe(0o600)
   expect(environment()).toMatchObject({
-    SPYRIA_DEPLOYMENT: 'spyria',
+    SPYRIA_DEPLOYMENT: deployment,
     SPYRIA_VERSION: '1.2.0',
     SPYRIA_APP_ORIGIN: 'https://spyria.example.com',
     CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
@@ -74,9 +90,11 @@ test('setting up again keeps a deployment without a runtime host that way until 
   await runSetup([])
   expect(environment().COMPOSE_PROFILES).toBe('cloudflare')
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBeUndefined()
+  expect(forgottenHostPairings).toEqual([])
   await runSetup(['--host'])
   expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
   expect(environment().SPYRIA_HOST_CLAIM_URL).toStartWith('http://server:3000/h/')
+  expect(forgottenHostPairings).toEqual([deployment])
 })
 
 test('run from inside an install without --folder, setup keeps that install and its secrets rather than writing another install', async () => {
@@ -87,6 +105,7 @@ test('run from inside an install without --folder, setup keeps that install and 
     await setup(parseFlags(['setup', '--unattended', '--no-start']), {
       cloudflareApiUrl: cloudflare.url.origin,
       processEnvironment: {},
+      ...withoutDocker,
     })
     expect(environment()).toEqual(before)
   } finally {
@@ -114,10 +133,13 @@ test('an unattended setup refuses what it cannot decide: no hostname, a new host
   const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
   try {
     const attempt = (extra: string[], processEnvironment = {}) =>
-      setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0', ...extra]), {
-        cloudflareApiUrl: cloudflare.url.origin,
-        processEnvironment,
-      }).catch((error: Error) => error.message)
+      setup(
+        parseFlags([
+          ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0', '--name', deployment],
+          ...extra,
+        ]),
+        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment, ...withoutDocker },
+      ).catch((error: Error) => error.message)
     expect(await attempt([])).toBe('--hostname is required')
     expect(await attempt(['--hostname', 'spyria.example.com'])).toBe(
       'A Cloudflare API token is required to create the tunnel',
@@ -158,13 +180,11 @@ test("setup refuses a folder holding another project's compose.yml or .env and l
   const originalDirectory = process.cwd()
   try {
     const refusal = await setup(
-      parseFlags(['setup', '--unattended', '--no-start', '--folder', project, '--hostname', 'spyria.example.com']),
-      {
-        cloudflareApiUrl: cloudflare.url.origin,
-        processEnvironment: {},
-        workspaceExistsIn: () => false,
-        dataVolumesOf: () => [],
-      },
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', project, '--name', deployment],
+        ...['--hostname', 'spyria.example.com'],
+      ]),
+      { cloudflareApiUrl: cloudflare.url.origin, processEnvironment: {}, ...withoutDocker },
     ).catch((error: Error) => error.message)
     expect(refusal).toBe(`The .env and compose.yml in ${project} are not Spyria's: choose another folder with --folder`)
     expect(readdirSync(project).sort()).toEqual(['.env', 'compose.yml'])
@@ -221,12 +241,18 @@ test('setup refuses a --port that is not a port number before it creates a tunne
           '--no-start',
           '--folder',
           empty,
+          '--name',
+          deployment,
           '--hostname',
           'spyria.example.com',
           '--port',
           port,
         ]),
-        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' } },
+        {
+          cloudflareApiUrl: cloudflare.url.origin,
+          processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' },
+          ...withoutDocker,
+        },
       ).catch((error: Error) => error.message)
       expect({ port, refusal }).toEqual({ port, refusal: '--port takes a port number from 1 to 65535' })
     }
@@ -242,12 +268,13 @@ test('setup refuses an answer .env cannot hold before it rewrites compose.yml an
   const keptCompose = `name: \${SPYRIA_DEPLOYMENT}\n# kept\n`
   try {
     const setupIn = (extra: string[], processEnvironment = {}) =>
-      setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', ...extra]), {
-        cloudflareApiUrl: cloudflare.url.origin,
-        processEnvironment,
-        workspaceExistsIn: () => false,
-        dataVolumesOf: () => [],
-      })
+      setup(
+        parseFlags([
+          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment],
+          ...extra,
+        ]),
+        { cloudflareApiUrl: cloudflare.url.origin, processEnvironment, ...withoutDocker },
+      )
     await setupIn(['--hostname', 'spyria.example.com'], { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' })
     writeFileSync(join(install, 'compose.yml'), keptCompose)
     writeFileSync(join(install, 'bifrost.json'), 'kept gateway config')
@@ -285,15 +312,14 @@ test('setting up again with a Microsoft app to create keeps the app and secret t
     const setupIn = (processEnvironment = {}) =>
       setup(
         parseFlags([
-          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment],
           ...['--hostname', 'spyria.example.com', '--microsoft-client-id', 'create'],
         ]),
         {
           cloudflareApiUrl: cloudflare.url.origin,
           processEnvironment,
           az,
-          workspaceExistsIn: () => false,
-          dataVolumesOf: () => [],
+          ...withoutDocker,
         },
       )
     const microsoftApp = () => {
@@ -329,15 +355,14 @@ test('setup refuses an answer .env cannot hold before it creates the tunnel', as
   try {
     const refusal = await setup(
       parseFlags([
-        ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0'],
+        ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0', '--name', deployment],
         ...['--hostname', 'spyria.example.com', '--oidc-issuer', 'https://login.example.com'],
         ...['--oidc-client-id', "o'brien"],
       ]),
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't', SPYRIA_SETUP_OIDC_CLIENT_SECRET: 'oidc-secret' },
-        workspaceExistsIn: () => false,
-        dataVolumesOf: () => [],
+        ...withoutDocker,
       },
     ).catch((error: Error) => error.message)
     expect(refusal).toBe('SPYRIA_OIDC_CLIENT_ID cannot hold a quote or span lines')
@@ -369,15 +394,14 @@ test('a setup failing after it registered the Microsoft app keeps the app and it
     const setupIn = (extra: string[]) =>
       setup(
         parseFlags([
-          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+          ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment],
           ...['--hostname', 'spyria.example.com', '--microsoft-client-id', 'create', ...extra],
         ]),
         {
           cloudflareApiUrl: cloudflare.url.origin,
           processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't', SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' },
           az,
-          workspaceExistsIn: () => false,
-          dataVolumesOf: () => [],
+          ...withoutDocker,
         },
       )
     const failure = await setupIn(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
@@ -413,10 +437,10 @@ test('setup without saved secrets refuses data this machine holds for the deploy
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' },
-        workspaceExistsIn: () => false,
-        dataVolumesOf: (deployment) => {
-          askedDeployments.push(deployment)
-          return [`${deployment}-postgres-data`]
+        ...withoutDocker,
+        dataVolumesOf: (askedDeployment) => {
+          askedDeployments.push(askedDeployment)
+          return [`${askedDeployment}-postgres-data`]
         },
       },
     ).catch((error: Error) => error.message)
@@ -429,12 +453,6 @@ test('setup without saved secrets refuses data this machine holds for the deploy
   }
 })
 
-const reachableDirectly: DirectHttpsProbes = {
-  addressesOf: async () => ['203.0.113.7'],
-  isDockerRootless: () => false,
-  unprivilegedPortStart: () => 1024,
-  isPortInUse: async () => false,
-}
 const directSetupIn = (
   install: string,
   extra: string[],
@@ -443,13 +461,18 @@ const directSetupIn = (
     probes = {},
   }: { processEnvironment?: Record<string, string>; probes?: Partial<DirectHttpsProbes> } = {},
 ) =>
-  setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', ...extra]), {
-    cloudflareApiUrl: cloudflare.url.origin,
-    processEnvironment,
-    workspaceExistsIn: () => false,
-    dataVolumesOf: () => [],
-    directHttpsProbes: { ...reachableDirectly, ...probes },
-  })
+  setup(
+    parseFlags([
+      ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment],
+      ...extra,
+    ]),
+    {
+      cloudflareApiUrl: cloudflare.url.origin,
+      processEnvironment,
+      ...withoutDocker,
+      directHttpsProbes: { ...reachableDirectly, ...probes },
+    },
+  )
 const printedBy = async (run: () => Promise<unknown>) => {
   const printed: string[] = []
   const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
@@ -559,7 +582,7 @@ test('setting up again without --https keeps the saved mode; tunnel to direct re
     const direct = readEnvironment(install)
     expect(direct).toMatchObject({ SPYRIA_HTTPS: 'direct', COMPOSE_PROFILES: 'host,direct' })
     expect(direct.CLOUDFLARE_TUNNEL_TOKEN).toBeUndefined()
-    expect(switchOutput).toContain('The tunnel spyria-spyria.example.com and its DNS record stay in Cloudflare')
+    expect(switchOutput).toContain(`The tunnel ${deployment}-spyria.example.com and its DNS record stay in Cloudflare`)
     expect(switchOutput).toContain('Zero Trust > Networks > Tunnels')
 
     await directSetupIn(install, [])
@@ -588,5 +611,27 @@ test('setting up again in direct mode does not take the ports its own Caddy hold
     expect(readEnvironment(install).SPYRIA_HTTPS).toBe('direct')
   } finally {
     rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('a setup without --name names the deployment spyria, and its tunnel after it', async () => {
+  const empty = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    await setup(
+      parseFlags([
+        ...['setup', '--unattended', '--no-start', '--folder', empty, '--version', '1.2.0'],
+        ...['--hostname', 'spyria.example.com'],
+      ]),
+      {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'api-token' },
+        ...withoutDocker,
+      },
+    )
+    expect(readEnvironment(empty).SPYRIA_DEPLOYMENT).toBe('spyria')
+    expect(tunnelNames.at(-1)).toBe('spyria-spyria.example.com')
+    expect(forgottenHostPairings).toEqual([deployment])
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
   }
 })

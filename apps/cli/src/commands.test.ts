@@ -17,6 +17,7 @@ import { parseFlags } from './flags.ts'
 import { setup } from './setup.ts'
 
 const root = mkdtempSync(join(tmpdir(), 'spyria-commands-'))
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
 const install = join(root, 'install')
 const fakeBin = join(root, 'bin')
 const fakeDocker = join(root, 'docker')
@@ -45,7 +46,7 @@ case "$*" in
     [ -f "$FAKE_DOCKER/daemon-down" ] && exit 1
     cat "$FAKE_DOCKER/volumes" 2>/dev/null ;;
   "volume rm "*) [ -f "$FAKE_DOCKER/volume-in-use" ] && { echo "Error response from daemon: volume is in use" >&2; exit 1; } ;;
-  "ps -q --filter label=spyria.managed=1 --filter name=^spyria-rt-") cat "$FAKE_DOCKER/runtimes" 2>/dev/null ;;
+  "ps -q --filter label=spyria.managed=1 --filter name=^${deployment}-rt-") cat "$FAKE_DOCKER/runtimes" 2>/dev/null ;;
 esac
 exit 0
 `,
@@ -78,7 +79,7 @@ afterAll(() => {
 
 const oldCompose = `name: \${SPYRIA_DEPLOYMENT}\n# release 1.2.0\n`
 const installed = {
-  SPYRIA_DEPLOYMENT: 'spyria',
+  SPYRIA_DEPLOYMENT: deployment,
   SPYRIA_VERSION: '1.2.0',
   SPYRIA_APP_ORIGIN: 'https://spyria.example.com',
   SPYRIA_LOCAL_PORT: String(health.port),
@@ -296,8 +297,8 @@ test('setting up again without a runtime host removes the host container this ma
   })
   expect(environment().COMPOSE_PROFILES).toBe('host,cloudflare')
   expect(indexOfCall('rm --stop --force host')).toBeGreaterThan(-1)
-  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(indexOfCall('rm --stop --force host'))
-  expect(indexOfCall('volume rm spyria-host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(indexOfCall(`volume rm ${deployment}-host`)).toBeGreaterThan(indexOfCall('rm --stop --force host'))
+  expect(indexOfCall(`volume rm ${deployment}-host`)).toBeLessThan(indexOfCall('up -d --remove-orphans'))
 
   rmSync(join(fakeDocker, 'calls'), { force: true })
   await setup(parseFlags(['setup', '--unattended', '--host', '--folder', install, '--version', '1.2.0']), {
@@ -333,8 +334,8 @@ test("turning this machine's host on once a workspace exists takes the command o
     SPYRIA_HOST_CLAIM_URL: 'http://server:3000/h/ABCD2345',
   })
   expect(environment().SPYRIA_INSTALL_HOST_TOKEN).toBeUndefined()
-  expect(indexOfCall('volume rm spyria-host')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
-  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(-1)
+  expect(indexOfCall(`volume rm ${deployment}-host`)).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(indexOfCall(`volume rm ${deployment}-host`)).toBeGreaterThan(-1)
 
   rmSync(join(fakeDocker, 'calls'), { force: true })
   await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/ABCD2345' })
@@ -343,12 +344,12 @@ test("turning this machine's host on once a workspace exists takes the command o
   const inUse = await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/WXYZ6789' }).catch(
     (error: Error) => error.message,
   )
-  expect(inUse).toBe('Removing spyria-host failed: Error response from daemon: volume is in use')
+  expect(inUse).toBe(`Removing ${deployment}-host failed: Error response from daemon: volume is in use`)
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/ABCD2345')
   rmSync(join(fakeDocker, 'volume-in-use'))
   await hostTurnedOn({ SPYRIA_SETUP_HOST_CLAIM_URL: 'https://spyria.example.com/h/WXYZ6789' })
   expect(environment().SPYRIA_HOST_CLAIM_URL).toBe('http://server:3000/h/WXYZ6789')
-  expect(indexOfCall('volume rm spyria-host')).toBeGreaterThan(-1)
+  expect(indexOfCall(`volume rm ${deployment}-host`)).toBeGreaterThan(-1)
 
   writeFileSync(join(install, '.env'), serializeEnvironment({ ...installed, COMPOSE_PROFILES: 'cloudflare' }), {
     mode: 0o600,
@@ -363,13 +364,13 @@ test('setup without the secrets of a deployment whose data this machine still ho
   rmSync(join(install, '.env'))
   writeFileSync(
     join(fakeDocker, 'volumes'),
-    'spyria-postgres-data\nspyria-gateway-data\nspyria-postgres-data-old\nother-spyria-zero-data\n',
+    `${deployment}-postgres-data\n${deployment}-gateway-data\n${deployment}-postgres-data-old\nother-${deployment}-zero-data\n`,
   )
   const setUp = (extra: string[] = []) =>
     setup(
       parseFlags([
         ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
-        ...['--hostname', 'spyria.example.com', ...extra],
+        ...['--name', deployment, '--hostname', 'spyria.example.com', ...extra],
       ]),
       {
         cloudflareApiUrl: 'http://127.0.0.1:9',
@@ -379,7 +380,7 @@ test('setup without the secrets of a deployment whose data this machine still ho
     ).catch((error: Error) => error.message)
 
   expect(await setUp()).toBe(
-    `This machine holds the data of an earlier deployment named spyria (spyria-postgres-data, spyria-gateway-data), but ${install} has no .env with its secrets: put back the .env you copied off the machine with your backups and run setup again, choose another deployment name with --name, or, to start over without that data, remove it with docker volume rm spyria-postgres-data spyria-gateway-data`,
+    `This machine holds the data of an earlier deployment named ${deployment} (${deployment}-postgres-data, ${deployment}-gateway-data), but ${install} has no .env with its secrets: put back the .env you copied off the machine with your backups and run setup again, choose another deployment name with --name, or, to start over without that data, remove it with docker volume rm ${deployment}-postgres-data ${deployment}-gateway-data`,
   )
   expect(existsSync(join(install, '.env'))).toBe(false)
   expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
