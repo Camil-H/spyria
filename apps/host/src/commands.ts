@@ -320,6 +320,10 @@ export const createCommandRunner = ({
       throw new Refused('not a managed runtime')
     return container
   }
+  const isJoinedTo = async (network: string) => {
+    const self = await docker<ContainerInfo>('GET', `/containers/${selfContainerId}/json`)
+    return Object.hasOwn(self.NetworkSettings?.Networks ?? {}, network)
+  }
   const joinNetwork = async (network: string) => {
     if (selfContainerId)
       await docker('POST', `/networks/${network}/connect`, {
@@ -336,7 +340,7 @@ export const createCommandRunner = ({
     await joinNetwork(network)
   }
   const removeNetwork = async (network: string) => {
-    if (selfContainerId)
+    if (selfContainerId && (await isJoinedTo(network)))
       await docker('POST', `/networks/${network}/disconnect`, { Container: selfContainerId, Force: true }).catch(
         ignoring(403, 404),
       )
