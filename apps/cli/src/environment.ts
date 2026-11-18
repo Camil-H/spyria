@@ -82,8 +82,13 @@ export const withSecrets = (existing: Environment): Environment => ({
   SPYRIA_GATEWAY_ADMIN_USER: existing.SPYRIA_GATEWAY_ADMIN_USER || `admin-${randomBytes(4).toString('hex')}`,
 })
 
+export const httpsModes = ['tunnel', 'direct'] as const
+export type HttpsMode = (typeof httpsModes)[number]
+
 export type SetupAnswers = {
   deployment: string
+  https: HttpsMode
+  acmeEmail?: string
   version: string
   images: string
   origin: string
@@ -128,7 +133,13 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     throw new Error('The deployment name takes lowercase letters, digits and dashes')
   if (!answers.origin.startsWith('https://')) throw new Error('The address of Spyria must start with https://')
   const secrets = withSecrets(existing)
-  const profiles = [...(answers.runsHost ? ['host'] : []), ...(answers.tunnelToken ? ['cloudflare'] : [])]
+  const servesDirectly = answers.https === 'direct'
+  const tunnelToken = servesDirectly ? undefined : answers.tunnelToken
+  const profiles = [
+    ...(answers.runsHost ? ['host'] : []),
+    ...(tunnelToken ? ['cloudflare'] : []),
+    ...(servesDirectly ? ['direct'] : []),
+  ]
   return storable({
     ...existing,
     SPYRIA_DEPLOYMENT: answers.deployment,
@@ -139,8 +150,10 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     ...secrets,
     ...hostPairingOf(answers, existing),
     COMPOSE_PROFILES: profiles.join(','),
-    SPYRIA_TRUSTED_PROXY: answers.tunnelToken ? 'cloudflare' : '',
-    CLOUDFLARE_TUNNEL_TOKEN: answers.tunnelToken ?? '',
+    SPYRIA_HTTPS: answers.https,
+    SPYRIA_TRUSTED_PROXY: servesDirectly ? 'x-forwarded-for:1' : tunnelToken ? 'cloudflare' : '',
+    CLOUDFLARE_TUNNEL_TOKEN: tunnelToken ?? '',
+    SPYRIA_ACME_EMAIL: servesDirectly ? (answers.acmeEmail ?? '') : '',
     SPYRIA_DOCKER_GROUP: answers.runsHost ? answers.dockerGroup : '',
     SPYRIA_GOOGLE_CLIENT_ID: answers.instanceApps.google?.clientId ?? '',
     SPYRIA_GOOGLE_CLIENT_SECRET: answers.instanceApps.google?.clientSecret ?? '',

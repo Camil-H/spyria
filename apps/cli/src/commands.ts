@@ -25,9 +25,11 @@ import type { Flags } from './flags.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
+  certificateExpiryProblemOf,
   credentialProblemsOf,
   diskProblemOf,
   environmentFileModeProblemOf,
+  lastCertificateErrorIn,
   productionProblemsIn,
   publishedPortProblemsOf,
   serviceProblemsOf,
@@ -39,6 +41,10 @@ const backupDatabases = ['spyria', 'bifrost'] as const
 const databaseOwners: Record<(typeof backupDatabases)[number], string> = { spyria: 'spyria', bifrost: 'bifrost' }
 const defaultBackupsKept = 7
 const healthWaitMilliseconds = 180_000
+const servicesOfOptionalProfiles = [
+  { profile: 'cloudflare', service: 'cloudflared' },
+  { profile: 'direct', service: 'caddy' },
+]
 
 const readableTextOf = (path: string) => {
   try {
@@ -97,6 +103,36 @@ const mustSucceed = (exitCode: number | null, what: string) => {
   if (exitCode !== 0) throw new Error(`${what} failed`)
 }
 
+export const profilesOf = (environment: Environment) => (environment.COMPOSE_PROFILES ?? '').split(',').filter(Boolean)
+const hostnameOf = (environment: Environment) => URL.parse(environment.SPYRIA_APP_ORIGIN ?? '')?.hostname ?? ''
+
+const answersHealthy = (url: string) =>
+  fetch(url, { signal: AbortSignal.timeout(5000) }).then(
+    (response) => response.ok,
+    () => false,
+  )
+
+const certificateFailureOf = (environment: Environment, certificateError: string | undefined) =>
+  [
+    `Spyria runs, but ${environment.SPYRIA_APP_ORIGIN} does not answer over HTTPS: Caddy could not get its certificate${certificateError ? ` (${certificateError})` : ''}.`,
+    `The usual causes: ${hostnameOf(environment)} does not point at this machine's public address, or a firewall or the provider closes ports 80 and 443 to the internet.`,
+    'Caddy keeps trying: once fixed, run spyria setup again, and see spyria compose logs caddy for more.',
+  ].join(' ')
+
+const waitForCertificate = async (folder: string, environment: Environment) => {
+  const url = `${environment.SPYRIA_APP_ORIGIN}/health`
+  for (const deadline = Date.now() + healthWaitMilliseconds; ; await Bun.sleep(2000)) {
+    if (await answersHealthy(url)) return
+    if (Date.now() > deadline)
+      throw new Error(
+        certificateFailureOf(
+          environment,
+          lastCertificateErrorIn(readCompose(folder, ['logs', '--no-log-prefix', '--tail', '300', 'caddy']).output),
+        ),
+      )
+  }
+}
+
 const waitForHealth = async (environment: Environment) => {
   const url = `http://127.0.0.1:${environment.SPYRIA_LOCAL_PORT || '3300'}/health`
   for (const deadline = Date.now() + healthWaitMilliseconds; ; await Bun.sleep(2000)) {
@@ -130,8 +166,9 @@ const stopRuntimesOf = (deployment: string) => {
   return runtimes.length
 }
 
-const hasHostContainer = (folder: string) =>
-  readCompose(folder, ['--profile', 'host', 'ps', '--all', '--quiet', 'host']).output.trim() !== ''
+const hasContainer = (folder: string, profile: string, service: string) =>
+  readCompose(folder, ['--profile', profile, 'ps', '--all', '--quiet', service]).output.trim() !== ''
+const hasHostContainer = (folder: string) => hasContainer(folder, 'host', 'host')
 const removeHostContainer = (folder: string) =>
   mustSucceed(runCompose(folder, ['--profile', 'host', 'rm', '--stop', '--force', 'host']), 'Removing the runtime host')
 
@@ -184,13 +221,27 @@ export const forgetEarlierHostPairing = (folder: string, environment: Environmen
     step('Forgot the pairing of the runtime host this machine ran before, so it pairs with the new code')
 }
 
+const removeServicesOfInactiveProfiles = (folder: string, profiles: string[]) => {
+  for (const { profile, service } of servicesOfOptionalProfiles)
+    if (!profiles.includes(profile) && hasContainer(folder, profile, service)) {
+      step(`Removing ${service}, which this deployment no longer uses`)
+      mustSucceed(runCompose(folder, ['--profile', profile, 'rm', '--stop', '--force', service]), `Removing ${service}`)
+    }
+}
+
 export const startStack = async (folder: string, environment: Environment) => {
-  if (!(environment.COMPOSE_PROFILES ?? '').split(',').includes('host')) removeHostOfThisMachine(folder, environment)
+  const profiles = profilesOf(environment)
+  if (!profiles.includes('host')) removeHostOfThisMachine(folder, environment)
+  removeServicesOfInactiveProfiles(folder, profiles)
   step('Pulling the images')
   mustSucceed(runCompose(folder, ['pull', '--quiet']), 'Pulling the images')
   step('Starting Spyria')
   mustSucceed(runCompose(folder, ['up', '-d', '--remove-orphans']), 'Starting Spyria')
   await waitForHealth(environment)
+  if (profiles.includes('direct')) {
+    step(`Waiting for the certificate of ${hostnameOf(environment)}`)
+    await waitForCertificate(folder, environment)
+  }
   step('Spyria answers')
 }
 
@@ -274,7 +325,7 @@ export const restore = async (
   const database = backupDatabases.find((candidate) => path.split('/').at(-1)?.startsWith(`${candidate}-`))
   if (!database || !existsSync(path)) throw new Error(`${file} is not a backup of spyria or bifrost`)
   const environment = readEnvironment(folder)
-  const profiles = (environment.COMPOSE_PROFILES ?? '').split(',')
+  const profiles = profilesOf(environment)
   assertPostgresRuns(folder, 'restore again')
   step(`Reading ${file} whole before changing anything`)
   const readable = await spawnCompose(folder, ['exec', '-T', 'postgres', 'pg_restore', '--file=/dev/null'], {
@@ -332,20 +383,33 @@ export const restore = async (
   step(`Restored ${file}`)
 }
 
-export const releaseFilesOf = async (version: string, fileUrlOf = releaseFileUrlOf) => {
-  const [compose = '', bifrost = ''] = await Promise.all(
-    ['deploy/compose.prod.yml', 'deploy/bifrost.json'].map(async (path) => {
-      const response = await fetch(fileUrlOf(version, path))
-      if (!response.ok) throw new Error(`Version ${version} has no ${path} (${response.status})`)
-      return response.text()
-    }),
-  )
-  return { compose, bifrost }
+export type ReleaseFiles = { compose: string; bifrost: string; caddyfile?: string }
+
+const releaseFileOf = async (
+  version: string,
+  path: string,
+  fileUrlOf: typeof releaseFileUrlOf,
+  { optional = false }: { optional?: boolean } = {},
+) => {
+  const response = await fetch(fileUrlOf(version, path))
+  if (response.ok) return response.text()
+  if (optional && response.status === 404) return undefined
+  throw new Error(`Version ${version} has no ${path} (${response.status})`)
 }
 
-export const writeReleaseFiles = (folder: string, { compose, bifrost }: { compose: string; bifrost: string }) => {
+export const releaseFilesOf = async (version: string, fileUrlOf = releaseFileUrlOf): Promise<ReleaseFiles> => {
+  const [compose = '', bifrost = '', caddyfile] = await Promise.all([
+    releaseFileOf(version, 'deploy/compose.prod.yml', fileUrlOf),
+    releaseFileOf(version, 'deploy/bifrost.json', fileUrlOf),
+    releaseFileOf(version, 'deploy/Caddyfile', fileUrlOf, { optional: true }),
+  ])
+  return { compose, bifrost, caddyfile }
+}
+
+export const writeReleaseFiles = (folder: string, { compose, bifrost, caddyfile }: ReleaseFiles) => {
   writeFileSync(composeFileOf(folder), compose)
   writeFileSync(join(folder, 'bifrost.json'), bifrost)
+  if (caddyfile !== undefined) writeFileSync(join(folder, 'Caddyfile'), caddyfile)
 }
 
 export const upgrade = async (
@@ -367,6 +431,10 @@ export const upgrade = async (
     console.log(`This spyria tool is ${cliVersion}: install the one of ${version} with install.sh to match it.`)
 }
 
+const readCaddyCertificate = (folder: string, hostname: string) =>
+  readCompose(folder, ['exec', '-T', 'caddy', 'sh', '-c', 'cat /data/caddy/certificates/*/"$0"/"$0".crt', hostname])
+    .output
+
 export const doctor = (folder: string) => {
   const environment = readEnvironment(folder)
   const problems = credentialProblemsOf(environment)
@@ -376,9 +444,17 @@ export const doctor = (folder: string) => {
   if (docker === null || Bun.spawnSync([docker, 'info'], { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0)
     problems.push('Docker does not answer: start Docker')
   else {
-    const profiles = (environment.COMPOSE_PROFILES ?? '').split(',').filter(Boolean)
+    const profiles = profilesOf(environment)
     const states = serviceStatesOf(readCompose(folder, ['ps', '--all', '--format', 'json']).output)
     problems.push(...serviceProblemsOf(states, profiles), ...publishedPortProblemsOf(states))
+    if (profiles.includes('direct')) {
+      const certificateProblem = certificateExpiryProblemOf(
+        readCaddyCertificate(folder, hostnameOf(environment)),
+        hostnameOf(environment),
+        new Date(),
+      )
+      if (certificateProblem) problems.push(certificateProblem)
+    }
     problems.push(...productionProblemsIn(readCompose(folder, ['logs', '--tail', '200', 'server']).output))
     const images = readCompose(folder, ['images', '--format', 'json']).output.trim()
     if (images)

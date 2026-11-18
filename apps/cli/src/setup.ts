@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import bifrostConfig from '../../../deploy/bifrost.json'
+import caddyfile from '../../../deploy/Caddyfile' with { type: 'text' }
 import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
 import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
 import {
@@ -17,10 +18,13 @@ import {
   writeReleaseFiles,
 } from './commands.ts'
 import { environmentFileOf, operatorCommandOf, readCompose } from './compose.ts'
+import { assertServesDirectly, type DirectHttpsProbes, directHttpsProbesOfThisMachine } from './direct-https.ts'
 import { type AzRunner, isAzSignedIn, registerEntraApp, runAz } from './entra.ts'
 import {
   type Environment,
   environmentOf,
+  type HttpsMode,
+  httpsModes,
   isDeploymentName,
   pairingCodeOf,
   type SetupAnswers,
@@ -174,6 +178,20 @@ const oidcAccountAppOf = (asker: Asker, origin: string, existing: Environment) =
   return { issuer, clientId, clientSecret }
 }
 
+const httpsQuestion =
+  "How will people reach Spyria? tunnel goes through Cloudflare with no open port; direct serves this machine's public address on ports 80 and 443"
+
+const switchingLinesOf = (existing: Environment, https: HttpsMode, deployment: string) => {
+  if (https === 'direct' && existing.CLOUDFLARE_TUNNEL_TOKEN)
+    return [
+      'The Cloudflare tunnel of this deployment stops and its token leaves .env.',
+      `The tunnel ${deployment}-${hostnameOf(existing.SPYRIA_APP_ORIGIN)} and its DNS record stay in Cloudflare: in DNS > Records, replace the CNAME record of the hostname with an A or AAAA record to this machine's public address, and delete the tunnel in Zero Trust > Networks > Tunnels.`,
+    ]
+  if (https === 'tunnel' && existing.SPYRIA_HTTPS === 'direct')
+    return [`Caddy stops; its certificates stay in the volume ${deployment}-caddy-data.`]
+  return []
+}
+
 export const setup = async (
   flags: Flags,
   {
@@ -182,12 +200,14 @@ export const setup = async (
     processEnvironment = process.env,
     workspaceExistsIn = workspaceExistsInRunningStack,
     dataVolumesOf = dataVolumesOnThisMachineOf,
+    directHttpsProbes = directHttpsProbesOfThisMachine,
   }: {
     cloudflareApiUrl?: string
     az?: AzRunner
     processEnvironment?: ProcessEnvironment
     workspaceExistsIn?: (folder: string) => boolean | undefined
     dataVolumesOf?: (deployment: string) => string[]
+    directHttpsProbes?: DirectHttpsProbes
   } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
@@ -207,21 +227,42 @@ export const setup = async (
   const hostname = asker
     .require(
       'hostname',
-      'Hostname of Spyria, on a domain of your Cloudflare account',
+      'Hostname of Spyria, for example spyria.example.com (on a domain of your Cloudflare account for a tunnel)',
       hostnameOf(existing.SPYRIA_APP_ORIGIN),
     )
     .toLowerCase()
   if (!hostnamePattern.test(hostname)) throw new Error(`${hostname} is not a hostname`)
   const origin = `https://${hostname}`
+  const https = asker.choose('https', httpsQuestion, httpsModes, (existing.SPYRIA_HTTPS as HttpsMode) ?? 'tunnel')
+  if (https === 'direct')
+    await assertServesDirectly(
+      hostname,
+      { holdsPublicPortsAlready: existing.SPYRIA_HTTPS === 'direct' },
+      directHttpsProbes,
+    )
   const runsHost = runsHostOf(flags, existing.COMPOSE_PROFILES)
   const pairingCode = pairingCodeFor(asker, { folder, origin, existing, runsHost }, workspaceExistsIn)
   const keepsTunnel =
-    existing.CLOUDFLARE_TUNNEL_TOKEN !== undefined && hostnameOf(existing.SPYRIA_APP_ORIGIN) === hostname
-  const apiToken = asker.secret(
-    'cloudflare-token',
-    `Cloudflare API token with Account > Cloudflare Tunnel > Edit, Zone > DNS > Edit and Zone > Zone > Read, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
-  )
-  if (!apiToken && !keepsTunnel) throw new Error('A Cloudflare API token is required to create the tunnel')
+    https === 'tunnel' &&
+    existing.CLOUDFLARE_TUNNEL_TOKEN !== undefined &&
+    hostnameOf(existing.SPYRIA_APP_ORIGIN) === hostname
+  const tunnelApiToken =
+    https === 'tunnel'
+      ? asker.secret(
+          'cloudflare-token',
+          `Cloudflare API token with Account > Cloudflare Tunnel > Edit, Zone > DNS > Edit and Zone > Zone > Read, used now and never stored${keepsTunnel ? ' (empty to keep the current tunnel)' : ''}`,
+        )
+      : ''
+  if (https === 'tunnel' && !tunnelApiToken && !keepsTunnel)
+    throw new Error('A Cloudflare API token is required to create the tunnel')
+  let accessApiToken = tunnelApiToken
+  const cloudflareForAccess = () => {
+    accessApiToken ||= asker.secret(
+      'cloudflare-token',
+      'Cloudflare API token with the permissions spyria --help lists for --provider cloudflare-access, used now and never stored',
+    )
+    return accessApiToken ? cloudflareClientOf(accessApiToken, cloudflareApiUrl) : undefined
+  }
 
   const savedGoogleApp = {
     clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
@@ -245,13 +286,17 @@ export const setup = async (
     ? savedAppOf(savedMicrosoftApp)
     : instanceAppOf(asker, 'microsoft', microsoftClientId, savedMicrosoftApp)
   const oidc = oidcAccountAppOf(asker, origin, existing)
-  const cloudflare = apiToken ? cloudflareClientOf(apiToken, cloudflareApiUrl) : undefined
-  const setUpFirstWorkspaceProvider = firstWorkspaceProviderOf({ asker, hostname, origin, cloudflare }, { az })
+  const firstWorkspaceProvider = firstWorkspaceProviderOf(
+    { asker, hostname, origin, cloudflare: cloudflareForAccess },
+    { az },
+  )
   if (secretNames.every((name) => !existing[name])) assertNoEarlierData(folder, deployment, dataVolumesOf(deployment))
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   let answers: SetupAnswers = {
     deployment,
+    https,
+    acmeEmail: firstWorkspaceProvider.ownerEmail ?? existing.SPYRIA_ACME_EMAIL,
     version,
     images: flags.values.images ?? existing.SPYRIA_IMAGES ?? defaultImages,
     origin,
@@ -265,8 +310,10 @@ export const setup = async (
   let environment = environmentOf(answers, existing)
   const releaseFiles =
     version === cliVersion || cliVersion === 'dev'
-      ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n` }
+      ? { compose: composeFile, bifrost: `${JSON.stringify(bifrostConfig, null, 2)}\n`, caddyfile }
       : await releaseFilesOf(version)
+  if (https === 'direct' && releaseFiles.caddyfile === undefined)
+    throw new Error(`Spyria ${version} cannot serve HTTPS itself: choose --https tunnel, or a later version`)
   if (existing.SPYRIA_VERSION !== undefined && existing.SPYRIA_VERSION !== version) {
     console.log(`Backing up before changing from ${existing.SPYRIA_VERSION} to ${version}`)
     assertPostgresRuns(folder, 'run setup again')
@@ -289,11 +336,16 @@ export const setup = async (
     }
     writeEnvironment(folder, keptEnvironment)
   }
-  if (apiToken)
+  if (tunnelApiToken)
     keepInEnvironment(
       {
         tunnelToken: (
-          await createTunnel({ apiToken, hostname, tunnelName: `${deployment}-${hostname}`, api: cloudflareApiUrl })
+          await createTunnel({
+            apiToken: tunnelApiToken,
+            hostname,
+            tunnelName: `${deployment}-${hostname}`,
+            api: cloudflareApiUrl,
+          })
         ).token,
       },
       ['CLOUDFLARE_TUNNEL_TOKEN'],
@@ -305,10 +357,14 @@ export const setup = async (
       },
       ['SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'],
     )
-  await setUpFirstWorkspaceProvider()
+  await firstWorkspaceProvider.setUp()
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
-  console.log(`Wrote ${folder}: compose.yml, bifrost.json and .env (readable by you only).`)
+  console.log(
+    `Wrote ${folder}: compose.yml, bifrost.json${https === 'direct' ? ', Caddyfile' : ''} and .env (readable by you only).`,
+  )
+  const switchingLines = switchingLinesOf(existing, https, deployment)
+  if (switchingLines.length > 0) console.log(switchingLines.join('\n'))
   if (flags.switches.has('no-start')) return
   await startStack(folder, environment)
   const setupLink = readCompose(folder, operatorCommandOf(['setup-link']))

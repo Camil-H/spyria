@@ -1,12 +1,17 @@
+import { X509Certificate } from 'node:crypto'
 import { type Environment, secretNames } from './environment.ts'
 
 type Publisher = { URL?: string; PublishedPort?: number }
 type ServiceState = { Service: string; State: string; Health?: string; Publishers?: Publisher[] | null }
 type Problem = string
+type CaddyLogEntry = { level?: string; logger?: string; msg?: string; error?: string }
 
 const expectedServices = ['postgres', 'server', 'zero-cache', 'gateway']
 const loopbackAddresses = ['127.0.0.1', '::1']
 const everyAddress = ['', '0.0.0.0', '::']
+const caddyPublicPorts = [80, 443]
+const certificateWarningDays = 14
+const dayMilliseconds = 24 * 60 * 60 * 1000
 const minimumSecretLength = 32
 const isDevelopmentDefault = (value: string) => value === 'spyria' || value.startsWith('spyria-dev-')
 
@@ -22,6 +27,7 @@ export const serviceProblemsOf = (states: readonly ServiceState[], profiles: rea
     ...expectedServices,
     ...(profiles.includes('host') ? ['host'] : []),
     ...(profiles.includes('cloudflare') ? ['cloudflared'] : []),
+    ...(profiles.includes('direct') ? ['caddy'] : []),
   ]
   return expected.flatMap((service) => {
     const state = states.find((candidate) => candidate.Service === service)
@@ -37,6 +43,7 @@ export const publishedPortProblemsOf = (states: readonly ServiceState[]): Proble
     states.flatMap(({ Service, Publishers }) =>
       (Publishers ?? [])
         .filter(({ URL = '', PublishedPort = 0 }) => PublishedPort > 0 && !loopbackAddresses.includes(URL))
+        .filter(({ PublishedPort = 0 }) => !(Service === 'caddy' && caddyPublicPorts.includes(PublishedPort)))
         .map(
           ({ URL, PublishedPort }) =>
             `${Service} publishes port ${PublishedPort} on ${everyAddress.includes(URL ?? '') ? 'every address' : URL}, reachable from other machines: publish it on 127.0.0.1 only`,
@@ -93,3 +100,32 @@ export const backupNameOf = (database: string, now: Date) =>
     .toISOString()
     .replace(/[-:]/g, '')
     .replace(/\.\d{3}/, '')}.dump`
+
+export const certificateExpiryProblemOf = (certificate: string, hostname: string, now: Date): Problem | undefined => {
+  if (!certificate.includes('BEGIN CERTIFICATE'))
+    return `Caddy holds no certificate for ${hostname}: see spyria compose logs caddy`
+  const daysLeft = Math.floor(
+    (new X509Certificate(certificate).validToDate.getTime() - now.getTime()) / dayMilliseconds,
+  )
+  return daysLeft < certificateWarningDays
+    ? `The certificate of ${hostname} expires in ${daysLeft} days and Caddy has not renewed it: see spyria compose logs caddy`
+    : undefined
+}
+
+const caddyLogEntryOf = (line: string): CaddyLogEntry | undefined => {
+  const start = line.indexOf('{')
+  if (start === -1) return undefined
+  try {
+    return JSON.parse(line.slice(start))
+  } catch {
+    return undefined
+  }
+}
+
+export const lastCertificateErrorIn = (caddyLogs: string) => {
+  const entry = caddyLogs
+    .split('\n')
+    .map(caddyLogEntryOf)
+    .findLast((candidate) => candidate?.level === 'error' && candidate.logger?.startsWith('tls'))
+  return entry && (entry.error ?? entry.msg)
+}

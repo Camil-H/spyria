@@ -12,13 +12,15 @@ const usage = `spyria ${cliVersion}: install and run Spyria on this machine
   spyria restore <file> [--yes]    back up the database it replaces, then restore a dump from backups/ (asks first
                                    unless --yes)
   spyria doctor                    check Docker, the services, the server's start check, the disk,
-                                   the .env mode, its credentials and the published ports
+                                   the .env mode, its credentials, the published ports and, with direct HTTPS,
+                                   the certificate
   spyria setup-link                print the link that creates the first workspace
   spyria compose <arguments>       run docker compose on the install, for example spyria compose logs -f server
 
 Setup flags, each a question it then skips (with --cloud: --region, --project, --subscription, --dns-zone,
 --dns-zone-resource-group, --route53-zone-id, --certificate-arn, --size, --bind-hostname yes|no): --name, --hostname,
---google-client-id, --microsoft-client-id (create to register it with az), --oidc-issuer with --oidc-client-id,
+--https tunnel|direct (tunnel through Cloudflare, the default, or direct HTTPS on this machine's ports 80 and 443; kept
+when you set up again), --google-client-id, --microsoft-client-id (create to register it with az), --oidc-issuer with --oidc-client-id,
 --provider cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url, --version, --images,
 --port, --no-host (no runtime host on this machine; kept when you set up again), --host (turn it back on; once a
 workspace exists, with the command of Add runtime host), --no-start, --unattended (no question at all).
