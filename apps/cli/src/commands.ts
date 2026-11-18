@@ -115,7 +115,7 @@ const answersHealthy = (url: string) =>
 const certificateFailureOf = (environment: Environment, certificateError: string | undefined) =>
   [
     `Spyria runs, but ${environment.SPYRIA_APP_ORIGIN} does not answer over HTTPS: Caddy could not get its certificate${certificateError ? ` (${certificateError})` : ''}.`,
-    `The usual causes: ${hostnameOf(environment)} does not point at this machine's public address, or a firewall or the provider closes ports 80 and 443 to the internet.`,
+    `The usual causes: ${hostnameOf(environment)} does not point at an address that reaches this machine from the internet, or a firewall or the provider closes ports 80 and 443 to the internet.`,
     'Caddy keeps trying: once fixed, run spyria setup again, and see spyria compose logs caddy for more.',
   ].join(' ')
 

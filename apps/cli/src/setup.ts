@@ -179,13 +179,13 @@ const oidcAccountAppOf = (asker: Asker, origin: string, existing: Environment) =
 }
 
 const httpsQuestion =
-  "How will people reach Spyria? tunnel goes through Cloudflare with no open port; direct serves this machine's public address on ports 80 and 443"
+  'How will people reach Spyria? tunnel goes through Cloudflare with no open port; direct serves HTTPS itself on ports 80 and 443, which must be reachable from the internet'
 
 const switchingLinesOf = (existing: Environment, https: HttpsMode, deployment: string) => {
   if (https === 'direct' && existing.CLOUDFLARE_TUNNEL_TOKEN)
     return [
       'The Cloudflare tunnel of this deployment stops and its token leaves .env.',
-      `The tunnel ${deployment}-${hostnameOf(existing.SPYRIA_APP_ORIGIN)} and its DNS record stay in Cloudflare: in DNS > Records, replace the CNAME record of the hostname with an A or AAAA record to this machine's public address, and delete the tunnel in Zero Trust > Networks > Tunnels.`,
+      `The tunnel ${deployment}-${hostnameOf(existing.SPYRIA_APP_ORIGIN)} and its DNS record stay in Cloudflare: in DNS > Records, replace the CNAME record of the hostname with an A or AAAA record to an address that reaches this machine from the internet, and delete the tunnel in Zero Trust > Networks > Tunnels.`,
     ]
   if (https === 'tunnel' && existing.SPYRIA_HTTPS === 'direct')
     return [`Caddy stops; its certificates stay in the volume ${deployment}-caddy-data.`]

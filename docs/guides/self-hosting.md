@@ -296,7 +296,7 @@ It removes everything it created, even on failure, and skips the optional profil
 
 ## Example: Cloudflare
 
-An HTTPS origin and an organization provider without opening a port. Any equivalent works.
+One way among others to get an HTTPS origin and an organization provider without opening a port: any reverse proxy or tunnel, and any OIDC provider, work the same way.
 
 1. **Tunnel.** Zero Trust > Networks > Tunnels: create a tunnel (cloudflared). Put its token in `CLOUDFLARE_TUNNEL_TOKEN`, add `cloudflare` to `COMPOSE_PROFILES`, and start the stack (routes save only once a connector runs). Add one public hostname, `spyria.example.com` without a path, to `http://server:3000`.
 2. **Trusted proxy.** Set `SPYRIA_TRUSTED_PROXY=cloudflare` so rate limits use `CF-Connecting-IP`. Only if Cloudflare is the only way in, or clients could choose their own address.
