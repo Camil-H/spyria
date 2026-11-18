@@ -520,7 +520,7 @@ test('--https direct refuses a hostname with no A or AAAA record before writing 
       },
     }).catch((error: Error) => error.message)
     expect(refusal).toBe(
-      "Point spyria.example.com at this machine's public address (an A or AAAA record), then run this again.",
+      'Point spyria.example.com at an address that reaches this machine from the internet (an A or AAAA record), then run this again.',
     )
     expect(askedHostnames).toEqual(['spyria.example.com'])
     expect(readdirSync(install)).toEqual(['backups'])

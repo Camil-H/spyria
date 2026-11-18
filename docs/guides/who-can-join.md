@@ -1,6 +1,11 @@
 # Who can join and sign-in
 
-Spyria has no passwords and sends no sign-in codes: everyone signs in through a single sign-on provider.
+Spyria has no passwords and sends no sign-in codes: everyone signs in through a single sign-on provider, at two levels.
+
+- **Account providers** belong to the whole deployment (Google, Microsoft, any OIDC provider). People sign in to Spyria with their own account, create workspaces and join the ones they are invited to.
+- **A workspace's own provider** is optional, set per workspace (Microsoft Entra, Okta, Google Workspace, Cloudflare Access, any OIDC provider). Once a workspace enforces it, only it opens that workspace, for everyone, Admins included.
+
+A deployment can have both. Without account providers, only workspaces' own providers sign people in, and nobody can create workspaces beyond the first.
 
 ## Signing in with an account
 

@@ -60,7 +60,9 @@ export const assertServesDirectly = async (
   probes: DirectHttpsProbes,
 ) => {
   if ((await probes.addressesOf(hostname)).length === 0)
-    throw new Error(`Point ${hostname} at this machine's public address (an A or AAAA record), then run this again.`)
+    throw new Error(
+      `Point ${hostname} at an address that reaches this machine from the internet (an A or AAAA record), then run this again.`,
+    )
   if (probes.isDockerRootless() && (probes.unprivilegedPortStart() ?? defaultUnprivilegedPortStart) > lowestPublicPort)
     throw new Error(
       `Rootless Docker cannot publish ports 80 and 443 on this machine: run sudo sysctl net.ipv4.ip_unprivileged_port_start=${lowestPublicPort}, and to keep it after a restart, echo net.ipv4.ip_unprivileged_port_start=${lowestPublicPort} | sudo tee /etc/sysctl.d/99-spyria.conf, then run this again.`,
