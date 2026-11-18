@@ -1,12 +1,11 @@
 # Machines
 
-This page explains where agent chats run: on the workspace's runtime hosts, or on a member's own machine for Claude Code and Codex subscriptions. It covers adding a host, adding your machine, signing in to a harness, the admin switch for members' machines, and how runtimes are isolated. It is for admins who run hosts and members who use their own machine. Installing the server is in [install on one machine](../guides/install.md) and the [manual install](../guides/self-hosting.md); a host for local development is in [Development](../guides/development.md).
+Agent chats run on the workspace's runtime hosts, or on a member's own machine for Claude Code and Codex subscriptions. To install the server, see [install on one machine](../guides/install.md) or the [manual install](../guides/self-hosting.md); for a local development host, [Development](../guides/development.md).
 
 ## Runtime hosts and runtimes
 
-A **runtime** is one container per runtime chat, made from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git, ripgrep and poppler-utils. A **runtime host** is any machine with Docker that runs the host program, `spyria-host`. The host dials out to Spyria over a WebSocket and carries out a fixed set of commands (create, start, stop, remove a runtime, report status). Spyria never connects into the host, so a host needs no open port and Spyria never holds a key to it. See [Decisions](../decisions/).
-
-There are two kinds of host:
+- A **runtime** is one container per runtime chat, from Spyria's runtime image: `spyria-agent`, Pi, node and npm, git, ripgrep and poppler-utils.
+- A **runtime host** is any machine with Docker running `spyria-host`. It dials out to Spyria over a WebSocket and runs a fixed set of commands (create, start, stop, remove a runtime, report status). It needs no open port; Spyria holds no key to it. See [Decisions](../decisions/).
 
 | | Workspace runtime host | A member's machine |
 |---|---|---|
@@ -15,29 +14,54 @@ There are two kinds of host:
 | Model calls | the prompter's API key through Spyria's gateway | the owner's subscription, directly from the machine |
 | Started with | `spyria-host <claim URL>` | `spyria-host --personal <claim URL>` |
 
-A host runs only the runtime image the server names: on a published deployment the `spyria-agent` image of the server's version, pulled by digest from the deployment's registry the first time a runtime starts on the host (any other registry, name or tag is refused); on a deployment built from a clone, the local content ID that `bun run agent:build` wrote on the server's machine, which each host must hold. Until the image is there, a prompt answers "Spyria's runtime image is not built: run bun run agent:build".
+A host runs only the runtime image the server names:
+
+- Published deployment: the `spyria-agent` image of the server's version, pulled by digest from the deployment's registry when the first runtime starts. Any other registry, name or tag is refused.
+- Built from a clone: the local content ID that `bun run agent:build` wrote on the server's machine; each host must hold it.
+- Until then, a prompt answers "Spyria's runtime image is not built: run bun run agent:build".
 
 ## Adding a workspace runtime host
 
-1. As an admin, open **Workspace settings**, **Runtimes**, then **Add runtime host**, give it a name and copy the command.
-2. Run the command on the machine. It starts the `spyria-host` container with all capabilities dropped, `no-new-privileges`, a read-only root filesystem and a state volume, gives it the Docker socket (rootless or rooted, detected by the command), and passes a single-use claim URL. On a published deployment the command runs the host image of Spyria's own version (`ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker); when Spyria's origin is `localhost` (local development), it builds the host image itself and points the container at `host.docker.internal`.
-3. The row turns **Online** within seconds, and the command dialog closes by itself. The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one. Once paired, the host keeps its own token in its state volume.
+1. In **Workspace settings**, **Runtimes**, click **Add runtime host**, name it and copy the command.
+2. Run the command on the machine.
+3. The row turns **Online** within seconds and the dialog closes. The host keeps its token in its state volume.
 
-Each host row shows its CPUs, memory, how many runtimes run against its cap, its version, and badges: **Rootless Docker** or **Docker runs as root** (a rooted daemon has root on the host, even though containers are isolated), and **Limits not enforced** when Docker cannot apply memory and process limits on that machine; the last two are amber, as risks. **Remove**, in the host's menu, disconnects a host and revokes its token.
+The claim code expires after 15 minutes (**Code expired**); **New command** issues a fresh one.
+
+A host row shows CPUs, memory, runtimes against its cap, version, and badges:
+
+- **Rootless Docker**, or **Docker runs as root** (amber: a rooted daemon has root on the host, even though containers are isolated).
+- **Limits not enforced** (amber): Docker cannot apply memory and process limits there.
+
+**Remove**, in the host's menu, disconnects it and revokes its token.
+
+Good to know:
+
+- The command starts `spyria-host` with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, a state volume, the Docker socket (rootless or rooted, detected) and a single-use claim URL.
+- Published deployments use the host image of Spyria's version, `ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker.
+- When Spyria's origin is `localhost`, the command builds the host image itself and points the container at `host.docker.internal`.
 
 ## Versions and updates
 
-A host says hello with its release and protocol versions, and spyria-agent answers the server's readiness check with its own. The server holds a minimum protocol for each, raised by a breaking change or a security fix in the host or the agent:
+Hosts report release and protocol versions on connect; `spyria-agent` reports its own to the server's readiness check. The server keeps a minimum protocol for each, raised by a breaking change or a security fix.
 
-- A host below the minimum (one that sends no version counts as protocol 0) is refused with "This host is out of date: update it with `<command>`", logs it and stops; its row shows **Update needed**. The badge opens the update command: it replaces the host container with the current image but keeps the state volume, so the host reconnects with its token and sign-ins, and needs no new code.
-- A host that is accepted but older than Spyria shows **Update available** with the same command.
-- A runtime whose spyria-agent is below the minimum fails as outdated, and the next prompt places a new runtime on the current image. A stopped runtime whose image is no longer the server's is recreated on the current image when it starts again, keeping its workspace and home volumes; a running runtime keeps its image until it stops.
+- **Update needed**: the host is below the minimum (no version counts as protocol 0). It is refused with "This host is out of date: update it with `<command>`", logs it and stops.
+- **Update available**: accepted, but older than Spyria.
+- Either badge opens the update command: it replaces the host container with the current image and keeps the state volume, so token and sign-ins survive and no new code is needed.
+- A runtime whose `spyria-agent` is below the minimum fails as outdated; the next prompt places a new runtime on the current image.
+- A stopped runtime on an old image is recreated on the current one when it starts again, keeping its workspace and home volumes. A running runtime keeps its image until it stops.
 
-The same applies to a member's machine on their profile page.
+The same applies to a member's machine, on their profile page.
 
 ## Removing a host
 
-Removing a host (or a member's machine) disconnects it: `spyria-host` logs "This host was removed", turns off its container's restart policy so Docker does not restart it, and stops. Its runtimes show **Could not start** in their chats. Nothing is deleted on the machine: the stopped host container, the runtime containers and their volumes stay until you remove them there, here for the default deployment `spyria`:
+Removing a host (or a member's machine) disconnects it:
+
+- `spyria-host` logs "This host was removed", turns off its restart policy so Docker does not restart it, and stops.
+- Its runtimes show **Could not start**.
+- Nothing is deleted: the stopped host container, runtime containers and volumes stay.
+
+To clean up, for the default deployment `spyria`:
 
 ```sh
 docker rm -f spyria-host
@@ -49,74 +73,123 @@ docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filte
 docker volume rm spyria-host
 ```
 
-The runtime volumes hold the files the agents worked on, so remove them only once nothing in them is needed; the package caches only hold downloads, and the snapshots a copy of a repository after its setup. If you add the machine to another workspace instead, its new host removes these runtimes and their volumes when it connects, as runtimes that workspace does not know. With another deployment name, replace `spyria-` with `<deployment>-`; the name filter keeps another deployment's runtimes on the same Docker daemon. On a member's machine, the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and installed harnesses (`spyria-harnesses`) stay too; `docker volume rm` them if the machine is not added again.
+- Runtime volumes hold the agents' files: remove them only when nothing in them is needed. Caches hold only downloads; snapshots, a repository after its setup.
+- For another deployment, replace `spyria-` with `<deployment>-`; the name filter spares other deployments on the same daemon.
+- On a member's machine, also `docker volume rm` the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and harnesses (`spyria-harnesses`) if the machine is not added again.
+- Added to another workspace instead, the new host removes these runtimes and volumes on connect, as unknown to that workspace.
 
 ## Where a chat runs
 
-A Spyria runtime is placed on the least loaded online workspace host that has room. A host's cap is one runtime per GiB of memory above the first 2 GiB. When the host runs directly on a machine that is itself a memory-limited container, together with its Docker (an LXC or sysbox container, or a Docker-in-Docker pod), that container's `memory.max` counts as the host's memory, and its free memory is what is left under it. A limit on the host's own container does not count: the runtimes run beside it, not inside it. The runtimes kept ready for a repository ([Dev mode](./dev-mode.md#runtimes-kept-ready)) count against it, but never take a host's last place. When no host is online the chat says "No runtime host is available"; when the chosen host goes offline, "The runtime host is offline". A host that misses three of its heartbeats is shown offline, even when Spyria did not see its connection close, and comes back online once it reconnects.
+A runtime goes to the least loaded online workspace host with room.
 
-The runtime's status shows in the chat: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**. A runtime idle for an hour is stopped (**Sleeping**), once its host is online, and starts again on the next prompt with its files intact; the panel shows the last snapshot of its files while it sleeps. A runtime whose host goes offline while it starts shows **Host offline** and starts on that host again, files intact, once it returns. A runtime whose container was removed from its host, for example by hand with Docker, or stopped outside Spyria, shows **Sleeping** as soon as Spyria next reaches it, and the next prompt creates or starts its container again. A runtime stopped or failed for 7 days is removed. A runtime its connected host could not stop shows **Sleeping**, and one it could not remove fails and is removed again 7 days later; while the host is offline, both wait for it to return. When a host connects, it also removes the runtimes Spyria no longer knows, such as one replaced while the host was offline, with their volumes. A package cache is removed with the last runtime on its host that uses it. A repository's snapshot stays on its host while the repository keeps runtimes ready; the host keeps only the newest one.
+- Cap: one runtime per GiB of memory above the first 2 GiB.
+- Runtimes kept ready for a repository ([Dev mode](./dev-mode.md#runtimes-kept-ready)) count against it, but never take a host's last place.
+- No host online: "No runtime host is available". Chosen host offline: "The runtime host is offline".
+- A host missing three heartbeats shows offline, even if its connection did not visibly close, until it reconnects.
 
-When the runtime is **Ready**, the chat's owner and Editors can open the status as a menu:
+Good to know: when the host runs directly on a memory-limited container together with its Docker (LXC, sysbox, Docker-in-Docker pod), that container's `memory.max` is the host's memory and its free memory what is left under it. A limit on the host's own container does not count: runtimes run beside it, not inside it.
 
-- **Restart session** keeps the runtime running but starts a fresh agent process and reloads the conversation into it. The chip reads **Restarting…** until the new session has started, then **Session restarted** for a few seconds; when no session was running, or the agent could not restart it, it reads **New session on your next message** instead. Use it when the agent stops answering, for example after its process died. When a later prompt has started by the time the restart runs, the restart waits for that prompt to end instead of cutting it.
-- **Stop runtime** puts the runtime to sleep as the idle stop does; the next prompt starts it again.
+### Runtime status
 
-While the agent is working, both ask for confirmation, because they stop the current turn. Other participants see the status without the menu, and the server refuses both actions to them.
+Statuses: **Not started**, **Starting…**, **Installing** *tool*…, **Ready**, **Sleeping**, **Host offline**, **Could not start**.
 
-When an agent's Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation on its own. A prompt that failed before the agent wrote anything is sent again once; otherwise the chat says "The agent restarted; send your message again", with the last line the agent printed. When that line asks to run a command, which a member cannot do in a runtime, the chat says "If it happens again, restart the session" instead. That output is redacted like the rest of the agent's output and kept in the agent's logs.
+- Idle one hour, host online: stopped (**Sleeping**). The next prompt restarts it, files intact; meanwhile the panel shows the last snapshot of its files.
+- Host offline during start: **Host offline**; it starts there again, files intact, when the host returns.
+- Container removed (for example by hand with Docker) or stopped outside Spyria: **Sleeping** once Spyria next reaches it; the next prompt recreates or starts it.
+- Stopped or failed for 7 days: removed.
 
-Each runtime has three volumes (its workspace, its home and its temporary directory), plus, for a dev chat, the package cache its owner shares across their runtimes on the same repository (`<deployment>-cache-*`) and, read-only, the newest snapshot of its repository on that host (`<deployment>-snapshot-*`), a 2 GiB memory limit, 2 CPUs and 512 processes, runs as a non-root user, and has all capabilities dropped and a read-only root filesystem.
+Good to know:
+
+- A runtime its connected host could not stop shows **Sleeping**; one it could not remove fails and is retried 7 days later. With the host offline, both wait for it.
+- On connect, a host removes runtimes Spyria no longer knows (such as one replaced while it was offline), with their volumes.
+- A package cache goes with the last runtime on its host that uses it.
+- A repository's snapshot stays while the repository keeps runtimes ready; the host keeps only the newest.
+
+### Restarting or stopping a runtime
+
+When **Ready**, the chat's owner and Editors can open the status as a menu:
+
+- **Restart session**: keeps the runtime, starts a fresh agent process and reloads the conversation. Use it when the agent stops answering.
+  - The chip reads **Restarting…**, then **Session restarted** for a few seconds, or **New session on your next message** if no session was running or the restart failed.
+  - If a later prompt has started, the restart waits for it to end.
+- **Stop runtime**: puts it to sleep like the idle stop; the next prompt starts it.
+
+Both ask for confirmation while the agent works, since they stop the turn. Other participants see the status without the menu; the server refuses them both actions.
+
+When a Claude Code or Codex process dies, `spyria-agent` restarts it and reloads the conversation:
+
+- A prompt that failed before any output is resent once.
+- Otherwise: "The agent restarted; send your message again", with the agent's last line.
+- If that line asks to run a command (impossible in a runtime), the chat says "If it happens again, restart the session" instead.
+- That output is redacted like all agent output and kept in the agent's logs.
+
+### Runtime resources
+
+- Three volumes: workspace, home, temporary directory.
+- Dev chats also get the owner's package cache shared across their runtimes on the repository (`<deployment>-cache-*`) and, read-only, the repository's newest snapshot on that host (`<deployment>-snapshot-*`).
+- 2 GiB memory, 2 CPUs, 512 processes.
+- Non-root user, all capabilities dropped, read-only root filesystem.
 
 ## Isolation and egress
 
-Each runtime gets its own Docker bridge network, which the host joins to relay the runtime's model and tool calls to Spyria. Runtimes on one host therefore cannot reach each other where Docker enforces isolation between networks (Docker Engine on Linux; some desktop Docker products allow traffic between networks).
-
-The model calls a runtime makes go to its host, which relays them to Spyria; Spyria runs them in the gateway on the prompting member's key. A runtime holds only a per-runtime token that Spyria issues, never a member's key, and never a GitHub token. See [Security](../architecture/security.md).
-
-Spyria does not filter runtimes' outbound traffic. On a cloud host, block the metadata endpoint (`169.254.169.254`) and private address ranges in the provider's firewall.
+- Each runtime has its own Docker bridge network; the host joins it to relay model and tool calls to Spyria.
+- Runtimes on a host cannot reach each other where Docker isolates networks (Docker Engine on Linux; some desktop Docker products do not).
+- Spyria runs model calls in the gateway on the prompting member's key. A runtime holds only a per-runtime token: never a member's key or a GitHub token. See [Security](../architecture/security.md).
+- Outbound traffic is not filtered. On a cloud host, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall.
 
 ## A member's own machine
 
-A member can run Claude Code on their Claude subscription, or Codex on their ChatGPT plan, on their own computer. The sign-in stays on that computer: Spyria never sees it.
+Run Claude Code on your Claude subscription, or Codex on your ChatGPT plan, on your computer. The sign-in never leaves it.
 
-1. Open **Profile**, **My machine**, then **Set up** on the Claude Code or Codex row (or **Add my machine**). Copy the command and run it on your computer. It ends with `spyria-host --personal <claim URL>`, followed by the sign-in command for the tool you chose.
+**Never run it on a machine others use.** The agent runs as you and can read your Claude and ChatGPT sign-ins.
+
+1. In **Profile**, **My machine**, click **Set up** on the Claude Code or Codex row (or **Add my machine**). Run the command on your computer. It ends with `spyria-host --personal <claim URL>`, then the tool's sign-in command.
 2. Sign in once, in a terminal:
-   - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the printed URL, sign in and paste the code.
-   - Codex: `docker exec -it spyria-host spyria-host login codex`, open the printed URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in first, in its **Security** settings.
-3. The dialog closes and the tool's row reads **Signed in** as soon as the sign-in ends. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
+   - Claude Code: `docker exec -it spyria-host spyria-host login claude-code`, open the URL, sign in and paste the code.
+   - Codex: `docker exec -it spyria-host spyria-host login codex`, open the URL and enter the one-time code. ChatGPT may ask you to enable device code sign-in in its **Security** settings first.
+3. The row reads **Signed in**. In a new runtime chat, set **Runs on** to **Local · Claude Code** or **Local · Codex**.
 
-The sign-in waits until `spyria-host --personal` has connected to Spyria once ("Waiting for spyria-host to connect to Spyria…"), since Spyria tells it which runtime image to sign in with. If it never connects, the sign-in stops after 15 minutes and points to `docker logs spyria-host`.
+When the machine shows **Offline** (Docker was not running at startup, or the container stopped):
 
-The container name follows the deployment name (`<deployment>-host`); the default deployment is `spyria`, so the commands above use `spyria-host`. The commands Spyria shows always carry the right name.
+- **Start** shows `docker start spyria-host`; it reconnects within seconds and the dialog closes by itself.
+- Still offline: **Set up again** gives a fresh install command. The old connection stops working; sign-ins are kept.
 
-**Never run it on a machine others use.** The agent on that machine runs as you and can read your Claude and ChatGPT sign-ins.
+Good to know:
 
-When your machine shows **Offline** (Docker was not running when your computer started, or the container was stopped), **Start** shows the command that starts it again, `docker start spyria-host`; it reconnects within seconds, and the dialog closes by itself once the machine is online. If it stays offline, **Set up again** gives a new command that installs it afresh: the old connection stops working, and your sign-ins are kept.
+- The sign-in waits for `spyria-host --personal` to connect once ("Waiting for spyria-host to connect to Spyria…"), since Spyria names the image to sign in with. After 15 minutes without it, it stops and points to `docker logs spyria-host`.
+- The container is `<deployment>-host` (`spyria-host` for the default deployment); the commands Spyria shows always use the right name.
 
 ### Sign-ins
 
-Each tool's sign-in lives in its own Docker volume on your machine (`<deployment>-cred-claude-code`, `<deployment>-cred-codex`) and survives runtimes being removed. `spyria-host logout claude-code` or `spyria-host logout codex` (through `docker exec -it`, as above) deletes it. Logging out of Codex is local only; to also end the session at OpenAI, log out of all devices in ChatGPT's **Security** settings. When a sign-in expires, the chat says "Authentication required — sign in to *tool* again".
-
-Tokens that show up in the agent's output (for example if it prints its own credentials file) are replaced with `[redacted]` before the events leave your machine.
+- Each lives in its own volume on your machine (`<deployment>-cred-claude-code`, `<deployment>-cred-codex`) and survives runtime removal.
+- `spyria-host logout claude-code` or `spyria-host logout codex` (via `docker exec -it`) deletes it.
+- Codex logout is local only; to end the OpenAI session, log out of all devices in ChatGPT's **Security** settings.
+- Expired: "Authentication required — sign in to *tool* again".
+- Tokens in the agent's output (such as a printed credentials file) become `[redacted]` before events leave your machine.
 
 ### Harness install on first use
 
-Claude Code, Codex and their adapters are not in the runtime image. Their versions are pinned in `apps/host/src/harnesses.json`, and your machine's `spyria-host` installs the pinned set the first time it is needed, at `login` or when a session starts (the chat shows **Installing Claude Code…**). The install goes into the `<deployment>-harnesses` volume, one folder per pinned set, mounted read-only into sessions. `SPYRIA_HARNESS_REGISTRY` points the install at another npm registry.
+- Claude Code, Codex and their adapters are not in the runtime image; their versions are pinned in `apps/host/src/harnesses.json`.
+- `spyria-host` installs the pinned set when first needed, at `login` or session start (**Installing Claude Code…**).
+- It goes into the `<deployment>-harnesses` volume, one folder per pinned set, mounted read-only into sessions.
+- `SPYRIA_HARNESS_REGISTRY` sets another npm registry.
 
 ### What a machine session does and does not do
 
-- Only the owner prompts; other participants read. Questions and steps work as in [Agents](./agents.md).
-- A message you send while the agent works joins its running turn, as on Pi: Claude Code takes it at once, Codex at its next step (see [Agents](./agents.md#agent-chats)). While your machine is offline or the tool is signed out, it stays queued and starts the next turn once the session is back.
-- The tool runs on your plan's models, chosen in the session chip; Spyria does not route, meter or budget it.
-- The agent's tools (MCP) still go through Spyria's gateway, as the chat owner.
-- If your machine is offline, prompts wait with "Your machine is offline".
-- If your machine is online but cannot reach the internet, a Codex session waits about 20 to 30 seconds before it starts: Codex first tries to fetch its model list and your ChatGPT workspace, then gives up. The turn then fails, since Codex needs ChatGPT to answer.
+- Only the owner prompts; others read. Questions and steps work as in [Agents](./agents.md).
+- A message sent mid-turn joins the running turn, as on Pi: Claude Code at once, Codex at its next step (see [Agents](./agents.md#agent-chats)). While the machine is offline or signed out, it waits and starts the next turn.
+- Models come from your plan, chosen in the session chip; Spyria does not route, meter or budget them.
+- Agent tools (MCP) still go through Spyria's gateway, as the chat owner.
+- Machine offline: prompts wait with "Your machine is offline".
+- Machine without internet: Codex waits about 20 to 30 seconds (fetching its model list and ChatGPT workspace) and the turn fails, since Codex needs ChatGPT.
 
 ## Turning members' machines off
 
-Admins control this for the workspace with the switch **Members can run sessions on their own machine** in **Workspace settings > Runtimes > Member local runtimes** (on by default). The section also counts how many members use their machine and how many of them are signed in to Claude Code and to Codex, kept up to date as machines are added, removed or signed in; it never shows whose machines they are. When it is off, members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"), and prompts in existing machine sessions get a notice.
+The switch **Members can run sessions on their own machine** is in **Workspace settings > Runtimes > Member local runtimes** (on by default).
+
+- The section counts members using their machine and those signed in to Claude Code and to Codex, live, never naming them.
+- Off: members cannot add a machine or start such a session (Profile says "Your workspace turned off sessions on members' machines"); prompts in existing machine sessions get a notice.
 
 ## Several deployments on one machine
 
-Every Docker object Spyria names carries the deployment name `SPYRIA_DEPLOYMENT`: the host container and its state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one Docker daemon, such as a development stack and a production one, therefore never see each other's runtimes. See [Manual install](../guides/self-hosting.md).
+Every Docker object carries the deployment name `SPYRIA_DEPLOYMENT`: host container and state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one daemon, such as development and production, never see each other's runtimes. See [Manual install](../guides/self-hosting.md).
