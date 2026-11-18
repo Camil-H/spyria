@@ -24,7 +24,7 @@ const timeoutOf = (requested: unknown) =>
     : maximumTimeoutMilliseconds
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
-const failureOf = (error: unknown) => ({
+export const failureOf = (error: unknown) => ({
   error: messageOf(error),
   ...(error instanceof RuntimeMissing && { missingRuntimeId: error.runtimeId }),
 })

@@ -29,8 +29,11 @@ export class Refused extends Error {
 }
 
 export class RuntimeMissing extends Refused {
-  constructor(readonly runtimeId: string) {
-    super('the runtime container is missing')
+  constructor(
+    readonly runtimeId: string,
+    reason = 'the runtime container is missing',
+  ) {
+    super(reason)
   }
 }
 
@@ -320,6 +323,18 @@ export const createCommandRunner = ({
       throw new Refused('not a managed runtime')
     return container
   }
+  const runningContainer = async (runtimeId: string) => {
+    const container = await managedContainer(runtimeId).catch((error) => {
+      ignoringMissing(error)
+      throw new RuntimeMissing(runtimeId)
+    })
+    if (!container.State?.Running) throw new RuntimeMissing(runtimeId, 'the runtime is not running')
+    return container
+  }
+  const isJoinedTo = async (network: string) => {
+    const self = await docker<ContainerInfo>('GET', `/containers/${selfContainerId}/json`)
+    return Object.hasOwn(self.NetworkSettings?.Networks ?? {}, network)
+  }
   const joinNetwork = async (network: string) => {
     if (selfContainerId)
       await docker('POST', `/networks/${network}/connect`, {
@@ -336,7 +351,7 @@ export const createCommandRunner = ({
     await joinNetwork(network)
   }
   const removeNetwork = async (network: string) => {
-    if (selfContainerId)
+    if (selfContainerId && (await isJoinedTo(network)))
       await docker('POST', `/networks/${network}/disconnect`, { Container: selfContainerId, Force: true }).catch(
         ignoring(403, 404),
       )
@@ -519,8 +534,8 @@ export const createCommandRunner = ({
     browserKey: string
     signInHours?: number
   }) => {
-    const runtime = await managedContainer(runtimeId)
-    if (!runtime.State?.Running || !runtime.Id) throw new Refused('runtime is not running')
+    const runtime = await runningContainer(runtimeId)
+    if (!runtime.Id) throw new Refused('runtime is not running')
     const { name, container } = await browserOf(runtimeId, browserKey)
     signInHoursByBrowser.set(name, signInHours)
     const profileVolume = profileVolumeOf(name)
@@ -657,10 +672,7 @@ export const createCommandRunner = ({
   return {
     run,
     originOf: async (runtimeId: string) => {
-      const container = await managedContainer(runtimeId).catch((error) => {
-        ignoringMissing(error)
-        throw new RuntimeMissing(runtimeId)
-      })
+      const container = await runningContainer(runtimeId)
       const networks = Object.values(container.NetworkSettings?.Networks ?? {})
       const address = networks.find((network) => network.IPAddress)?.IPAddress
       if (!address) throw new Refused('runtime is not running')

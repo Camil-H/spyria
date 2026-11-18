@@ -171,7 +171,8 @@ test("a host's refusal to start a browser reads in the member's terms", () => {
   expect(browserStartFailureOf('refused: no room for another browser on this host')).toBe(
     "The runtime's host has no room for another browser right now",
   )
-  expect(browserStartFailureOf('refused: runtime is not running')).toBe(browserAsleepRefusal)
+  expect(browserStartFailureOf('refused: the runtime is not running')).toBe(browserAsleepRefusal)
+  expect(browserStartFailureOf('refused: the runtime container is missing')).toBe(browserAsleepRefusal)
   expect(browserStartFailureOf('Runtime host x did not answer in time')).toBe('The browser could not start')
 })
 

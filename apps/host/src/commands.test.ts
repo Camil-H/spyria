@@ -193,10 +193,18 @@ const noBrowsers = (path: string) => {
 
 const recordingDocker = () => {
   const calls: { method: string; path: string; body?: unknown }[] = []
+  const selfNetworks = new Set<string>()
   const docker = (async (method: string, path: string, body?: unknown) => {
     calls.push({ method, path, body })
     const listing = noBrowsers(path)
     if (listing) return listing
+    const [, network, action] = path.match(/^\/networks\/([^/]+)\/(connect|disconnect)$/) ?? []
+    if (network && (body as { Container?: string }).Container === 'self-1') {
+      if (action === 'connect') selfNetworks.add(network)
+      else selfNetworks.delete(network)
+    }
+    if (path === '/containers/self-1/json')
+      return { NetworkSettings: { Networks: Object.fromEntries([...selfNetworks].map((name) => [name, {}])) } }
     if (path.endsWith('/json') && path.startsWith('/containers/spyria-rt-'))
       return { ...managedRuntimeJson, NetworkSettings: { Networks: { 'spyria-rt-runtime-1-net': {} } } }
     return {}
@@ -247,7 +255,7 @@ test('removing a runtime never deletes the credentials volumes', async () => {
   ])
 })
 
-test('each runtime gets its own network only while it runs: created and joined by a containerized spyria-host on create and start, released on stop and remove', async () => {
+test('each runtime gets its own network only while it runs: created and joined by a containerized spyria-host on create and start, released on stop and remove, leaving it only while joined', async () => {
   const { docker, calls } = recordingDocker()
   const runner = createCommandRunner({ docker, prefix: 'spyria-', selfContainerId: 'self-1' })
   const networkCallsOf = () => calls.filter((call) => call.path.startsWith('/networks/'))
@@ -288,7 +296,7 @@ test('each runtime gets its own network only while it runs: created and joined b
   ])
   calls.splice(0)
   await runner.run({ op: 'remove', runtimeId: 'runtime-1' })
-  expect(networkCallsOf()).toEqual(released)
+  expect(networkCallsOf()).toEqual(released.slice(1))
 })
 
 test('stop and remove of a runtime whose container is gone still release its network and volumes, but never touch an unmanaged container', async () => {
@@ -343,6 +351,16 @@ test('relaying to a runtime whose container is gone fails as missing, naming the
     .catch((error) => error)
   expect(unmanaged).not.toBeInstanceOf(RuntimeMissing)
   expect(unmanaged.message).toBe('refused: not a managed runtime')
+})
+
+test('relaying to a runtime whose container exited fails as missing, naming the runtime, so Spyria stops waiting on it', async () => {
+  const exitedDocker = (async () => ({ ...managedRuntimeJson, State: { Running: false } })) as Docker
+  const exited = await createCommandRunner({ docker: exitedDocker, prefix: 'spyria-' })
+    .originOf('runtime-1')
+    .catch((error) => error)
+  expect(exited).toBeInstanceOf(RuntimeMissing)
+  expect(exited.runtimeId).toBe('runtime-1')
+  expect(exited.message).toBe('refused: the runtime is not running')
 })
 
 test("two deployments on one Docker daemon never count or manage each other's runtimes, even when one name prefixes the other", async () => {
@@ -854,9 +872,11 @@ test('a profile older than the sign-in lifetime, or a browser left from an earli
 })
 
 test('a browser starts only on a running runtime of this host, with room for it, and is never one of another runtime', async () => {
-  expect(await failureOf(browserDocker({ isRuntimeRunning: false }).runner.run(startBrowser))).toContain(
-    'runtime is not running',
-  )
+  const onStoppedRuntime = await browserDocker({ isRuntimeRunning: false })
+    .runner.run(startBrowser)
+    .catch((error: unknown) => error)
+  expect(onStoppedRuntime).toBeInstanceOf(RuntimeMissing)
+  expect(onStoppedRuntime).toHaveProperty('message', 'refused: the runtime is not running')
   const full = browserDocker({ freeBytes: 512 * 1024 ** 2 })
   expect(await failureOf(full.runner.run(startBrowser))).toContain('no room for another browser on this host')
   expect(full.requests()).toEqual([])
