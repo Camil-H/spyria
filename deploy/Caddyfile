@@ -1,0 +1,8 @@
+{
+	acme_ca {$SPYRIA_ACME_CA}
+	email "{$SPYRIA_ACME_EMAIL}"
+}
+
+{$SPYRIA_APP_ORIGIN} {
+	reverse_proxy server:3000
+}

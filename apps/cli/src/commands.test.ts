@@ -28,6 +28,7 @@ writeFileSync(
   `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER/calls"
 case "$*" in
+  *"exec -T caddy"*) cat "$FAKE_DOCKER/certificate.pem" 2>/dev/null ;;
   *pg_dump*)
     cp "$FAKE_INSTALL/compose.yml" "$FAKE_DOCKER/compose-at-backup"
     cp "$FAKE_INSTALL/.env" "$FAKE_DOCKER/env-at-backup"
@@ -39,6 +40,7 @@ case "$*" in
   *"ps --all --format json"*) cat "$FAKE_DOCKER/ps.json" ;;
   *"images --format json"*) printf '[]' ;;
   *"ps --all --quiet host"*) cat "$FAKE_DOCKER/host-container" 2>/dev/null ;;
+  *"ps --all --quiet caddy"*) cat "$FAKE_DOCKER/caddy-container" 2>/dev/null ;;
   "volume ls "*)
     [ -f "$FAKE_DOCKER/daemon-down" ] && exit 1
     cat "$FAKE_DOCKER/volumes" 2>/dev/null ;;
@@ -92,6 +94,8 @@ beforeEach(() => {
   rmSync(join(fakeDocker, 'compose-at-backup'), { force: true })
   rmSync(join(fakeDocker, 'env-at-backup'), { force: true })
   rmSync(join(fakeDocker, 'host-container'), { force: true })
+  rmSync(join(fakeDocker, 'caddy-container'), { force: true })
+  rmSync(join(fakeDocker, 'certificate.pem'), { force: true })
   rmSync(join(fakeDocker, 'runtimes'), { force: true })
   rmSync(join(fakeDocker, 'volume-in-use'), { force: true })
   rmSync(join(fakeDocker, 'volumes'), { force: true })
@@ -437,4 +441,74 @@ test('a setup changing the version that fails after it registered the Microsoft 
   } finally {
     rmSync(join(fakeBin, 'az'), { force: true })
   }
+})
+
+const certificateValidUntil2036 = [
+  '-----BEGIN CERTIFICATE-----',
+  'MIIBbjCCARSgAwIBAgIUEI1iz44ycvwLNLLwMK2fSzVnJEEwCgYIKoZIzj0EAwIw',
+  'HTEbMBkGA1UEAwwSc3B5cmlhLmV4YW1wbGUuY29tMB4XDTI2MTExODE3MDY0MVoX',
+  'DTM2MTExNTE3MDY0MVowHTEbMBkGA1UEAwwSc3B5cmlhLmV4YW1wbGUuY29tMFkw',
+  'EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOPcqSISqfhYTF+zRkvBlejpTcvUxyFch',
+  'SIcSiOxqQYlXdcF/hY9ykjm2puna2+Y+UIk71S3UtHZWxdhzmpKPw6MyMDAwHQYD',
+  'VR0OBBYEFATXepNnyoyT9U2dbzDSEDI9rWGyMA8GA1UdEwEB/wQFMAMBAf8wCgYI',
+  'KoZIzj0EAwIDSAAwRQIgSunKlHxQNkigcpqUst6vTFiPwe5lKSLqFr/PbTk0yr0C',
+  'IQDaZD9gJJHcG3cMz254MeMo1SzLu2//ntXX6rwb0TsOLg==',
+  '-----END CERTIFICATE-----',
+].join('\n')
+
+test('spyria doctor in direct mode expects a healthy Caddy publishing 80 and 443 on every address, and names a missing certificate', () => {
+  const { CLOUDFLARE_TUNNEL_TOKEN: _tunnelToken, ...withoutTunnel } = installed
+  writeFileSync(
+    join(install, '.env'),
+    serializeEnvironment({
+      ...withoutTunnel,
+      ...withSecrets({}),
+      SPYRIA_HTTPS: 'direct',
+      COMPOSE_PROFILES: 'host,direct',
+    }),
+  )
+  writeFileSync(
+    join(fakeDocker, 'ps.json'),
+    ['postgres', 'server', 'zero-cache', 'gateway', 'host', 'caddy']
+      .map((service) =>
+        JSON.stringify({
+          Service: service,
+          State: 'running',
+          Health: 'healthy',
+          Publishers:
+            service === 'caddy'
+              ? [
+                  { URL: '0.0.0.0', TargetPort: 80, PublishedPort: 80 },
+                  { URL: '0.0.0.0', TargetPort: 443, PublishedPort: 443 },
+                ]
+              : [],
+        }),
+      )
+      .join('\n'),
+  )
+  writeFileSync(join(fakeDocker, 'certificate.pem'), certificateValidUntil2036)
+  expect(doctor(install)).toBe(true)
+  expect(calls()).toContain(
+    `compose --env-file ${install}/.env -f ${install}/compose.yml exec -T caddy sh -c cat /data/caddy/certificates/*/"$0"/"$0".crt spyria.example.com`,
+  )
+
+  rmSync(join(fakeDocker, 'certificate.pem'))
+  const printed: string[] = []
+  quiet.mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  try {
+    expect(doctor(install)).toBe(false)
+  } finally {
+    quiet.mockImplementation(() => undefined)
+  }
+  expect(printed.filter((line) => line.startsWith('✗'))).toEqual([
+    '✗ Caddy holds no certificate for spyria.example.com: see spyria compose logs caddy',
+  ])
+})
+
+test('starting a deployment no longer in direct mode removes the Caddy container and keeps its certificates volume', async () => {
+  writeFileSync(join(fakeDocker, 'caddy-container'), 'caddy-container-id\n')
+  await upgrade(install, parseFlags(['upgrade', '1.3.0', '--folder', install]), { fileUrlOf })
+  expect(indexOfCall('--profile direct rm --stop --force caddy')).toBeGreaterThan(-1)
+  expect(indexOfCall('--profile direct rm --stop --force caddy')).toBeLessThan(indexOfCall('up -d --remove-orphans'))
+  expect(calls().some((call) => call.includes('volume rm'))).toBe(false)
 })

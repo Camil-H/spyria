@@ -88,3 +88,40 @@ test('setup shows the Access client secret even when routing the admin mail fail
   }
   expect(printed.join('\n')).toContain('Client secret: access-secret')
 })
+
+test('in direct mode, Cloudflare Access as the first workspace provider still takes the Cloudflare token, creates no tunnel, and its owner email becomes the certificate contact', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-automation-'))
+  const flagsOf = (owner: string) =>
+    parseFlags([
+      ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--https', 'direct'],
+      ...['--hostname', 'spyria.example.com', '--provider', 'cloudflare-access', '--owner-email', owner],
+    ])
+  const optionsWith = (processEnvironment: Record<string, string>) => ({
+    cloudflareApiUrl: cloudflare.url.origin,
+    processEnvironment,
+    dataVolumesOf: () => [],
+    directHttpsProbes: {
+      addressesOf: async () => ['203.0.113.7'],
+      isDockerRootless: () => false,
+      unprivilegedPortStart: () => 1024,
+      isPortInUse: async () => false,
+    },
+  })
+  const printed: string[] = []
+  const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  try {
+    expect(await setup(flagsOf('pat@gmail.com'), optionsWith({})).catch((error: Error) => error.message)).toBe(
+      'Cloudflare Access needs the Cloudflare API token: set SPYRIA_SETUP_CLOUDFLARE_TOKEN or answer its question',
+    )
+    await setup(flagsOf('pat@gmail.com'), optionsWith({ SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' }))
+    const storedText = readFileSync(join(install, '.env'), 'utf8')
+    const stored = parseEnvironment(storedText)
+    expect(stored).toMatchObject({ SPYRIA_HTTPS: 'direct', SPYRIA_ACME_EMAIL: 'pat@gmail.com' })
+    expect(stored.CLOUDFLARE_TUNNEL_TOKEN).toBeUndefined()
+    expect(storedText).not.toContain('cloudflare-api-token')
+  } finally {
+    log.mockRestore()
+    rmSync(install, { recursive: true, force: true })
+  }
+  expect(printed.join('\n')).toContain('Client secret: access-secret')
+})

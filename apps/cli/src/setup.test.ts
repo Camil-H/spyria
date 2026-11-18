@@ -1,9 +1,10 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, spyOn, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { commandsOf } from './command-table.ts'
 import { installFolderOf, readEnvironment } from './commands.ts'
+import type { DirectHttpsProbes } from './direct-https.ts'
 import type { AzRunner } from './entra.ts'
 import { parseEnvironment, serializeEnvironment } from './environment.ts'
 import { parseFlags } from './flags.ts'
@@ -425,5 +426,167 @@ test('setup without saved secrets refuses data this machine holds for the deploy
     expect(readdirSync(empty)).toEqual(['backups'])
   } finally {
     rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+const reachableDirectly: DirectHttpsProbes = {
+  addressesOf: async () => ['203.0.113.7'],
+  isDockerRootless: () => false,
+  unprivilegedPortStart: () => 1024,
+  isPortInUse: async () => false,
+}
+const directSetupIn = (
+  install: string,
+  extra: string[],
+  {
+    processEnvironment = {},
+    probes = {},
+  }: { processEnvironment?: Record<string, string>; probes?: Partial<DirectHttpsProbes> } = {},
+) =>
+  setup(parseFlags(['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', ...extra]), {
+    cloudflareApiUrl: cloudflare.url.origin,
+    processEnvironment,
+    workspaceExistsIn: () => false,
+    dataVolumesOf: () => [],
+    directHttpsProbes: { ...reachableDirectly, ...probes },
+  })
+const printedBy = async (run: () => Promise<unknown>) => {
+  const printed: string[] = []
+  const log = spyOn(console, 'log').mockImplementation((...parts) => void printed.push(parts.join(' ')))
+  try {
+    await run()
+  } finally {
+    log.mockRestore()
+  }
+  return printed.join('\n')
+}
+
+test('--https direct sets up without a Cloudflare token: it writes the direct profile and a Caddyfile serving the hostname, and stores no tunnel token', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const tunnelsBefore = tunnelNames.length
+  try {
+    await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'])
+    const written = readEnvironment(install)
+    expect(written).toMatchObject({
+      SPYRIA_HTTPS: 'direct',
+      SPYRIA_APP_ORIGIN: 'https://spyria.example.com',
+      COMPOSE_PROFILES: 'host,direct',
+      SPYRIA_TRUSTED_PROXY: 'x-forwarded-for:1',
+    })
+    expect(written.CLOUDFLARE_TUNNEL_TOKEN).toBeUndefined()
+    expect(tunnelNames).toHaveLength(tunnelsBefore)
+    const caddyfile = readFileSync(join(install, 'Caddyfile'), 'utf8')
+    expect(caddyfile).toContain('{$SPYRIA_APP_ORIGIN} {')
+    expect(caddyfile).toContain('reverse_proxy server:3000')
+    expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toContain('./Caddyfile:/etc/caddy/Caddyfile:ro')
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('--https direct refuses a hostname with no A or AAAA record before writing any file', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const askedHostnames: string[] = []
+  try {
+    const refusal = await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'], {
+      probes: {
+        addressesOf: async (hostname: string) => {
+          askedHostnames.push(hostname)
+          return []
+        },
+      },
+    }).catch((error: Error) => error.message)
+    expect(refusal).toBe(
+      "Point spyria.example.com at this machine's public address (an A or AAAA record), then run this again.",
+    )
+    expect(askedHostnames).toEqual(['spyria.example.com'])
+    expect(readdirSync(install)).toEqual(['backups'])
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('--https direct on rootless Docker that cannot publish port 80 refuses with the sysctl line to run, and goes on once it can', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    const refusal = await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'], {
+      probes: { isDockerRootless: () => true, unprivilegedPortStart: () => 1024 },
+    }).catch((error: Error) => error.message)
+    expect(refusal).toContain('sudo sysctl net.ipv4.ip_unprivileged_port_start=80')
+    expect(refusal).toContain('/etc/sysctl.d/')
+    expect(readdirSync(install)).toEqual(['backups'])
+    await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'], {
+      probes: { isDockerRootless: () => true, unprivilegedPortStart: () => 80 },
+    })
+    expect(readEnvironment(install).SPYRIA_HTTPS).toBe('direct')
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('--https direct refuses when port 80 or 443 is taken on this machine, naming the port, before writing any file', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    for (const takenPort of [80, 443]) {
+      const refusal = await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'], {
+        probes: { isPortInUse: async (port: number) => port === takenPort },
+      }).catch((error: Error) => error.message)
+      expect({ takenPort, refusal }).toEqual({
+        takenPort,
+        refusal: `Port ${takenPort} is in use on this machine: stop what listens on it, or choose --https tunnel, then run this again.`,
+      })
+    }
+    expect(readdirSync(install)).toEqual(['backups'])
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('setting up again without --https keeps the saved mode; tunnel to direct removes the tunnel token and says how to delete the tunnel, and direct to tunnel asks for a token again', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    await directSetupIn(install, ['--hostname', 'spyria.example.com'], {
+      processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' },
+    })
+    expect(readEnvironment(install)).toMatchObject({ SPYRIA_HTTPS: 'tunnel', COMPOSE_PROFILES: 'host,cloudflare' })
+    await directSetupIn(install, [])
+    expect(readEnvironment(install)).toMatchObject({
+      SPYRIA_HTTPS: 'tunnel',
+      CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
+    })
+
+    const switchOutput = await printedBy(() => directSetupIn(install, ['--https', 'direct']))
+    const direct = readEnvironment(install)
+    expect(direct).toMatchObject({ SPYRIA_HTTPS: 'direct', COMPOSE_PROFILES: 'host,direct' })
+    expect(direct.CLOUDFLARE_TUNNEL_TOKEN).toBeUndefined()
+    expect(switchOutput).toContain('The tunnel spyria-spyria.example.com and its DNS record stay in Cloudflare')
+    expect(switchOutput).toContain('Zero Trust > Networks > Tunnels')
+
+    await directSetupIn(install, [])
+    expect(readEnvironment(install)).toMatchObject({ SPYRIA_HTTPS: 'direct', COMPOSE_PROFILES: 'host,direct' })
+
+    expect(await directSetupIn(install, ['--https', 'tunnel']).catch((error: Error) => error.message)).toBe(
+      'A Cloudflare API token is required to create the tunnel',
+    )
+    await directSetupIn(install, ['--https', 'tunnel'], { processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' } })
+    expect(readEnvironment(install)).toMatchObject({
+      SPYRIA_HTTPS: 'tunnel',
+      COMPOSE_PROFILES: 'host,cloudflare',
+      CLOUDFLARE_TUNNEL_TOKEN: 'tunnel-token-1',
+      SPYRIA_TRUSTED_PROXY: 'cloudflare',
+    })
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('setting up again in direct mode does not take the ports its own Caddy holds for taken', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    await directSetupIn(install, ['--hostname', 'spyria.example.com', '--https', 'direct'])
+    await directSetupIn(install, [], { probes: { isPortInUse: async () => true } })
+    expect(readEnvironment(install).SPYRIA_HTTPS).toBe('direct')
+  } finally {
+    rmSync(install, { recursive: true, force: true })
   }
 })

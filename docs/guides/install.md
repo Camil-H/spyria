@@ -1,12 +1,16 @@
 # Install on one machine
 
-The `spyria` tool installs Spyria with Docker Compose on one machine, reachable through a Cloudflare tunnel.
+The `spyria` tool installs Spyria with Docker Compose on one machine, reachable over HTTPS through a Cloudflare tunnel or on the machine's own public address.
 
 ## What you need
 
 - A Linux machine, a Mac, or a PC under WSL.
 - Docker. On Linux the script offers to install Docker Engine with Docker's own script; on a Mac, use Docker Desktop or OrbStack.
-- A domain on your Cloudflare account.
+- A domain: on your Cloudflare account for the tunnel, or at any DNS provider for direct HTTPS.
+- For direct HTTPS only:
+  - An A or AAAA record pointing the hostname at the machine's public address.
+  - Ports 80 and 443 free on the machine and open to the internet (firewall, provider, router).
+  - On rootless Docker, ports below 1024 allowed: `sudo sysctl net.ipv4.ip_unprivileged_port_start=80`, kept after a restart with `echo net.ipv4.ip_unprivileged_port_start=80 | sudo tee /etc/sysctl.d/99-spyria.conf`.
 
 ## Run the installer
 
@@ -24,19 +28,23 @@ The script checks Docker, downloads the `spyria` tool, checks it against the rel
 ## What setup asks
 
 1. **Deployment name and install folder** (`spyria` and `~/spyria`).
-   - The folder holds `compose.yml`, `bifrost.json`, `.env` (readable by you only, every secret generated) and `backups/`.
+   - The folder holds `compose.yml`, `bifrost.json`, `.env` (readable by you only, every secret generated) and `backups/`, plus a `Caddyfile` for direct HTTPS.
    - A folder whose `compose.yml` or `.env` belongs to another project is refused.
-2. **Hostname**, such as `spyria.example.com`, on a domain of your Cloudflare account.
-   - A hostname with other DNS records (an A or AAAA record of a website, say) is refused: delete them or choose another.
-3. **Cloudflare API token** with *Account > Cloudflare Tunnel > Edit*, *Zone > DNS > Edit* and *Zone > Zone > Read* (My Profile > API Tokens > Create Token > Custom token).
+2. **Hostname**, such as `spyria.example.com`.
+3. **How people reach Spyria** (`--https`):
+   - `tunnel` (the default): through a Cloudflare tunnel, with no open port. The hostname must be on a domain of your Cloudflare account.
+   - `direct`: on this machine's public address. A Caddy container gets a Let's Encrypt certificate and serves ports 80 and 443.
+4. **Cloudflare API token** (tunnel only) with *Account > Cloudflare Tunnel > Edit*, *Zone > DNS > Edit* and *Zone > Zone > Read* (My Profile > API Tokens > Create Token > Custom token).
    - The tool creates a tunnel to the server and its DNS record; no port opens on the machine.
+   - A hostname with other DNS records (an A or AAAA record of a website, say) is refused: delete them or choose another.
    - The token is never stored.
-4. **Account providers** people sign in to their account with, each optional, with the redirect URI `<origin>/auth/callback` the tool shows. With none, people sign in only through the first workspace's own provider ([who can join and sign-in](./who-can-join.md)).
+   - With `direct`, setup instead checks the hostname's A or AAAA record, rootless Docker's lowest port and that ports 80 and 443 are free, and stops before writing anything if one fails.
+5. **Account providers** people sign in to their account with, each optional, with the redirect URI `<origin>/auth/callback` the tool shows. With none, people sign in only through the first workspace's own provider ([who can join and sign-in](./who-can-join.md)).
    - **Google**: an OAuth client (any Google account, Gmail included).
    - **Microsoft**: an app for any organizational directory and personal accounts. Answer `create` to register it with `az`; later runs reuse it.
    - **OIDC provider**: issuer URL, client id and secret.
-5. **The first workspace's own provider** (optional, `skip` by default). Where the provider has an API and you are an admin there, the tool sets it up and prints what to enter in **Create a workspace** (the client secret only this once). The workspace enforces it.
-   - **Cloudflare Access**: set up Zero Trust once in the Cloudflare dashboard first (it picks your team domain). The tool creates an Access application with a one-time PIN for people at your domain.
+6. **The first workspace's own provider** (optional, `skip` by default). Where the provider has an API and you are an admin there, the tool sets it up and prints what to enter in **Create a workspace** (the client secret only this once). The workspace enforces it.
+   - **Cloudflare Access**: set up Zero Trust once in the Cloudflare dashboard first (it picks your team domain). The tool creates an Access application with a one-time PIN for people at your domain. It asks for the Cloudflare token with `direct` too.
      - You sign in as `admin@<domain>` to create the workspace. If the domain receives no mail yet, Email Routing forwards that address to yours (confirm Cloudflare's email first). If it has mailboxes, the tool leaves its mail alone and `admin@<domain>` must be one you read.
      - The token also needs *Account > Access: Apps and Policies > Edit*, *Account > Access: Organizations, Identity Providers, and Groups > Edit*, *Account > Email Routing Addresses > Edit* and *Zone > Email Routing Rules > Edit*.
    - **Microsoft Entra**: an app registration for your tenant only, through `az`, when you are signed in with it.
@@ -73,13 +81,18 @@ spyria setup --unattended --hostname spyria.example.com --google-client-id <clie
 
 ## Running setup again
 
-`spyria setup` keeps every secret, the tunnel and the answers you do not change.
+`spyria setup` keeps every secret, the tunnel, the HTTPS choice and the answers you do not change.
 
 - It checks every answer before creating anything in Cloudflare, Microsoft Entra or Okta.
 - It saves each secret to `.env` as soon as it gets it and prints a first workspace's client secret as soon as it is created, so a run that stops halfway loses neither; the next run goes on from there. The rest of `.env`, the version included, changes only at the end.
 - It rewrites `.env` in place (as does `spyria upgrade`), keeping your comments, `export` prefixes and own variables.
 - Without `.env`, it refuses to start over a deployment whose data is still on the machine ([troubleshooting](./troubleshooting.md)).
 - Other commands use the current folder only when its `compose.yml` and `.env` are Spyria's.
+
+### Tunnel or direct HTTPS
+
+- `--https direct` on a tunnel install stops `cloudflared` and removes its token from `.env`. The tunnel and its DNS record stay in Cloudflare: replace the CNAME record with an A or AAAA record to the machine, and delete the tunnel in **Zero Trust > Networks > Tunnels**.
+- `--https tunnel` on a direct install stops Caddy and asks for a Cloudflare token. Its certificates stay in the `<deployment>-caddy-data` volume.
 
 ### Runtime host on or off
 
@@ -94,7 +107,9 @@ spyria setup --unattended --hostname spyria.example.com --google-client-id <clie
 ## Good to know
 
 - On a laptop, Spyria is unreachable while the machine sleeps and running agent turns are interrupted. Docker and Compose's restart policies bring everything back on wake or restart.
-- `spyria doctor` checks Docker, each service, the server's start check, the disk, the versions, the mode of `.env`, its credentials and the published ports.
+- `spyria doctor` checks Docker, each service, the server's start check, the disk, the versions, the mode of `.env`, its credentials and the published ports. With direct HTTPS, it also checks Caddy and warns when its certificate expires in under 14 days.
+- With direct HTTPS, setup waits for `https://<hostname>/health`. If Caddy gets no certificate, setup prints its last certificate error: usually the hostname does not point at the machine, or ports 80 and 443 are closed by a firewall or the provider.
+- The certificates are not in the backups: Caddy gets new ones.
 - Upgrades and backups: [operations](./operations.md).
 - Managed clouds: [Install on AWS, Azure or Google Cloud](./cloud.md).
 - By hand, or to see what the tool does: [manual install](./self-hosting.md).

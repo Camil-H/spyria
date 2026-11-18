@@ -11,6 +11,7 @@ import { secretVariables } from './flags.ts'
 
 const answers: SetupAnswers = {
   deployment: 'spyria',
+  https: 'tunnel',
   version: '1.2.0',
   images: 'ghcr.io/camil-h',
   origin: 'https://spyria.example.com',

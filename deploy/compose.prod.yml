@@ -199,6 +199,30 @@ services:
       interval: 10s
       retries: 6
 
+  caddy:
+    profiles: [direct]
+    image: caddy:2.11.2@sha256:25cdc846626b62d05f6b633b9b40c2c9f6ef89b515dc76133cefd920f7dbe562
+    container_name: ${SPYRIA_DEPLOYMENT}-caddy
+    environment:
+      SPYRIA_APP_ORIGIN: ${SPYRIA_APP_ORIGIN}
+      SPYRIA_ACME_CA: ${SPYRIA_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+      SPYRIA_ACME_EMAIL: ${SPYRIA_ACME_EMAIL:-}
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - caddy-data:/data
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:2019/config/]
+      interval: 10s
+      retries: 6
+
 volumes:
   postgres-data:
     name: ${SPYRIA_DEPLOYMENT}-postgres-data
@@ -208,6 +232,8 @@ volumes:
     name: ${SPYRIA_DEPLOYMENT}-gateway-data
   host-state:
     name: ${SPYRIA_DEPLOYMENT}-host
+  caddy-data:
+    name: ${SPYRIA_DEPLOYMENT}-caddy-data
 
 networks:
   default:

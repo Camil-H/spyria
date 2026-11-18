@@ -1,6 +1,8 @@
 # Manual install
 
-Spyria runs as one Docker Compose file on one machine: Postgres, the migrations, the server with the web app, zero-cache, the model gateway and its database, and optionally a runtime host. This guide installs it by hand and shows what [`spyria setup`](./install.md) does underneath.
+Most installs use [`spyria setup`](./install.md), which can serve HTTPS itself or through a Cloudflare tunnel. Use this page to run Spyria behind your own reverse proxy, or to see what setup does underneath.
+
+Spyria runs as one Docker Compose file on one machine: Postgres, the migrations, the server with the web app, zero-cache, the model gateway and its database, and optionally a runtime host.
 
 See also [troubleshooting](./troubleshooting.md), [operations](./operations.md) (logs, traces, health, backups, disk) and the [architecture overview](../architecture/overview.md).
 
@@ -120,11 +122,14 @@ Compose reads only the keys of `.env.example` marked `[prod]`. It sets the gatew
 | `SPYRIA_POSTGRES_PASSWORD` | `spyria` database role password, set on first start and kept in the Postgres volume. |
 | `SPYRIA_ZERO_ADMIN_PASSWORD` | zero-cache admin password. |
 | `SPYRIA_LOCAL_PORT` | Server's loopback port, default `3300`. |
-| `COMPOSE_PROFILES` | Optional services, comma-separated: `host`, `cloudflare`. |
+| `COMPOSE_PROFILES` | Optional services, comma-separated: `host`, `cloudflare`, `direct`. |
+| `SPYRIA_HTTPS` | Written by `spyria setup`: `tunnel` or `direct`, the answer it keeps when run again. |
 | `SPYRIA_INSTALL_HOST_TOKEN` | Optional: one-time code pairing this machine's host before the first workspace exists. |
 | `SPYRIA_HOST_CLAIM_URL` | Profile `host`: the [claim URL](#runtime-host-on-this-machine), passed in the environment so other users cannot read it in `ps`. |
 | `SPYRIA_DOCKER_GROUP` | Profile `host`: Docker socket group, `0` on macOS (default), `stat -c %g /var/run/docker.sock` on Linux. |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Profile `cloudflare`: the tunnel's token. |
+| `SPYRIA_ACME_EMAIL` | Profile `direct`: optional contact address for Let's Encrypt. |
+| `SPYRIA_ACME_CA` | Profile `direct`: ACME directory, Let's Encrypt by default; only tests set it. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | Optional OTLP export of traces and logs ([operations](./operations.md#traces)). |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | Trace sampling, default 10% of new traces. |
 
@@ -134,6 +139,7 @@ Compose reads only the keys of `.env.example` marked `[prod]`. It sets the gatew
 |---|---|---|
 | `host` | `<deployment>-host`, a workspace runtime host on this machine's Docker: read-only, all capabilities dropped, `no-new-privileges` | `SPYRIA_HOST_CLAIM_URL`; `SPYRIA_DOCKER_GROUP` on Linux |
 | `cloudflare` | `<deployment>-cloudflared`, the Cloudflare Tunnel connector | `CLOUDFLARE_TUNNEL_TOKEN` |
+| `direct` | `<deployment>-caddy` on ports 80 and 443, with a Let's Encrypt certificate kept in `<deployment>-caddy-data` (not backed up: Caddy gets a new one) | The release's `deploy/Caddyfile` next to the Compose file; DNS pointing at the machine; `SPYRIA_TRUSTED_PROXY=x-forwarded-for:1` |
 
 ### What the server checks at start
 

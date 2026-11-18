@@ -3,9 +3,11 @@ import { withSecrets } from './environment.ts'
 import {
   backupNameOf,
   backupsToRemoveOf,
+  certificateExpiryProblemOf,
   credentialProblemsOf,
   diskProblemOf,
   environmentFileModeProblemOf,
+  lastCertificateErrorIn,
   productionProblemsIn,
   publishedPortProblemsOf,
   serviceProblemsOf,
@@ -32,6 +34,7 @@ test('the services of the stack and of its profiles must run and be healthy', ()
     'cloudflared is not running',
   ])
   expect(serviceProblemsOf(serviceStatesOf(JSON.stringify(states)), [])).toEqual(['gateway is starting'])
+  expect(serviceProblemsOf(states, ['direct'])).toEqual(['gateway is starting', 'caddy is not running'])
   expect(serviceStatesOf('')).toEqual([])
 })
 
@@ -90,6 +93,14 @@ test('a port published beyond this machine is a problem, once per service and po
       },
       { ...healthy('gateway'), Publishers: null },
       { ...healthy('zero-cache'), Publishers: [{ URL: '192.168.1.5', TargetPort: 4848, PublishedPort: 4848 }] },
+      {
+        ...healthy('caddy'),
+        Publishers: [
+          { URL: '0.0.0.0', TargetPort: 80, PublishedPort: 80 },
+          { URL: '::', TargetPort: 443, PublishedPort: 443 },
+          { URL: '0.0.0.0', TargetPort: 2019, PublishedPort: 2019 },
+        ],
+      },
     ]
       .map((state) => JSON.stringify(state))
       .join('\n'),
@@ -97,6 +108,7 @@ test('a port published beyond this machine is a problem, once per service and po
   expect(publishedPortProblemsOf(states)).toEqual([
     'postgres publishes port 5432 on every address, reachable from other machines: publish it on 127.0.0.1 only',
     'zero-cache publishes port 4848 on 192.168.1.5, reachable from other machines: publish it on 127.0.0.1 only',
+    'caddy publishes port 2019 on every address, reachable from other machines: publish it on 127.0.0.1 only',
   ])
 })
 
@@ -128,4 +140,51 @@ test('a missing, short or development default secret, or a default gateway admin
     'SPYRIA_ZERO_ADMIN_PASSWORD is a default or short value: replace it as the troubleshooting guide shows',
     'SPYRIA_GATEWAY_ADMIN_USER is a development default: give it another name',
   ])
+})
+
+const certificateValidUntil2036 = [
+  '-----BEGIN CERTIFICATE-----',
+  'MIIBbjCCARSgAwIBAgIUEI1iz44ycvwLNLLwMK2fSzVnJEEwCgYIKoZIzj0EAwIw',
+  'HTEbMBkGA1UEAwwSc3B5cmlhLmV4YW1wbGUuY29tMB4XDTI2MTExODE3MDY0MVoX',
+  'DTM2MTExNTE3MDY0MVowHTEbMBkGA1UEAwwSc3B5cmlhLmV4YW1wbGUuY29tMFkw',
+  'EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOPcqSISqfhYTF+zRkvBlejpTcvUxyFch',
+  'SIcSiOxqQYlXdcF/hY9ykjm2puna2+Y+UIk71S3UtHZWxdhzmpKPw6MyMDAwHQYD',
+  'VR0OBBYEFATXepNnyoyT9U2dbzDSEDI9rWGyMA8GA1UdEwEB/wQFMAMBAf8wCgYI',
+  'KoZIzj0EAwIDSAAwRQIgSunKlHxQNkigcpqUst6vTFiPwe5lKSLqFr/PbTk0yr0C',
+  'IQDaZD9gJJHcG3cMz254MeMo1SzLu2//ntXX6rwb0TsOLg==',
+  '-----END CERTIFICATE-----',
+].join('\n')
+
+test("Caddy's certificate is a problem when it is missing or expires in under 14 days", () => {
+  const expiry = new Date('2036-11-15T17:06:41Z')
+  const daysBeforeExpiry = (days: number) => new Date(expiry.getTime() - days * 24 * 60 * 60 * 1000)
+  expect(certificateExpiryProblemOf(certificateValidUntil2036, 'spyria.example.com', daysBeforeExpiry(30))).toBe(
+    undefined,
+  )
+  expect(certificateExpiryProblemOf(certificateValidUntil2036, 'spyria.example.com', daysBeforeExpiry(13.5))).toBe(
+    'The certificate of spyria.example.com expires in 13 days and Caddy has not renewed it: see spyria compose logs caddy',
+  )
+  expect(certificateExpiryProblemOf('', 'spyria.example.com', daysBeforeExpiry(30))).toBe(
+    'Caddy holds no certificate for spyria.example.com: see spyria compose logs caddy',
+  )
+})
+
+test("the last certificate error is read from Caddy's log", () => {
+  const logLine = (entry: object) => `spyria-caddy  | ${JSON.stringify(entry)}`
+  const logs = [
+    logLine({ level: 'info', logger: 'tls.obtain', msg: 'acquiring lock' }),
+    logLine({ level: 'error', logger: 'tls.obtain', msg: 'could not get certificate from issuer', error: 'first' }),
+    logLine({ level: 'error', logger: 'http.log.error', msg: 'dial tcp: connection refused', error: 'not tls' }),
+    logLine({
+      level: 'error',
+      logger: 'tls.obtain',
+      msg: 'could not get certificate from issuer',
+      error: 'HTTP 400 urn:ietf:params:acme:error:connection - Timeout during connect (likely firewall problem)',
+    }),
+    'spyria-caddy  | not json',
+  ].join('\n')
+  expect(lastCertificateErrorIn(logs)).toBe(
+    'HTTP 400 urn:ietf:params:acme:error:connection - Timeout during connect (likely firewall problem)',
+  )
+  expect(lastCertificateErrorIn(logLine({ level: 'info', logger: 'tls', msg: 'ok' }))).toBeUndefined()
 })
