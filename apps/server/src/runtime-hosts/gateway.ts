@@ -100,7 +100,7 @@ const isHttpAnswer = (frame: Frame) =>
   isText(frame.error) ||
   (isHttpStatus(frame.status) && isTextRecord(frame.headers) && (frame.chunked === true || isText(frame.body)))
 const relayFrameChecks: Record<string, (frame: Frame) => boolean> = {
-  res: (frame) => isRequestId(frame.id) && isOptionalText(frame.error),
+  res: (frame) => isRequestId(frame.id) && isOptionalText(frame.error) && isOptionalText(frame.missingRuntimeId),
   http_res: (frame) => isRequestId(frame.sid) && isHttpAnswer(frame) && isOptionalText(frame.missingRuntimeId),
   http_body: (frame) => isRequestId(frame.sid) && isText(frame.data),
   http_end: (frame) => isRequestId(frame.sid),
@@ -294,7 +294,7 @@ export const createRuntimeHostGateway = ({
 
   const recordRuntimeMissing = async (connection: Connection, frame: Frame) => {
     const { identified } = connection
-    const isFailure = frame.type === 'http_res' || frame.type === 'ws_close'
+    const isFailure = frame.type === 'res' || frame.type === 'http_res' || frame.type === 'ws_close'
     if (!identified || !isFailure || typeof frame.missingRuntimeId !== 'string') return
     await identified.handlers.runtimeMissing(identified.host, frame.missingRuntimeId).catch((error) =>
       log.error({

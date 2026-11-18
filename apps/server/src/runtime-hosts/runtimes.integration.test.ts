@@ -274,6 +274,32 @@ test('a running runtime whose container its connected host reports missing is st
   expect(host.containers.get(runtime.id)?.running).toBe(true)
 })
 
+test('a running runtime whose container exited is stopped as soon as a call or a browser start reaches it, and the next prompt starts its container again', async () => {
+  const host = await fakeHost('Host with an exited container')
+  const chat = await newRuntimeChat()
+  const runtime = await runningRuntime(chat)
+  const sandbox = gateway.sandboxProvider.connect({
+    workspaceId: acme,
+    hostId: runtimeHostId(host.id),
+    runtimeId: runtime.id,
+  })
+  const exitContainer = () => Object.assign(host.containers.get(runtime.id) ?? {}, { running: false })
+
+  exitContainer()
+  expect((await rejectionOf(sandbox.fetch({ method: 'GET', path: '/ready' }))).message).toBe(
+    'refused: the runtime is not running',
+  )
+  expect(await runtimeOf(chat)).toMatchObject({ state: 'stopped', host_id: host.id })
+  host.commands.length = 0
+  await ensure(chat)
+  await runtimeIn(chat, 'running')
+  expect(host.lifecycleCommands()).toEqual(['start'])
+
+  exitContainer()
+  expect((await rejectionOf(sandbox.startBrowser('member', {}))).message).toBe('refused: the runtime is not running')
+  expect(await runtimeOf(chat)).toMatchObject({ state: 'stopped', host_id: host.id })
+})
+
 test('a runtime whose host drops while it starts goes back to stopped on that host and starts there again once it returns, keeping its container and volumes', async () => {
   const host = await fakeHost('Dropping host')
   const chat = await newRuntimeChat()

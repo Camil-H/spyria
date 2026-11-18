@@ -865,8 +865,13 @@ type HostCommand = {
   signInHours?: number
   keep?: string[]
 }
-const runtimeMissingOf = ({ runtimeId }: { runtimeId?: string }) => ({
-  error: 'refused: the runtime container is missing',
+class FakeRuntimeMissing extends Error {
+  constructor(readonly runtimeId: string) {
+    super('refused: the runtime is not running')
+  }
+}
+const runtimeMissingOf = ({ runtimeId }: { runtimeId?: string }, container?: FakeContainer) => ({
+  error: container ? 'refused: the runtime is not running' : 'refused: the runtime container is missing',
   missingRuntimeId: runtimeId,
 })
 export type FakeHost = Awaited<ReturnType<ReturnType<typeof createFakeHosts>['fakeHost']>>
@@ -1087,6 +1092,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
       if (op === 'install' && installFailure) throw new Error(installFailure)
       if (op === 'install') installedHarnesses.add(harness)
       const container = containers.get(runtimeId)
+      if (op === 'browser_start' && container && !container.running) throw new FakeRuntimeMissing(runtimeId)
       if (op === 'create' || op === 'recreate') containers.set(runtimeId, { running: false, apiKey })
       if (op === 'start' && container) {
         Object.assign(container, { running: true, isBooted: false })
@@ -1171,15 +1177,15 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
         const incomingRequests = new Map<number, { request: HostFrame; parts: string[] }>()
         const answerHttp = (request: HostFrame) => {
           const container = containers.get(request.runtimeId ?? '')
-          if (!container) return send({ type: 'http_res', sid: request.sid, ...runtimeMissingOf(request) })
+          if (!container?.running)
+            return send({ type: 'http_res', sid: request.sid, ...runtimeMissingOf(request, container) })
           const isReadyProbe = request.path === '/ready'
-          const isReady = isReadyProbe && container?.running && container.isBooted !== false
-          const answered =
-            container?.running && !isReadyProbe
-              ? Promise.resolve(
-                  containerAgent?.respond(request as Parameters<ContainerAgent['respond']>[0], container),
-                ).catch((error: Error) => ({ error: error.message }))
-              : undefined
+          const isReady = isReadyProbe && container.isBooted !== false
+          const answered = !isReadyProbe
+            ? Promise.resolve(
+                containerAgent?.respond(request as Parameters<ContainerAgent['respond']>[0], container),
+              ).catch((error: Error) => ({ error: error.message }))
+            : undefined
           const limited =
             relayLimitMilliseconds === undefined
               ? answered
@@ -1226,7 +1232,12 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
               try {
                 send({ type: 'res', id: frame.id, data: run(op, frame.args ?? {}) })
               } catch (error) {
-                send({ type: 'res', id: frame.id, error: (error as Error).message })
+                send({
+                  type: 'res',
+                  id: frame.id,
+                  error: (error as Error).message,
+                  ...(error instanceof FakeRuntimeMissing && { missingRuntimeId: error.runtimeId }),
+                })
               }
             })
           }
@@ -1269,7 +1280,7 @@ export const createFakeHosts = ({ port, database }: { port: number; database: Da
               }),
             )
           } else if (frame.type === 'ws_connect')
-            send({ type: 'ws_close', sid, ...(!container && runtimeMissingOf(frame)) })
+            send({ type: 'ws_close', sid, ...(!container?.running && runtimeMissingOf(frame, container)) })
           if (frame.type === 'ws_msg') streams.get(sid)?.onMessage(frame.data ?? '')
           if (frame.type === 'ws_close') {
             streams.get(sid)?.onClose()

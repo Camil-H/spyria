@@ -17,7 +17,7 @@ import {
 } from './personal.ts'
 import { hostVersion, hostProtocolVersion as protocolVersion } from './protocol.ts'
 import { proxyOf, takeProxySettings, webSocketThrough } from './proxy.ts'
-import { createRelay, type Frame, frameTextOf, messageOf } from './relay.ts'
+import { createRelay, type Frame, failureOf, frameTextOf, messageOf } from './relay.ts'
 import { readSecretFiles } from './secret-files.ts'
 import { freeMemoryBytes, systemOf } from './system.ts'
 import { contextOf, log, startTelemetry, withSpan } from './telemetry.ts'
@@ -277,7 +277,7 @@ const connect = () => {
           })
         } catch (error) {
           log.error({ event: 'host.command', body: 'Host command failed', attributes, error })
-          send({ type: 'res', id: frame.id, error: messageOf(error) })
+          send({ type: 'res', id: frame.id, ...failureOf(error) })
         }
       },
       contextOf(frame),

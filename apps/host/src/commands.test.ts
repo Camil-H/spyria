@@ -353,6 +353,16 @@ test('relaying to a runtime whose container is gone fails as missing, naming the
   expect(unmanaged.message).toBe('refused: not a managed runtime')
 })
 
+test('relaying to a runtime whose container exited fails as missing, naming the runtime, so Spyria stops waiting on it', async () => {
+  const exitedDocker = (async () => ({ ...managedRuntimeJson, State: { Running: false } })) as Docker
+  const exited = await createCommandRunner({ docker: exitedDocker, prefix: 'spyria-' })
+    .originOf('runtime-1')
+    .catch((error) => error)
+  expect(exited).toBeInstanceOf(RuntimeMissing)
+  expect(exited.runtimeId).toBe('runtime-1')
+  expect(exited.message).toBe('refused: the runtime is not running')
+})
+
 test("two deployments on one Docker daemon never count or manage each other's runtimes, even when one name prefixes the other", async () => {
   const runtimeContainers = [
     { Names: ['/spyria-rt-a'], Labels: { 'spyria.managed': '1', 'spyria.runtime': 'a' } },
@@ -862,9 +872,11 @@ test('a profile older than the sign-in lifetime, or a browser left from an earli
 })
 
 test('a browser starts only on a running runtime of this host, with room for it, and is never one of another runtime', async () => {
-  expect(await failureOf(browserDocker({ isRuntimeRunning: false }).runner.run(startBrowser))).toContain(
-    'runtime is not running',
-  )
+  const onStoppedRuntime = await browserDocker({ isRuntimeRunning: false })
+    .runner.run(startBrowser)
+    .catch((error: unknown) => error)
+  expect(onStoppedRuntime).toBeInstanceOf(RuntimeMissing)
+  expect(onStoppedRuntime).toHaveProperty('message', 'refused: the runtime is not running')
   const full = browserDocker({ freeBytes: 512 * 1024 ** 2 })
   expect(await failureOf(full.runner.run(startBrowser))).toContain('no room for another browser on this host')
   expect(full.requests()).toEqual([])
