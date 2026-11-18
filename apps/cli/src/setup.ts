@@ -201,6 +201,7 @@ export const setup = async (
     workspaceExistsIn = workspaceExistsInRunningStack,
     dataVolumesOf = dataVolumesOnThisMachineOf,
     directHttpsProbes = directHttpsProbesOfThisMachine,
+    forgetHostPairing = forgetEarlierHostPairing,
   }: {
     cloudflareApiUrl?: string
     az?: AzRunner
@@ -208,6 +209,7 @@ export const setup = async (
     workspaceExistsIn?: (folder: string) => boolean | undefined
     dataVolumesOf?: (deployment: string) => string[]
     directHttpsProbes?: DirectHttpsProbes
+    forgetHostPairing?: (folder: string, environment: Environment) => void
   } = {},
 ) => {
   const isUnattended = flags.switches.has('unattended')
@@ -324,7 +326,7 @@ export const setup = async (
     existing.COMPOSE_PROFILES !== undefined &&
     environment.SPYRIA_HOST_CLAIM_URL !== existing.SPYRIA_HOST_CLAIM_URL
   )
-    forgetEarlierHostPairing(folder, environment)
+    forgetHostPairing(folder, environment)
 
   let keptEnvironment: Environment = { SPYRIA_DEPLOYMENT: deployment, ...existing }
   const keepInEnvironment = (created: Partial<SetupAnswers>, createdNames: string[]) => {

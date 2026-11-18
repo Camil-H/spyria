@@ -30,6 +30,14 @@ const cloudflare = Bun.serve({
   },
 })
 const folder = mkdtempSync(join(tmpdir(), 'spyria-setup-automation-'))
+const deployment = `spyria-test-${crypto.randomUUID().slice(0, 8)}`
+const withoutDocker = {
+  workspaceExistsIn: () => false,
+  dataVolumesOf: () => [],
+  forgetHostPairing: () => {
+    throw new Error('setup forgot a host pairing')
+  },
+}
 afterAll(() => {
   cloudflare.stop(true)
   rmSync(folder, { recursive: true, force: true })
@@ -41,13 +49,13 @@ test('setup with Cloudflare Access prints the provider values once and stores on
   try {
     await setup(
       parseFlags([
-        ...['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0'],
+        ...['setup', '--unattended', '--no-start', '--folder', folder, '--version', '1.2.0', '--name', deployment],
         ...['--hostname', 'spyria.example.com', '--provider', 'cloudflare-access', '--owner-email', 'pat@gmail.com'],
       ]),
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' },
-        dataVolumesOf: () => [],
+        ...withoutDocker,
       },
     )
   } finally {
@@ -71,13 +79,13 @@ test('setup shows the Access client secret even when routing the admin mail fail
   try {
     const failure = await setup(
       parseFlags([
-        ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0'],
+        ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment],
         ...['--hostname', 'spyria.example.com', '--provider', 'cloudflare-access', '--owner-email', 'pat@gmail.com'],
       ]),
       {
         cloudflareApiUrl: cloudflare.url.origin,
         processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 'cloudflare-api-token' },
-        dataVolumesOf: () => [],
+        ...withoutDocker,
       },
     ).catch((error: Error) => error.message)
     expect(failure).toBe('Cloudflare refused POST /zones/zone-1/email/routing/dns: Email Routing is unavailable')
@@ -94,12 +102,13 @@ test('in direct mode, Cloudflare Access as the first workspace provider still ta
   const flagsOf = (owner: string) =>
     parseFlags([
       ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.2.0', '--https', 'direct'],
+      ...['--name', deployment],
       ...['--hostname', 'spyria.example.com', '--provider', 'cloudflare-access', '--owner-email', owner],
     ])
   const optionsWith = (processEnvironment: Record<string, string>) => ({
     cloudflareApiUrl: cloudflare.url.origin,
     processEnvironment,
-    dataVolumesOf: () => [],
+    ...withoutDocker,
     directHttpsProbes: {
       addressesOf: async () => ['203.0.113.7'],
       isDockerRootless: () => false,
