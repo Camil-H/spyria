@@ -32,6 +32,11 @@ Start with `spyria doctor`. It checks:
 - Cause: the link lacks the setup token, or a workspace already exists.
 - Fix: `spyria setup-link` prints the link again while no workspace exists.
 
+**With direct HTTPS, setup says Caddy could not get its certificate**
+
+- Cause: the hostname does not point at this machine's public address, or a firewall or the provider closes ports 80 and 443 to the internet. Setup prints Caddy's last certificate error.
+- Fix: correct the DNS record or open the ports, then run `spyria setup` again; `spyria compose logs caddy` shows more.
+
 ## What `spyria doctor` reports
 
 **`.env` is readable by other users**
