@@ -133,7 +133,7 @@ Start with `spyria doctor`. It checks:
 
 **On Azure, the hostname has no HTTPS**
 
-- Fix: run the `certificate_command` output once the DNS records exist ([cloud](./cloud.md)).
+- Fix: run the `certificate_command` output once the DNS records exist ([Azure](./cloud-azure.md#after-setup)).
 
 **On Google Cloud, the certificate stays provisioning**
 
