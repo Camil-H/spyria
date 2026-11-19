@@ -347,19 +347,18 @@ const commandLineOf = ({
   installed = true,
   signedIn = false,
   signsIn = true,
-  awsProfileUsesSso = false,
+  awsSsoSetting,
 }: {
   installed?: boolean
   signedIn?: boolean
   signsIn?: boolean
-  awsProfileUsesSso?: boolean
+  awsSsoSetting?: 'sso_session' | 'sso_start_url'
 } = {}) => {
   const ranInTerminal: string[] = []
   let isSignedIn = signedIn
   const runner: CommandRunner = {
     isInstalled: () => installed,
-    succeeds: (command) =>
-      command.includes('configure') ? awsProfileUsesSso && command.at(-1) === 'sso_session' : isSignedIn,
+    succeeds: (command) => (command.includes('configure') ? command.at(-1) === awsSsoSetting : isSignedIn),
     runInTerminal: (command) => {
       ranInTerminal.push(command.join(' '))
       isSignedIn = signsIn
@@ -376,9 +375,12 @@ test('setup --cloud signs in with the cloud command line when it is not signed i
     return commandLine.ranInTerminal
   })
   expect(signIns).toEqual([['az login'], ['gcloud auth application-default login'], ['aws login']])
-  const awsWithSso = commandLineOf({ awsProfileUsesSso: true })
-  signInTo('aws', false, awsWithSso.runner)
-  expect(awsWithSso.ranInTerminal).toEqual(['aws sso login'])
+  const ssoSignIns = (['sso_session', 'sso_start_url'] as const).map((awsSsoSetting) => {
+    const commandLine = commandLineOf({ awsSsoSetting })
+    signInTo('aws', false, commandLine.runner)
+    return commandLine.ranInTerminal
+  })
+  expect(ssoSignIns).toEqual([['aws sso login'], ['aws sso login']])
 })
 
 test('setup --cloud signs in nowhere when already signed in, and stops when the command line is missing or the sign-in fails', () => {
