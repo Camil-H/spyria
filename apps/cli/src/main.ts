@@ -21,18 +21,16 @@ Setup flags, each a question it then skips (with --cloud: --region, --project, -
 --dns-zone-resource-group, --route53-zone-id, --certificate-arn, --size, --bind-hostname yes|no): --name, --hostname,
 --https tunnel|direct (tunnel through Cloudflare, the default, or direct HTTPS on this machine's ports 80 and 443; kept
 when you set up again), --google-client-id, --microsoft-client-id (create to register it with az), --oidc-issuer with --oidc-client-id,
---provider cloudflare-access|microsoft|okta|google|other|skip with --owner-email or --okta-url, --version, --images,
---port, --no-host (no runtime host on this machine; kept when you set up again), --host (turn it back on; once a
-workspace exists, with the command of Add runtime host), --no-start, --unattended (no question at all).
+--version, --images, --port, --no-host (no runtime host on this machine; kept when you set up again), --host (turn it
+back on; once a workspace exists, with the command of Add runtime host), --no-start, --unattended (no question at all).
+A workspace's own sign-in provider is chosen in Create a workspace, or later in Workspace settings > Single sign-on.
 
 Secrets are never flags, so they stay out of your shell history and process list: setup asks for them, or reads them
-from SPYRIA_SETUP_CLOUDFLARE_TOKEN (Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Read), SPYRIA_SETUP_GOOGLE_CLIENT_SECRET,
-SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET, SPYRIA_SETUP_OIDC_CLIENT_SECRET, SPYRIA_SETUP_OKTA_TOKEN and
+from SPYRIA_SETUP_CLOUDFLARE_TOKEN (tunnel only: Account Cloudflare Tunnel Edit, Zone DNS Edit, Zone Read),
+SPYRIA_SETUP_GOOGLE_CLIENT_SECRET, SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET, SPYRIA_SETUP_OIDC_CLIENT_SECRET and
 SPYRIA_SETUP_HOST_CLAIM_URL (the command of Add runtime host). A saved secret is never shown;
 an empty answer keeps it.
-A - answer removes a sign-in app, or a saved optional answer with --cloud. --provider cloudflare-access needs the
-Cloudflare token to also hold Access: Apps and Policies Edit, Access: Organizations, Identity Providers, and Groups
-Edit, Email Routing Addresses Edit, Zone Email Routing Rules Edit and Zone DNS Edit.
+A - answer removes a sign-in app, or a saved optional answer with --cloud.
 
 Every command takes --folder <path> (default ~/spyria, or the current folder when it holds an install).`
 

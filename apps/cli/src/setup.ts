@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import bifrostConfig from '../../../deploy/bifrost.json'
 import caddyfile from '../../../deploy/Caddyfile' with { type: 'text' }
 import composeFile from '../../../deploy/compose.prod.yml' with { type: 'text' }
-import { cloudflareApi, cloudflareClientOf, createTunnel } from './cloudflare.ts'
+import { cloudflareApi, createTunnel } from './cloudflare.ts'
 import {
   assertNoOtherProjectIn,
   assertPostgresRuns,
@@ -32,7 +32,7 @@ import {
 } from './environment.ts'
 import { askerOf, type Flags, type ProcessEnvironment, secretVariables } from './flags.ts'
 import { cliVersion, defaultImages, latestVersion } from './release.ts'
-import { type Asker, firstWorkspaceProviderOf, removal } from './setup-steps.ts'
+import { type Asker, removal } from './setup-steps.ts'
 
 const googleClientIdPattern = /^[\w-]+\.apps\.googleusercontent\.com$/
 const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -42,6 +42,16 @@ const localPortOf = (given: string) => {
   const port = Number(given)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port takes a port number from 1 to 65535')
   return port
+}
+
+const setupFlags = new Set([
+  ...['folder', 'name', 'port', 'hostname', 'https', 'host', 'no-host', 'version', 'images', 'no-start', 'unattended'],
+  ...['google-client-id', 'microsoft-client-id', 'oidc-issuer', 'oidc-client-id'],
+])
+
+const assertSetupFlags = (flags: Flags) => {
+  const unknown = [...Object.keys(flags.values), ...flags.switches].find((name) => !setupFlags.has(name))
+  if (unknown) throw new Error(`--${unknown} is not a setup flag: spyria --help lists them`)
 }
 
 const hostnameOf = (origin = '') => URL.parse(origin)?.hostname ?? ''
@@ -141,7 +151,7 @@ const instanceAppOf = (
 }
 
 const registeredMicrosoftAppOf = (origin: string, existing: SavedAccountApp, az: AzRunner): AccountApp => {
-  const entra = registerEntraApp({ origin, audience: 'any-account', savedClientId: existing.clientId }, az)
+  const entra = registerEntraApp({ origin, savedClientId: existing.clientId }, az)
   const clientSecret = entra.clientSecret ?? (entra.clientId === existing.clientId ? existing.clientSecret : undefined)
   if (!clientSecret)
     throw new Error(
@@ -214,6 +224,7 @@ export const setup = async (
 ) => {
   const isUnattended = flags.switches.has('unattended')
   const asker: Asker = { ...askerOf(flags, isUnattended, processEnvironment), isUnattended }
+  assertSetupFlags(flags)
   const folder = installFolderOf({
     ...flags,
     values: { ...flags.values, folder: asker.ask('folder', 'Install folder', installFolderOf(flags)) },
@@ -257,14 +268,6 @@ export const setup = async (
       : ''
   if (https === 'tunnel' && !tunnelApiToken && !keepsTunnel)
     throw new Error('A Cloudflare API token is required to create the tunnel')
-  let accessApiToken = tunnelApiToken
-  const cloudflareForAccess = () => {
-    accessApiToken ||= asker.secret(
-      'cloudflare-token',
-      'Cloudflare API token with the permissions spyria --help lists for --provider cloudflare-access, used now and never stored',
-    )
-    return accessApiToken ? cloudflareClientOf(accessApiToken, cloudflareApiUrl) : undefined
-  }
 
   const savedGoogleApp = {
     clientId: existing.SPYRIA_GOOGLE_CLIENT_ID,
@@ -288,17 +291,12 @@ export const setup = async (
     ? savedAppOf(savedMicrosoftApp)
     : instanceAppOf(asker, 'microsoft', microsoftClientId, savedMicrosoftApp)
   const oidc = oidcAccountAppOf(asker, origin, existing)
-  const firstWorkspaceProvider = firstWorkspaceProviderOf(
-    { asker, hostname, origin, cloudflare: cloudflareForAccess },
-    { az },
-  )
   if (secretNames.every((name) => !existing[name])) assertNoEarlierData(folder, deployment, dataVolumesOf(deployment))
   const version =
     flags.values.version ?? existing.SPYRIA_VERSION ?? (cliVersion === 'dev' ? await latestVersion() : cliVersion)
   let answers: SetupAnswers = {
     deployment,
     https,
-    acmeEmail: firstWorkspaceProvider.ownerEmail ?? existing.SPYRIA_ACME_EMAIL,
     version,
     images: flags.values.images ?? existing.SPYRIA_IMAGES ?? defaultImages,
     origin,
@@ -359,7 +357,6 @@ export const setup = async (
       },
       ['SPYRIA_MICROSOFT_CLIENT_ID', 'SPYRIA_MICROSOFT_CLIENT_SECRET'],
     )
-  await firstWorkspaceProvider.setUp()
   writeReleaseFiles(folder, releaseFiles)
   writeEnvironment(folder, environment)
   console.log(
@@ -375,7 +372,7 @@ export const setup = async (
       '',
       `Spyria ${version} runs at ${origin}.`,
       setupLink.exitCode === 0
-        ? `Create the first workspace from this setup link, which works once: ${setupLink.output.trim()}`
+        ? `Create the first workspace from this setup link, which works once: ${setupLink.output.trim()}\nTo make your organization's provider the only way in, choose it in Create a workspace, or later in Workspace settings › Single sign-on.`
         : '',
       answers.pairingCode
         ? 'This machine runs a runtime host: it joins the workspace whose admin made its command.'
@@ -384,7 +381,7 @@ export const setup = async (
           : '',
       'Then, in Workspace settings, open GitHub to connect it and work on repositories.',
       Object.values(answers.instanceApps).some(Boolean)
-        ? 'Anyone who signs in with an app of this Spyria can then create a workspace; a workspace can require its own sign-in provider in Single sign-on.'
+        ? 'Anyone who signs in with an app of this Spyria can then create a workspace.'
         : 'People join the first workspace by invite, signing in with its own provider.',
     ]
       .filter(Boolean)
