@@ -386,7 +386,10 @@ test('an account in no workspace hears so and creates one as its Admin, from thi
       select workspaces.name, created_by, user_id, role from workspaces join memberships using (workspace_id)
       where workspace_id = ${issued.workspaceId}`),
   ]).toEqual([{ name: 'Olive Co', created_by: oliveId, user_id: oliveId, role: 'admin' }])
-  expect(JSON.parse((await readSso(issued.workspaceId, oliveId)).body)).toEqual({ settings: null })
+  expect(JSON.parse((await readSso(issued.workspaceId, oliveId)).body)).toEqual({
+    settings: null,
+    suggestion: { preset: 'oidc', issuer: accountIdp.issuer },
+  })
   expect((await queryWith(app, issued.token)).status).toBe(200)
 })
 
@@ -1106,7 +1109,11 @@ test('the server refuses to start when workspaces sign in through an app of this
   await database.$client`
     insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
     values ('wonka', 'oidc', ${accountIdp.issuer}, 'spyria-accounts', '', true, now())`
-  const oidc = { issuer: `${accountIdp.issuer}/`, clientId: 'spyria-accounts', clientSecret: 'accounts-secret' }
+  const oidc = {
+    issuer: `${accountIdp.issuer.replace('localhost', 'LOCALHOST')}/`,
+    clientId: 'spyria-accounts',
+    clientSecret: 'accounts-secret',
+  }
   expect(await assertInstanceAppsConfigured(database, { google, oidc })).toBeUndefined()
   for (const instanceApps of [{ google }, { google, oidc: { ...oidc, issuer: 'https://idp.elsewhere.example' } }])
     expect((await rejectionOf(assertInstanceAppsConfigured(database, instanceApps))).message).toBe(

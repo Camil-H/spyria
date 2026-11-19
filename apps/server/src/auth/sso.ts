@@ -17,7 +17,6 @@ import {
 import { addInstallHostIn } from '@spyria/runtime/server'
 import {
   type AccountProvider,
-  accountIssuerOf,
   ClaimedDomainCannotCreate,
   displayNameFrom,
   domainOfEmail,
@@ -29,6 +28,7 @@ import {
   Name,
   NoAccountSignIn,
   normalizedEmail,
+  normalizedIssuerOf,
   SsoAddressMismatch,
   SsoDiscoveryFailed,
   type SsoPreset,
@@ -234,9 +234,9 @@ const suggestionFor = async (
   { instanceApps = {}, microsoftLoginOrigin }: SsoDependencies,
 ) => {
   if (signedInThrough !== 'account') return undefined
-  const [account] = await sql<{ issuer: string }[]>`
-    select issuer from account_identities where user_id = ${userId} order by issuer limit 1`
-  return account && ssoSuggestionOf(account.issuer, instanceApps, microsoftLoginOrigin)
+  const accounts = await sql<{ issuer: string }[]>`
+    select issuer from account_identities where user_id = ${userId} order by issuer`
+  return accounts.map(({ issuer }) => ssoSuggestionOf(issuer, instanceApps, microsoftLoginOrigin)).find(Boolean)
 }
 
 export const readSsoSettings = (
@@ -442,7 +442,7 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
     await database.$client<{ preset: SsoPreset; count: number }[]>`
       select preset, count(*)::int as count from workspace_sso join workspaces using (workspace_id)
       where uses_instance_app and workspaces.deleted_at is null
-        and (preset <> 'oidc' or issuer <> ${accountIssuerOf('oidc', instanceApps)})
+        and (preset <> 'oidc' or issuer <> ${normalizedIssuerOf(instanceApps.oidc?.issuer ?? '')})
       group by preset order by preset`
   ).filter(({ preset }) => preset === 'oidc' || !instanceApps[preset])
   if (missing.length > 0)

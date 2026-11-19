@@ -58,6 +58,7 @@ export {
   type InstanceApps,
   instanceAppFor,
   microsoftPersonalAccountsTenantId,
+  normalizedIssuerOf,
   type SignInScope,
   type SsoEmail,
   type SsoPreset,

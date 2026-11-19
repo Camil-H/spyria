@@ -50,11 +50,13 @@ const FirstWorkspaceForm = ({
   setupToken,
   accountProviders,
   instanceApps,
+  callbackOrigin,
   createFirstWorkspace,
 }: {
   setupToken?: string
   accountProviders: readonly AccountProvider[]
   instanceApps: readonly SsoPreset[]
+  callbackOrigin: string
   createFirstWorkspace: (form: HTMLFormElement) => Promise<SignInOutcome>
 }) => {
   const [isCreating, setIsCreating] = useState(false)
@@ -94,6 +96,7 @@ const FirstWorkspaceForm = ({
               clientSecret={clientSecret}
               onClientSecretChange={setClientSecret}
               instanceApps={instanceApps}
+              callbackOrigin={callbackOrigin}
               usesInstanceApp={usesInstanceApp}
               onUsesInstanceAppChange={setUsesInstanceApp}
             />
@@ -164,6 +167,7 @@ export const SignInScreen = ({
   setupToken,
   accountProviders = [],
   instanceApps = [],
+  callbackOrigin = location.origin,
   notice,
   signInWithEmail,
   signIn,
@@ -176,6 +180,7 @@ export const SignInScreen = ({
   setupToken?: string
   accountProviders?: readonly AccountProvider[]
   instanceApps?: readonly SsoPreset[]
+  callbackOrigin?: string
   notice?: string
   signInWithEmail: (email: string) => Promise<SignInOutcome>
   signIn: (target: { email?: string; provider?: string }) => Promise<SignInOutcome>
@@ -219,6 +224,7 @@ export const SignInScreen = ({
         setupToken={setupToken}
         accountProviders={accountProviders}
         instanceApps={instanceApps}
+        callbackOrigin={callbackOrigin}
         createFirstWorkspace={createFirstWorkspace}
       />
     )

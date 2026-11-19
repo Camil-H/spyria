@@ -28,6 +28,7 @@ type SettingsCard = PageCard & {
     workspaceId: WorkspaceId
     isDexSignIn: boolean
     instanceApps: readonly ('google' | 'microsoft' | 'oidc')[]
+    callbackOrigin: string
     permissions: readonly WorkspacePermission[]
   }>
 }
@@ -209,6 +210,7 @@ const SettingsRoute = () => {
           workspaceId={workspaceId}
           isDexSignIn={isDexSignIn}
           instanceApps={authMode.instanceApps}
+          callbackOrigin={authMode.callbackOrigin}
           permissions={permissions}
         />
       </CardPage>

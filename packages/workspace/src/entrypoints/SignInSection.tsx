@@ -47,8 +47,8 @@ export const isInstanceAppIn = (instanceApps: readonly SsoPreset[], preset: SsoP
   usesInstanceApp && instanceApps.includes(preset)
 export const continueLabelOf = (preset: SsoPreset) => `Continue with ${instanceAppNames[preset]}`
 
-const RedirectUri = ({ preset }: { preset: SsoPreset }) => {
-  const redirectUri = `${location.origin}/auth/callback`
+const RedirectUri = ({ preset, callbackOrigin }: { preset: SsoPreset; callbackOrigin: string }) => {
+  const redirectUri = `${callbackOrigin}/auth/callback`
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2 text-sm">
@@ -68,6 +68,7 @@ export const ProviderFields = ({
   onClientSecretChange,
   hasSecret = false,
   instanceApps = [],
+  callbackOrigin,
   usesInstanceApp = false,
   onUsesInstanceAppChange,
 }: {
@@ -77,6 +78,7 @@ export const ProviderFields = ({
   onClientSecretChange: (clientSecret: string) => void
   hasSecret?: boolean
   instanceApps?: readonly SsoPreset[]
+  callbackOrigin: string
   usesInstanceApp?: boolean
   onUsesInstanceAppChange?: (usesInstanceApp: boolean) => void
 }) => {
@@ -119,7 +121,7 @@ export const ProviderFields = ({
         </>
       ) : (
         <>
-          <RedirectUri preset={provider.preset} />
+          <RedirectUri preset={provider.preset} callbackOrigin={callbackOrigin} />
           <label className={labelClass}>
             Client id
             <input name="clientId" className={fieldClass} value={provider.clientId} onChange={edit('clientId')} />
@@ -157,10 +159,12 @@ export const SignInSection = ({
   workspaceId,
   isDexSignIn,
   instanceApps = [],
+  callbackOrigin = location.origin,
 }: {
   workspaceId: WorkspaceId
   isDexSignIn: boolean
   instanceApps?: readonly SsoPreset[]
+  callbackOrigin?: string
 }) =>
   isDexSignIn ? (
     <section aria-label="Sign-in" className={`${rowListClass} max-w-2xl`}>
@@ -169,7 +173,7 @@ export const SignInSection = ({
       </SettingRow>
     </section>
   ) : (
-    <SsoSettingsForm workspaceId={workspaceId} instanceApps={instanceApps} />
+    <SsoSettingsForm workspaceId={workspaceId} instanceApps={instanceApps} callbackOrigin={callbackOrigin} />
   )
 
 const suggestionLabelOf = (suggestion: SsoSuggestion) => {
@@ -218,9 +222,11 @@ const confirmationNotice =
 const SsoSettingsForm = ({
   workspaceId,
   instanceApps,
+  callbackOrigin,
 }: {
   workspaceId: WorkspaceId
   instanceApps: readonly SsoPreset[]
+  callbackOrigin: string
 }) => {
   const commands = useWorkspaceCommands()
   const [stored, setStored] = useState<SsoSettingsView | null>()
@@ -245,10 +251,9 @@ const SsoSettingsForm = ({
         setStored(settings)
         setSuggestion(suggestion)
         setAtOtherDomains(addresses)
-        if (settings) {
-          setForm({ ...emptyProvider, ...settings })
-          setUsesInstanceApp(settings.usesInstanceApp)
-        }
+        if (!settings) return
+        setForm({ ...emptyProvider, ...settings })
+        setUsesInstanceApp(settings.usesInstanceApp)
       },
       (error: unknown) => setLoadError(failureMessageOf(error)),
     )
@@ -271,7 +276,11 @@ const SsoSettingsForm = ({
     setRefusal(confirmationRefusalOf(outcome))
     if (outcome.status !== 'signed_in') return
     setClientSecret('')
-    setStored((await commands.readSsoSettings({ workspaceId })).settings)
+    const { settings } = await commands.readSsoSettings({ workspaceId })
+    setStored(settings)
+    if (!settings) return
+    setForm({ ...emptyProvider, ...settings })
+    setUsesInstanceApp(settings.usesInstanceApp)
   }
   const submit = (event: SubmitEvent<HTMLFormElement>, changesIssuer: boolean) => {
     event.preventDefault()
@@ -331,6 +340,7 @@ const SsoSettingsForm = ({
               onClientSecretChange={setClientSecret}
               hasSecret={stored?.hasSecret}
               instanceApps={instanceApps}
+              callbackOrigin={callbackOrigin}
               usesInstanceApp={usesInstanceApp}
               onUsesInstanceAppChange={setUsesInstanceApp}
             />

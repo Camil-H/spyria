@@ -10,9 +10,9 @@ const isTunnelRecord = ({ type, content }: DnsRecord) => type === 'CNAME' && con
 
 export class CloudflareRefused extends Error {}
 
-export type CloudflareCall = <Result>(method: string, path: string, body?: object) => Promise<Result>
+type CloudflareCall = <Result>(method: string, path: string, body?: object) => Promise<Result>
 
-export const cloudflareClientOf =
+const cloudflareClientOf =
   (apiToken: string, api = cloudflareApi): CloudflareCall =>
   async <Result>(method: string, path: string, body?: object) => {
     const response = await fetch(`${api}${path}`, {
@@ -33,7 +33,7 @@ const zoneCandidatesOf = (hostname: string) => {
   return labels.slice(0, -1).map((_, index) => labels.slice(index).join('.'))
 }
 
-export const zoneOf = async (call: CloudflareCall, hostname: string) => {
+const zoneOf = async (call: CloudflareCall, hostname: string) => {
   for (const candidate of zoneCandidatesOf(hostname)) {
     const [zone] = await call<Zone[]>('GET', `/zones?${new URLSearchParams({ name: candidate })}`)
     if (zone) return zone

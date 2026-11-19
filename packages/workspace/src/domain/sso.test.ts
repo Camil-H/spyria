@@ -98,7 +98,7 @@ test('the provider suggested to enforce follows the account the Admin signed in 
   ).toBeUndefined()
   expect(ssoSuggestionOf('https://login.microsoftonline.com/common/v2.0', apps)).toBeUndefined()
   expect(ssoSuggestionOf('https://idp.acme.com', apps)).toEqual({ preset: 'oidc', issuer: 'https://idp.acme.com' })
-  expect(ssoSuggestionOf('https://idp.acme.com/', apps)).toEqual({ preset: 'oidc', issuer: 'https://idp.acme.com' })
+  expect(ssoSuggestionOf('https://IdP.acme.com:443/', apps)).toEqual({ preset: 'oidc', issuer: 'https://idp.acme.com' })
   expect(ssoSuggestionOf('https://idp.globex.com', apps)).toBeUndefined()
   expect(ssoSuggestionOf('not a url', apps)).toBeUndefined()
   expect(ssoSuggestionOf('https://accounts.google.com', { microsoft: app })).toBeUndefined()

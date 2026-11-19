@@ -5,6 +5,7 @@ import {
   openSettings,
   type Page,
   ssoProviderIssuer,
+  ssoServerUrl,
   ssoViteUrl,
   test,
 } from '../01-access/fixtures'
@@ -46,6 +47,8 @@ test.describe('Single sign-on', () => {
     await expect(signInSectionOf(page)).toContainText('SSO enforced')
     await expect(signInSectionOf(page)).toContainText(enforcedText)
     await expect(form.getByRole('button', { name: 'Save and sign in again' })).toBeVisible()
+    await expect(form.getByLabel('Provider')).toHaveValue('oidc')
+    await expect(form).toContainText('Members sign in through the single sign-on app of this Spyria')
   })
 
   test('As an Admin, choosing another provider with my own app, I see the redirect URI of this Spyria and copy it', {
@@ -59,7 +62,7 @@ test.describe('Single sign-on', () => {
     await form.getByRole('button', { name: 'Use another provider' }).click()
     await form.getByLabel('Provider').selectOption('microsoft')
 
-    const redirectUri = `${new URL(ssoViteUrl).origin}/auth/callback`
+    const redirectUri = `${ssoServerUrl}/auth/callback`
     await expect(form.getByText(redirectUri, { exact: true })).toBeVisible()
     await expect(form).toContainText('an app registration for accounts in this organizational directory only')
     await form.getByRole('button', { name: 'Copy the redirect URI' }).click()
