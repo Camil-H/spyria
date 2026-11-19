@@ -52,7 +52,7 @@ Upgrades never replace runtime host VMs; they keep their pairing and runtimes. T
 
 ## Good to know
 
-- **Size for the zero-cache replica.** zero-cache keeps its SQLite replica on the container's local storage (SQLite's write-ahead log does not work on network file systems) and rebuilds it from Postgres on start. It answers only after that first sync. Choose a size whose replica and first sync fit the database with room to grow.
+- **Size for the zero-cache replica.** zero-cache keeps its SQLite replica on the container's local storage (SQLite's write-ahead log does not work on network file systems) and rebuilds it from Postgres on start. It answers only after that first sync. Check that the replica's room and first sync under [What it runs](#what-it-runs) fit the database with room to grow.
 - **zero-cache waits for the migrations** to create its publication and let its role replicate: it waits for the server and the gateway's configuration beside it.
 - **Health checks:** the platform uses `GET /health/live` (the process and its database), not `/health`, which also fails while zero-cache rebuilds or the gateway restarts ([operations](./operations.md#health)).
 - **Client addresses:** `SPYRIA_TRUSTED_PROXY=x-forwarded-for:2` makes rate limits key on the client's address, not the load balancer's.

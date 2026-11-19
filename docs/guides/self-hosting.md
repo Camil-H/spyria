@@ -60,15 +60,15 @@ Good to know:
 
 Open the setup link `<origin>/?setup=<SPYRIA_SETUP_TOKEN>` and create the first workspace by signing in. To print the link again: [first workspace](./operations.md#first-workspace).
 
-To run agents on this machine, add it in **Workspace settings › Runtimes › Add runtime host**.
+To run agents on this machine, take the code from the claim URL of **Workspace settings › Runtimes › Add runtime host** (`https://<hostname>/h/<code>`), set `SPYRIA_HOST_CLAIM_URL=http://server:3000/h/<code>`, add `host` to `COMPOSE_PROFILES` (and set `SPYRIA_DOCKER_GROUP` on Linux), then run `pull` and `up -d` again. Do not run the copied command on this machine: it would replace the Compose container of the same name.
 
 ## Account providers
 
 Apps people sign in to their account with ([who can join and sign-in](./who-can-join.md)). Each is optional and uses the redirect URI `<origin>/auth/callback`.
 
-- **Google**: an OAuth client of type *Web application* (any Google account, Gmail included): `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`.
-- **Microsoft**: an app in Microsoft Entra for *Accounts in any organizational directory and personal Microsoft accounts*: `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that blocks user consent needs its Entra admin to consent on the first sign-in.
-- **OIDC provider**, which must confirm addresses (`email_verified: true`): `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID` and `SPYRIA_OIDC_CLIENT_SECRET`.
+- **Google**: an OAuth client of type *Web application* with an *External* consent screen and the scopes `openid`, `email` and `profile` (any Google account, Gmail included): `SPYRIA_GOOGLE_CLIENT_ID` and `SPYRIA_GOOGLE_CLIENT_SECRET`.
+- **Microsoft**: an app in Microsoft Entra for *Accounts in any organizational directory and personal Microsoft accounts*, with a web redirect URI and a client secret: `SPYRIA_MICROSOFT_CLIENT_ID` and `SPYRIA_MICROSOFT_CLIENT_SECRET`. A tenant that blocks user consent needs its Entra admin to consent on the first sign-in.
+- **OIDC provider**: a client with the scopes `openid`, `email` and `profile`, which must confirm addresses (`email_verified: true`, [decision 0028](../decisions/0028-generic-oidc-must-confirm-addresses.md)): `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID` and `SPYRIA_OIDC_CLIENT_SECRET`.
 - With none, people sign in only through the first workspace's own provider, and nobody can create more workspaces.
 
 ## Deployment name
@@ -132,7 +132,7 @@ Compose reads only the keys of `.env.example` marked `[prod]`. It sets the gatew
 | `SPYRIA_HOST_CLAIM_URL` | Profile `host`: `http://server:3000/h/<code>`, with the code from the claim URL of **Add runtime host**, passed in the environment so other users cannot read it in `ps`. |
 | `SPYRIA_DOCKER_GROUP` | Profile `host`: Docker socket group, `0` on macOS (default), `stat -c %g /var/run/docker.sock` on Linux. |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Profile `cloudflare`: the tunnel's token. |
-| `SPYRIA_ACME_EMAIL` | Profile `direct`: optional address Let's Encrypt, which issues the HTTPS certificate, writes to about it. |
+| `SPYRIA_ACME_EMAIL` | Profile `direct`: optional contact address for Let's Encrypt, which issues the HTTPS certificate. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | Optional OTLP export of traces and logs ([operations](./operations.md#traces)). |
 | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | Trace sampling, default 10% of new traces. |
 

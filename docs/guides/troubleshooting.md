@@ -1,7 +1,5 @@
 # Troubleshooting
 
-Problems are grouped by when they show up: during setup, when Spyria does not load, at sign-in, with agents, after a key changed, in `spyria doctor`, and on a cloud install. Each one gives its cause and its fix.
-
 ## First checks
 
 Run `spyria doctor`. It checks:

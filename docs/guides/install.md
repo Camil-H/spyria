@@ -19,7 +19,7 @@ curl -fsSL https://spyria.dev/install | sh
 2. **Hostname**, such as `spyria.example.com`.
 3. **How people reach Spyria**:
    - `tunnel` (the default): through a Cloudflare tunnel, with no open port, for a laptop or a machine that cannot open ports. The hostname must be on a domain of your Cloudflare account.
-   - `direct`: the machine must serve ports 80 and 443 and be reachable from the internet (behind a VPC or NAT, forward these ports to it: see [direct HTTPS behind a VPC or NAT](#direct-https-behind-a-vpc-or-nat)).
+   - `direct`: without a tunnel. The machine must serve ports 80 and 443 and be reachable from the internet (behind a VPC or NAT, forward these ports to it: see [direct HTTPS behind a VPC or NAT](#direct-https-behind-a-vpc-or-nat)).
    - With `direct`, setup checks, and stops before writing anything if one fails:
      - that the hostname has an A or AAAA record;
      - on rootless Docker, that ports below 1024 are allowed (`sudo sysctl net.ipv4.ip_unprivileged_port_start=80`);
