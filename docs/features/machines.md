@@ -122,6 +122,27 @@ When a Claude Code or Codex process dies, `spyria-agent` restarts it and reloads
 - Spyria runs model calls in the gateway on the prompting member's key. A runtime holds only a per-runtime token: never a member's key or a GitHub token. See [Security](../architecture/security.md).
 - Outbound traffic is not filtered. On a cloud host, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall.
 
+## Many runtimes on one host
+
+Each running runtime gets its own Docker bridge network, so runtimes cannot reach each other where Docker's isolation applies (Docker Engine on Linux). Default address pools allow about 30 networks per daemon.
+
+For more than about 25 runtimes at once, set smaller pools in `/etc/docker/daemon.json` (4,096 networks) and restart Docker:
+
+```json
+{ "default-address-pools": [{ "base": "10.200.0.0/16", "size": 28 }] }
+```
+
+## Behind an outbound proxy
+
+- Set `HTTPS_PROXY` (`HTTP_PROXY` for an `http://` origin) and `NO_PROXY` in the shell before running the host command; it passes them on.
+- Only the connection to Spyria uses the proxy: not relayed runtime calls, not the host's health check. Runtimes get no proxy settings.
+
+## Relay limits
+
+- HTTP bodies between server and runtime: up to 256 MiB, relayed in 256 KiB base64 chunks.
+- A runtime's event stream: 1 MiB sent ahead of acknowledgements; the host closes that stream if it holds more than 8 MiB.
+- A host too old for this relay is refused, with the command that updates it.
+
 ## A member's own machine
 
 Run Claude Code on your Claude subscription, or Codex on your ChatGPT plan, on your computer. The sign-in never leaves it.

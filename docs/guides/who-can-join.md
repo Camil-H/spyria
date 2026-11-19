@@ -7,7 +7,7 @@ Spyria has no passwords and sends no sign-in codes: everyone signs in through a 
 
 ## Signing in with an account
 
-Account providers are set when installing Spyria ([install](./install.md), [manual install](./self-hosting.md#account-providers), [clouds](./cloud.md)):
+Account providers are set when installing Spyria ([install](./install.md), [manual install](./self-hosting.md#account-providers), clouds: [AWS](./cloud-aws.md), [Azure](./cloud-azure.md), [Google Cloud](./cloud-gcp.md)):
 
 | Provider | Who signs in |
 |---|---|
@@ -29,4 +29,5 @@ The sign-in screen asks for an email address, then offers the account providers,
 
 - **A workspace can enforce its own provider**, in **Create a workspace** or **Workspace settings › Single sign-on** ([administration](../features/admin.md#sign-in-and-sso)). Only that provider then opens the workspace, for everyone, Admins included, and people lose access when their organization account is removed.
 - **A workspace enforcing its provider can claim its organization's email domains** with a DNS record ([domains](../features/admin.md#domains)). The domain's addresses then sign in only through that provider, cannot create workspaces, and cannot be invited to other workspaces of this Spyria.
+- **A workspace enforcing Google Workspace or Microsoft Entra can use the deployment's Google or Microsoft app** instead of its own client. Through Google it admits only accounts managed by their domain's Google Workspace, plus Gmail; through Microsoft, only its own tenant.
 - **Workspaces created before a domain claim keep running.** Their members at the domain reach them through the claiming workspace's provider, and invites sent before the claim still work. Releasing the domain lets those addresses sign in with their own accounts again.
