@@ -28,6 +28,9 @@ fake(
   'url=""; out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; -*) ;; *) url="$1" ;; esac; shift; done; cp "$(echo "$url" | sed "s|^file://||")" "$out"',
 )
 fake('docker', 'exit 0')
+const stoppedDockerTools = mkdtempSync(join(work, 'stopped-docker-'))
+writeFileSync(join(stoppedDockerTools, 'docker'), '#!/bin/sh\n[ "$1" = compose ] && exit 0\nexit 1\n')
+chmodSync(join(stoppedDockerTools, 'docker'), 0o755)
 const cosignCalls = join(work, 'cosign-calls')
 const cosignOf = (exitCode: number, reason = '') => {
   const tools = mkdtempSync(join(work, 'cosign-'))
@@ -43,12 +46,12 @@ const refusingCosign = cosignOf(1, 'Error: none of the expected identities match
 
 const install = (
   release: string,
-  { cosign, environment = {} }: { cosign?: string; environment?: Record<string, string> } = {},
+  { cosign, docker, environment = {} }: { cosign?: string; docker?: string; environment?: Record<string, string> } = {},
 ) => {
   const installDir = mkdtempSync(join(work, 'install-'))
   const result = Bun.spawnSync(['sh', installScript], {
     env: {
-      PATH: [fakeTools, ...(cosign ? [cosign] : []), '/usr/bin', '/bin'].join(':'),
+      PATH: [...(docker ? [docker] : []), fakeTools, ...(cosign ? [cosign] : []), '/usr/bin', '/bin'].join(':'),
       HOME: work,
       SPYRIA_DOWNLOAD_BASE: `file://${release}`,
       SPYRIA_INSTALL_DIR: installDir,
@@ -124,6 +127,19 @@ test('install.sh refuses a binary that does not match the published checksum, an
   expect(exitCode).toBe(1)
   expect(output).toContain(`the download of spyria-${platform} does not match its checksum`)
   expect(() => statSync(join(installDir, 'spyria'))).toThrow()
+})
+
+test('with SPYRIA_SKIP_SETUP=1, install.sh installs without Docker, which only setup on this machine needs; without it, a Docker that does not answer is refused', () => {
+  const skipped = install(releaseWith('#!/bin/sh\necho spyria\n'), { docker: stoppedDockerTools })
+  expect(skipped.output).toContain(`Installed spyria in ${skipped.installDir}`)
+  expect(skipped.exitCode).toBe(0)
+  const settingUp = install(releaseWith('#!/bin/sh\necho spyria\n'), {
+    docker: stoppedDockerTools,
+    environment: { SPYRIA_SKIP_SETUP: '' },
+  })
+  expect(settingUp.output).toContain('Docker does not answer: start it, then run this again.')
+  expect(settingUp.exitCode).toBe(1)
+  expect(() => statSync(join(settingUp.installDir, 'spyria'))).toThrow()
 })
 
 test('install.sh removes its download folder before it hands the terminal over to spyria setup', () => {

@@ -116,7 +116,7 @@ Budgets are a hard stop, enforced by the relay before each model call: when one 
 
 ## Secrets at rest
 
-- `SPYRIA_SECRETS_KEY` seals SSO client secrets, the GitHub App's credentials and members' GitHub tokens, and derives the key the server uses to reach each runtime. Each sealed value starts with the id of the key that sealed it (a hash prefix, never the key). It is [rotated](../guides/operations.md#rotating-the-secrets-key) by keeping the previous key in `SPYRIA_PREVIOUS_SECRETS_KEYS`, which still opens and still reaches runtimes but seals nothing, sealing every stored secret again with the `secrets:reseal` operator command, and removing the previous key once no running runtime uses it. A runtime moves to the current key the next time it starts.
+- `SPYRIA_SECRETS_KEY` seals SSO client secrets, the GitHub App's credentials and members' GitHub tokens, and derives the key the server uses to reach each runtime. Each sealed value starts with the id of the key that sealed it (a hash prefix, never the key). It is [rotated](../guides/security.md#rotating-the-secrets-key) by keeping the previous key in `SPYRIA_PREVIOUS_SECRETS_KEYS`, which still opens and still reaches runtimes but seals nothing, sealing every stored secret again with the `secrets:reseal` operator command, and removing the previous key once no running runtime uses it. A runtime moves to the current key the next time it starts.
 - The gateway's encryption key seals members' provider keys in the gateway's database. It cannot change without wiping that database.
 - `SPYRIA_TOKEN_SECRET` signs session tokens; changing it signs everyone out.
 

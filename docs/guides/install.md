@@ -1,29 +1,15 @@
 # Install on one machine
 
-The `spyria` tool installs Spyria with Docker Compose on one machine, reachable over HTTPS through a Cloudflare tunnel, or directly on an address that reaches the machine from the internet.
-
 ## What you need
 
-- A Linux machine, a Mac, or a PC under WSL.
+- A Linux machine or a Mac.
 - Docker. On Linux the script offers to install Docker Engine with Docker's own script; on a Mac, use Docker Desktop or OrbStack.
-- A domain: on your Cloudflare account for the tunnel, or at any DNS provider for direct HTTPS.
-- For direct HTTPS only:
-  - An A or AAAA record pointing the hostname at an address that reaches the machine from the internet: its own public IP, or a public IP forwarded to it.
-  - Ports 80 and 443 reachable from the internet on that address (firewall, provider, router), and free on the machine.
-  - On rootless Docker, ports below 1024 allowed: `sudo sysctl net.ipv4.ip_unprivileged_port_start=80`, kept after a restart with `echo net.ipv4.ip_unprivileged_port_start=80 | sudo tee /etc/sysctl.d/99-spyria.conf`.
 
 ## Run the installer
 
 ```sh
 curl -fsSL https://spyria.dev/install | sh
 ```
-
-Or the same script from the latest release: `curl -fsSL https://github.com/Camil-H/spyria/releases/latest/download/install.sh | sh`.
-
-The script checks Docker, downloads the `spyria` tool, checks it against the release's checksums, installs it in `~/.local/bin` and runs `spyria setup`.
-
-- When [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) is installed, it also checks that the repository's Publish workflow signed the checksums.
-- `SPYRIA_REQUIRE_SIGNATURE=1` refuses to install without cosign.
 
 ## What setup asks
 
@@ -32,44 +18,49 @@ The script checks Docker, downloads the `spyria` tool, checks it against the rel
    - A folder whose `compose.yml` or `.env` belongs to another project is refused.
 2. **Hostname**, such as `spyria.example.com`.
 3. **How people reach Spyria** (`--https`):
-   - `tunnel` (the default): through a Cloudflare tunnel, with no open port. The hostname must be on a domain of your Cloudflare account.
-   - `direct`: Spyria serves HTTPS itself. A Caddy container gets a Let's Encrypt certificate and serves ports 80 and 443, which must be reachable from the internet ([behind a VPC or NAT](#direct-https-behind-a-vpc-or-nat)).
-   - With `direct`, setup checks the hostname's A or AAAA record, rootless Docker's lowest port and that ports 80 and 443 are free, and stops before writing anything if one fails.
+   - `tunnel` (the default): through a Cloudflare tunnel, with no open port, for a laptop or a machine that cannot open ports. The hostname must be on a domain of your Cloudflare account.
+   - `direct`: Spyria serves HTTPS itself. The machine must serve ports 80 and 443 and be reachable from the internet (behind a VPC or NAT, forward these ports to it: see [direct HTTPS behind a VPC or NAT](#direct-https-behind-a-vpc-or-nat)).
+   - With `direct`, setup checks, and stops before writing anything if one fails:
+     - that the hostname has an A or AAAA record;
+     - on rootless Docker, that ports below 1024 are allowed (`sudo sysctl net.ipv4.ip_unprivileged_port_start=80`);
+     - that ports 80 and 443 are free on the machine.
 4. **Cloudflare API token** (tunnel only) with *Account > Cloudflare Tunnel > Edit*, *Zone > DNS > Edit* and *Zone > Zone > Read* (My Profile > API Tokens > Create Token > Custom token).
    - The tool creates a tunnel to the server and its DNS record; no port opens on the machine.
    - A hostname with other DNS records (an A or AAAA record of a website, say) is refused: delete them or choose another.
    - The token is never stored.
-
-Step 5 sets up sign-in for the whole deployment ([who can join and sign-in](./who-can-join.md)):
-
-- **Account providers** belong to the whole deployment: people sign in to Spyria with their own account, create workspaces and join the ones they are invited to.
-- **A workspace's own provider** is your organization's single sign-on, enforced on one workspace: only it opens that workspace, for everyone, Admins included. Setup does not ask for it: you choose it in **Create a workspace**, or later in **Workspace settings › Single sign-on**, which show the redirect URI to register at the provider.
-
-5. **Account providers** (each optional), with the redirect URI `<origin>/auth/callback` the tool shows.
+5. **Account providers** (each optional), with the redirect URI `<origin>/auth/callback` the tool shows. People sign in to Spyria with these accounts, create workspaces and join the ones they are invited to ([who can join and sign-in](./who-can-join.md)).
    - **Google**: an OAuth client (any Google account, Gmail included).
    - **Microsoft**: an app for any organizational directory and personal accounts. Answer `create` to register it with `az`; later runs reuse it.
    - **OIDC provider**: issuer URL, client id and secret.
    - With none, people sign in only through the first workspace's own provider, and nobody can create more workspaces.
-
-Secrets you type are hidden. A saved secret is never shown again; an empty answer keeps it.
+   - Your organization's single sign-on is not asked here: you choose it in **Create a workspace**, or later in **Workspace settings › Single sign-on**.
 
 ## After setup
 
-Setup pulls the images of its version, starts Spyria with a runtime host on this machine and prints the **setup link**, followed by where to choose your organization's provider.
-
-1. Open it and create the first workspace by signing in. To make your organization's provider the only way in, choose it there, or later in **Workspace settings › Single sign-on**: an Admin who signed in with Google, a Microsoft work account or this Spyria's OIDC provider enforces that provider in one click ([who can join](./who-can-join.md#workspaces-enforcing-sso)).
-2. The machine's runtime host is already in **Workspace settings**.
-3. Open **GitHub** there to work on repositories.
+Setup starts Spyria with a runtime host on the machine and prints the **setup link**. Open it and create the first workspace by signing in.
 
 ## Unattended install
 
-Every question is also a flag (`spyria --help`); a flag setup does not know is refused. Secrets are read from environment variables instead, to keep them out of shell history and the process list; setup says when it uses one, never its value:
+Every question is also a flag (`spyria --help`); a flag setup does not know is refused. The list of accessible flags is:
 
-- `SPYRIA_SETUP_CLOUDFLARE_TOKEN`
-- `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`
-- `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`
-- `SPYRIA_SETUP_OIDC_CLIENT_SECRET`
-- `SPYRIA_SETUP_HOST_CLAIM_URL`
+| Flag | Answer |
+|---|---|
+| `--unattended` | Asks no question: every answer comes from a flag or its default. |
+| `--folder <path>` | Install folder (default `~/spyria`). |
+| `--name <name>` | Deployment name (default `spyria`). |
+| `--hostname <hostname>` | Hostname, such as `spyria.example.com`. |
+| `--https tunnel\|direct` | How people reach Spyria (default `tunnel`). |
+| `--google-client-id <id>` | Google account provider. |
+| `--microsoft-client-id <id>\|create` | Microsoft account provider; `create` registers it with `az`. |
+| `--oidc-issuer <url>`, `--oidc-client-id <id>` | OIDC account provider. |
+| `--version <version>` | Release to run (default: the tool's own). |
+| `--images <registry>` | Registry of the images (default `ghcr.io/camil-h`). |
+| `--port <port>` | Local port of the server (default `3300`). |
+| `--no-host` | No runtime host on this machine. |
+| `--host` | Turns the runtime host back on. |
+| `--no-start` | Writes the folder without starting Spyria. |
+
+Secrets are never flags, so they stay out of your shell history: setup reads them from `SPYRIA_SETUP_CLOUDFLARE_TOKEN`, `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`, `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`, `SPYRIA_SETUP_OIDC_CLIENT_SECRET` and `SPYRIA_SETUP_HOST_CLAIM_URL`.
 
 ```sh
 printf 'Cloudflare API token: '; stty -echo; read -r SPYRIA_SETUP_CLOUDFLARE_TOKEN; stty echo; echo
@@ -78,48 +69,36 @@ export SPYRIA_SETUP_CLOUDFLARE_TOKEN SPYRIA_SETUP_GOOGLE_CLIENT_SECRET
 spyria setup --unattended --hostname spyria.example.com --google-client-id <client id>
 ```
 
-## Running setup again
+## Upgrade
 
-`spyria setup` keeps every secret, the tunnel, the HTTPS choice and the answers you do not change.
+```sh
+spyria upgrade            # the latest release, or: spyria upgrade 1.3.0
+```
 
-- It checks every answer before creating anything in Cloudflare or Microsoft Entra.
-- It saves each secret to `.env` as soon as it gets it, so a run that stops halfway loses none; the next run goes on from there. The rest of `.env`, the version included, changes only at the end.
-- It rewrites `.env` in place (as does `spyria upgrade`), keeping your comments, `export` prefixes and own variables.
-- Without `.env`, it refuses to start over a deployment whose data is still on the machine ([troubleshooting](./troubleshooting.md)).
-- Other commands use the current folder only when its `compose.yml` and `.env` are Spyria's.
+It backs up both databases into `backups/`, fetches the release's Compose file and gateway configuration, pulls and starts the new images, waits for `/health`, and prints the link to what changed.
 
-### Tunnel or direct HTTPS
-
-- `--https direct` on a tunnel install stops `cloudflared` and removes its token from `.env`. The tunnel and its DNS record stay in Cloudflare: replace the CNAME record with an A or AAAA record to the machine, and delete the tunnel in **Zero Trust > Networks > Tunnels**.
-- `--https tunnel` on a direct install stops Caddy and asks for a Cloudflare token. Its certificates stay in the `<deployment>-caddy-data` volume.
-
-### Runtime host on or off
-
-- `--no-host` installs without a runtime host on this machine, and later runs keep it off.
-  - If the machine already runs one, setup removes it and stops its runtimes, keeping their files. Also remove it in **Workspace settings > Runtimes** to revoke its token; [removing a host](../features/machines.md#removing-a-host) deletes its runtimes and files.
-- `--host` turns it back on.
-  - Before the first workspace exists, the host joins it when you create it.
-  - Once one exists, setup asks for the command from **Workspace settings > Runtimes > Add runtime host** (or reads `SPYRIA_SETUP_HOST_CLAIM_URL`). Only this Spyria's **Add runtime host** command works, not the one for a member's own machine.
-  - Setup asks Spyria whether a workspace exists, so Spyria must be running; unattended, it stops if Spyria does not answer, unless `SPYRIA_SETUP_HOST_CLAIM_URL` is set.
-  - Turning the host back on, or giving another **Add runtime host** command, removes the host container and its old pairing, so the host pairs with the new code.
+- Migrations run before the server starts. A failed one leaves the old server down; the reason is in `spyria compose logs migrate`.
+- A new gateway image migrates its own database on start, and some of those migrations cannot be reverted: going back to the previous release means restoring the backup taken by the upgrade.
+- Runtimes move to the new runtime image the next time they start; running ones keep theirs until they stop.
+- Runtime hosts on other machines show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the host is refused until updated. Either badge opens the command that updates it in place.
 
 ## Good to know
 
 - On a laptop, Spyria is unreachable while the machine sleeps and running agent turns are interrupted. Docker and Compose's restart policies bring everything back on wake or restart.
-- `spyria doctor` checks Docker, each service, the server's start check, the disk, the versions, the mode of `.env`, its credentials and the published ports. With direct HTTPS, it also checks Caddy and warns when its certificate expires in under 14 days.
-- With direct HTTPS, setup waits for `https://<hostname>/health`. If Caddy gets no certificate, setup prints its last certificate error: usually the hostname does not point at the machine, or ports 80 and 443 are closed by a firewall or the provider.
-- The certificates are not in the backups: Caddy gets new ones.
+- `spyria doctor` checks Docker, each service, the server's start check, the disk, the versions, the mode of `.env`, its credentials and the published ports. With direct HTTPS, it also checks the certificate and warns when it expires in under 14 days.
+- With direct HTTPS, setup waits for `https://<hostname>/health`. If no certificate is issued, setup prints the last certificate error: usually the hostname does not point at the machine, or ports 80 and 443 are closed by a firewall or the provider.
+- The HTTPS certificates are not in the backups: after a restore on a new machine, Spyria requests new ones on its own.
 
 ### Direct HTTPS behind a VPC or NAT
 
-The machine itself needs no public IP: Let's Encrypt and your users only need to reach ports 80 and 443 at the hostname's address.
+The machine itself needs no public IP: you only need to reach ports 80 and 443 at the hostname's address.
 
-- **Works:** a cloud VM in a private subnet with a public or elastic IP; a NAT gateway, firewall or home router forwarding TCP 80 and 443 to the machine; a load balancer passing TCP through without terminating TLS.
-- **Does not work:** a private-only network (reached over a VPN, no inbound internet); Let's Encrypt cannot reach it. Use the tunnel, or the [manual install](./self-hosting.md) with your own certificate.
-- A public DNS record to a private address (`10.x`, `192.168.x`) passes setup's check, but no certificate is issued.
-- A load balancer that terminates TLS itself is the [manual install](./self-hosting.md).
+- **What works:** a cloud VM in a private subnet with a public or elastic IP; a NAT gateway, firewall or home router forwarding TCP 80 and 443 to the machine; a load balancer passing TCP through without serving HTTPS itself.
+- **What does not work:**
+  - a private-only network (reached over a VPN, no inbound internet), or a hostname pointing at a private address (`10.x`, `192.168.x`): no certificate can be issued. Use the tunnel, or the [manual install](./self-hosting.md) with your own certificate;
+  - a load balancer that serves HTTPS with its own certificate: Spyria must then run behind it without serving HTTPS itself, which is the [manual install](./self-hosting.md).
 
-- Upgrades and backups: [operations](./operations.md).
+- Backups and the rest of running Spyria: [operations](./operations.md).
 - Managed clouds: [Install on AWS, Azure or Google Cloud](./cloud.md).
 - By hand, or to see what the tool does: [manual install](./self-hosting.md).
 - When something goes wrong: [troubleshooting](./troubleshooting.md).
