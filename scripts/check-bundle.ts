@@ -21,7 +21,9 @@ const serverOnlySql = [
 const lazyChunkMarkers = ['Load image from', 'registerLanguage']
 
 const failures: string[] = []
-const mainChunkPath = readFileSync(`${distDirectory}index.html`, 'utf8').match(/<script[^>]+src="\/([^"]+\.js)"/)?.[1]
+const mainChunkPath = readFileSync(`${distDirectory}index.html`, 'utf8').match(
+  /<script type="module"[^>]+src="\/([^"]+\.js)"/,
+)?.[1]
 if (!mainChunkPath) throw new Error('No main chunk in apps/web/dist/index.html')
 const mainChunk = readFileSync(`${distDirectory}${mainChunkPath}`, 'utf8')
 const mainChunkBytes = Buffer.byteLength(mainChunk)

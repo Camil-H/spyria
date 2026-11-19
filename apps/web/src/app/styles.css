@@ -2,6 +2,16 @@
 @import "@fontsource-variable/outfit";
 @plugin "tailwind-scrollbar";
 @source "../../../../packages";
+@custom-variant dark {
+  &:where([data-color-mode="dark"], [data-color-mode="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:not(:where([data-color-mode="light"], [data-color-mode="light"] *)) {
+      @slot;
+    }
+  }
+}
 
 @theme {
   --color-*: initial;
@@ -142,6 +152,14 @@
 
 :root {
   color-scheme: light dark;
+}
+
+:root[data-color-mode="light"] {
+  color-scheme: light;
+}
+
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
 }
 
 @keyframes toast-countdown {
