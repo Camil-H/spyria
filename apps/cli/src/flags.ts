@@ -23,7 +23,6 @@ export const secretVariables: Record<string, string> = {
   'cloudflare-token': 'SPYRIA_SETUP_CLOUDFLARE_TOKEN',
   'google-client-secret': 'SPYRIA_SETUP_GOOGLE_CLIENT_SECRET',
   'microsoft-client-secret': 'SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET',
-  'okta-token': 'SPYRIA_SETUP_OKTA_TOKEN',
   'oidc-client-secret': 'SPYRIA_SETUP_OIDC_CLIENT_SECRET',
   'host-claim-url': 'SPYRIA_SETUP_HOST_CLAIM_URL',
 }

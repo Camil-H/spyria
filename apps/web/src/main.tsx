@@ -75,7 +75,8 @@ const createWorkspaceOnce = async (name: string) => {
 const showSignIn = async (notice?: string) => {
   workspaceCreation = undefined
   const setupToken = new URLSearchParams(location.search).get('setup') ?? undefined
-  const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps } = await loadAuthMode(setupToken)
+  const { authMode, isBeingSetUp, canCreateWorkspace, accountProviders, instanceApps, callbackOrigin } =
+    await loadAuthMode(setupToken)
   root.render(
     <SignInScreen
       isEmailFirst={authMode === 'sso'}
@@ -84,6 +85,7 @@ const showSignIn = async (notice?: string) => {
       setupToken={setupToken}
       accountProviders={accountProviders}
       instanceApps={instanceApps}
+      callbackOrigin={callbackOrigin}
       notice={notice}
       signInWithEmail={async (email) => openAppWhenSignedIn(await signInWithEmail(email))}
       signIn={async (target) => openAppWhenSignedIn(await signInWithPopup(target))}

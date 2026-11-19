@@ -1,6 +1,6 @@
 # 0020. One-click Google and Microsoft sign-in through the apps of the instance
 
-Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): the apps of the instance also sign in accounts, the Microsoft app through the `common` authority with personal accounts too, and a workspace domain no longer gates matching by email.
+Amended by [decision 0029](0029-account-sign-in-and-workspace-sso.md): the apps of the instance also sign in accounts, the Microsoft app through the `common` authority with personal accounts too, and a workspace domain no longer gates matching by email. The deployment's OIDC app (`SPYRIA_OIDC_*`) also serves a workspace enforcing SSO, with its issuer, and the start check covers it like the other two.
 
 ## Context
 

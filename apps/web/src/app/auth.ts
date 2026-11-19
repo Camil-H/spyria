@@ -43,7 +43,7 @@ export const loadAuthMode = async (
   canCreateWorkspace: boolean
   accountProviders: ('google' | 'microsoft' | 'oidc')[]
   callbackOrigin: string
-  instanceApps: ('google' | 'microsoft')[]
+  instanceApps: ('google' | 'microsoft' | 'oidc')[]
 }> => authJsonOf(setupToken ? `/auth/mode?${new URLSearchParams({ setup: setupToken })}` : '/auth/mode')
 
 let sharedAuthModeLoading: ReturnType<typeof loadAuthMode> | undefined

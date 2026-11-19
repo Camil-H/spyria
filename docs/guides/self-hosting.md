@@ -296,13 +296,13 @@ It removes everything it created, even on failure, and skips the optional profil
 
 ## Example: Cloudflare
 
-One way among others to get an HTTPS origin and an organization provider without opening a port: any reverse proxy or tunnel, and any OIDC provider, work the same way.
+One way among others to get an HTTPS origin and an organization provider without opening a port: any reverse proxy or tunnel, and any OIDC provider, work the same way. Cloudflare Access is set up by hand here, as one provider among others; `spyria setup` does not create it.
 
 1. **Tunnel.** Zero Trust > Networks > Tunnels: create a tunnel (cloudflared). Put its token in `CLOUDFLARE_TUNNEL_TOKEN`, add `cloudflare` to `COMPOSE_PROFILES`, and start the stack (routes save only once a connector runs). Add one public hostname, `spyria.example.com` without a path, to `http://server:3000`.
 2. **Trusted proxy.** Set `SPYRIA_TRUSTED_PROXY=cloudflare` so rate limits use `CF-Connecting-IP`. Only if Cloudflare is the only way in, or clients could choose their own address.
 3. **Mailbox.** Email > Email Routing: forward an address such as `admin@example.com` to your inbox, for the Access one-time PINs.
-4. **OIDC through Access.** Zero Trust > Access > Applications > Add an application > SaaS: OIDC, redirect URL `https://spyria.example.com/auth/callback`, a policy allowing emails ending in `@example.com`. Add **One-time PIN** (or your identity provider) as a login method and select it on the application.
-5. **Workspace.** In **Create a workspace**, choose **Other OIDC** with issuer `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client id>` and the client id and secret from Access.
+4. **OIDC through Access.** Zero Trust > Access > Applications > Add an application > SaaS: OIDC, with the redirect URI **Create a workspace** or **Single sign-on** shows (`https://spyria.example.com/auth/callback`), a policy allowing emails ending in `@example.com`. Add **One-time PIN** (or your identity provider) as a login method and select it on the application.
+5. **Workspace.** In **Create a workspace**, or later in **Workspace settings › Single sign-on**, choose **Other OIDC** with your own app: issuer `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client id>` and the client id and secret from Access.
 
 Pitfalls:
 

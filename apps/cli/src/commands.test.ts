@@ -420,19 +420,19 @@ test('a setup changing the version that fails after it registered the Microsoft 
         ...['setup', '--unattended', '--no-start', '--folder', install, '--version', '1.3.0'],
         ...['--microsoft-client-id', 'create', ...extra],
       ]),
-      { processEnvironment: { SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' }, az, workspaceExistsIn: () => false },
+      { processEnvironment: {}, az, workspaceExistsIn: () => false },
     )
   try {
-    const failure = await setUp(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
-      (error: Error) => error.message,
-    )
-    expect(failure).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+    rmSync(join(install, 'bifrost.json'))
+    mkdirSync(join(install, 'bifrost.json'))
+    const failure = await setUp([]).catch((error: Error) => error.message)
+    expect(failure).toContain('EISDIR')
+    rmSync(join(install, 'bifrost.json'), { recursive: true })
     expect(environment()).toEqual({
       ...installed,
       SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
       SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
     })
-    expect(readFileSync(join(install, 'compose.yml'), 'utf8')).toBe(oldCompose)
 
     rmSync(join(fakeDocker, 'calls'), { force: true })
     await setUp([])

@@ -8,6 +8,7 @@ import {
   MissingWorkspacePermission,
   memberActor,
   memberId,
+  type SignedInThrough,
   workspaceId as spyriaWorkspaceId,
   storedActorOf,
   systemActor,
@@ -27,6 +28,7 @@ import {
   Name,
   NoAccountSignIn,
   normalizedEmail,
+  normalizedIssuerOf,
   SsoAddressMismatch,
   SsoDiscoveryFailed,
   type SsoPreset,
@@ -34,6 +36,7 @@ import {
   type SsoSettingsInput,
   type SsoSettingsView,
   ssoSettingsFrom,
+  ssoSuggestionOf,
   tenantIdOf,
   WorkspaceCreationClosed,
 } from '@spyria/workspace/server'
@@ -145,8 +148,11 @@ const ownProviderFrom = async (
   }
   const clientSecret = input.usesInstanceApp ? '' : formField(form, 'clientSecret')
   if (clientSecret !== '' && !secretBox) throw new InvalidSsoSettings('SPYRIA_SECRETS_KEY is not set on this server')
-  const clientId = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset).clientId : input.clientId
-  const settings = ssoSettingsFrom({ ...input, clientId }, microsoftLoginOrigin)
+  const instanceApp = input.usesInstanceApp ? instanceAppFor(instanceApps ?? {}, input.preset) : undefined
+  const settings = ssoSettingsFrom(
+    { ...input, clientId: instanceApp?.clientId ?? input.clientId, issuer: instanceApp?.issuer ?? input.issuer },
+    microsoftLoginOrigin,
+  )
   const keptSecret =
     stored?.issuer === settings.issuer && stored.clientId === settings.clientId ? stored.encryptedClientSecret : ''
   if (!input.usesInstanceApp && clientSecret === '' && keptSecret === '')
@@ -222,8 +228,45 @@ const ssoSettingsViewOf = async (sql: Sql, member: Member): Promise<SsoSettingsV
   }
 }
 
-export const readSsoSettings = (database: Database, member: Member) =>
-  database.$client.begin((sql) => ssoSettingsViewOf(sql, member))
+const suggestionFor = async (
+  sql: Sql,
+  { userId, signedInThrough }: Member & { signedInThrough?: SignedInThrough },
+  { instanceApps = {}, microsoftLoginOrigin }: SsoDependencies,
+) => {
+  if (signedInThrough !== 'account') return undefined
+  const accounts = await sql<{ issuer: string }[]>`
+    select issuer from account_identities where user_id = ${userId} order by issuer`
+  return accounts.map(({ issuer }) => ssoSuggestionOf(issuer, instanceApps, microsoftLoginOrigin)).find(Boolean)
+}
+
+export const readSsoSettings = (
+  database: Database,
+  member: Member & { signedInThrough?: SignedInThrough },
+  dependencies: SsoDependencies,
+) =>
+  database.$client.begin(async (sql) => {
+    const settings = await ssoSettingsViewOf(sql, member)
+    return { settings, suggestion: settings ? undefined : await suggestionFor(sql, member, dependencies) }
+  })
+
+const shownAddressesAtRisk = 20
+
+export const addressesAtOtherDomains = (database: Database, member: Member) =>
+  database.$client.begin(async (sql) => {
+    await requireMemberPermission(sql, member, 'sso.manage')
+    const [user] = await sql<{ email: string }[]>`select email from users where id = ${member.userId}`
+    const rows = await sql<{ email: string; count: number }[]>`
+      select email, (count(*) over ())::int as count from (
+        select users.email from memberships join users on users.id = memberships.user_id
+        where memberships.workspace_id = ${member.workspaceId} and memberships.removed_at is null
+        union
+        select email from invitations
+        where workspace_id = ${member.workspaceId} and revoked_at is null and accepted_at is null and expires_at > now()
+      ) addresses
+      where lower(split_part(email, '@', 2)) <> ${domainOfEmail(user?.email ?? '')}
+      order by email limit ${shownAddressesAtRisk}`
+    return { addresses: rows.map(({ email }) => email), count: rows[0]?.count ?? 0 }
+  })
 
 export type PendingSso = { workspaceId: string; userId: string; email: string; provider: OwnProvider }
 
@@ -398,12 +441,14 @@ export const assertInstanceAppsConfigured = async (database: Database, instanceA
   const missing = (
     await database.$client<{ preset: SsoPreset; count: number }[]>`
       select preset, count(*)::int as count from workspace_sso join workspaces using (workspace_id)
-      where uses_instance_app and workspaces.deleted_at is null group by preset order by preset`
+      where uses_instance_app and workspaces.deleted_at is null
+        and (preset <> 'oidc' or issuer <> ${normalizedIssuerOf(instanceApps.oidc?.issuer ?? '')})
+      group by preset order by preset`
   ).filter(({ preset }) => preset === 'oidc' || !instanceApps[preset])
   if (missing.length > 0)
     throw new Error(
       `Workspaces sign in through apps of this deployment that are not configured: ${missing
         .map(({ preset, count }) => `${preset} (${count} workspace${count === 1 ? '' : 's'})`)
-        .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.`,
+        .join(', ')}. Set SPYRIA_GOOGLE_CLIENT_*, SPYRIA_MICROSOFT_CLIENT_* or SPYRIA_OIDC_* again.`,
     )
 }

@@ -15,7 +15,7 @@ import type { DomainClaimView } from '../domain/domain-claim.ts'
 import type { GitHubRepository, GitHubSettingsInput, GitHubSettingsView } from '../domain/github.ts'
 import type { Name } from '../domain/name.ts'
 import type { ChatsPolicy } from '../domain/project.ts'
-import type { SsoSettingsView } from '../domain/sso.ts'
+import type { SsoSettingsView, SsoSuggestion } from '../domain/sso.ts'
 
 type Command<Input> = (input: Input & { workspaceId: WorkspaceId }) => Promise<string>
 
@@ -48,7 +48,10 @@ export type WorkspaceCommands = {
   setDevLoop: Command<{ settings: DevLoopSettings | null }>
   setSetupCommands: Command<{ commands: readonly SetupCommand[] }>
   setBrowserSettings: Command<{ settings: BrowserSettings }>
-  readSsoSettings: (input: { workspaceId: WorkspaceId }) => Promise<SsoSettingsView | null>
+  readSsoSettings: (input: {
+    workspaceId: WorkspaceId
+  }) => Promise<{ settings: SsoSettingsView | null; suggestion?: SsoSuggestion }>
+  readAddressesAtOtherDomains: (input: { workspaceId: WorkspaceId }) => Promise<{ addresses: string[]; count: number }>
   confirmSsoSettings: (input: {
     workspaceId: WorkspaceId
     form: HTMLFormElement

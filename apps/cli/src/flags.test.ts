@@ -51,7 +51,9 @@ test('a secret is never a flag: it comes from its environment variable, or from 
   expect(unattended.secret('oidc-client-secret', 'OIDC client secret')).toBe('oidc-secret')
   expect(unattended.given('oidc-client-secret')).toBe(true)
   expect(unattended.secret('google-client-secret', 'Client secret', 'saved-secret')).toBe('saved-secret')
-  expect(() => unattended.requireSecret('okta-token', 'Okta API token')).toThrow('SPYRIA_SETUP_OKTA_TOKEN is required')
+  expect(() => unattended.requireSecret('host-claim-url', 'Command of Add runtime host')).toThrow(
+    'SPYRIA_SETUP_HOST_CLAIM_URL is required',
+  )
 
   const questions: string[] = []
   const answers = ['', 'typed-secret']

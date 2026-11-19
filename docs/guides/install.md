@@ -40,41 +40,35 @@ The script checks Docker, downloads the `spyria` tool, checks it against the rel
    - A hostname with other DNS records (an A or AAAA record of a website, say) is refused: delete them or choose another.
    - The token is never stored.
 
-Steps 5 and 6 set up sign-in, at two levels ([who can join and sign-in](./who-can-join.md)):
+Step 5 sets up sign-in for the whole deployment ([who can join and sign-in](./who-can-join.md)):
 
 - **Account providers** belong to the whole deployment: people sign in to Spyria with their own account, create workspaces and join the ones they are invited to.
-- **A workspace's own provider** is your organization's single sign-on, enforced on one workspace: only it opens that workspace, for everyone, Admins included. It is optional; each workspace can set or change it later in **Workspace settings › Single sign-on**.
+- **A workspace's own provider** is your organization's single sign-on, enforced on one workspace: only it opens that workspace, for everyone, Admins included. Setup does not ask for it: you choose it in **Create a workspace**, or later in **Workspace settings › Single sign-on**, which show the redirect URI to register at the provider.
 
 5. **Account providers** (each optional), with the redirect URI `<origin>/auth/callback` the tool shows.
    - **Google**: an OAuth client (any Google account, Gmail included).
    - **Microsoft**: an app for any organizational directory and personal accounts. Answer `create` to register it with `az`; later runs reuse it.
    - **OIDC provider**: issuer URL, client id and secret.
    - With none, people sign in only through the first workspace's own provider, and nobody can create more workspaces.
-6. **The first workspace's own provider** (optional, `skip` by default). Where the provider has an API and you are an admin there, the tool sets it up and prints what to enter in **Create a workspace** (the client secret only this once).
-   - **Microsoft Entra**: an app registration for your tenant only, through `az`, when you are signed in with it.
-   - **Okta**: a web OIDC app assigned to Everyone, from your Okta URL (https) and an admin API token. Later runs reuse the app with a new client secret; once it holds the two secrets Okta allows, setup asks you to delete an unused one first.
-   - **Google** and any other OIDC provider: guided, with the redirect URI to paste.
-   - **Cloudflare Access**: an Access application with one-time PINs for people at your domain ([details](#cloudflare-access)).
 
 Secrets you type are hidden. A saved secret is never shown again; an empty answer keeps it.
 
 ## After setup
 
-Setup pulls the images of its version, starts Spyria with a runtime host on this machine and prints the **setup link**.
+Setup pulls the images of its version, starts Spyria with a runtime host on this machine and prints the **setup link**, followed by where to choose your organization's provider.
 
-1. Open it and create the first workspace by signing in.
+1. Open it and create the first workspace by signing in. To make your organization's provider the only way in, choose it there, or later in **Workspace settings › Single sign-on**: an Admin who signed in with Google, a Microsoft work account or this Spyria's OIDC provider enforces that provider in one click ([who can join](./who-can-join.md#workspaces-enforcing-sso)).
 2. The machine's runtime host is already in **Workspace settings**.
 3. Open **GitHub** there to work on repositories.
 
 ## Unattended install
 
-Every question is also a flag (`spyria --help`). Secrets are read from environment variables instead, to keep them out of shell history and the process list; setup says when it uses one, never its value:
+Every question is also a flag (`spyria --help`); a flag setup does not know is refused. Secrets are read from environment variables instead, to keep them out of shell history and the process list; setup says when it uses one, never its value:
 
 - `SPYRIA_SETUP_CLOUDFLARE_TOKEN`
 - `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`
 - `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`
 - `SPYRIA_SETUP_OIDC_CLIENT_SECRET`
-- `SPYRIA_SETUP_OKTA_TOKEN`
 - `SPYRIA_SETUP_HOST_CLAIM_URL`
 
 ```sh
@@ -88,8 +82,8 @@ spyria setup --unattended --hostname spyria.example.com --google-client-id <clie
 
 `spyria setup` keeps every secret, the tunnel, the HTTPS choice and the answers you do not change.
 
-- It checks every answer before creating anything in Cloudflare, Microsoft Entra or Okta.
-- It saves each secret to `.env` as soon as it gets it and prints a first workspace's client secret as soon as it is created, so a run that stops halfway loses neither; the next run goes on from there. The rest of `.env`, the version included, changes only at the end.
+- It checks every answer before creating anything in Cloudflare or Microsoft Entra.
+- It saves each secret to `.env` as soon as it gets it, so a run that stops halfway loses none; the next run goes on from there. The rest of `.env`, the version included, changes only at the end.
 - It rewrites `.env` in place (as does `spyria upgrade`), keeping your comments, `export` prefixes and own variables.
 - Without `.env`, it refuses to start over a deployment whose data is still on the machine ([troubleshooting](./troubleshooting.md)).
 - Other commands use the current folder only when its `compose.yml` and `.env` are Spyria's.
@@ -108,14 +102,6 @@ spyria setup --unattended --hostname spyria.example.com --google-client-id <clie
   - Once one exists, setup asks for the command from **Workspace settings > Runtimes > Add runtime host** (or reads `SPYRIA_SETUP_HOST_CLAIM_URL`). Only this Spyria's **Add runtime host** command works, not the one for a member's own machine.
   - Setup asks Spyria whether a workspace exists, so Spyria must be running; unattended, it stops if Spyria does not answer, unless `SPYRIA_SETUP_HOST_CLAIM_URL` is set.
   - Turning the host back on, or giving another **Add runtime host** command, removes the host container and its old pairing, so the host pairs with the new code.
-
-## Cloudflare Access
-
-Only when you choose Cloudflare Access as the first workspace's provider:
-
-- Set up Zero Trust once in the Cloudflare dashboard first (it picks your team domain).
-- Setup asks for a Cloudflare API token, with `direct` too. Besides the tunnel permissions, it needs *Account > Access: Apps and Policies > Edit*, *Account > Access: Organizations, Identity Providers, and Groups > Edit*, *Account > Email Routing Addresses > Edit* and *Zone > Email Routing Rules > Edit*.
-- You sign in as `admin@<domain>` to create the workspace. If the domain receives no mail yet, Email Routing forwards that address to yours (confirm Cloudflare's email first). If it has mailboxes, the tool leaves its mail alone and `admin@<domain>` must be one you read.
 
 ## Good to know
 

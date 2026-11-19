@@ -55,21 +55,22 @@ export {
   accountIssuerOf,
   accountProvidersOf,
   entraObjectIdPattern,
-  type InstanceAppPreset,
   type InstanceApps,
   instanceAppFor,
-  instanceAppPresets,
   microsoftPersonalAccountsTenantId,
+  normalizedIssuerOf,
   type SignInScope,
   type SsoEmail,
   type SsoPreset,
   type SsoSettings,
   type SsoSettingsInput,
   type SsoSettingsView,
+  type SsoSuggestion,
   ssoCanBindByEmail,
   ssoEmailOf,
   ssoSettingsFrom,
   ssoSubjectOf,
+  ssoSuggestionOf,
   tenantIdOf,
 } from './domain/sso.ts'
 export type { WorkspaceCommands } from './entrypoints/commands.ts'
@@ -92,4 +93,9 @@ export {
   githubRepositoriesPath,
   githubSettingsPath,
 } from './integrations/http-github.ts'
-export { createHttpSsoSettingsCommands, ssoSettingsPath, ssoStopPath } from './integrations/http-sso-settings.ts'
+export {
+  createHttpSsoSettingsCommands,
+  ssoOtherDomainsPath,
+  ssoSettingsPath,
+  ssoStopPath,
+} from './integrations/http-sso-settings.ts'

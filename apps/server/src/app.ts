@@ -107,6 +107,7 @@ import {
   githubSettingsPath,
   githubWebhooksPath,
   type InstanceApps,
+  ssoOtherDomainsPath,
   ssoSettingsPath,
   ssoStopPath,
   workspaceCreationPath,
@@ -132,7 +133,7 @@ import { createSecretBox, type SecretsKeyring, secretsKeyringOf } from './auth/s
 import { sessionEndingsOf } from './auth/session-endings.ts'
 import { createSessionAuthenticator, errorByStatus } from './auth/session-tokens.ts'
 import { findMemberIn } from './auth/sessions.ts'
-import { hasNoWorkspace, readSsoSettings, stopWorkspaceSso } from './auth/sso.ts'
+import { addressesAtOtherDomains, hasNoWorkspace, readSsoSettings, stopWorkspaceSso } from './auth/sso.ts'
 import {
   disconnectGitHub,
   finishGitHubAppCreation,
@@ -792,9 +793,14 @@ export const createApp = ({
       workspaceConnectionResponse(context, context.req.param('action'), context.req.param('connectionId')),
     )
     .get(ssoSettingsPath, (context) =>
-      endpointResponse('Reading the SSO settings', 200, async () => ({
-        settings: await readSsoSettings(context.get('database'), context.get('zeroContext')),
-      })),
+      endpointResponse('Reading the SSO settings', 200, () =>
+        readSsoSettings(context.get('database'), context.get('zeroContext'), sso),
+      ),
+    )
+    .get(ssoOtherDomainsPath, (context) =>
+      endpointResponse('Reading the addresses at other domains', 200, () =>
+        addressesAtOtherDomains(context.get('database'), context.get('zeroContext')),
+      ),
     )
     .post(ssoStopPath, (context) =>
       endpointResponse('Stopping the SSO of a workspace', 204, () =>

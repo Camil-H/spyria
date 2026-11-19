@@ -399,15 +399,15 @@ test('a setup failing after it registered the Microsoft app keeps the app and it
         ]),
         {
           cloudflareApiUrl: cloudflare.url.origin,
-          processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't', SPYRIA_SETUP_OKTA_TOKEN: 'okta-token' },
+          processEnvironment: { SPYRIA_SETUP_CLOUDFLARE_TOKEN: 't' },
           az,
           ...withoutDocker,
         },
       )
-    const failure = await setupIn(['--provider', 'okta', '--okta-url', 'http://acme.okta.com']).catch(
-      (error: Error) => error.message,
-    )
-    expect(failure).toBe('The Okta organization URL must start with https://, so the API token never travels in clear')
+    mkdirSync(join(install, 'bifrost.json'))
+    const failure = await setupIn([]).catch((error: Error) => error.message)
+    expect(failure).toContain('EISDIR')
+    rmSync(join(install, 'bifrost.json'), { recursive: true })
     const kept = {
       SPYRIA_MICROSOFT_CLIENT_ID: '00000000-0000-4000-8000-000000000000',
       SPYRIA_MICROSOFT_CLIENT_SECRET: 'secret-1',
@@ -633,5 +633,55 @@ test('a setup without --name names the deployment spyria, and its tunnel after i
     expect(forgottenHostPairings).toEqual([deployment])
   } finally {
     rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test('an interactive direct setup with every account app asks for no workspace provider and no Cloudflare token', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  const answers: [RegExp, string][] = [
+    [/^Hostname/, 'spyria.example.com'],
+    [/^How will people reach Spyria/, 'direct'],
+    [/^Google client id/, 'spyria.apps.googleusercontent.com'],
+    [/^Microsoft client id/, '00000000-0000-4000-8000-000000000000'],
+    [/^OIDC issuer URL/, 'https://login.example.com'],
+    [/^OIDC client id/, 'spyria'],
+    [/^Client secret/, 'secret'],
+  ]
+  const questions: string[] = []
+  const ask = spyOn(globalThis, 'prompt').mockImplementation((question = '') => {
+    questions.push(question)
+    return answers.find(([pattern]) => pattern.test(question))?.[1] ?? ''
+  })
+  try {
+    await printedBy(() =>
+      setup(parseFlags(['setup', '--no-start', '--folder', install, '--version', '1.2.0', '--name', deployment]), {
+        cloudflareApiUrl: cloudflare.url.origin,
+        processEnvironment: {},
+        ...withoutDocker,
+      }),
+    )
+  } finally {
+    ask.mockRestore()
+  }
+  try {
+    expect(readEnvironment(install)).toMatchObject({ SPYRIA_HTTPS: 'direct', SPYRIA_OIDC_CLIENT_ID: 'spyria' })
+    expect(questions.filter((question) => /Cloudflare API token|sign-in provider/i.test(question))).toEqual([])
+  } finally {
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('a removed or unknown setup flag is refused before any question or file', async () => {
+  const install = mkdtempSync(join(tmpdir(), 'spyria-setup-'))
+  try {
+    for (const flag of ['--provider', '--owner-email', '--okta-url'])
+      expect(
+        await directSetupIn(install, ['--hostname', 'spyria.example.com', flag, 'value']).catch(
+          (error: Error) => error.message,
+        ),
+      ).toBe(`${flag} is not a setup flag: spyria --help lists them`)
+    expect(readdirSync(install)).toEqual([])
+  } finally {
+    rmSync(install, { recursive: true, force: true })
   }
 })

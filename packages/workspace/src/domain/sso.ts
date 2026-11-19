@@ -17,12 +17,18 @@ export type SsoSettingsView = SsoSettings & { tenantId: string; hasSecret: boole
 export type SsoEmail =
   | { email: string; refusal?: undefined }
   | { email?: undefined; refusal: 'unconfirmed' | 'untrusted' }
-export const instanceAppPresets = ['google', 'microsoft'] as const
-export type InstanceAppPreset = (typeof instanceAppPresets)[number]
-type InstanceApp = { clientId: string; clientSecret: string }
-export type InstanceApps = Partial<Record<InstanceAppPreset, InstanceApp>> & { oidc?: InstanceApp & { issuer: string } }
+type InstanceApp = { clientId: string; clientSecret: string; issuer?: string }
+export type InstanceApps = {
+  google?: InstanceApp
+  microsoft?: InstanceApp
+  oidc?: InstanceApp & { issuer: string }
+}
 const accountProviders = ['google', 'microsoft', 'oidc'] as const
 export type AccountProvider = (typeof accountProviders)[number]
+export type SsoSuggestion =
+  | { preset: 'google'; tenantId?: undefined; issuer?: undefined }
+  | { preset: 'microsoft'; tenantId: string; issuer?: undefined }
+  | { preset: 'oidc'; tenantId?: undefined; issuer: string }
 
 const googleIssuer = 'https://accounts.google.com'
 const microsoftLoginOrigin = 'https://login.microsoftonline.com'
@@ -32,6 +38,7 @@ const tenantIdPattern = /^[\w.-]+$/
 const gmailDomains = new Set(['gmail.com', 'googlemail.com'])
 
 export const tenantIdOf = (issuer: string) => new URL(issuer).pathname.split('/')[1] ?? ''
+export const normalizedIssuerOf = (issuer: string) => URL.parse(issuer.trim())?.href.replace(/\/$/, '') ?? ''
 
 const issuerOf = ({ preset, issuer = '', tenantId = '' }: SsoSettingsInput, microsoftOrigin: string) => {
   if (typeof issuer !== 'string' || typeof tenantId !== 'string')
@@ -41,9 +48,9 @@ const issuerOf = ({ preset, issuer = '', tenantId = '' }: SsoSettingsInput, micr
     if (!tenantIdPattern.test(tenantId.trim())) throw new InvalidSsoSettings('A Microsoft Entra tenant id is required')
     return `${microsoftOrigin}/${tenantId.trim()}/v2.0`
   }
-  const url = URL.parse(issuer.trim())
-  if (!url || !['https:', 'http:'].includes(url.protocol)) throw new InvalidSsoSettings('The issuer must be a URL')
-  return url.href.replace(/\/$/, '')
+  if (!['https:', 'http:'].includes(URL.parse(issuer.trim())?.protocol ?? ''))
+    throw new InvalidSsoSettings('The issuer must be a URL')
+  return normalizedIssuerOf(issuer)
 }
 
 export const ssoSettingsFrom = (input: SsoSettingsInput, microsoftOrigin = microsoftLoginOrigin): SsoSettings => {
@@ -88,11 +95,9 @@ export const ssoCanBindByEmail = (preset: SsoPreset, claims: Record<string, unkn
   claims.idp === claims.iss ||
   claims.tid === microsoftPersonalAccountsTenantId
 
-const instanceAppNames: Record<InstanceAppPreset, string> = { google: 'Google', microsoft: 'Microsoft' }
+const instanceAppNames: Record<SsoPreset, string> = { google: 'Google', microsoft: 'Microsoft', oidc: 'OIDC' }
 
-export const instanceAppFor = (instanceApps: InstanceApps, preset: SsoPreset) => {
-  if (preset === 'oidc')
-    throw new InvalidSsoSettings('Only Google Workspace and Microsoft Entra sign in through the app of this Spyria')
+export const instanceAppFor = (instanceApps: InstanceApps, preset: SsoPreset): InstanceApp => {
   const app = instanceApps[preset]
   if (!app)
     throw new InvalidSsoSettings(
@@ -112,6 +117,29 @@ export const accountIssuerOf = (
   if (provider === 'google') return googleIssuer
   if (provider === 'microsoft') return `${microsoftOrigin}/common/v2.0`
   return instanceApps.oidc?.issuer.replace(/\/$/, '') ?? ''
+}
+
+const workTenantIdOf = (issuer: string, microsoftOrigin: string) => {
+  const tenantId = URL.canParse(issuer) ? tenantIdOf(issuer) : ''
+  const isWorkTenant =
+    issuer === `${microsoftOrigin}/${tenantId}/v2.0` &&
+    tenantIdPattern.test(tenantId) &&
+    !multiTenantSegments.has(tenantId.toLowerCase()) &&
+    tenantId !== microsoftPersonalAccountsTenantId
+  return isWorkTenant ? tenantId : undefined
+}
+
+export const ssoSuggestionOf = (
+  accountIssuer: string,
+  instanceApps: InstanceApps,
+  microsoftOrigin = microsoftLoginOrigin,
+): SsoSuggestion | undefined => {
+  const issuer = accountIssuer.replace(/\/$/, '')
+  if (instanceApps.google && issuer === googleIssuer) return { preset: 'google' }
+  const tenantId = instanceApps.microsoft ? workTenantIdOf(issuer, microsoftOrigin) : undefined
+  if (tenantId) return { preset: 'microsoft', tenantId }
+  const oidcIssuer = normalizedIssuerOf(instanceApps.oidc?.issuer ?? '')
+  if (oidcIssuer !== '' && normalizedIssuerOf(issuer) === oidcIssuer) return { preset: 'oidc', issuer: oidcIssuer }
 }
 
 export const ssoSubjectOf = (preset: SsoPreset, claims: Record<string, unknown>) => {

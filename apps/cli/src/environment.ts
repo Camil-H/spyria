@@ -88,7 +88,6 @@ export type HttpsMode = (typeof httpsModes)[number]
 export type SetupAnswers = {
   deployment: string
   https: HttpsMode
-  acmeEmail?: string
   version: string
   images: string
   origin: string
@@ -153,7 +152,6 @@ export const environmentOf = (answers: SetupAnswers, existing: Environment = {})
     SPYRIA_HTTPS: answers.https,
     SPYRIA_TRUSTED_PROXY: servesDirectly ? 'x-forwarded-for:1' : tunnelToken ? 'cloudflare' : '',
     CLOUDFLARE_TUNNEL_TOKEN: tunnelToken ?? '',
-    SPYRIA_ACME_EMAIL: servesDirectly ? (answers.acmeEmail ?? '') : '',
     SPYRIA_DOCKER_GROUP: answers.runsHost ? answers.dockerGroup : '',
     SPYRIA_GOOGLE_CLIENT_ID: answers.instanceApps.google?.clientId ?? '',
     SPYRIA_GOOGLE_CLIENT_SECRET: answers.instanceApps.google?.clientSecret ?? '',
