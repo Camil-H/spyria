@@ -72,7 +72,12 @@ spyria setup --unattended --hostname spyria.example.com --google-client-id <clie
 spyria upgrade            # the latest release, or: spyria upgrade 1.3.0
 ```
 
-It backs up the database first, then runs the new release ([upgrades and migrations](./operations.md#upgrades-and-migrations)).
+It backs up both databases into `backups/`, fetches the release's Compose file and gateway configuration, pulls and starts the new images, waits for `/health`, and prints the link to what changed.
+
+- Migrations run before the server starts. A failed one leaves the old server down; the reason is in `spyria compose logs migrate`.
+- A new gateway image migrates its own database on start, and some of those migrations cannot be reverted: going back to the previous release means restoring the backup taken by the upgrade.
+- Runtimes move to the new runtime image the next time they start; running ones keep theirs until they stop.
+- Runtime hosts on other machines show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the host is refused until updated. Either badge opens the command that updates it in place ([machines](../features/machines.md#versions-and-updates)).
 
 ## Good to know
 

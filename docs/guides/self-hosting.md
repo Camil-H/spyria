@@ -47,6 +47,12 @@ See also [troubleshooting](./troubleshooting.md), [operations](./operations.md) 
 8. Create the [first workspace](#first-workspace-and-sign-in).
 9. Optional: add a [runtime host on this machine](#runtime-host-on-this-machine) and the [GitHub App](#github-app-dev-chats).
 
+The other guides write `spyria compose`; on this install, define this alias and use it instead:
+
+```sh
+alias spyria-compose='docker compose --env-file .env.prod -f compose.prod.yml'
+```
+
 Good to know:
 
 - Start order: Postgres, `migrate` (one-shot), `gateway-database` (one-shot, creates the gateway's role and database), the gateway, the server (once migrations succeeded and the gateway is healthy), zero-cache.
@@ -100,7 +106,7 @@ Good to know:
 Compose reads only the keys of `.env.example` marked `[prod]`. It sets the gateway URL, the redirect URI (`<origin>/auth/callback`), the auth mode (`sso`) and `SPYRIA_ENV=production` itself.
 
 - Secrets: letters and digits only (the Postgres password goes into a URL), for example `openssl rand -hex 32`.
-- Any secret can come from a file: `<NAME>_FILE` holding its path ([secrets in files](./operations.md#secrets-in-files)). When to replace each: [rotation intervals](./operations.md#rotation-intervals).
+- Any secret can come from a file: `<NAME>_FILE` holding its path ([secrets in files](./security.md#secrets-in-files)). When to replace each: [rotation intervals](./security.md#rotation-intervals).
 
 | Key | Purpose |
 |---|---|
@@ -110,8 +116,8 @@ Compose reads only the keys of `.env.example` marked `[prod]`. It sets the gatew
 | `SPYRIA_APP_ORIGIN` | Public origin, `https://`. |
 | `SPYRIA_TOKEN_SECRET` | Signs session tokens. At least 32 characters. |
 | `SPYRIA_SETUP_TOKEN` | At least 32 characters. Only the setup link carrying it creates the first workspace; spent once one exists. |
-| `SPYRIA_SECRETS_KEY` | At least 32 characters. Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM and derives the key that reaches each runtime. Never change it directly, or stored secrets must be re-entered: [rotate it](./operations.md#rotating-the-secrets-key). |
-| `SPYRIA_PREVIOUS_SECRETS_KEYS` | Only while [rotating](./operations.md#rotating-the-secrets-key): previous keys, comma-separated. Still open what they sealed and reach runtimes started with them; seal nothing new. |
+| `SPYRIA_SECRETS_KEY` | At least 32 characters. Encrypts stored secrets (SSO client secrets, GitHub App keys) with AES-GCM and derives the key that reaches each runtime. Never change it directly, or stored secrets must be re-entered: [rotate it](./security.md#rotating-the-secrets-key). |
+| `SPYRIA_PREVIOUS_SECRETS_KEYS` | Only while [rotating](./security.md#rotating-the-secrets-key): previous keys, comma-separated. Still open what they sealed and reach runtimes started with them; seal nothing new. |
 | `SPYRIA_TRUSTED_PROXY` | Leave unset, except `cloudflare` ([example](#example-cloudflare)) or `x-forwarded-for:<hops from the end>` behind a load balancer that appends the client and is the only way in (cloud modules set it). Otherwise rate limits on unauthenticated routes see every client as the proxy. |
 | `SPYRIA_GOOGLE_CLIENT_ID`, `SPYRIA_GOOGLE_CLIENT_SECRET`, `SPYRIA_MICROSOFT_CLIENT_ID`, `SPYRIA_MICROSOFT_CLIENT_SECRET` | Optional [account providers](#account-providers). |
 | `SPYRIA_OIDC_ISSUER`, `SPYRIA_OIDC_CLIENT_ID`, `SPYRIA_OIDC_CLIENT_SECRET` | Optional other OIDC account provider; all three or none. |
@@ -276,12 +282,18 @@ Good to know:
 
 ## Upgrading
 
-Set `SPYRIA_VERSION` in `.env.prod` to the new release, then run the same `pull` and `up -d`.
+1. Take a [backup](./operations.md#backups).
+2. Set `SPYRIA_VERSION` in `.env.prod` to the new release.
+3. Replace `compose.prod.yml` and `bifrost.json` with the release's.
+4. Run `spyria-compose pull`, then `spyria-compose up -d`.
 
-- `migrate` applies new migrations before the server starts.
-- Hosts use the new runtime image from their next runtime start; running runtimes keep theirs until they stop.
-- Hosts on other machines show **Update available**, or **Update needed** (refused) when the release raised the minimum protocol, with the command that updates them.
-- More in [operations](./operations.md#upgrades-and-migrations).
+From a clone: `git pull`, `bun run agent:build`, then:
+
+```sh
+docker compose --env-file .env.prod -f deploy/compose.prod.yml -f deploy/compose.build.yml up -d --build
+```
+
+Also rebuild the image of hosts on other machines and load the new runtime image there. What the upgrade changes (migrations, runtimes, hosts) is the same as with [`spyria upgrade`](./install.md#upgrade).
 
 ## Checking the Compose file
 

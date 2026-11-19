@@ -47,7 +47,7 @@ Start with `spyria doctor`. It checks:
 **A default or short credential**
 
 - Fix for most: set a new value from `openssl rand -hex 32` in `.env`, then `spyria compose up -d`.
-- `SPYRIA_SECRETS_KEY`: [rotate it](./operations.md#rotating-the-secrets-key), or the stored SSO secrets and GitHub App keys are lost.
+- `SPYRIA_SECRETS_KEY`: [rotate it](./security.md#rotating-the-secrets-key), or the stored SSO secrets and GitHub App keys are lost.
 - `SPYRIA_GATEWAY_ENCRYPTION_KEY`: changes only with the gateway's database wiped; members then add their API keys again.
 - `SPYRIA_POSTGRES_PASSWORD` (role `spyria`) or `SPYRIA_GATEWAY_DB_PASSWORD` (role `bifrost`): Postgres keeps the password it started with, so set the new one there first with `spyria compose exec postgres psql -U spyria`, then `\password spyria` or `\password bifrost`.
 
@@ -78,7 +78,7 @@ Start with `spyria doctor`. It checks:
 **SSO client secrets or GitHub App keys stop working**
 
 - Cause: `SPYRIA_SECRETS_KEY` changed without the previous value in `SPYRIA_PREVIOUS_SECRETS_KEYS`.
-- Fix: put the previous value there; otherwise enter every secret again. To change the key, [rotate it](./operations.md#rotating-the-secrets-key).
+- Fix: put the previous value there; otherwise enter every secret again. To change the key, [rotate it](./security.md#rotating-the-secrets-key).
 
 **Members' API keys stop working**
 
