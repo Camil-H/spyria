@@ -1,47 +1,35 @@
 # Install on AWS, Azure or Google Cloud
 
-`spyria setup --cloud` deploys Spyria on a cloud's managed services with OpenTofu, from two modules per cloud in [`deploy/tofu/modules`](../../deploy/tofu/modules):
-
-- `control-plane`: the server, zero-cache, the model gateway and a managed Postgres, behind the cloud's HTTPS. It needs no Docker; runtimes never run on it.
-- `runtime-host`: a VM running `spyria-host`, which dials out to the control plane.
-
-Inputs and outputs are the same on every cloud, apart from where things go (region, project, DNS zone).
-
 ## What you need
 
 - [OpenTofu](https://opentofu.org/docs/intro/install/).
-- The cloud's command line, signed in: `aws sso login` or `aws configure`, `az login`, or `gcloud auth application-default login`.
-- On Azure, Owner or User Access Administrator on the subscription, since the module grants Key Vault roles.
+- The cloud's command line, signed in: `aws sso login` or `aws configure`, `az login`, or `gcloud auth application-default login`. Setup checks it before applying.
+- Rights to create the resources and grant roles to them:
+  - **AWS**: `AdministratorAccess`, or `PowerUserAccess` with `IAMFullAccess`, since the module creates IAM roles.
+  - **Azure**: Owner, or Contributor with User Access Administrator, on the subscription, since the module grants Key Vault roles.
+  - **Google Cloud**: Owner on the project, since the module enables APIs and grants a service account access to its secrets.
 
-## With the spyria tool
+## Run the installer
 
 ```sh
+curl -fsSL https://spyria.dev/install | SPYRIA_SKIP_SETUP=1 sh
 spyria setup --cloud aws      # or azure, gcp
 ```
 
 1. Setup asks for the hostname, the size and the cloud's own settings.
-2. It writes `~/spyria-<cloud>/main.tf` (its version's example, using the modules of the same release tag) and `terraform.tfvars` (readable by you only).
+2. It writes `~/spyria-<cloud>/main.tf` and `terraform.tfvars` (readable by you only).
 3. It runs `tofu init` and `tofu apply`.
 4. It prints the DNS records to create, if any, and the first workspace's setup link.
 
-### The configuration folder
+Every question is also a flag (`spyria --help`): `--hostname`, `--size small|medium|large`, `--region`, `--project` (Google Cloud), `--subscription` (Azure), `--dns-zone`, `--dns-zone-resource-group`, `--route53-zone-id`, `--certificate-arn`, `--bind-hostname yes|no`, `--version` and `--folder`. `--unattended` asks no question and applies without confirmation.
 
-- The OpenTofu state in the folder holds every secret of the deployment. Keep it private, or move it to an encrypted remote backend in a file of its own such as `backend.tf`, since setup rewrites `main.tf`.
-- Setup marks each folder it writes into with a `.spyria-cloud` file naming the cloud. It writes only into a new or empty folder or one it marked for the same cloud, and uses the current folder when it carries the mark. Any other folder is refused.
-- Files you add to a marked folder, such as a backend or state encryption, stay.
+The folder also holds the OpenTofu state, which contains the deployment's passwords and keys: keep it private and backed up. To keep the state elsewhere, such as in an encrypted bucket, declare that backend in a file of its own like `backend.tf`, since setup rewrites `main.tf` on every run.
 
-### Sign-in
-
-Setup asks nothing about sign-in. Without an account provider, people sign in only through the first workspace's own provider ([who can join and sign-in](./who-can-join.md)).
-
-- OIDC account provider: add `oidc_issuer`, `oidc_client_id` and `oidc_client_secret` to `terraform.tfvars` and run setup again.
-- Google and Microsoft account providers: the generated `main.tf` does not pass them; add them [by hand](#by-hand).
-
-## After apply
+## After setup
 
 1. Create the printed DNS records, if any.
 2. On Azure, run the printed `certificate_command` ([good to know](#good-to-know)).
-3. Open the setup link and create the first workspace. The runtime host VM created next to the control plane pairs with it through the install code.
+3. Open the setup link and create the first workspace.
 
 ## Upgrades
 
@@ -63,7 +51,12 @@ Upgrades and new OS images never replace runtime host VMs; they keep their pairi
 - To let others apply (another admin, a CI service principal), list every applying account's object id, yours included, on one line in `terraform.tfvars`, such as `secret_admin_object_ids = ["<yours>", "<ci>"]`, and apply once from an account that already can.
 - An unlisted account is refused before anything changes, so no apply takes access from another.
 
-## By hand
+## Without the spyria tool
+
+The configuration uses two modules per cloud in [`deploy/tofu/modules`](../../deploy/tofu/modules), with the same inputs and outputs on every cloud apart from where things go (region, project, DNS zone):
+
+- `control-plane`: the server, zero-cache, the model gateway and a managed Postgres, behind the cloud's HTTPS. It needs no Docker; runtimes never run on it.
+- `runtime-host`: a VM running `spyria-host`, which dials out to the control plane.
 
 1. Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples).
 2. Replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/…?ref=v<version>`.
