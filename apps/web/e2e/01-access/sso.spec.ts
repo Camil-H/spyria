@@ -32,6 +32,7 @@ const providerFormOf = (page: Page) => signInSectionOf(page).getByRole('form', {
 
 const fillProvider = async (scope: Locator, issuer: string) => {
   await scope.getByLabel('Provider').selectOption('oidc')
+  await scope.getByRole('button', { name: 'Use your own app' }).click()
   await scope.getByLabel('Issuer').fill(issuer)
   await scope.getByLabel('Client id').fill(providerClientId)
   await scope.getByLabel('Client secret').fill(providerClientSecret)
