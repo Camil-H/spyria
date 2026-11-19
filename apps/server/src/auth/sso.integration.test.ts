@@ -1039,7 +1039,12 @@ test('the first workspace created with an account provider has no SSO of its own
 test('the first workspace needs the setup token: refused without it, with a wrong one, and once a workspace exists; the sign-in mode only offers creation with it', async () => {
   const modeOf = async (query = '') => (await emptyInstanceApp.request(`/auth/mode${query}`)).json()
   const callbackOrigin = new URL(testAuthSettings.oidc.redirectUri).origin
-  const mode = { authMode: 'sso', accountProviders: ['microsoft', 'oidc'], callbackOrigin, instanceApps: ['microsoft'] }
+  const mode = {
+    authMode: 'sso',
+    accountProviders: ['microsoft', 'oidc'],
+    callbackOrigin,
+    instanceApps: ['microsoft', 'oidc'],
+  }
   expect(await modeOf()).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
   expect(await modeOf('?setup=not-the-token')).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: false })
   expect(await modeOf(`?setup=${testSetupToken}`)).toEqual({ ...mode, isBeingSetUp: true, canCreateWorkspace: true })
