@@ -2,7 +2,15 @@ import { afterAll, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hostUpdateStepsOf, rootModuleOf, setupCloud, tfVariablesFrom, tfVariablesOf } from './cloud.ts'
+import {
+  type CommandRunner,
+  hostUpdateStepsOf,
+  rootModuleOf,
+  setupCloud,
+  signInTo,
+  tfVariablesFrom,
+  tfVariablesOf,
+} from './cloud.ts'
 import { parseFlags } from './flags.ts'
 
 const folder = mkdtempSync(join(tmpdir(), 'spyria-cloud-'))
@@ -333,4 +341,62 @@ test('a one-line list of texts in terraform.tfvars, such as the Azure secret adm
   } finally {
     rmSync(azureFolder, { recursive: true, force: true })
   }
+})
+
+const commandLineOf = ({
+  installed = true,
+  signedIn = false,
+  signsIn = true,
+  awsProfileUsesSso = false,
+}: {
+  installed?: boolean
+  signedIn?: boolean
+  signsIn?: boolean
+  awsProfileUsesSso?: boolean
+} = {}) => {
+  const ranInTerminal: string[] = []
+  let isSignedIn = signedIn
+  const runner: CommandRunner = {
+    isInstalled: () => installed,
+    succeeds: (command) =>
+      command.includes('configure') ? awsProfileUsesSso && command.at(-1) === 'sso_session' : isSignedIn,
+    runInTerminal: (command) => {
+      ranInTerminal.push(command.join(' '))
+      isSignedIn = signsIn
+      return signsIn
+    },
+  }
+  return { runner, ranInTerminal }
+}
+
+test('setup --cloud signs in with the cloud command line when it is not signed in, then goes on', () => {
+  const signIns = (['azure', 'gcp', 'aws'] as const).map((cloud) => {
+    const commandLine = commandLineOf()
+    signInTo(cloud, false, commandLine.runner)
+    return commandLine.ranInTerminal
+  })
+  expect(signIns).toEqual([['az login'], ['gcloud auth application-default login'], ['aws login']])
+  const awsWithSso = commandLineOf({ awsProfileUsesSso: true })
+  signInTo('aws', false, awsWithSso.runner)
+  expect(awsWithSso.ranInTerminal).toEqual(['aws sso login'])
+})
+
+test('setup --cloud signs in nowhere when already signed in, and stops when the command line is missing or the sign-in fails', () => {
+  const signedIn = commandLineOf({ signedIn: true })
+  signInTo('azure', false, signedIn.runner)
+  expect(signedIn.ranInTerminal).toEqual([])
+  expect(() => signInTo('gcp', false, commandLineOf({ installed: false }).runner)).toThrow(
+    'The Google Cloud CLI is missing: install it (https://cloud.google.com/sdk/docs/install), then run this again',
+  )
+  expect(() => signInTo('azure', false, commandLineOf({ signsIn: false }).runner)).toThrow(
+    'The sign-in did not complete: run az login, then run this again',
+  )
+})
+
+test('unattended, setup --cloud never opens a sign-in and says which command to run', () => {
+  const unattended = commandLineOf()
+  expect(() => signInTo('aws', true, unattended.runner)).toThrow(
+    "OpenTofu uses the AWS CLI's sign-in: run aws login, then run this again",
+  )
+  expect(unattended.ranInTerminal).toEqual([])
 })

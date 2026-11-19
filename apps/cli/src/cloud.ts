@@ -14,13 +14,58 @@ type TfValue = string | boolean | number | string[]
 type TfVariables = Record<string, TfValue>
 
 const examples: Record<Cloud, string> = { aws: awsExample, azure: azureExample, gcp: gcpExample }
-const signInChecks: Record<Cloud, { command: string[]; hint: string }> = {
-  aws: { command: ['aws', 'sts', 'get-caller-identity'], hint: 'sign in with aws configure or aws sso login' },
-  azure: { command: ['az', 'account', 'show'], hint: 'sign in with az login' },
-  gcp: {
-    command: ['gcloud', 'auth', 'application-default', 'print-access-token'],
-    hint: 'sign in with gcloud auth application-default login',
+const commandLines: Record<Cloud, { name: string; install: string; check: string[] }> = {
+  aws: {
+    name: 'AWS CLI',
+    install: 'https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html',
+    check: ['aws', 'sts', 'get-caller-identity'],
   },
+  azure: {
+    name: 'Azure CLI',
+    install: 'https://learn.microsoft.com/cli/azure/install-azure-cli',
+    check: ['az', 'account', 'show'],
+  },
+  gcp: {
+    name: 'Google Cloud CLI',
+    install: 'https://cloud.google.com/sdk/docs/install',
+    check: ['gcloud', 'auth', 'application-default', 'print-access-token'],
+  },
+}
+
+export type CommandRunner = {
+  isInstalled: (tool: string) => boolean
+  succeeds: (command: string[]) => boolean
+  runInTerminal: (command: string[]) => boolean
+}
+
+const commandRunner: CommandRunner = {
+  isInstalled: (tool) => Bun.which(tool) !== null,
+  succeeds: (command) => Bun.spawnSync(command, { stdout: 'ignore', stderr: 'ignore' }).exitCode === 0,
+  runInTerminal: (command) =>
+    Bun.spawnSync(command, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }).exitCode === 0,
+}
+
+const signInCommandOf = (cloud: Cloud, runner: CommandRunner) => {
+  if (cloud === 'azure') return ['az', 'login']
+  if (cloud === 'gcp') return ['gcloud', 'auth', 'application-default', 'login']
+  const usesSso =
+    runner.succeeds(['aws', 'configure', 'get', 'sso_session']) ||
+    runner.succeeds(['aws', 'configure', 'get', 'sso_start_url'])
+  return usesSso ? ['aws', 'sso', 'login'] : ['aws', 'login']
+}
+
+export const signInTo = (cloud: Cloud, isUnattended: boolean, runner: CommandRunner = commandRunner) => {
+  const commandLine = commandLines[cloud]
+  const tool = commandLine.check[0] ?? ''
+  if (!runner.isInstalled(tool))
+    throw new Error(`The ${commandLine.name} is missing: install it (${commandLine.install}), then run this again`)
+  if (runner.succeeds(commandLine.check)) return
+  const signIn = signInCommandOf(cloud, runner)
+  if (isUnattended)
+    throw new Error(`OpenTofu uses the ${commandLine.name}'s sign-in: run ${signIn.join(' ')}, then run this again`)
+  console.log(`Signing in with ${signIn.join(' ')}, which OpenTofu then uses.`)
+  if (!runner.runInTerminal(signIn) || !runner.succeeds(commandLine.check))
+    throw new Error(`The sign-in did not complete: run ${signIn.join(' ')}, then run this again`)
 }
 
 export const rootModuleOf = (cloud: Cloud, version: string) =>
@@ -246,12 +291,7 @@ export const setupCloud = async (
   if (flags.switches.has('no-start')) return
   if (Bun.which('tofu') === null)
     throw new Error('OpenTofu is missing: install it (https://opentofu.org/docs/intro/install/), then run this again')
-  const signIn = signInChecks[cloud]
-  if (
-    Bun.which(signIn.command[0] ?? '') === null ||
-    Bun.spawnSync(signIn.command, { stdout: 'ignore', stderr: 'ignore' }).exitCode !== 0
-  )
-    throw new Error(`OpenTofu uses the ${cloud} command line's login: ${signIn.hint}, then run this again`)
+  signInTo(cloud, isUnattended)
   if (run(folder, ['tofu', 'init', '-input=false']) !== 0) throw new Error('tofu init failed')
   if (run(folder, ['tofu', 'apply', '-input=false', ...(isUnattended ? ['-auto-approve'] : [])]) !== 0)
     throw new Error(
