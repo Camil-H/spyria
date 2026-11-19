@@ -41,6 +41,8 @@ bun run load:websockets    # server memory under many agent-stream sockets; not 
 
 `smoke:prod` is described in [Manual install](./self-hosting.md).
 
+`check:tofu` runs in CI when the modules change. Before a release, a real apply per cloud by hand proves what mock providers cannot: Postgres 18 in the chosen region, logical replication with the managed admin role, the platform's WebSocket limits, and HTTPS without Cloudflare.
+
 ### Before a pull request
 
 Run `lint`, `typecheck`, `check:boundaries`, `check:locks` (after a dependency change) and `test` while you work, then `check:related` where Docker is available. Run `check:all` for changes to shared code (`packages/kernel`, `packages/db`, test helpers), and `check:docker` for the host, the agent, the images, the gateway config or the backups.

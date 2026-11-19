@@ -7,7 +7,7 @@ Spyria has no passwords and sends no sign-in codes: everyone signs in through a 
 
 ## Signing in with an account
 
-Account providers are set when installing Spyria ([install](./install.md), [manual install](./self-hosting.md#account-providers), [clouds](./cloud.md)):
+Account providers are set when installing Spyria ([install](./install.md), [manual install](./self-hosting.md#account-providers), clouds: [AWS](./cloud-aws.md), [Azure](./cloud-azure.md), [Google Cloud](./cloud-gcp.md)):
 
 | Provider | Who signs in |
 |---|---|
