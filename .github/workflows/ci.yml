@@ -34,7 +34,7 @@ jobs:
       - uses: ./.github/actions/setup
       - id: plan
         env:
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.ref == 'refs/heads/develop' && 'HEAD' || 'origin/develop' }}
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.ref == 'refs/heads/develop' && 'origin/main' || 'origin/develop' }}
           SCOPE: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && '--full' || '' }}
         run: |
           plan="$RUNNER_TEMP/plan.json"
