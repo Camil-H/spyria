@@ -17,7 +17,7 @@ The configuration uses two modules per cloud in [`deploy/tofu/modules`](../../de
 
 1. Copy [`deploy/tofu/examples/<cloud>`](../../deploy/tofu/examples).
 2. Replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/…?ref=v<version>`.
-3. Set the variables. The examples declare every input below except `images` and the Google and Microsoft account providers, which you add to the `control_plane` module block.
+3. Set the variables. The examples declare every input below except `images` and the Google and Microsoft account providers, which you add to the `control_plane` module block. Apply this configuration with `tofu` from then on: `spyria setup --cloud` rewrites `main.tf` and would drop them.
 4. Run `tofu init` and `tofu apply`; `tofu output -raw setup_link` prints the setup link.
 
 Each service carries a digest of its secrets, so applying a changed secret restarts the services in the same apply.

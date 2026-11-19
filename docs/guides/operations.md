@@ -60,7 +60,8 @@ The Google, Microsoft and OIDC apps people sign in with are deployment settings 
 
 - **`spyria setup` install:** run `spyria setup` again. An empty answer keeps a saved app; `-` removes it.
 - **Install made by hand:** set them in `.env.prod` ([manual install](./self-hosting.md#account-providers)), or in the secret files when [read from files](./security.md#secrets-in-files).
-- **Cloud:** set the OIDC app in `terraform.tfvars` and run `spyria setup --cloud <cloud>` again; Google and Microsoft apps go in the `control_plane` module block ([without the spyria tool](./cloud.md#without-the-spyria-tool)).
+- **Cloud with `spyria setup --cloud`:** set the OIDC app in `terraform.tfvars` and run setup again. The `main.tf` it writes, and rewrites on every run, does not pass Google or Microsoft apps: those need a configuration you apply [without the spyria tool](./cloud.md#without-the-spyria-tool).
+- **Cloud without the tool:** set them in your configuration and run `tofu apply`.
 
 The server reads them when it restarts.
 

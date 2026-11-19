@@ -293,7 +293,7 @@ From a clone: `git pull`, `bun run agent:build`, then:
 docker compose --env-file .env.prod -f deploy/compose.prod.yml -f deploy/compose.build.yml up -d --build
 ```
 
-Also rebuild the image of hosts on other machines and load the new runtime image there. What the upgrade changes (migrations, runtimes, hosts) is the same as with [`spyria upgrade`](./install.md#upgrade).
+From a clone, also rebuild the image of hosts on other machines and load the new runtime image there; hosts using the published images pull it themselves and show **Update available**. What the upgrade changes (migrations, runtimes, hosts) is the same as with [`spyria upgrade`](./install.md#upgrade).
 
 ## Checking the Compose file
 
