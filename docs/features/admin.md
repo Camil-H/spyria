@@ -135,19 +135,21 @@ Inviting a removed member's address again creates a normal invite that restores 
 
 People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Single sign-on** lets a workspace enforce its organization's own provider, so people lose access when their organization account is removed. Rules and the sign-in screen: [who can join and sign-in](../guides/who-can-join.md); reasoning: [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md).
 
-The page shows whether SSO is enforced, then the provider form:
+The page shows whether SSO is enforced, then the provider form. While none is enforced and you signed in with Google, a Microsoft work account or the deployment's OIDC provider, it is pre-filled: "Enforce *that provider* for this workspace", one **Enforce SSO** button, and **Use another provider** for the full form.
 
 - **Google Workspace**: only accounts managed by the Google Workspace of their address's domain, and Gmail addresses.
 - **Microsoft Entra**: one tenant, from its tenant id.
 - **Another OIDC provider**.
 - Each takes a client id and a client secret (sealed, shown only as set, replaced by entering a new one).
-- When the deployment has its own Google or Microsoft app, those two can use it with no client id or secret (Microsoft still asks for the tenant id).
+- When the deployment has its own Google, Microsoft or OIDC app, that provider can use it with no client id or secret (Microsoft still asks for the tenant id).
+- With your own app, the form shows the redirect URI to register at the provider, with a copy button, and what to create there.
 - Saving checks the issuer's discovery document.
 - On a development deployment, the card says sign-in uses the deployment's Dex instead.
 
 Actions:
 
 - **Enforce SSO**: you confirm by signing in through the provider with your own address; nothing changes if that fails. Then only that provider opens the workspace, for everyone, Admins included.
+- Before enforcing, or changing the issuer, a dialog lists the members and pending invites at another domain than yours, who then sign in only if the provider has an account with that exact address: **Enforce anyway** or **Cancel**.
 - **Save and sign in again** changes the provider the same way. A new issuer or tenant signs everyone out; members sign in again, matched once by their invited address. A new client or secret for the same provider keeps everyone signed in.
 - **Stop enforcing SSO**, below the form, signs everyone out (you included) and releases the claimed domains; people then use their own accounts. Refused when the deployment offers no account provider.
 

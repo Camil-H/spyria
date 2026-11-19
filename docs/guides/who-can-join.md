@@ -3,7 +3,7 @@
 Spyria has no passwords and sends no sign-in codes: everyone signs in through a single sign-on provider, at two levels.
 
 - **Account providers** belong to the whole deployment (Google, Microsoft, any OIDC provider). People sign in to Spyria with their own account, create workspaces and join the ones they are invited to.
-- **A workspace's own provider** is optional, set per workspace (Microsoft Entra, Okta, Google Workspace, Cloudflare Access, any OIDC provider). Once a workspace enforces it, only it opens that workspace, for everyone, Admins included.
+- **A workspace's own provider** is optional, set per workspace in **Create a workspace** or **Workspace settings › Single sign-on** (Microsoft Entra, Google Workspace, any OIDC provider such as Okta or Cloudflare Access). Once a workspace enforces it, only it opens that workspace, for everyone, Admins included.
 
 A deployment can have both. Without account providers, only workspaces' own providers sign people in, and nobody can create workspaces beyond the first.
 
@@ -41,8 +41,12 @@ Good to know:
 
 ## Workspaces enforcing SSO
 
-A workspace can enforce its organization's own provider in **Workspace settings › Single sign-on** ([administration](../features/admin.md#sign-in-and-sso)): Google Workspace, Microsoft Entra of one tenant, or any OIDC provider.
+A workspace can enforce its organization's own provider in **Workspace settings › Single sign-on** ([administration](../features/admin.md#sign-in-and-sso)), or from **Create a workspace**: Google Workspace, Microsoft Entra of one tenant, or any OIDC provider (Okta, Cloudflare Access and others).
 
+- **Pre-filled from your account.** An Admin who signed in with Google, a Microsoft work account or the deployment's OIDC provider sees "Enforce *that provider* for this workspace" with one **Enforce SSO** button, through the deployment's app (Microsoft Entra with the Admin's tenant). **Use another provider** opens the full form. A personal Microsoft account, or a session opened through a workspace's own provider, gets the full form.
+- **Your own app.** With an app of your own, the form shows the redirect URI to register at the provider (`<origin>/auth/callback`, with a copy button) and what to create there.
+- **Confirmation.** Enforcing always goes through a sign-in at the provider with your own address, usually at once since you are signed in there. A wrong guess, such as a Google account whose address is not managed by a Google Workspace, is refused there and changes nothing.
+- **Who may lose access.** Before enforcing, or changing the issuer, Spyria lists the members and pending invites at another domain than yours (the first 20, then how many more): once the provider is enforced, they sign in only if it has an account with that exact address. Spyria cannot ask the provider who exists, so this compares domains only; a Gmail Admin compares against `gmail.com` like any domain.
 - Only that provider then opens the workspace, for everyone, Admins included. People lose access when their organization account is removed.
 - Until the workspace [claims a domain](#claimed-domains), a session opened through its provider opens only that workspace: it cannot open or list the person's other workspaces, or create one.
 - Model keys, tool connections, machines and sessions belong to each workspace membership anyway.
@@ -82,4 +86,4 @@ A fresh deployment shows only that it is being set up, so nobody can claim it be
 - Its creator signs in with an account provider, or with their organization's provider, which the workspace then enforces.
 - Without account providers, people join that workspace by invite through its provider, and nobody can create further workspaces.
 
-The reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md), [decision 0035](../decisions/0035-domain-claims.md) for claimed domains, [decision 0012](../decisions/0012-per-workspace-sso.md) for a workspace's own provider and [decision 0020](../decisions/0020-instance-sign-in-apps.md) for the deployment's Google and Microsoft apps.
+The reasoning is in [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md), [decision 0035](../decisions/0035-domain-claims.md) for claimed domains, [decision 0012](../decisions/0012-per-workspace-sso.md) for a workspace's own provider and [decision 0020](../decisions/0020-instance-sign-in-apps.md) for the deployment's apps.
