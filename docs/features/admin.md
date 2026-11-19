@@ -23,6 +23,7 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 
 - Workspace tasks are at the top of **Workspace settings** (**Get your workspace ready**), personal ones in **Profile** (**Set up your profile**). Lists can be collapsed.
 - **Profile** has cards **Account**, **LLM keys**, **My machine**, **Connections** and **Usage** (the member's spend this month).
+- **Profile** sets the app's appearance next to the member's name: **Light**, **Dark** or **System** (follows the device). The choice is kept in this browser.
 
 | Task | Who sees it | Done once |
 |---|---|---|
