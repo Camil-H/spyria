@@ -30,20 +30,22 @@ ask() {
   [ "$answer" = y ] || [ "$answer" = Y ]
 }
 
-if ! command -v docker >/dev/null 2>&1; then
-  if [ "$os" = darwin ]; then
-    fail "Docker is missing: install Docker Desktop (https://www.docker.com/products/docker-desktop/) or OrbStack (https://orbstack.dev), start it, then run this again."
+if [ "${SPYRIA_SKIP_SETUP:-}" != 1 ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    if [ "$os" = darwin ]; then
+      fail "Docker is missing: install Docker Desktop (https://www.docker.com/products/docker-desktop/) or OrbStack (https://orbstack.dev), start it, then run this again."
+    fi
+    ask "Docker is missing. Install Docker Engine with Docker's own script (https://get.docker.com)?" ||
+      fail "Docker is required: install it, then run this again."
+    curl -fsSL https://get.docker.com | sh
   fi
-  ask "Docker is missing. Install Docker Engine with Docker's own script (https://get.docker.com)?" ||
-    fail "Docker is required: install it, then run this again."
-  curl -fsSL https://get.docker.com | sh
-fi
-docker compose version >/dev/null 2>&1 || fail "Docker Compose is missing: install the Docker Compose plugin, then run this again."
-if ! docker info >/dev/null 2>&1; then
-  if [ "$os" = linux ] && [ -S /var/run/docker.sock ] && ! [ -w /var/run/docker.sock ]; then
-    fail "Docker does not let you in yet: run sudo usermod -aG docker $(id -un), log out and back in, then run this again."
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose is missing: install the Docker Compose plugin, then run this again."
+  if ! docker info >/dev/null 2>&1; then
+    if [ "$os" = linux ] && [ -S /var/run/docker.sock ] && ! [ -w /var/run/docker.sock ]; then
+      fail "Docker does not let you in yet: run sudo usermod -aG docker $(id -un), log out and back in, then run this again."
+    fi
+    fail "Docker does not answer: start it, then run this again."
   fi
-  fail "Docker does not answer: start it, then run this again."
 fi
 
 if [ "$version" = latest ]; then
