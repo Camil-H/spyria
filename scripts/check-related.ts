@@ -71,6 +71,7 @@ const isOutsideTests = (file: string) =>
   /\.md$|^\.claude\/|^\.agents\/|^\.github\/|^scripts\/|^\.gitignore$|^biome\.json$|^\.dependency-cruiser\.cjs$/.test(
     file,
   )
+const isDocumentation = (file: string) => /\.md$|^\.claude\/|^\.agents\//.test(file)
 const isE2eHarness = (file: string) =>
   /^apps\/server\/src\/testing\/(test-server|sso-test-server|testing|fake-llm)\.ts$|^apps\/web\/(playwright\.config|e2e\/global-setup|e2e\/stack-ports|e2e\/platform-gate)\.ts$/.test(
     file,
@@ -213,7 +214,7 @@ console.log(tofuReasons.length > 0 ? `tofu: yes, because of ${tofuReasons.join('
 
 const selectionOf = (suite: Suite) => (suite.full.length > 0 ? ('all' as const) : [...suite.files])
 if (planFile) {
-  const isFull = process.argv.includes('--full')
+  const isFull = process.argv.includes('--full') && changedFiles.some((file) => !isDocumentation(file))
   const selection = isFull
     ? { unit: 'all', integration: 'all', e2e: 'all', e2eRepeat: [], docker: true, bundle: true, tofu: true }
     : {

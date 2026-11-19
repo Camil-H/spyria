@@ -90,7 +90,7 @@ CI is `.github/workflows/ci.yml` and `.github/workflows/promote.yml` on GitHub A
 
 | Job | On a pull request | On a push to `develop` |
 |---|---|---|
-| `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` |
+| `plan` | `check:related --plan` against the merge base with `develop` | `check:related --plan --full` against `main`: everything below runs in full, unless `develop` differs from `main` only in documentation (`.md`, `.claude/`, `.agents/`), then no test job runs |
 | `checks` | lint, typecheck, boundaries, locks | the same |
 | `secrets` | gitleaks on the pull request's commits; fails when one adds a credential (key, token, private key) | gitleaks on the pushed commits |
 | `unit`, `integration` | the selected test files, or the whole suite | the whole suite |
