@@ -29,5 +29,11 @@ test.describe('Appearance', () => {
 
     await appearance.getByRole('radio', { name: 'Light' }).check()
     await expect.poll(backgroundOfPage).toBe(lightBackground)
+
+    await page.evaluate(() => localStorage.setItem('spyria.color-mode', 'sepia'))
+    await page.reload()
+    await expect(appearance.getByRole('radio', { name: 'System' })).toBeChecked()
+    expect(await page.evaluate(() => document.documentElement.dataset.colorMode)).toBe('system')
+    expect(await backgroundOfPage()).toBe(darkBackground)
   })
 })

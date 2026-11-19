@@ -7,7 +7,7 @@
     @slot;
   }
   @media (prefers-color-scheme: dark) {
-    &:where([data-color-mode="system"], [data-color-mode="system"] *) {
+    &:not(:where([data-color-mode="light"], [data-color-mode="light"] *)) {
       @slot;
     }
   }
