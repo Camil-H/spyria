@@ -21,7 +21,7 @@ Setup asks for:
 
 It writes `~/spyria-azure/main.tf` and `terraform.tfvars` (readable by you only), runs `tofu init` and `tofu apply`, then prints the DNS records to create, if any, the certificate command and the setup link.
 
-Every question is also a flag (`spyria --help`): `--hostname`, `--size`, `--subscription`, `--region`, `--dns-zone`, `--dns-zone-resource-group`, `--bind-hostname yes|no`, `--version` and `--folder`. `--unattended` asks no question and applies without confirmation.
+Every question is also a flag (`spyria --help`): `--hostname`, `--size`, `--subscription`, `--region`, `--dns-zone`, `--dns-zone-resource-group`, `--bind-hostname yes|no`, `--version` and `--folder`. `--no-start` writes the folder without applying; `--unattended` asks no question and applies without confirmation.
 
 The folder also holds the OpenTofu state, which contains the deployment's passwords and keys: keep it private and backed up. To keep the state elsewhere, such as in an encrypted storage account, declare that backend in a file of its own like `backend.tf`, since setup rewrites `main.tf` on every run.
 

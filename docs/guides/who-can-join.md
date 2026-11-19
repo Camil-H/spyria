@@ -15,7 +15,7 @@ Account providers are set when installing Spyria ([install](./install.md), [manu
 | Microsoft | Work or school accounts of any organization, and personal Microsoft accounts. |
 | Another OIDC provider | Its accounts, as long as it confirms their addresses. |
 
-The sign-in screen asks for an email address, then offers the account providers, and "Continue with your organization's sign-in" for each workspace enforcing SSO where the address is invited or a member. An address at a [claimed domain](#good-to-know) gets only its organization's sign-in.
+The sign-in screen asks for an email address, then offers the account providers, and "Continue with your organization's sign-in" for each workspace enforcing SSO where the address is invited or a member. An address at a [claimed domain](#good-to-know) is offered no account provider: its organization's sign-in comes first.
 
 ## Workspaces and invites
 

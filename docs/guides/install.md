@@ -63,6 +63,9 @@ Every question is also a flag (`spyria --help`); a flag setup does not know is r
 Secrets are never flags, so they stay out of your shell history: setup reads them from `SPYRIA_SETUP_CLOUDFLARE_TOKEN`, `SPYRIA_SETUP_GOOGLE_CLIENT_SECRET`, `SPYRIA_SETUP_MICROSOFT_CLIENT_SECRET`, `SPYRIA_SETUP_OIDC_CLIENT_SECRET` and `SPYRIA_SETUP_HOST_CLAIM_URL`.
 
 ```sh
+printf 'Cloudflare API token: '; stty -echo; read -r SPYRIA_SETUP_CLOUDFLARE_TOKEN; stty echo; echo
+printf 'Google client secret: '; stty -echo; read -r SPYRIA_SETUP_GOOGLE_CLIENT_SECRET; stty echo; echo
+export SPYRIA_SETUP_CLOUDFLARE_TOKEN SPYRIA_SETUP_GOOGLE_CLIENT_SECRET
 spyria setup --unattended --hostname spyria.example.com --google-client-id <client id>
 ```
 
