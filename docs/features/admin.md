@@ -361,7 +361,7 @@ Seven days later, Spyria erases for good: chats and their whole history, runtime
 Good to know:
 
 - The GitHub App stays installed on the organization: uninstall it on GitHub.
-- Until the seven days are over, only the operator can restore the workspace ([Manual install](../guides/self-hosting.md#deleting-a-workspace)).
+- Until the seven days are over, only the operator can restore the workspace ([operations](../guides/operations.md#deleting-a-workspace)).
 - When a deployment's only workspace is erased, creating one needs the setup link again ([who can join and sign-in](../guides/who-can-join.md)).
 
 ## Audit log

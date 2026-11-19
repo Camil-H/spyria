@@ -9,7 +9,6 @@ curl 127.0.0.1:3300/health
 spyria compose ps
 ```
 
-- `GET /health` answers `200 {"status":"ok"}`, or `503 {"status":"degraded","failing":[…]}` naming `database`, `gateway` and/or `zero`. Each check has 2 seconds.
 - `GET /health/live` checks only the process and the database. Point restarts and load balancers at it (the cloud modules do): zero-cache rebuilding or the gateway restarting is no reason to restart the server.
 - Every long-running service has a Compose healthcheck and restarts `unless-stopped`. Postgres uses `pg_isready`, zero-cache `/keepalive`, the server and gateway `/health`, the host `spyria-host health` (its model relay answers), plus the optional tunnel.
 
@@ -60,7 +59,7 @@ The Google, Microsoft and OIDC apps people sign in with are deployment settings 
 
 - **`spyria setup` install:** run `spyria setup` again. An empty answer keeps a saved app; `-` removes it.
 - **Install made by hand:** set them in `.env.prod` ([manual install](./self-hosting.md#account-providers)), or in the secret files when [read from files](./security.md#secrets-in-files).
-- **Cloud with `spyria setup --cloud`:** set the OIDC app in `terraform.tfvars` and run setup again. The `main.tf` it writes, and rewrites on every run, does not pass Google or Microsoft apps: those need a configuration you apply [without the spyria tool](./cloud.md#without-the-spyria-tool).
+- **Cloud with `spyria setup --cloud`:** set the OIDC app in `terraform.tfvars` and run setup again. The `main.tf` it writes, and rewrites on every run, does not pass Google or Microsoft apps: those need a configuration you apply without the spyria tool ([AWS](./cloud-aws.md#without-the-spyria-tool), [Azure](./cloud-azure.md#without-the-spyria-tool), [Google Cloud](./cloud-gcp.md#without-the-spyria-tool)).
 - **Cloud without the tool:** set them in your configuration and run `tofu apply`.
 
 The server reads them when it restarts.
@@ -82,8 +81,8 @@ spyria compose exec server bun apps/server/src/operator-cli.ts rebuild-messages 
 - `failed-jobs` lists failed jobs: workspace, type, attempts, last error, when it failed.
 - `retry-jobs` requeues them with attempts reset. A dead sweep whose next run is already queued, or superseded by a later failure of the same sweep, is dropped instead.
 - `rebuild-messages` rebuilds the messages projection from the append-only event store, for one chat or all.
-- `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over.
-- `workspace:stop-sso <workspace id>` stops a workspace enforcing its own SSO when that provider no longer signs anyone in, and releases its claimed domains, so its members sign in with their own accounts ([manual install](./self-hosting.md#deleting-a-workspace)).
+- `workspace:restore` and `workspace:purge` restore a deleted workspace or erase it before its seven days are over ([deleting a workspace](#deleting-a-workspace)).
+- `workspace:stop-sso <workspace id>` stops a workspace enforcing its own SSO when that provider no longer signs anyone in, and releases its claimed domains, so its members sign in with their own accounts.
 - In development: `bun run jobs:failed`, `bun run jobs:retry`, `bun run db:rebuild-messages` (read `.env.dev`).
 
 Retries:
@@ -95,6 +94,24 @@ Good to know:
 - Every workspace has its sweeps and usage sync scheduled within a minute of being created or restored. A dead one is rescheduled an hour after it failed.
 - Some jobs run one at a time per subject, such as the check of a member's tool sign-ins: at most one waits behind the running one. A failed one ends, keeping its error, when a newer one already waits.
 - A tool sign-in check whose last attempt cannot reach a tool server keeps the stored statuses and logs a `tool_connections.not_checked` warning instead of failing.
+
+## Deleting a workspace
+
+An Admin deletes a workspace from **Workspace settings** ([Administration](../features/admin.md#deleting-the-workspace)). Members lose access at once; seven days later a job erases it: it removes its runtimes through the hosts, its keys and tool servers from the gateway, then its rows.
+
+To restore it, or erase it now, during those seven days:
+
+```sh
+spyria compose exec server bun apps/server/src/operator-cli.ts workspace:restore <workspace id>
+spyria compose exec server bun apps/server/src/operator-cli.ts workspace:purge <workspace id> [--abandon-failed-cleanup]
+```
+
+Good to know:
+- After deletion, nothing new starts for the workspace; runtimes still starting are removed a few minutes later. Hosts stay connected until the erase is done.
+- If a cleanup job keeps failing (for example a host stays offline), the erase waits so no keys stay in the gateway. It logs `workspace.purge_blocked` and retries hourly; bring the host back and it goes through.
+- `--abandon-failed-cleanup` erases anyway: it drops cleanup jobs that failed or await a retry after failing (not running ones, nor ones that never failed) and prints what is left behind.
+- A restore is refused once the erase has started.
+- Once the last workspace is erased, the setup link creates the next one.
 
 ## Database connections
 
