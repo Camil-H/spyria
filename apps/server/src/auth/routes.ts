@@ -9,7 +9,6 @@ import {
   entraObjectIdPattern,
   InstanceBeingSetUp,
   instanceAppFor,
-  instanceAppPresets,
   normalizedEmail,
   type SignInScope,
   type SsoPreset,
@@ -423,7 +422,7 @@ export const createAuthRoutes = ({
         canCreateWorkspace: isBeingSetUp && isSetupToken(context.req.query('setup')),
         accountProviders,
         callbackOrigin: new URL(redirectUri).origin,
-        instanceApps: authMode === 'sso' ? instanceAppPresets.filter((preset) => sso.instanceApps?.[preset]) : [],
+        instanceApps: accountProviders,
       })
     })
     .get('/providers', rateLimited('emailRouting'), async (context) => {

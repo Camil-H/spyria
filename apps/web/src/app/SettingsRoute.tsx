@@ -27,7 +27,7 @@ type SettingsCard = PageCard & {
   Page: ComponentType<{
     workspaceId: WorkspaceId
     isDexSignIn: boolean
-    instanceApps: readonly ('google' | 'microsoft')[]
+    instanceApps: readonly ('google' | 'microsoft' | 'oidc')[]
     permissions: readonly WorkspacePermission[]
   }>
 }

@@ -24,6 +24,7 @@ import {
   workspaceEventsOf,
 } from '../testing/testing.ts'
 import { createSecretBox, secretsKeyringOf } from './secret-box.ts'
+import { issueSessionToken } from './session-tokens.ts'
 import { openSessions } from './sessions.ts'
 import { assertInstanceAppsConfigured } from './sso.ts'
 
@@ -161,14 +162,19 @@ test('the server tells its auth mode, the account providers of this Spyria and w
   const modeOf = async (server: { request: (path: string) => Response | Promise<Response> }) =>
     (await server.request('/auth/mode')).json()
   const callbackOrigin = new URL(testAuthSettings.oidc.redirectUri).origin
-  const mode = { authMode: 'sso', accountProviders: ['microsoft', 'oidc'], callbackOrigin, instanceApps: ['microsoft'] }
+  const mode = {
+    authMode: 'sso',
+    accountProviders: ['microsoft', 'oidc'],
+    callbackOrigin,
+    instanceApps: ['microsoft', 'oidc'],
+  }
   expect(await modeOf(app)).toEqual({ ...mode, isBeingSetUp: false, canCreateWorkspace: false })
   const google = { clientId: 'spyria-google', clientSecret: 'google-secret' }
   expect(
     await modeOf(
       createApp({ database, ...ssoSettings, instanceSignInApps: { ...ssoSettings.instanceSignInApps, google } }),
     ),
-  ).toMatchObject({ accountProviders: ['google', 'microsoft', 'oidc'], instanceApps: ['google', 'microsoft'] })
+  ).toMatchObject({ accountProviders: ['google', 'microsoft', 'oidc'], instanceApps: ['google', 'microsoft', 'oidc'] })
   expect(await modeOf(createApp({ database, ...ssoSettings, instanceSignInApps: {} }))).toMatchObject({
     accountProviders: [],
     instanceApps: [],
@@ -1094,8 +1100,19 @@ test('the server refuses to start when workspaces sign in through an app of this
   const google = { clientId: 'spyria-google', clientSecret: 'secret' }
   expect(await assertInstanceAppsConfigured(database, { google })).toBeUndefined()
   expect((await rejectionOf(assertInstanceAppsConfigured(database, {}))).message).toBe(
-    'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_* or SPYRIA_MICROSOFT_CLIENT_* again.',
+    'Workspaces sign in through apps of this deployment that are not configured: google (1 workspace). Set SPYRIA_GOOGLE_CLIENT_*, SPYRIA_MICROSOFT_CLIENT_* or SPYRIA_OIDC_* again.',
   )
+  await addWorkspace('wonka')
+  await database.$client`
+    insert into workspace_sso (workspace_id, preset, issuer, client_id, encrypted_client_secret, uses_instance_app, updated_at)
+    values ('wonka', 'oidc', ${accountIdp.issuer}, 'spyria-accounts', '', true, now())`
+  const oidc = { issuer: `${accountIdp.issuer}/`, clientId: 'spyria-accounts', clientSecret: 'accounts-secret' }
+  expect(await assertInstanceAppsConfigured(database, { google, oidc })).toBeUndefined()
+  for (const instanceApps of [{ google }, { google, oidc: { ...oidc, issuer: 'https://idp.elsewhere.example' } }])
+    expect((await rejectionOf(assertInstanceAppsConfigured(database, instanceApps))).message).toBe(
+      'Workspaces sign in through apps of this deployment that are not configured: oidc (1 workspace). Set SPYRIA_GOOGLE_CLIENT_*, SPYRIA_MICROSOFT_CLIENT_* or SPYRIA_OIDC_* again.',
+    )
+  await database.$client`delete from workspace_sso where workspace_id = 'wonka'`
   await database.$client`update workspaces set deleted_at = now(), purge_at = now() + interval '7 days' where workspace_id = 'wayne'`
   expect(await assertInstanceAppsConfigured(database, {})).toBeUndefined()
 })
@@ -1189,4 +1206,97 @@ test('workspaces signing in through the same app of a provider offer one button,
     email: 'vic@example.com',
   })
   expect(workspaceIdsOf(forOneWorkspace)).toEqual(['piper'])
+})
+
+test("an Admin whose account is at this Spyria's OIDC provider enforces it through the app of this Spyria, without a client id or secret; members then sign in through it, and its sessions open only this workspace", async () => {
+  await bindAliceAccount()
+  expect(JSON.parse((await readSso('stark')).body)).toEqual({
+    settings: null,
+    suggestion: { preset: 'oidc', issuer: accountIdp.issuer },
+  })
+  const confirmed = await callbackAfter(
+    accountIdp,
+    await startSsoChange('stark', await sessionCookieOf('stark', alice), { preset: 'oidc', usesInstanceApp: 'true' }),
+    { sub: 'alice-stark', email: 'alice@example.com' },
+  )
+  expect(confirmed.clientId).toBe('spyria-accounts')
+  expect(confirmed.page).toContain('"status":"signed_in"')
+  expect(workspaceIdsOf(confirmed)).toEqual(['stark'])
+  expect(JSON.parse((await readSso('stark')).body)).toEqual({
+    settings: {
+      preset: 'oidc',
+      issuer: accountIdp.issuer,
+      clientId: 'spyria-accounts',
+      tenantId: '',
+      hasSecret: false,
+      usesInstanceApp: true,
+    },
+  })
+  const [stored] = await database.$client<{ encryptedClientSecret: string }[]>`
+    select encrypted_client_secret as "encryptedClientSecret" from workspace_sso where workspace_id = 'stark'`
+  expect(stored?.encryptedClientSecret).toBe('')
+
+  const bobSignedIn = await signInThrough(accountIdp, 'workspace=stark', { sub: 'bob-stark', email: 'bob@example.com' })
+  expect(bobSignedIn.page).toContain('"status":"signed_in"')
+  expect(bobSignedIn.userId).toBe(bob)
+  expect(workspaceIdsOf(bobSignedIn)).toEqual(['stark'])
+  expect(Object.fromEntries(accountIdp.tokenRequests.at(-1) ?? [])).toMatchObject({
+    client_id: 'spyria-accounts',
+    client_secret: 'accounts-secret',
+  })
+  expect((await openSessionWith(app, bobSignedIn.sessions[0]?.token ?? '', acme)).status).toBe(403)
+})
+
+test('the SSO settings suggest Microsoft Entra with the tenant of an Admin signed in with a work account, and nothing for a personal account or a session opened through the provider of another workspace', async () => {
+  const workIssuer = `${microsoftIdp.origin}/tenant-1/v2.0`
+  await database.$client`
+    insert into account_identities (issuer, subject, user_id) values (${workIssuer}, 'alice-work', ${alice})`
+  expect(JSON.parse((await readSso('stark')).body)).toEqual({
+    settings: null,
+    suggestion: { preset: 'microsoft', tenantId: 'tenant-1' },
+  })
+
+  await database.$client`
+    update account_identities set issuer = ${`${microsoftIdp.origin}/${microsoftPersonalAccountsTenantId}/v2.0`}
+    where user_id = ${alice}`
+  expect(JSON.parse((await readSso('stark')).body)).toEqual({ settings: null })
+
+  await database.$client`update account_identities set issuer = ${workIssuer} where user_id = ${alice}`
+  await database.$client`
+    insert into domain_claims (workspace_id, domain, token, created_at, verified_at)
+    values ('hooli', 'example.com', 'claim-token', now(), now())`
+  const [throughHooli] = await openSessions(database, alice, 'stark', 'hooli')
+  if (!throughHooli) throw new Error('hooli does not open stark for alice')
+  const { token } = await issueSessionToken(testAuthSettings.tokenSecret, throughHooli)
+  const read = await app.request('/api/sso-settings', { headers: { authorization: `Bearer ${token}` } })
+  expect(await read.json()).toEqual({ settings: null })
+})
+
+test('before enforcing, an Admin reads the members and pending invites of the workspace at another domain than theirs, the first 20 with the count; a member who may not set up SSO and other workspaces see none of them', async () => {
+  await database.$client`insert into users (id, email) values ('member-pat', 'pat@globex.test'), ('member-quinn', 'quinn@wayne.test')`
+  await addMember('stark', 'member-pat')
+  await invite('stark', 'kim@initech.test')
+  await invite('stark', 'nina@example.com')
+  await invite('stark', 'old@initech.test', { expiresIn: '-1 day' })
+  await addWorkspace('wayne')
+  await addMember('wayne', 'member-quinn')
+  await invite('wayne', 'robin@wayne.test')
+  const readAs = async (workspaceId: string, userId: string) => {
+    const response = await app.request('/api/sso-settings/other-domains', {
+      headers: { authorization: await bearerOf(workspaceId, userId) },
+    })
+    return { status: response.status, body: await response.json() }
+  }
+  expect(await readAs('stark', alice)).toEqual({
+    status: 200,
+    body: { addresses: ['kim@initech.test', 'pat@globex.test'], count: 2 },
+  })
+  expect((await readAs('stark', bob)).status).toBe(403)
+
+  for (let index = 10; index < 32; index++) await invite('stark', `guest-${index}@umbrella.test`)
+  const { body } = await readAs('stark', alice)
+  expect(body.count).toBe(24)
+  expect(body.addresses).toHaveLength(20)
+  expect(body.addresses.slice(0, 2)).toEqual(['guest-10@umbrella.test', 'guest-11@umbrella.test'])
+  expect(body.addresses.join(' ')).not.toContain('wayne.test')
 })

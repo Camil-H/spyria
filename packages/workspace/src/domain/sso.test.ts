@@ -9,6 +9,7 @@ import {
   ssoEmailOf,
   ssoSettingsFrom,
   ssoSubjectOf,
+  ssoSuggestionOf,
 } from './sso.ts'
 
 const base = { clientId: ' spyria ' }
@@ -66,15 +67,42 @@ test('Entra reads the user principal name before the mail attribute, which an ac
   })
 })
 
-test('the app of this Spyria serves Google and Microsoft once configured, never another provider', () => {
+test('the app of this Spyria serves each provider it configures, the OIDC one with its issuer, and refuses the others', () => {
   const google = { clientId: 'spyria-google', clientSecret: 'secret' }
+  const oidc = { clientId: 'spyria-oidc', clientSecret: 'oidc-secret', issuer: 'https://idp.acme.com' }
   expect(instanceAppFor({ google }, 'google')).toBe(google)
+  expect(instanceAppFor({ google, oidc }, 'oidc')).toBe(oidc)
   expect(() => instanceAppFor({ google }, 'microsoft')).toThrow(
     'This Spyria has no Microsoft app: enter the client id and secret of your own',
   )
-  expect(() => instanceAppFor({ google, oidc: { ...google, issuer: 'https://idp.acme.com' } }, 'oidc')).toThrow(
-    'Only Google Workspace and Microsoft Entra sign in through the app of this Spyria',
+  expect(() => instanceAppFor({ google }, 'oidc')).toThrow(
+    'This Spyria has no OIDC app: enter the client id and secret of your own',
   )
+})
+
+test('the provider suggested to enforce follows the account the Admin signed in with, through an app of this Spyria', () => {
+  const app = { clientId: 'spyria', clientSecret: 'secret' }
+  const apps = { google: app, microsoft: app, oidc: { ...app, issuer: 'https://idp.acme.com/' } }
+  const workTenant = '11111111-2222-4333-8444-555555555555'
+  expect(ssoSuggestionOf('https://accounts.google.com', apps)).toEqual({ preset: 'google' })
+  expect(ssoSuggestionOf(`https://login.microsoftonline.com/${workTenant}/v2.0`, apps)).toEqual({
+    preset: 'microsoft',
+    tenantId: workTenant,
+  })
+  expect(ssoSuggestionOf('http://localhost:9/tenant-1/v2.0', apps, 'http://localhost:9')).toEqual({
+    preset: 'microsoft',
+    tenantId: 'tenant-1',
+  })
+  expect(
+    ssoSuggestionOf(`https://login.microsoftonline.com/${microsoftPersonalAccountsTenantId}/v2.0`, apps),
+  ).toBeUndefined()
+  expect(ssoSuggestionOf('https://login.microsoftonline.com/common/v2.0', apps)).toBeUndefined()
+  expect(ssoSuggestionOf('https://idp.acme.com', apps)).toEqual({ preset: 'oidc', issuer: 'https://idp.acme.com' })
+  expect(ssoSuggestionOf('https://idp.acme.com/', apps)).toEqual({ preset: 'oidc', issuer: 'https://idp.acme.com' })
+  expect(ssoSuggestionOf('https://idp.globex.com', apps)).toBeUndefined()
+  expect(ssoSuggestionOf('not a url', apps)).toBeUndefined()
+  expect(ssoSuggestionOf('https://accounts.google.com', { microsoft: app })).toBeUndefined()
+  expect(ssoSuggestionOf(`https://login.microsoftonline.com/${workTenant}/v2.0`, { google: app })).toBeUndefined()
 })
 
 test('accounts sign in through the configured apps of this Spyria; Microsoft takes any tenant and personal accounts', () => {
