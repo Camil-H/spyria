@@ -57,7 +57,7 @@ Then read the logs of the service in question: `spyria compose logs <service>`, 
 ### The setup link says the deployment is being set up
 
 - Cause: the link lacks the setup token, or a workspace already exists.
-- Fix: `spyria setup-link` prints the link again while no workspace exists.
+- Fix: `spyria setup-link` prints the link again while no workspace exists ([on a manual install](./operations.md#first-workspace)).
 
 ### "Your provider did not confirm this address"
 

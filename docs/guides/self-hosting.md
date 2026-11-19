@@ -58,7 +58,7 @@ Good to know:
 
 ## After setup
 
-Open the setup link `<origin>/?setup=<SPYRIA_SETUP_TOKEN>` and create the first workspace by signing in. To print the link again: [first workspace](./operations.md#first-workspace).
+Open the setup link `<origin>/?setup=<SPYRIA_SETUP_TOKEN>` and create the first workspace by signing in. To print it again, run `spyria-compose exec server bun apps/server/src/operator-cli.ts setup-link`.
 
 To run agents on this machine, take the code from the claim URL of **Workspace settings › Runtimes › Add runtime host** (`https://<hostname>/h/<code>`), set `SPYRIA_HOST_CLAIM_URL=http://server:3000/h/<code>`, add `host` to `COMPOSE_PROFILES` (and set `SPYRIA_DOCKER_GROUP` on Linux), then run `pull` and `up -d` again. Do not run the copied command on this machine: it would replace the Compose container of the same name.
 

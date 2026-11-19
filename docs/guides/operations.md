@@ -51,7 +51,13 @@ Until the first workspace exists, only the setup link creates one. To print it a
 spyria setup-link
 ```
 
-It is refused once a workspace exists.
+On a [manual install](./self-hosting.md), run it in the server container instead:
+
+```sh
+spyria-compose exec server bun apps/server/src/operator-cli.ts setup-link
+```
+
+Both are refused once a workspace exists.
 
 ## Account providers
 

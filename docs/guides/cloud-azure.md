@@ -72,7 +72,7 @@ The configuration uses two modules in [`deploy/tofu/modules/azure`](../../deploy
 - `runtime-host`: a VM running `spyria-host`, which dials out to the control plane.
 
 1. Copy [`deploy/tofu/examples/azure`](../../deploy/tofu/examples/azure).
-2. Replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/azure/…?ref=v<version>`.
+2. Replace each `source = "../../modules/…"` with `github.com/Camil-H/spyria//deploy/tofu/modules/…?ref=v<version>`.
 3. Set the variables. The example declares every input below except `images` and the Google and Microsoft account providers, which you add to the `control_plane` module block. Apply this configuration with `tofu` from then on: `spyria setup --cloud` rewrites `main.tf` and would drop them.
 4. Run `tofu init` and `tofu apply`; `tofu output -raw setup_link` prints the setup link.
 
