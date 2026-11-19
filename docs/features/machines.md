@@ -61,22 +61,7 @@ Removing a host (or a member's machine) disconnects it:
 - Its runtimes show **Could not start**.
 - Nothing is deleted: the stopped host container, runtime containers and volumes stay.
 
-To clean up, for the default deployment `spyria`:
-
-```sh
-docker rm -f spyria-host
-docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
-docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
-docker volume rm $(docker volume ls -q --filter name=^spyria-cache-)
-docker volume rm $(docker volume ls -q --filter name=^spyria-snapshot-)
-docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
-docker volume rm spyria-host
-```
-
-- Runtime volumes hold the agents' files: remove them only when nothing in them is needed. Caches hold only downloads; snapshots, a repository after its setup.
-- For another deployment, replace `spyria-` with `<deployment>-`; the name filter spares other deployments on the same daemon.
-- On a member's machine, also `docker volume rm` the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and harnesses (`spyria-harnesses`) if the machine is not added again.
-- Added to another workspace instead, the new host removes these runtimes and volumes on connect, as unknown to that workspace.
+To clean up the containers and volumes: [operations](../guides/operations.md#removing-a-runtime-host).
 
 ## Where a chat runs
 
@@ -192,4 +177,4 @@ The switch **Members can run sessions on their own machine** is in **Workspace s
 
 ## Several deployments on one machine
 
-Every Docker object carries the deployment name `SPYRIA_DEPLOYMENT`: host container and state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one daemon, such as development and production, never see each other's runtimes. See [Manual install](../guides/self-hosting.md).
+Each deployment's Docker objects carry its name, so two deployments on one daemon never see each other's runtimes ([operations](../guides/operations.md#several-deployments-on-one-machine)).

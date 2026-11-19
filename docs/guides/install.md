@@ -77,7 +77,7 @@ It backs up both databases into `backups/`, fetches the release's Compose file a
 - Migrations run before the server starts. A failed one leaves the old server down; the reason is in `spyria compose logs migrate`.
 - A new gateway image migrates its own database on start, and some of those migrations cannot be reverted: going back to the previous release means restoring the backup taken by the upgrade.
 - Runtimes move to the new runtime image the next time they start; running ones keep theirs until they stop.
-- Runtime hosts on other machines show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the host is refused until updated. Either badge opens the command that updates it in place ([machines](../features/machines.md#versions-and-updates)).
+- Runtime hosts on other machines show **Update available** in Workspace settings (or on the member's profile), or **Update needed** when the host is refused until updated. Either badge opens the command that updates it in place.
 
 ## Good to know
 

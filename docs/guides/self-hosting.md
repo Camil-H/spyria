@@ -187,7 +187,7 @@ Good to know:
 
 ## Runtime host on this machine
 
-Runtime hosts are machines with Docker running `spyria-host`, which dials out to Spyria ([machines](../features/machines.md)).
+Runtime hosts are machines with Docker running `spyria-host`, which dials out to Spyria.
 
 What `spyria setup` does: it generates a one-time install code (`SPYRIA_INSTALL_HOST_TOKEN`), points the host at `http://server:3000/h/<code>` and adds the `host` profile. Once the first workspace exists, the host appears in **Workspace settings** as **This machine**, removable like any host. The code works once, for the first workspace only; later, `spyria setup --host` asks for the command of **Add runtime host** and uses its code.
 

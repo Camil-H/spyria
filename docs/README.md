@@ -2,7 +2,7 @@
 
 Start with the architecture overview, then the page for what you are doing. The project rules for contributors are in [AGENTS.md](../AGENTS.md).
 
-The install guides (install, cloud, manual install, who can join, operations, security, troubleshooting, machines and administration) are also published at [spyria.dev/docs/install](https://spyria.dev/docs/install), and `deploy/install.sh` at `https://spyria.dev/install`. The site lives in its own repository, [spyria-landing](https://github.com/Camil-H/spyria-landing), which renders these pages from this folder at the commit in its `product.ref`; moving that commit to each stable release keeps the guides and `/install` matching the release the script downloads.
+The install guides (install, cloud, manual install, who can join, operations, security, troubleshooting and administration) are also published at [spyria.dev/docs/install](https://spyria.dev/docs/install), and `deploy/install.sh` at `https://spyria.dev/install`. The site lives in its own repository, [spyria-landing](https://github.com/Camil-H/spyria-landing), which renders these pages from this folder at the commit in its `product.ref`; moving that commit to each stable release keeps the guides and `/install` matching the release the script downloads.
 
 ## Architecture
 

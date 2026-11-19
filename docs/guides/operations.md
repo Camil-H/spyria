@@ -114,13 +114,43 @@ zero-cache needs at least one connection per sync worker in each pool. On a mach
 - The production Compose file caps that at 10 GB (`max_slot_wal_keep_size`). Past it, Postgres drops the slot instead of filling its disk.
 - zero-cache then resyncs its replica from scratch when it starts again (clients reload).
 
+## Runtime hosts
+
+### Removing a runtime host
+
+Removing a host in **Workspace settings › Runtimes** (or a member's machine in their profile) disconnects it and deletes nothing: the stopped host container, runtime containers and volumes stay. To clean up, for the default deployment `spyria`:
+
+```sh
+docker rm -f spyria-host
+docker rm -f $(docker ps -aq --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-rt-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-cache-)
+docker volume rm $(docker volume ls -q --filter name=^spyria-snapshot-)
+docker network rm $(docker network ls -q --filter label=spyria.managed=1 --filter name=^spyria-rt-)
+docker volume rm spyria-host
+```
+
+- Runtime volumes hold the agents' files: remove them only when nothing in them is needed. Caches hold only downloads; snapshots, a repository after its setup.
+- For another deployment, replace `spyria-` with `<deployment>-`; the name filter spares other deployments on the same daemon.
+- On a member's machine, also `docker volume rm` the sign-ins (`spyria-cred-claude-code`, `spyria-cred-codex`) and harnesses (`spyria-harnesses`) if the machine is not added again.
+- Added to another workspace instead, the new host removes these runtimes and volumes on connect, as unknown to that workspace.
+
+### Outbound traffic
+
+- Each runtime has its own Docker network; runtimes on a host cannot reach each other where Docker isolates networks (Docker Engine on Linux; some desktop Docker products do not).
+- Outbound traffic from runtimes is not filtered. On a cloud VM you set up yourself, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall; the cloud modules' runtime hosts already do.
+
+### Several deployments on one machine
+
+Every Docker object carries the deployment name `SPYRIA_DEPLOYMENT`: host container and state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one daemon, such as development and production, never see each other's runtimes.
+
 ## Disk usage and cleanup
 
 **Runtimes**
 - Cleaned automatically: stopped after 60 minutes idle, removed 7 days after they stopped. A runtime's Docker network is released as soon as it stops.
 - On each connection, a host removes the runtimes Spyria no longer knows, and a package cache with the last runtime that uses it.
 - Runtimes kept ready are replaced after a day. A host keeps the newest snapshot of each repository that keeps runtimes ready and removes the others once unused.
-- Yours to prune: runtimes of removed hosts, with their volumes ([Removing a host](../features/machines.md#removing-a-host)).
+- Yours to prune: runtimes of removed hosts, with their volumes ([removing a runtime host](#removing-a-runtime-host)).
 
 **Runtime image**
 - About 350 MB of it is Chromium, for `take_screenshot` and members' browsers, shared by every runtime of a host.
