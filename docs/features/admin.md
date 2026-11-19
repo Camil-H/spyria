@@ -177,9 +177,10 @@ Good to know:
 
 ## GitHub
 
-**GitHub** sets up the workspace's GitHub App. Usage in dev chats: [Dev mode](./dev-mode.md); setup steps: [Manual install](../guides/self-hosting.md).
+**GitHub** sets up the workspace's GitHub App. Usage in dev chats: [Dev mode](./dev-mode.md).
 
-- Create the App in one click (on your account or an organization), or use **Create it manually** for an App made by hand.
+- Create the App in one click (on your account or an organization), or use **Create it manually** for an App made by hand, for example on GitHub Enterprise without manifests.
+- The App asks for contents, pull requests and workflows write; issues, checks, actions and metadata read. Its webhooks arrive on `/api/github/webhooks`.
 - Once connected: **GitHub App connected**, **Create a new App** (replaces the connected one), **Edit credentials**, and the repositories the App's installations grant.
 - **Members' accounts** shows each member's GitHub account as connected, needs reconnection, or not connected. The agent pushes and opens pull requests with the prompting member's account.
 - Who may use GitHub's commands is set in **Tools**, which the card links to.

@@ -2,7 +2,7 @@
 
 Start with the architecture overview, then the page for what you are doing. The project rules for contributors are in [AGENTS.md](../AGENTS.md).
 
-The install guides (install, cloud with a page per cloud, manual install, who can join, operations, security, troubleshooting and administration) are also published at [spyria.dev/docs/install](https://spyria.dev/docs/install), and `deploy/install.sh` at `https://spyria.dev/install`. The site lives in its own repository, [spyria-landing](https://github.com/Camil-H/spyria-landing), which renders these pages from this folder at the commit in its `product.ref`; moving that commit to each stable release keeps the guides and `/install` matching the release the script downloads.
+The install guides (install, one page per cloud, manual install, who can join, operations, security, troubleshooting and administration) are also published at [spyria.dev/docs/install](https://spyria.dev/docs/install), and `deploy/install.sh` at `https://spyria.dev/install`. The site lives in its own repository, [spyria-landing](https://github.com/Camil-H/spyria-landing), which renders these pages from this folder at the commit in its `product.ref`; moving that commit to each stable release keeps the guides and `/install` matching the release the script downloads.
 
 ## Architecture
 
@@ -20,9 +20,9 @@ The install guides (install, cloud with a page per cloud, manual install, who ca
 - [Testing](guides/testing.md): the test layers, commands, fakes, e2e conventions, the looks, the docker suite, manual checks.
 - [UI design](guides/ui-design.md): the design tokens (type scale, weights, colours) and the shared components every screen uses, and the check that enforces them.
 - [Install on one machine](guides/install.md): `install.sh` and `spyria setup`: the tunnel, the sign-in providers, the runtime host on the machine.
-- [Manual install](guides/self-hosting.md): what `spyria setup` does underneath: requirements, `.env.prod`, Compose profiles, the first workspace, runtime hosts, the GitHub App, a Cloudflare example.
-- [Install on AWS, Azure or Google Cloud](guides/cloud.md): `spyria setup --cloud`, with one page per cloud ([AWS](guides/cloud-aws.md), [Azure](guides/cloud-azure.md), [Google Cloud](guides/cloud-gcp.md)), and the OpenTofu modules without the tool.
-- [Operations](guides/operations.md): health, logs, traces, jobs, connections, disk, backups.
+- [Manual install](guides/self-hosting.md): what `spyria setup` does underneath: requirements, account providers, `.env.prod`, Compose profiles, building from a clone, a Cloudflare example.
+- Install on [AWS](guides/cloud-aws.md), [Azure](guides/cloud-azure.md) or [Google Cloud](guides/cloud-gcp.md): `spyria setup --cloud`, and the OpenTofu modules without the tool.
+- [Operations](guides/operations.md): health, logs, traces, jobs, deleting a workspace, connections, disk, backups.
 - [Security](guides/security.md): secrets read from files, rotation intervals, rotating the secrets key.
 - [Who can join and sign-in](guides/who-can-join.md): account providers and a workspace's own provider, the sign-in screen, invites.
 - [Troubleshooting](guides/troubleshooting.md): `spyria doctor` and the symptoms that cost the most time.
