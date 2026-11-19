@@ -163,7 +163,7 @@ Until the workspace claims a domain, a session opened through its own provider o
 2. Add it at your DNS provider.
 3. Click **Check the record**. DNS changes can take minutes, sometimes hours; the check says when the record is not found yet. **Cancel the claim** drops a domain still waiting.
 
-Once claimed (see [claimed domains](../guides/who-can-join.md#claimed-domains)):
+Once claimed (see [who can join](../guides/who-can-join.md#good-to-know)):
 
 - The domain's addresses sign in only through your provider, which also opens their other workspaces on this Spyria. They cannot create a workspace, and other workspaces cannot invite them.
 - Members and invites at any other domain can no longer sign in to this workspace; inviting such an address is refused.
