@@ -1,6 +1,6 @@
 # Agents
 
-This page explains what happens in a runtime chat: which agent (harness) runs, how its model is chosen, and what a member sees and controls while it works. It is for members who use agent chats and for contributors who need the rules behind them. Where a chat physically runs is in [Machines](./machines.md); sharing rules are in [Chats and sharing](./chats-and-sharing.md).
+This page explains what happens in a runtime chat: which agent (harness) runs, how its model is chosen, and what a member sees and controls while it works. It is for members who use agent chats. Where a chat physically runs is in [Machines](./machines.md); sharing rules are in [Chats and sharing](./chats-and-sharing.md).
 
 ## Agent chats
 
@@ -13,16 +13,16 @@ Prompts are handled one turn at a time. A prompt sent while the agent works show
   - **Claude Code** takes it at once: it interrupts the answer being written, or moves a running command to the background, and ends the turn only after answering it.
   - **Codex** takes it into the turn at its next step.
 
-  On Claude Code and Codex, the message counts as picked up as soon as the harness accepts it, so its later output shows under it; two messages taken in together are answered under the later one. This needs a harness version that supports steering mid-turn (the pinned versions do); with an older one, the message runs as the next turn. If Codex's turn has just ended when the message arrives, Codex starts a turn of its own for it: Spyria cancels that turn at once and the message runs as the next turn; a few words of the cancelled turn may show under the previous message, and Codex keeps the cancelled turn in its history, so it sees the message twice. Codex also refuses an image when the session's model reads only text; the message then runs as the next turn, where Codex refuses the image as usual.
+  On Claude Code and Codex, the message counts as picked up as soon as the harness accepts it, so its later output shows under it; two messages taken in together are answered under the later one. This needs a harness version that supports steering mid-turn (the versions Spyria installs do); with an older one, the message runs as the next turn. If Codex's turn has just ended when the message arrives, Codex starts a turn of its own for it: Spyria cancels that turn at once and the message runs as the next turn; a few words of the cancelled turn may show under the previous message, and Codex keeps the cancelled turn in its history, so it sees the message twice. Codex also refuses an image when the session's model reads only text; the message then runs as the next turn, where Codex refuses the image as usual.
 - **Run as the next turn:** a message from another member, and a message sent while the runtime is asleep or the machine offline, wait for the current turn to end and start the next one. So does a message the runtime refused, or that the agent had not read yet when its turn ended with an error or was stopped; it is never lost or sent twice.
 
 A prompt sent while the agent cannot run (no host, a start failure, a host or machine offline) gets a notice saying so and runs when the agent is back, unless it waited more than an hour: it then gets "Not sent: it waited more than an hour for the agent" and is skipped, so a prompt is not answered days after it was written. Before each turn the server checks again that its author may still post in the chat and, on a Spyria runtime, has an LLM key in the workspace; otherwise the prompt gets a notice such as "*Name* has no LLM key in this workspace" and the next one runs. In a dev chat with quality gates on, the server also sends prompts on the owner's behalf, marked as sent by quality gates; see [Dev mode](./dev-mode.md#quality-gates).
 
-The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt ([decision 0033](../decisions/0033-tools-on-the-prompters-account.md)). Every model call and tool call records both.
+The agent runs in the chat owner's runtime (**Agent acts as** *owner* in the header), and each model call and tool call uses the key and the accounts of the member who sent the prompt. Every model call and tool call records both.
 
 ## Harnesses
 
-A harness is the agent program that runs the loop. Spyria does not write its own model loop: it runs existing agents inside its own runtime image, driven by `spyria-agent`.
+A harness is the agent program that runs the loop. Spyria does not write its own model loop: it runs existing agents in its own runtimes.
 
 | Harness | Where it runs | Pays for the model | Chosen by |
 |---|---|---|---|
@@ -36,7 +36,7 @@ Subscription harnesses run only on the member's own machine because a subscripti
 
 ## Models and routing
 
-On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. The catalog in `packages/kernel/src/models.ts` assigns each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai, Meta and OpenRouter. When the workspace has an AI providers allow-list (see [Administration](admin.md#ai-providers)), only the models of the providers it allows are reachable. Prices and context windows come from the gateway's model list, refreshed every hour.
+On a Spyria runtime, the session's model is chosen once, at the first prompt, from the models the prompting member's keys can reach. A model is reachable when its provider has one of the member's keys in the gateway. Spyria's model list gives each model a tier (large, medium or small) and covers Anthropic, OpenAI, Mistral, Google Gemini, xAI, DeepSeek, Z.ai, Meta and OpenRouter. When the workspace has an AI providers allow-list (see [Administration](admin.md#ai-providers)), only the models of the providers it allows are reachable. Prices and context windows come from the gateway's model list, refreshed every hour.
 
 1. A classifier reads the first message and answers two questions: the tier the task needs, and the reasoning effort (high, medium or low). It runs on the member's cheapest reachable model (a dedicated decision model when the member's keys reach one), with a 3-second timeout, and is billed to the prompter like any model call. On a new session it runs while the runtime starts, so it rarely delays the first reply.
 2. Only a confident answer (at least 0.8) of `large` or `small` moves away from the default. The default is the prompter's best reachable **medium** model; when a tier has no reachable model, the nearest tier is used.
@@ -50,7 +50,7 @@ When another participant prompts later, their keys must reach the session's mode
 
 ## The session chip: model, effort, subagents
 
-The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"; while the first prompt waits for its model: "Choosing model…"). A participant with `session.configure` (Owner and Editor) opens it to change:
+The chip in the chat shows the session model and effort (before the first prompt: "Model chosen at first prompt"; while the first prompt waits for its model: "Choosing model…"). A participant who may **Choose the model and stop the agent** (Owner and Editor) opens it to change:
 
 - **Main model:** any reachable model, or one found with **Search all models** among the models the gateway lists for the member's providers. A switch asks for confirmation and shows the estimated cost of the next reply, which rereads the whole conversation with the new model. It applies at the next prompt and keeps the conversation's context.
 - **Effort:** **Off**, **Minimal**, **Low**, **Medium**, **High** or **Extra high** (Pi's thinking levels).
@@ -66,9 +66,9 @@ The agent can ask the member a question with suggested answers and a free answer
 
 ## Tools the agent sees
 
-Spyria's own tools (`open_page`, the `browser_` tools, `take_screenshot`, `web_search`, the public chat tools, delegation, the dev chat's GitHub tools, and Pi's `ask_member`) are declared to the agent from its first call. The servers of the workspace's tools catalogue come through a separate server, and Pi never declares their tools: it reaches them from `codemode` scripts, which find tools with `searchTools()`, call them and keep only what they need from the answers, so a large server (GitHub's has over a hundred tools, about 38,000 tokens of descriptions) does not weigh on every model call. Each call in a script is one call through the gateway, with the same restrictions, approvals and audit as before; a call waiting for approval holds the script until it is decided. Claude Code searches tool servers' tools on its own by default. A server switched off in the chat's **Connected tools** tab is left out of the list and refused by the server.
+The agent has Spyria's own tools from the start: opening pages and using the browser, screenshots, web search, the public chats, delegation and, in a dev chat, GitHub. The workspace's tools catalogue it reaches on demand: it searches the catalogue for the tool it needs instead of reading every tool's description on every call, so a large server, such as GitHub's with over a hundred tools, does not slow down or raise the cost of every model call. Each call goes through Spyria with the same access, approvals and audit; a call waiting for approval holds the agent until it is decided. A server switched off in the chat's **Connected tools** tab is left out and refused.
 
-Every agent can also use the catalogue from the shell with the `spyria` command of the runtime: `spyria` lists the connected services, `spyria <service>` their tools, `spyria <service> <tool> --help` what one takes, and `spyria <service> <tool> --<argument> <value>` runs it as one call through Spyria, with the same access, approvals and audit. A refusal prints why on standard error and exits with 1. A call waiting for a member's approval can outlast the harness's shell time limit (about two minutes in Claude Code); the call may then still run, and the command says to check its effect before running it again. Nothing about it is loaded up front: Claude Code and Codex read one line about it from Spyria's tool server, and Pi from a one-line skill. See [decision 0034](../decisions/0034-catalogue-tools-found-not-declared.md).
+Every agent can also use the catalogue from the shell with the `spyria` command of the runtime: `spyria` lists the connected services, `spyria <service>` their tools, `spyria <service> <tool> --help` what one takes, and `spyria <service> <tool> --<argument> <value>` runs it as one call through Spyria, with the same access, approvals and audit. A refusal prints why on standard error and exits with 1. A call waiting for a member's approval can outlast the harness's shell time limit (about two minutes in Claude Code); the call may then still run, and the command says to check its effect before running it again.
 
 ## Tool approvals
 
@@ -105,7 +105,7 @@ The agent finds what the workspace already discussed with three tools of Spyria'
 - `search_public_chats` searches their messages for a text, ignoring case, in every public chat or one: the 20 newest matches, each with its chat, author, date and the words around it.
 - `read_public_chat` reads one public chat's messages, members' messages and the agent's replies, oldest first: its latest 40 messages, the ones before a given message, or one thread. A message longer than 1,500 characters is cut.
 
-They read only the public, unarchived chats of the chat's workspace, which every member can read anyway: never a private chat, not even one the prompter is in, because the answer shows to everyone in the chat ([Security](../architecture/security.md)). Deleted messages and agent steps are left out. They use no member's connections, never wait for approval, and once the prompter has left the workspace they are refused. Each call is recorded as a read-only call of Spyria's server.
+They read only the public, unarchived chats of the chat's workspace, which every member can read anyway: never a private chat, not even one the prompter is in, because the answer shows to everyone in the chat. Deleted messages and agent steps are left out. They use no member's connections, never wait for approval, and once the prompter has left the workspace they are refused. Each call is recorded as a read-only call of Spyria's server.
 
 ## Delegation and subagents
 
@@ -125,11 +125,11 @@ Between messages, the agent's work shows as collapsible steps: thoughts, command
 
 A turn's finished steps fold into one line, with the agent's text between them, where the first step was: **Working · N steps** while the turn runs, **Worked for** *duration* **· N steps** once it ends, timed from the first step to the turn's last message, or to the question, error or notice that ends the fold. A fold needs at least two steps. The agent's latest text, its reply or its most recent progress note, and a step still running stay below the fold. Questions, a step that ended in an error and the stop notice never fold; the steps before and after one fold separately. A fold you open stays open as new steps arrive and after the turn ends, and stays open on that device after a reload.
 
-Live text streams to viewers over a WebSocket; only completed events are stored in Postgres, so a reload shows the finished steps and the turn in progress resumes streaming. See [Architecture overview](../architecture/overview.md).
+Text shows live as the agent writes it, and only finished steps are kept, so a reload shows the finished steps and the turn in progress picks up streaming where it is.
 
 ## Stop
 
-**Stop** interrupts the current turn, its running subagents and any pending tool approval, and closes the turn with "Stopped by *name*". It needs `session.configure` (Owner and Editor). Prompts waiting behind the turn run next, including a message handed to the turn that the agent had not read yet.
+**Stop** interrupts the current turn, its running subagents and any pending tool approval, and closes the turn with "Stopped by *name*". It needs **Choose the model and stop the agent** (Owner and Editor). Prompts waiting behind the turn run next, including a message handed to the turn that the agent had not read yet.
 
 ## Long conversations
 
@@ -150,4 +150,4 @@ The **Usage** tab of a chat shows its spend per member and per model (tokens, co
 ## Keys
 
 A member adds their LLM API keys in **Profile > LLM keys**, per workspace, with **Add key**. Keys are stored in the model gateway only; Spyria keeps a reference and the last four characters. A member without a key can read runtime chats but cannot prompt on a Spyria runtime; tools work for them all the same. **Profile > Connections** lists your GitHub account, then, in one list, the servers of the workspace's tools catalogue you may use: those with one shared login show how many tools you may use,
- and on those each member signs in to, **Connect** signs you in with your own account, which the agent uses on your prompts in any chat; each row's **⋯** menu holds **Approvals** and **Disconnect**. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it. See [Security](../architecture/security.md).
+ and on those each member signs in to, **Connect** signs you in with your own account, which the agent uses on your prompts in any chat; each row's **⋯** menu holds **Approvals** and **Disconnect**. Opening the profile checks each of your sign-ins with the model gateway: one without a sign-in there reads **Not connected**, and for a signed-in one Spyria runs one read-only tool of the server, so access revoked at the provider reads **Needs reconnection** before a chat runs into it.
