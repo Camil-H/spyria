@@ -1,21 +1,21 @@
 # Administration
 
-What workspace admins manage: members, roles, sign-in, GitHub, tools, spend, budgets, the audit log and deleting the workspace. Deployment steps (sign-in providers, the GitHub App) are in [Manual install](../guides/self-hosting.md).
+What workspace admins manage: members, roles, sign-in, GitHub, tools, spend, budgets, the audit log and deleting the workspace. The account providers people sign in with are set by your operator for the whole Spyria ([Operations](../guides/operations.md#account-providers)); everything else is here.
 
 Everything is in **Workspace settings** (the workspace menu), as cards showing their state. Each page lists items as rows with a **⋯** menu and keeps risky actions at the bottom; Escape goes back to the cards. A member sees only the cards their role allows, and the server checks the same permission on every request.
 
 | Section | Card | Permission needed |
 |---|---|---|
-| Organization | **Single sign-on** | `sso.manage` |
-| | **GitHub** | `github.manage` |
-| | **Members and roles** | `members.invite`, `members.manage` or `roles.manage` |
-| Agents | **Runtimes** | `runtimes.manage` |
-| | **AI providers** | `providers.manage` |
-| | **Tools** | `tools.manage` |
-| | **Browser** | `tools.manage` |
-| | **Quality gates** | `github.manage` |
-| Usage | **Costs and AI budgets** | `costs.view` or `budgets.manage` |
-| | **Audit log** | `audit.view` |
+| Organization | **Single sign-on** | Set up SSO |
+| | **GitHub** | Connect GitHub |
+| | **Members and roles** | Invite members, Change roles and remove members, or Manage roles |
+| Agents | **Runtimes** | Manage runtime hosts and local sessions |
+| | **AI providers** | Manage AI providers |
+| | **Tools** | Manage the tools catalogue |
+| | **Browser** | Manage the tools catalogue |
+| | **Quality gates** | Connect GitHub |
+| Usage | **Costs and AI budgets** | View costs or Manage budgets |
+| | **Audit log** | View the audit log |
 
 ## Setup checklist
 
@@ -27,10 +27,10 @@ Until the workspace is set up, the top of the sidebar shows **Get started** with
 
 | Task | Who sees it | Done once |
 |---|---|---|
-| Connect the GitHub App | `github.manage` | the workspace has a GitHub App |
-| Connect a runtime | `runtimes.manage` | a workspace runtime host has been claimed |
+| Connect the GitHub App | Connect GitHub | the workspace has a GitHub App |
+| Connect a runtime | Manage runtime hosts and local sessions | a workspace runtime host has been claimed |
 | Add your AI key | every member | they have an LLM key in the workspace |
-| Invite members | `members.invite` | there is a pending invite or another member |
+| Invite members | Invite members | there is a pending invite or another member |
 | Link your GitHub account | every member, once the workspace has had a GitHub App | they linked their GitHub account |
 | Add a profile picture | every member | they have a picture |
 
@@ -43,24 +43,22 @@ Good to know:
 
 ## Workspace roles
 
-**Members and roles** has a **Members** tab and, with `roles.manage`, a **Roles** tab: a grid of permissions by role, switching between **Workspace roles** and **Chat roles**. Use **New role**, or **Edit** and **Delete** in a custom role's column menu.
+**Members and roles** has a **Members** tab and, with **Manage roles**, a **Roles** tab: a grid of permissions by role, switching between **Workspace roles** and **Chat roles**. Use **New role**, or **Edit** and **Delete** in a custom role's column menu.
 
-A workspace role is a named set of permissions. The built-in **Admin** (every permission) and **Member** (none) cannot be changed. With `roles.manage` you can create custom roles from:
+A workspace role is a named set of permissions. The built-in **Admin** (every permission) and **Member** (none) cannot be changed. With **Manage roles** you can create custom roles from these permissions:
 
-| Permission | Shown as |
-|---|---|
-| `members.invite` | Invite members |
-| `members.manage` | Change roles and remove members |
-| `roles.manage` | Manage roles |
-| `sso.manage` | Set up SSO |
-| `github.manage` | Connect GitHub |
-| `tools.manage` | Manage the tools catalogue |
-| `providers.manage` | Manage AI providers |
-| `runtimes.manage` | Manage runtime hosts and local sessions |
-| `costs.view` | View costs |
-| `budgets.manage` | Manage budgets |
-| `audit.view` | View the audit log |
-| `audit.manage` | Change how long audit records are kept |
+- Invite members
+- Change roles and remove members
+- Manage roles
+- Set up SSO
+- Connect GitHub
+- Manage the tools catalogue
+- Manage AI providers
+- Manage runtime hosts and local sessions
+- View costs
+- Manage budgets
+- View the audit log
+- Change how long audit records are kept
 
 Rules for every role:
 
@@ -75,19 +73,19 @@ Rules for every role:
 
 Each chat participant has a chat role that decides what they can do in that chat (see [Chats and sharing](./chats-and-sharing.md)). **Chat roles** lists the four built-in roles and any custom ones:
 
-| Permission | Shown as | Owner | Editor | Prompter | Reader |
-|---|---|---|---|---|---|
-| `chat.read` | Read the chat | yes | yes | yes | yes |
-| `chat.post` | Post and prompt the agent | yes | yes | yes | |
-| `session.configure` | Choose the model and stop the agent | yes | yes | | |
-| `tools.manage` | Manage the chat's tools | yes | | | |
-| `members.invite` | Invite people to the chat | yes | yes | | |
-| `members.manage` | Change roles and remove people | yes | | | |
-| `chat.admin` | Rename, move and archive the chat, change its visibility | yes | | | |
+| Permission | Owner | Editor | Prompter | Reader |
+|---|---|---|---|---|
+| Read the chat | yes | yes | yes | yes |
+| Post and prompt the agent | yes | yes | yes | |
+| Choose the model and stop the agent | yes | yes | | |
+| Manage the chat's tools | yes | | | |
+| Invite people to the chat | yes | yes | | |
+| Change roles and remove people | yes | | | |
+| Rename, move and archive the chat, change its visibility | yes | | | |
 
 A custom chat role:
 
-- always includes `chat.read`;
+- always includes **Read the chat**;
 - can be given in a chat only by someone who holds all its permissions there;
 - never replaces Owner;
 - on a public channel, can be given only when it includes posting (everyone in the workspace can already read and post there).
@@ -118,7 +116,7 @@ Good to know: a workspace that takes over 10 seconds to load (after a deploy, or
 Runtime chats they owned **freeze**:
 
 - Participants can still read them, but nobody can prompt ("This chat is frozen: its owner left the workspace"), and their runtimes stop.
-- A member with `members.manage` picks a new owner with **Transfer to** in the chat, which thaws it. Only a chat whose owner has left can be transferred.
+- A member with **Change roles and remove members** picks a new owner with **Transfer to** in the chat, which thaws it. Only a chat whose owner has left can be transferred.
 - Channels never freeze, but can still be transferred.
 
 Inviting a removed member's address again creates a normal invite that restores their membership when they sign in.
@@ -129,12 +127,12 @@ Inviting a removed member's address again creates a normal invite that restores 
 
 - They stay a member and sign in again through their provider; a session in another workspace cannot reopen this one.
 - After a lost device, also end their session at the provider, or it signs them in again.
-- Needs `members.manage` and a member whose role you could grant. Recorded in the audit log under **Members**.
+- Needs **Change roles and remove members** and a member whose role you could grant. Recorded in the audit log under **Members**.
 - Members sign themselves out from **Profile** > **Account** > **Sessions**, which lists where they are signed in.
 
 ## Sign-in and SSO
 
-People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Single sign-on** lets a workspace enforce its organization's own provider, so people lose access when their organization account is removed. Rules and the sign-in screen: [who can join and sign-in](../guides/who-can-join.md); reasoning: [decision 0029](../decisions/0029-account-sign-in-and-workspace-sso.md).
+People sign in with an account at a provider the deployment offers (Google, Microsoft or another OIDC provider, set by the operator); there are no passwords. **Single sign-on** lets a workspace enforce its organization's own provider, so people lose access when their organization account is removed. Rules and the sign-in screen: [who can join and sign-in](../guides/who-can-join.md).
 
 The page shows whether SSO is enforced, then the provider form. While none is enforced and you signed in with Google, a Microsoft work account or the deployment's OIDC provider, it is pre-filled: "Enforce *that provider* for this workspace", one **Enforce SSO** button, and **Use another provider** for the full form.
 
@@ -145,7 +143,6 @@ The page shows whether SSO is enforced, then the provider form. While none is en
 - When the deployment has its own Google, Microsoft or OIDC app, that provider can use it with no client id or secret (Microsoft still asks for the tenant id).
 - With your own app, the form shows the redirect URI to register at the provider, with a copy button, and what to create there.
 - Saving checks the issuer's discovery document.
-- On a development deployment, the card says sign-in uses the deployment's Dex instead.
 
 Actions:
 
@@ -181,7 +178,7 @@ Good to know:
 **GitHub** sets up the workspace's GitHub App. Usage in dev chats: [Dev mode](./dev-mode.md).
 
 - Create the App in one click (on your account or an organization), or use **Create it manually** for an App made by hand, for example on GitHub Enterprise without manifests.
-- The App asks for contents, pull requests and workflows write; issues, checks, actions and metadata read. It subscribes to pull requests, reviews, review comments and threads, check suites and runs, whose webhooks arrive on `/api/github/webhooks`.
+- The App asks for contents, pull requests and workflows write; issues, checks, actions and metadata read. It subscribes to pull requests, reviews, review comments and threads, check suites and runs; for an App made by hand, the setup shows the webhook URL to enter.
 - Once connected: **GitHub App connected**, **Create a new App** (replaces the connected one), **Edit credentials**, and the repositories the App's installations grant.
 - **Members' accounts** shows each member's GitHub account as connected, needs reconnection, or not connected. The agent pushes and opens pull requests with the prompting member's account.
 - Who may use GitHub's commands is set in **Tools**, which the card links to.
@@ -272,7 +269,7 @@ A server's card heads with its state (**Waiting for the sign-in**, **To review**
 
 - Tabs **Read**, **Write** and **Destructive** each show a tool × workspace role grid of checkboxes, with a search. The checkbox under a role's name toggles every tool the tab shows.
 - A role starts with no tool.
-- Access is per role only: every member gets their role's, and a member who needs other tools needs another role ([decision 0036](../decisions/0036-tool-access-per-role-only.md)).
+- Access is per role only: every member gets their role's, and a member who needs other tools needs another role.
 - A member with no tool of a server does not see it.
 
 ### How access is enforced
@@ -284,19 +281,17 @@ A server's card heads with its state (**Waiting for the sign-in**, **To review**
 - An agent uses the access and accounts of the member who prompted: a per-member server answers with the prompter's sign-in; on a guest's prompt, a shared-login server needs both the owner's and the guest's access.
 - Which calls wait for approval is chosen by the member whose account answers for the call, in their profile (see [Agents](./agents.md#tool-approvals)).
 
-Decisions: [0030](../decisions/0030-workspace-tools-catalogue.md), [0031](../decisions/0031-tool-access-levels-and-approvals.md), [0033](../decisions/0033-tools-on-the-prompters-account.md), [0036](../decisions/0036-tool-access-per-role-only.md).
-
 ## AI providers
 
 **AI providers** chooses which model providers members can use. By default every provider is allowed. Turning one off makes the setting an allow-list; a provider that is on allows all its models. For a provider that is off:
 
 - members cannot add a key for it ("OpenAI is not allowed in this workspace");
 - its models are not offered in the model picker, nor chosen by routing or for sub-agents;
-- the model relay refuses a call to its models before the gateway, and the chat shows "*Model* is not allowed in this workspace".
+- Spyria refuses a call to its models before it reaches the provider, and the chat shows "*Model* is not allowed in this workspace".
 
 **Turn every provider on**, shown while a provider is off, removes the allow-list.
 
-Providers are listed in two groups (from `packages/kernel/src/models.ts`):
+Providers are listed in two groups:
 
 - Labs: Anthropic, OpenAI, Google Gemini, Mistral, xAI, DeepSeek, Z.ai, Meta, and TypeSafe (whose decision models route turns). Meta is reached through the OpenAI-compatible Meta Model API (`api.meta.ai`), with Muse Wonder as its large model and Muse Spark as its medium one.
 - Routers: OpenRouter.
@@ -309,7 +304,7 @@ Good to know:
 
 ## Spend
 
-**Costs and AI budgets** has two tabs: **Costs** (`costs.view`) and **AI budgets** (`budgets.manage`); a member with only one sees just that page.
+**Costs and AI budgets** has two tabs: **Costs** (**View costs**) and **AI budgets** (**Manage budgets**); a member with only one sees just that page.
 
 **Costs** reports the cost of model calls made through the gateway. A notice says sessions on a member's own machine are not counted.
 
@@ -334,7 +329,7 @@ Good to know:
 
 ## Budgets
 
-On **AI budgets**, a member with `budgets.manage` sets, in a grid of workspace roles, an optional budget in dollars per role for each day, week (from Monday) and month, in UTC ([decision 0038](../decisions/0038-budgets-per-role-and-period.md)).
+On **AI budgets**, a member with **Manage budgets** sets, in a grid of workspace roles, an optional budget in dollars per role for each day, week (from Monday) and month, in UTC.
 
 - **Per member.** Each member gets their role's budget for themselves; it is not shared. Under each budget the grid shows the role's total: "$5.00 × 3 members = $15.00".
 - **Workspace total.** The last row sums the roles' totals per period. It cannot be set, and shows **No limit** while a role with members has no budget for that period.
@@ -394,11 +389,11 @@ Good to know:
 
 ### Retention
 
-**Keep audit records**, under **Retention** at the top of the page, is changed by members with `audit.manage` (others only read it).
+**Keep audit records**, under **Retention** at the top of the page, is changed by members with **Change how long audit records are kept** (others only read it).
 
 - Forever by default, or a number of days (1 to 36,500).
 - A daily job deletes workspace events, tool call records and texts of deleted messages older than that.
 - Chat events are the conversation history itself and are deleted only with the workspace; past the retention they only drop out of the audit view.
 - Changing the retention is itself recorded.
 
-Related: [Security](../architecture/security.md), [Operations](../guides/operations.md).
+Related: [Who can join and sign-in](../guides/who-can-join.md).
