@@ -99,6 +99,13 @@ Spyria's own tools (`open_page`, the `browser_` tools, `take_screenshot`, `web_s
 - Claude Code searches tool servers' tools on its own by default.
 - The runtime's `spyria` command reaches the same catalogue from the shell. Nothing about it is loaded up front: Claude Code and Codex read one line about it from Spyria's tool server, and Pi from a one-line skill.
 
+## Quality gates
+
+In a dev chat with quality gates on, the server runs the agent's work through the repository's gates once the agent calls `finish_work` ([decision 0025](../decisions/0025-dev-loop.md)), sending prompts on the owner's behalf, marked as sent by quality gates ([dev mode](../features/dev-mode.md#quality-gates)):
+
+- The code review gate asks the agent for a subagent with a fresh context; in Claude Code it asks for a general-purpose subagent, since Explore and Plan skip `CLAUDE.md`. The subagent reports with `report_review`, listing in its `unresolved` field the ids of earlier findings that are not fixed.
+- The CI gate reads the checks of the pushed commit as `read_checks` does. A CI that annotates its failing tests, as Spyria's own does ([decision 0021](../decisions/0021-ci-on-github-actions-through-develop.md)), gives the agent the file, the line and the error without any log.
+
 ## The host relay
 
 A runtime host dials out to the server and needs no open port ([decision 0005](../decisions/0005-runtime-hosts-dial-out.md)). The host joins each runtime's own Docker bridge network to relay its model and tool calls to Spyria, and carries everything between the server and its runtimes over its one WebSocket:
