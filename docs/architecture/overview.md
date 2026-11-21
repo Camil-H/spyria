@@ -113,6 +113,7 @@ A runtime host dials out to the server and needs no open port ([decision 0005](.
 - HTTP bodies between server and runtime: up to 256 MiB, relayed in 256 KiB base64 chunks.
 - A runtime's event stream: 1 MiB sent ahead of acknowledgements; the host closes that stream if it holds more than 8 MiB.
 - A host too old for this relay is refused, with the command that updates it ([security](security.md#runtimes-and-hosts)).
+- A runtime's start, a dev chat's clone and checkout included, must finish within 2 minutes.
 
 A host reports its release and protocol versions when it connects, and `spyria-agent` reports its own to the server's readiness check of each runtime. On a member's machine, `spyria-host login` waits for `spyria-host --personal` to connect once, since the server names the image the sign-in runs in.
 
