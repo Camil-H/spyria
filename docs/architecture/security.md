@@ -32,7 +32,38 @@ Spyria checks permissions, never role names. A role is a named set of permission
 - **Chat roles** carry chat permissions (reading, prompting, configuring the session, inviting, managing participants, administering the chat). The built-ins go from Owner to Reader, and custom roles work the same way.
 - A member can grant only a role whose permissions they hold themselves. Public chats, channels or AI chats, give every workspace member read and post without a role; private chats are open to their owner and invitees only. In a public AI chat a member who is not the owner prompts as a guest ([0009](../decisions/0009-agent-acts-as-the-owner.md)).
 
-The permissions and built-in roles are defined in `packages/kernel/src/workspace-access.ts` and `packages/kernel/src/chat-access.ts`. How admins and owners use them: [admin](../features/admin.md) and [chats and sharing](../features/chats-and-sharing.md).
+The permissions and built-in roles are defined in `packages/kernel/src/workspace-access.ts` and `packages/kernel/src/chat-access.ts`. How admins and owners use them: [admin](../features/admin.md) and [chats and sharing](../features/chats-and-sharing.md), which name each permission as the app shows it:
+
+| Workspace permission | Shown as |
+|---|---|
+| `members.invite` | Invite members |
+| `members.manage` | Change roles and remove members |
+| `roles.manage` | Manage roles |
+| `sso.manage` | Set up SSO |
+| `github.manage` | Connect GitHub |
+| `tools.manage` | Manage the tools catalogue |
+| `providers.manage` | Manage AI providers |
+| `runtimes.manage` | Manage runtime hosts and local sessions |
+| `costs.view` | View costs |
+| `budgets.manage` | Manage budgets |
+| `audit.view` | View the audit log |
+| `audit.manage` | Change how long audit records are kept |
+
+| Chat permission | Shown as |
+|---|---|
+| `chat.read` | Read the chat |
+| `chat.post` | Post and prompt the agent |
+| `session.configure` | Choose the model and stop the agent |
+| `tools.manage` | Manage the chat's tools |
+| `members.invite` | Invite people to the chat |
+| `members.manage` | Change roles and remove people |
+| `chat.admin` | Rename, move and archive the chat, change its visibility |
+
+Deleting the workspace is not a permission: only the built-in Admin role may.
+
+### The tools catalogue
+
+Admins approve the tool servers (MCP) a workspace may use; members cannot add their own ([decision 0030](../decisions/0030-workspace-tools-catalogue.md)). Each tool is marked read or write, and access is granted per workspace role only: a member who needs other tools needs another role ([decision 0036](../decisions/0036-tool-access-per-role-only.md)). Each member's gateway key gets exactly the tools their access allows, and the gateway enforces it on every call.
 
 ## What the agent may do
 
@@ -73,10 +104,11 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 ### GitHub tokens never enter a runtime
 
 - **Cloning** uses a short-lived installation token of the workspace's GitHub App, limited to reading that one repository. It is passed to `git` as a one-off header, so it is not left in the runtime's environment or in `.git/config`.
-- **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the GitHub token of the member who prompted or clicked (the owner's, for the quality gates), once the same check the agent's tools use allows that member to push. A runtime has nothing it could push with.
+- **Publishing** runs on the server ([decision 0011](../decisions/0011-publishing-through-server-side-bundles.md)): the runtime hands over a git bundle of the working branch (at most 12 MB), and the server pushes it with the GitHub token of the member who prompted or clicked (the owner's, for the quality gates), once the same check the agent's tools use allows that member to push. A runtime has nothing it could push with. The server checks that the bundle carries only that branch, rebuilds it in a fresh temporary repository with a git configuration of its own (no hooks, no credential helper, no URL rewrites from the runtime), and pushes without force. The server image therefore includes `git`.
+- **Members' GitHub tokens** stay on the server, sealed, and are never synced to browsers. The server reads a member's GitHub login and no-reply address with their token once and caches it; only that name and address reach a runtime, as the clone's git identity.
 - **Workflows.** The GitHub App asks for the Workflows permission, so the agent can change files under `.github/workflows` and the server pushes them with the publishing member's token. A pushed workflow runs on GitHub with the repository's secrets. An admin who does not want agents to change workflows does not accept that permission on the installation; GitHub then refuses any push that changes one.
 - **Fetching and reading** run on the server too: the agent's `fetch_branch` gets a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
-- **Webhooks** are accepted only with a valid `X-Hub-Signature-256` for the App's webhook secret; a delivery id already received is ignored.
+- **Webhooks** arrive at `<origin>/api/github/webhooks` and are accepted only with a valid `X-Hub-Signature-256` for the webhook secret of the workspace whose App sent it (HMAC SHA-256, constant-time comparison); a body no secret signs gets `401`. A delivery id already received is ignored, so GitHub's retries are harmless.
 
 ## Runtimes and hosts
 
@@ -112,7 +144,7 @@ Outbound calls have timeouts; calls that are safe to repeat are retried a few ti
 
 ## Budgets
 
-Budgets are a hard stop, enforced by the relay before each model call: when one of the prompter's budgets (the day's, week's or month's of their role) is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
+Budgets are a hard stop, enforced by the relay before each model call: when one of the prompter's budgets (the day's, week's or month's of their role, [decision 0038](../decisions/0038-budgets-per-role-and-period.md)) is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
 
 ## Secrets at rest
 
