@@ -97,6 +97,7 @@ Spyria's own tools (`open_page`, the `browser_` tools, `take_screenshot`, `web_s
 
 - Pi never declares them: it reaches them from `codemode` scripts, which find tools with `searchTools()`, call them and keep only what they need from the answers, so a large server (GitHub's has over a hundred tools, about 38,000 tokens of descriptions) does not weigh on every model call. Each call in a script is one call through the gateway; a call waiting for approval holds the script until it is decided.
 - Claude Code searches tool servers' tools on its own by default.
+- Codex gets the catalogue as a plain MCP server and declares its tools.
 - The runtime's `spyria` command reaches the same catalogue from the shell. Nothing about it is loaded up front: Claude Code and Codex read one line about it from Spyria's tool server, and Pi from a one-line skill.
 
 ## Quality gates
