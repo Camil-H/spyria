@@ -91,6 +91,16 @@ sequenceDiagram
 
 Every prompt is marked picked up (`message.picked_up`) when its turn starts, and put back (`message.requeued`) if the turn is released before the agent got it. When the turn's prompter sends another message while a turn runs, its `agent.prompt` job finds the turn held and enqueues `agent.join`, one at a time per chat, which marks the message picked up and hands it to the running turn (`/joins`: Pi's steer, or the ACP `_session/steering` extension on Claude Code and Codex when the harness advertises it at `initialize`); a hand-off the runtime refuses puts it back in the queue. Once the agent reads it (a `prompt_joined` event, reported when Pi takes the message in, or as soon as an ACP harness injects it), the turn keeps its prompt but stores its later output under the message (`chats.agent_turn_reply_to_id`). When a turn delegates work, `spyria-agent` runs sub-conversations in the same runtime, and the same path applies to each. When the member presses **Stop**, an `agent.interrupt` job cancels the turn in the runtime.
 
+## The host relay
+
+A runtime host dials out to the server and needs no open port ([decision 0005](../decisions/0005-runtime-hosts-dial-out.md)). The host joins each runtime's own Docker bridge network to relay its model and tool calls to Spyria, and carries everything between the server and its runtimes over its one WebSocket:
+
+- HTTP bodies between server and runtime: up to 256 MiB, relayed in 256 KiB base64 chunks.
+- A runtime's event stream: 1 MiB sent ahead of acknowledgements; the host closes that stream if it holds more than 8 MiB.
+- A host too old for this relay is refused, with the command that updates it ([security](security.md#runtimes-and-hosts)).
+
+A host reports its release and protocol versions when it connects, and `spyria-agent` reports its own to the server's readiness check of each runtime.
+
 ## Where state lives
 
 | State | Where | Notes |
