@@ -53,7 +53,7 @@ Removing a host (or a member's machine) disconnects it:
 - Its runtimes show **Could not start**.
 - Nothing is deleted: the stopped host, its runtimes and their files stay on the machine.
 
-To free the disk, the operator removes them ([Operations](../guides/operations.md#removing-a-runtime-host)).
+To free the disk, remove them on the machine ([Operations](../guides/operations.md#removing-a-runtime-host)).
 
 ## Where a chat runs
 
