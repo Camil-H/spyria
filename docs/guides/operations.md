@@ -183,7 +183,7 @@ For more, set smaller pools in `/etc/docker/daemon.json` (4,096 networks) and re
 
 ### Removing a runtime host
 
-Removing a host in **Workspace settings › Runtimes** (or a member's machine in their profile) disconnects it and deletes nothing: the stopped host container, runtime containers and volumes stay. To clean up, for the default deployment `spyria`:
+Removing a host in **Workspace settings › Runtimes** (or a member's machine in their profile) disconnects it and deletes nothing: `spyria-host` logs "This host was removed", turns off its container's restart policy and stops, and the stopped host container, runtime containers and volumes stay. To clean up, for the default deployment `spyria`:
 
 ```sh
 docker rm -f spyria-host
