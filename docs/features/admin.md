@@ -139,7 +139,7 @@ The page shows whether SSO is enforced, then the provider form. While none is en
 - **Google Workspace**: only accounts managed by the Google Workspace of their address's domain, and Gmail addresses.
 - **Microsoft Entra**: one tenant, from its tenant id.
 - **Another OIDC provider**.
-- Each takes a client id and a client secret (sealed, shown only as set, replaced by entering a new one).
+- Each takes a client id and a client secret (stored encrypted, shown only as set, replaced by entering a new one).
 - When the deployment has its own Google, Microsoft or OIDC app, that provider can use it with no client id or secret (Microsoft still asks for the tenant id).
 - With your own app, the form shows the redirect URI to register at the provider, with a copy button, and what to create there.
 - Saving checks the issuer's discovery document.
