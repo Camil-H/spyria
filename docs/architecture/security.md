@@ -32,7 +32,38 @@ Spyria checks permissions, never role names. A role is a named set of permission
 - **Chat roles** carry chat permissions (reading, prompting, configuring the session, inviting, managing participants, administering the chat). The built-ins go from Owner to Reader, and custom roles work the same way.
 - A member can grant only a role whose permissions they hold themselves. Public chats, channels or AI chats, give every workspace member read and post without a role; private chats are open to their owner and invitees only. In a public AI chat a member who is not the owner prompts as a guest ([0009](../decisions/0009-agent-acts-as-the-owner.md)).
 
-The permissions and built-in roles are defined in `packages/kernel/src/workspace-access.ts` and `packages/kernel/src/chat-access.ts`. How admins and owners use them: [admin](../features/admin.md) and [chats and sharing](../features/chats-and-sharing.md).
+The permissions and built-in roles are defined in `packages/kernel/src/workspace-access.ts` and `packages/kernel/src/chat-access.ts`. How admins and owners use them: [admin](../features/admin.md) and [chats and sharing](../features/chats-and-sharing.md), which name each permission as the app shows it:
+
+| Workspace permission | Shown as |
+|---|---|
+| `members.invite` | Invite members |
+| `members.manage` | Change roles and remove members |
+| `roles.manage` | Manage roles |
+| `sso.manage` | Set up SSO |
+| `github.manage` | Connect GitHub |
+| `tools.manage` | Manage the tools catalogue |
+| `providers.manage` | Manage AI providers |
+| `runtimes.manage` | Manage runtime hosts and local sessions |
+| `costs.view` | View costs |
+| `budgets.manage` | Manage budgets |
+| `audit.view` | View the audit log |
+| `audit.manage` | Change how long audit records are kept |
+
+| Chat permission | Shown as |
+|---|---|
+| `chat.read` | Read the chat |
+| `chat.post` | Post and prompt the agent |
+| `session.configure` | Choose the model and stop the agent |
+| `tools.manage` | Manage the chat's tools |
+| `members.invite` | Invite people to the chat |
+| `members.manage` | Change roles and remove people |
+| `chat.admin` | Rename, move and archive the chat, change its visibility |
+
+Deleting the workspace is not a permission: only the built-in Admin role may.
+
+### The tools catalogue
+
+Admins approve the tool servers (MCP) a workspace may use; members cannot add their own ([decision 0030](../decisions/0030-workspace-tools-catalogue.md)). Each tool is marked read or write, and access is granted per workspace role only: a member who needs other tools needs another role ([decision 0036](../decisions/0036-tool-access-per-role-only.md)). Each member's gateway key gets exactly the tools their access allows, and the gateway enforces it on every call.
 
 ## What the agent may do
 
@@ -73,17 +104,18 @@ Admins can turn these sessions off for the workspace. See [machines](../features
 ### GitHub tokens never enter a runtime
 
 - **Cloning** uses a short-lived installation token of the workspace's GitHub App, limited to reading that one repository. It is passed to `git` as a one-off header, so it is not left in the runtime's environment or in `.git/config`.
-- **Publishing** runs on the server: the runtime hands over a git bundle of the working branch, and the server pushes it with the GitHub token of the member who prompted or clicked (the owner's, for the quality gates), once the same check the agent's tools use allows that member to push. A runtime has nothing it could push with.
+- **Publishing** runs on the server ([decision 0011](../decisions/0011-publishing-through-server-side-bundles.md)): the runtime hands over a git bundle of the working branch (at most 12 MB), and the server pushes it with the GitHub token of the member who prompted or clicked (the owner's, for the quality gates), once the same check the agent's tools use allows that member to push. A runtime has nothing it could push with. The server checks that the bundle carries only that branch, rebuilds it in a fresh temporary repository with a git configuration of its own (no hooks, no credential helper, no URL rewrites from the runtime), and pushes without force. The server image therefore includes `git`.
+- **Members' GitHub tokens** stay on the server, sealed, and are never synced to browsers. The server reads a member's GitHub login and no-reply address with their token once and caches it; only that name and address reach a runtime, as the clone's git identity.
 - **Workflows.** The GitHub App asks for the Workflows permission, so the agent can change files under `.github/workflows` and the server pushes them with the publishing member's token. A pushed workflow runs on GitHub with the repository's secrets. An admin who does not want agents to change workflows does not accept that permission on the installation; GitHub then refuses any push that changes one.
-- **Fetching and reading** run on the server too: the agent's `fetch_branch` gets a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
-- **Webhooks** are accepted only with a valid `X-Hub-Signature-256` for the App's webhook secret; a delivery id already received is ignored.
+- **Fetching and reading** run on the server too: the agent's `fetch_branch` and the **Update from base** action get a git bundle the server built with a read-only installation token, and its review-thread and issue tools answer from read-only installation tokens. Issue and comment text comes from anyone who can comment on the repository and reaches the agent unchanged.
+- **Webhooks** arrive at `<origin>/api/github/webhooks` and are accepted only with a valid `X-Hub-Signature-256` for the webhook secret of the workspace whose App sent it (HMAC SHA-256, constant-time comparison); a body no secret signs gets `401`. A delivery id already received is ignored, so GitHub's retries are harmless.
 
 ## Runtimes and hosts
 
 - A runtime host **dials out** to the server and accepts a fixed set of commands, each validated field by field. Spyria never opens a port on a host and never gets general access to its Docker.
 - The server treats what a host sends as untrusted: each frame is checked for its shape, and a malformed one closes that host's connection. A host answers only the requests and streams the server opened on its own connection, and the runtime tokens it relays for model and tool calls count only for runtimes on that host, so a host cannot speak for another host's runtimes or chats.
 - Each runtime container runs as an unprivileged user with all capabilities dropped, `no-new-privileges`, a read-only root filesystem, and limits on memory (2 GiB), CPU (2) and processes (512). Docker's init runs as its PID 1 and reaps orphaned processes, so killed commands do not stay as zombies against the process limit. It runs only the image the server names, and a host accepts just two forms of it: the published `spyria-agent` of the namespace its own image came from, by digest (pulled when missing; a tag, another name or another registry is refused), or a local content ID.
-- A host and spyria-agent declare a protocol version; the server refuses a host below its minimum ("This host is out of date") and fails a runtime whose agent is below it, so a security fix in the host or the agent is enforced by raising the minimum: an old host, with its old command validation, token redaction and harness pins, cannot stay connected ([machines](../features/machines.md#versions-and-updates)).
+- A host and spyria-agent declare a protocol version (a host that declares none counts as protocol 0); the server refuses a host below its minimum ("This host is out of date") and fails a runtime whose agent is below it, so a security fix in the host or the agent is enforced by raising the minimum: an old host, with its old command validation, token redaction and harness pins, cannot stay connected ([machines](../features/machines.md#versions-and-updates)).
 - Each runtime has its own Docker network, so runtimes on one host cannot reach each other where Docker isolates networks (Docker Engine on Linux). The name `host.docker.internal` resolves to the host machine in every runtime, as on Docker Desktop, so a host run outside a container can give its runtimes its model relay address; the machine was already reachable through the network's gateway. On Docker Engine on Linux a runtime therefore reaches every port the machine listens on outside its loopback, so services on a host machine publish their ports on `127.0.0.1` (the development stack does); Docker Desktop and OrbStack also forward `host.docker.internal` to the machine's loopback, so a runtime there reaches the machine's local services. Docker tests check that a runtime reaches its model relay (the Pi test, through a real host), the internet and a port published on every interface, and not a port published on `127.0.0.1` or a service on another Docker network.
 - **What a new runtime starts from is out of every chat's reach.** A package cache is shared only by one owner's runtimes on one repository. A repository's snapshot is taken only from a runtime kept ready, after its setup and before any chat has it: such a runtime belongs to no member, mounts no package cache and gets a read-only clone token only. The copy is made by a container with no network that mounts the runtime's volumes read-only, and every runtime mounts the snapshot read-only, so no agent can change what the next chats of the repository restore ([decision 0032](../decisions/0032-runtimes-kept-ready-and-setup-snapshots.md)).
 - Spyria does not filter runtimes' outbound traffic. On cloud machines, block the metadata endpoint (`169.254.169.254`) and private ranges in the provider's firewall. See [manual install](../guides/self-hosting.md).
@@ -112,7 +144,9 @@ Outbound calls have timeouts; calls that are safe to repeat are retried a few ti
 
 ## Budgets
 
-Budgets are a hard stop, enforced by the relay before each model call: when one of the prompter's budgets (the day's, week's or month's of their role) is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
+Budgets are a hard stop, enforced by the relay before each model call: when one of the prompter's budgets (the day's, week's or month's of their role, [decision 0038](../decisions/0038-budgets-per-role-and-period.md)) is used up, the call is refused and the chat says why. Spend is read from the gateway's logs every few seconds, so a call already in flight can overshoot a budget slightly. See [admin](../features/admin.md).
+
+The relay also refuses, before the gateway, a call to a model of a provider the workspace's AI providers allow-list leaves out.
 
 ## Secrets at rest
 

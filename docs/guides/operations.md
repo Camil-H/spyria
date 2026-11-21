@@ -23,6 +23,7 @@ spyria compose logs -f server    # or host
 - Follow a request across services with `trace_id`.
 - Errors have `ERROR` severity, with the error type and stack trace.
 - Recurring jobs (sweeps, usage sync) log only retries and failures; successful runs show only as trace spans.
+- When a Claude Code or Codex process dies, `spyria-agent` logs its last line of output, redacted like all agent output.
 - Logs are not sampled.
 
 ## Traces
@@ -140,9 +141,49 @@ zero-cache needs at least one connection per sync worker in each pool. On a mach
 
 ## Runtime hosts
 
+How admins add hosts and what members see is in [Machines](../features/machines.md).
+
+### The host command
+
+**Add runtime host** (and **Add my machine** for a member) gives a `docker run` command that starts `spyria-host`:
+
+- with all capabilities dropped, `no-new-privileges` and a read-only root filesystem;
+- with its state volume `<deployment>-host`, which keeps the host's pairing token, so a restarted host stays paired;
+- with the Docker socket, rootless or rooted, detected by the command;
+- with a single-use claim URL that expires after 15 minutes.
+
+Published deployments run the host image of Spyria's version, `ghcr.io/<owner>/spyria-host:<version>`, pulled by Docker. When Spyria's origin is `localhost`, the command builds the host image itself and points the container at `host.docker.internal` ([development](./development.md#build-and-pair-the-host)).
+
+### Runtime image
+
+A host runs only the runtime image the server names:
+
+- Published deployment: the `spyria-agent` image of the server's version, pulled by digest from the deployment's registry when the first runtime starts. Any other registry, name or tag is refused.
+- Built from a clone: the local content ID that `bun run agent:build` wrote on the server's machine; each host must hold it ([from a clone](./self-hosting.md#from-a-clone)).
+- Until then, a prompt answers "Spyria's runtime image is not built: run bun run agent:build" ([troubleshooting](./troubleshooting.md#a-prompt-says-the-runtime-image-is-missing)).
+
+### Host memory
+
+A host takes one runtime per GiB of memory above the first 2 GiB. When the host runs directly on a memory-limited container together with its Docker (LXC, sysbox, a Docker-in-Docker pod), that container's `memory.max` is the host's memory and its free memory what is left under it. A limit on the host's own container does not count: runtimes run beside it, not inside it.
+
+### Many runtimes on one host
+
+Each running runtime gets its own Docker bridge network. Docker's default address pools allow about 30 networks per daemon, so past about 25 runtimes at once new ones stop starting.
+
+For more, set smaller pools in `/etc/docker/daemon.json` (4,096 networks) and restart Docker:
+
+```json
+{ "default-address-pools": [{ "base": "10.200.0.0/16", "size": 28 }] }
+```
+
+### Behind an outbound proxy
+
+- Set `HTTPS_PROXY` (`HTTP_PROXY` for an `http://` origin) and `NO_PROXY` in the shell before running the host command; it passes them on.
+- Only the connection to Spyria uses the proxy: not relayed runtime calls, not the host's health check. Runtimes get no proxy settings.
+
 ### Removing a runtime host
 
-Removing a host in **Workspace settings › Runtimes** (or a member's machine in their profile) disconnects it and deletes nothing: the stopped host container, runtime containers and volumes stay. To clean up, for the default deployment `spyria`:
+Removing a host in **Workspace settings › Runtimes** (or a member's machine in their profile) disconnects it and deletes nothing: `spyria-host` logs "This host was removed", turns off its container's restart policy and stops, and the stopped host container, runtime containers and volumes stay. To clean up, for the default deployment `spyria`:
 
 ```sh
 docker rm -f spyria-host
@@ -166,7 +207,7 @@ docker volume rm spyria-host
 
 ### Several deployments on one machine
 
-Every Docker object carries the deployment name `SPYRIA_DEPLOYMENT`: host container and state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. Two deployments on one daemon, such as development and production, never see each other's runtimes.
+Every Docker object carries the deployment name `SPYRIA_DEPLOYMENT`: host container and state volume `<deployment>-host`, runtimes `<deployment>-rt-*`, dev chats' package caches `<deployment>-cache-*` and repository snapshots `<deployment>-snapshot-*`, sign-ins `<deployment>-cred-*`, harnesses `<deployment>-harnesses`. On a member's machine the container is `<deployment>-host` too (`spyria-host` for the default deployment); the commands Spyria shows always use the right name. Two deployments on one daemon, such as development and production, never see each other's runtimes.
 
 ## Disk usage and cleanup
 

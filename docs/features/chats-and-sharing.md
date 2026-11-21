@@ -1,6 +1,6 @@
 # Chats and sharing
 
-This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, replies, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members and for contributors who need the rules the server enforces. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
+This page describes how conversations are organized in a Spyria workspace and how members share them: projects, channels, runtime chats, threads, replies, links to messages, search, keyboard shortcuts, unread state, chat roles, forking and starting an agent from a channel thread. It is written for members. Agent behaviour inside a runtime chat is in [Agents](./agents.md); dev chats on repositories are in [Dev mode](./dev-mode.md).
 
 ## Projects and chats
 
@@ -17,7 +17,7 @@ A chat has one of two types. **New chat** asks questions instead of naming them,
 | **Channel** | members only | threads, "Start runtime from this message" |
 | **Runtime** | members and an agent | with or without GitHub access; with it, a dev chat on a repository |
 
-The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat runs in its owner's runtime (the header says **Agent acts as** *owner*), while each prompt's model and tool calls use the prompter's own key and accounts, so each call has one accountable identity. See [Security](../architecture/security.md).
+The member who creates a chat owns it, and stays its owner. Ownership matters beyond the chat itself: the agent of a runtime chat runs in its owner's runtime (the header says **Agent acts as** *owner*), while each prompt's model and tool calls use the prompter's own key and accounts, so each call has one accountable identity.
 
 From a chat's menu in the sidebar, a member with the right permission can **Move to** another project (or **No project**), rename, **Make private** / **Make public**, **Archive chat**, or leave (**Leave channel**, **Leave chat**). The same member can also drag the chat onto a project, or onto **Loose chats** to take it out of its project. Every member orders their own sidebar: dragging a chat above or below another places it there, and a bar shows where it will land while it is dragged. The order is the member's own and does not change anyone else's; a chat they have never placed sits at the end of its group, in creation order. Archiving a chat also removes its runtime, and the chat takes no new messages, uploads or retries ("This chat is archived: it takes no new messages"); a prompt still queued when the chat was archived gets no runtime. A project's menu offers **New chat**, which opens the new chat dialog with that project already chosen, **Rename project** and **Archive project**. **Archive project** offers two choices: **Archive with its chats**, or **Archive, keep chats**, which moves them to Loose chats. **Move to**, **Make private** / **Make public**, **Archive chat**, leaving and **Archive project** confirm what they did in a toast at the bottom of the screen ("Plans is now private: only its members can see it", "Research archived") that fades after 5 seconds; renaming, dragging and **New chat** show their result in place and raise no toast. When the server refuses one of these menu actions or a drag, the error shows at the bottom of the sidebar; a refused rename or new chat shows its error in its dialog. Adding, removing or changing the role of a chat member, or leaving, from the **Members** tab confirms itself the same way.
 
@@ -35,9 +35,9 @@ The author of a message can edit or delete it from its actions; in a runtime cha
 
 The paperclip next to **Send** attaches up to six files of up to 20 MB each: images (PNG, JPEG, GIF, WebP), sounds, videos (MP4, WebM, QuickTime) and PDFs. Pasting a file into the composer, or dropping it anywhere on the message box, attaches it too. The server checks each file's content, not its name, and refuses anything else (SVG and HTML included). Images show in the message once they scroll into view, and clicking one shows it full size over the chat, with a button to save it; Escape, **Close** or a click beside the image closes it. Sounds, videos and PDFs load only when a member clicks them. Only members who can read the chat can open its attachments, and deleting a message erases them along with their names in the chat's history. Files attached but never sent are erased after a day. A member can hold up to 120 MB of unsent files, and a workspace stores up to 10 GB of attachments.
 
-In a runtime chat, the files attached to a prompt reach the agent. Each is saved in the runtime under `/workspace/attachments/`, outside the repository, and the prompt tells the agent their paths, so it can open them with its tools; the image includes `pdftotext` and `pdftoppm` for PDFs. An image of up to 3.75 MB is also shown to the model directly when the harness reads images (Pi, Claude Code and Codex do) and, for Pi, when the gateway's model catalogue says the model does; a sound is too, for a harness that declares it reads sounds. PDFs and videos reach the agent only as files; Claude Code opens a PDF with its own file tool. Files attached to earlier messages, or quoted from another chat, are only named to the agent. Deleting the message later does not remove the files from the runtime, like the rest of what the agent already received.
+In a runtime chat, the files attached to a prompt reach the agent. Each is saved in the runtime under `/workspace/attachments/`, outside the repository, and the prompt tells the agent their paths, so it can open them with its tools; the runtime has tools to read PDFs. An image of up to 3.75 MB is also shown to the model directly when the harness reads images (Pi, Claude Code and Codex do) and, for Pi, when the gateway's model catalogue says the model does; a sound is too, for a harness that declares it reads sounds. PDFs and videos reach the agent only as files; Claude Code opens a PDF with its own file tool. Files attached to earlier messages, or quoted from another chat, are only named to the agent. Deleting the message later does not remove the files from the runtime, like the rest of what the agent already received.
 
-In a runtime chat, the agent can show a file it made, or a screenshot it took with `take_screenshot` (see [Agents](./agents.md#screenshots)), by writing a Markdown image with the file's path in its workspace, such as `![Sales chart](out/chart.png)`. The server fetches the file from the runtime through its existing host connection, checks that it is an image, a sound or a video of up to 20 MB, and shows it inline; an image opens full size on click, as an attachment does. The first four such images of a message load on their own; later ones load on click. Such files show only while the runtime is running. On a member's own machine, a file that holds one of that member's sign-in tokens is not shown.
+In a runtime chat, the agent can show a file it made, or a screenshot it took with `take_screenshot` (see [Agents](./agents.md#screenshots)), by writing a Markdown image with the file's path in its workspace, such as `![Sales chart](out/chart.png)`. Spyria fetches the file from the runtime, checks that it is an image, a sound or a video of up to 20 MB, and shows it inline; an image opens full size on click, as an attachment does. The first four such images of a message load on their own; later ones load on click. Such files show only while the runtime is running. On a member's own machine, a file that holds one of that member's sign-in tokens is not shown.
 
 An image with a web address in a message shows as a **Load image from** *site* button and loads only on click, from the viewer's browser, so that site sees the viewer's address. Once loaded, the same image stays loaded in that chat until the page is reloaded, also when the agent's reply that holds it is stored or folded into its steps.
 
@@ -45,7 +45,7 @@ An image with a web address in a message shows as a **Load image from** *site* b
 
 Channels are where members talk without an agent; AI chats add one. Either kind is public or private. A **public** chat is open to every member of the workspace: anyone can read it, and anyone can post after **Join channel** (**Join chat** for an AI chat). **Browse public chats** in the sidebar lists the public chats a member has not joined, channels and AI chats alike. A **private** chat is visible only to its participants. Agents read public chats too, to find what the workspace already discussed; they never read a private one (see [Agents](./agents.md#public-chats)). A runtime chat started from a channel message, and a fork, start private.
 
-Changing a chat's visibility needs the chat admin permission. When a chat becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public chat already lets everyone post. In a public AI chat, anyone who joins prompts the agent as a guest, on their own key, with the reach described in [Prompts from someone other than the owner](#prompts-from-someone-other-than-the-owner); a session on the owner's machine still answers only its owner.
+Changing a chat's visibility needs **Rename, move and archive the chat, change its visibility**. When a chat becomes public, any participant whose role gives less than read and post (a Reader) becomes a Prompter, because a public chat already lets everyone post. In a public AI chat, anyone who joins prompts the agent as a guest, on their own key, with the reach described in [Prompts from someone other than the owner](#prompts-from-someone-other-than-the-owner); a session on the owner's machine still answers only its owner.
 
 ## Message actions
 
@@ -100,15 +100,15 @@ A chat's participants and their roles are in the **Members** tab of the side pan
 
 A role is a named set of permissions. Spyria ships four built-in chat roles; admins can add custom chat roles in Workspace settings (see [Admin](./admin.md)).
 
-| Permission | What it allows | Owner | Editor | Prompter | Reader |
-|---|---|:-:|:-:|:-:|:-:|
-| `chat.read` | Read the chat | yes | yes | yes | yes |
-| `chat.post` | Post and prompt the agent | yes | yes | yes | |
-| `session.configure` | Choose the model and stop the agent | yes | yes | | |
-| `members.invite` | Invite people to the chat | yes | yes | | |
-| `members.manage` | Change roles and remove people | yes | | | |
-| `tools.manage` | Manage the chat's tools | yes | | | |
-| `chat.admin` | Rename, move and archive the chat, change its visibility | yes | | | |
+| Permission | Owner | Editor | Prompter | Reader |
+|---|:-:|:-:|:-:|:-:|
+| Read the chat | yes | yes | yes | yes |
+| Post and prompt the agent | yes | yes | yes | |
+| Choose the model and stop the agent | yes | yes | | |
+| Invite people to the chat | yes | yes | | |
+| Change roles and remove people | yes | | | |
+| Manage the chat's tools | yes | | | |
+| Rename, move and archive the chat, change its visibility | yes | | | |
 
 The server applies these rules on every request:
 
@@ -117,11 +117,11 @@ The server applies these rules on every request:
 - **Public chats are open to all.** In a public chat every member already reads and posts, so a role below that (Reader) cannot be given there: make the chat private to restrict someone.
 - **Members outside the workspace cannot be invited.**
 
-The `tools.manage` chat permission is defined and shown in the roles editor, but no chat action checks it yet.
+**Manage the chat's tools** lets a member switch tool servers on and off for the chat, in the **Connected tools** tab (see [Side panel](#side-panel)).
 
 ### Prompts from someone other than the owner
 
-When a participant other than the owner prompts the agent, the agent runs in the owner's runtime but uses the **prompter's own accounts**, so it never exceeds what the prompter could do and nobody is answerable for a call on someone else's account ([decision 0033](../decisions/0033-tools-on-the-prompters-account.md)):
+When a participant other than the owner prompts the agent, the agent runs in the owner's runtime but uses the **prompter's own accounts**, so it never exceeds what the prompter could do and nobody is answerable for a call on someone else's account:
 
 - A tool server **each member signs in to** answers with the prompter's own sign-in, never the owner's. A prompter who has not connected it does not get it: the step says "*Name* needs to connect *server*", and the **Connect** link shows to that prompter only.
 - A **shared-login** server is available only if both the owner and the prompter may use the tool.
@@ -135,7 +135,7 @@ Every tool call is recorded with its prompter, owner and approval decision, and 
 
 ## Forking a runtime chat
 
-**Fork into my session**, the fork icon in a runtime chat's header, creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), read by the server from the chat's history in the event store, and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. On a dev chat the icon asks whether the fork keeps the original's branch or starts a new one from it; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
+**Fork into my session**, the fork icon in a runtime chat's header, creates a new runtime chat owned by the member who forked it, in the same project. Any participant who can read the chat can fork it; the owner sees the button too. The fork starts with one message that quotes the conversation so far (members' messages and the agent's replies, with their authors and times, as they read after every edit and deletion), and its header links back with "Forked from". A fork is the way to continue someone else's work with your own tools, machine or model. On a dev chat the icon asks whether the fork keeps the original's branch or starts a new one from it; see [Dev mode](./dev-mode.md#forking-a-dev-chat).
 
 The quote stays short enough for any model: an automatic prompt of the quality gates is quoted by its first paragraph only, a message longer than 8,000 characters is cut and says how much it left out, and when the whole conversation is longer than 60,000 characters the quote keeps the first message and the newest ones that fit, with a line counting the messages left out between, to be read in the source chat. A runtime chat started from a channel thread quotes the thread the same way.
 
@@ -163,6 +163,6 @@ The side panel next to a chat has tabs that depend on the chat type. Runtime cha
 
 Each member of a chat has their own browser with their own sign-ins, and only they watch it. In a chat that runs on its owner's own machine, only the owner has one, so nobody's sign-ins land on another member's computer. When you prompt the agent, it can read and act in your browser, never in another member's: it opens a page with `open_page` and reads and acts on it with the `browser_` tools (see [Agents](./agents.md#browsing)). What it reads can end up in the chat, where everyone in it sees it: the tab says so the first time. Before the agent submits a form or runs a script in your browser, it asks you, unless an admin turned that off; reading needs no approval. On a captcha or a "browser not secure" page, solve it in the tab and let the agent carry on.
 
-The browser's own container shares only the runtime's network, so `localhost` reaches the app the agent runs there, but the agent's shell cannot read your browser's cookies or profile. Your workspace may block internal networks, the host machine and sites, and may record the addresses your browser visits in the audit log (never the pages' contents). See [Admin](./admin.md#browser).
+The browser runs beside the runtime and shares only its network, so `localhost` reaches the app the agent runs there, but the agent's shell cannot read your browser's cookies or profile. Your workspace may block internal networks, the host machine and sites, and may record the addresses your browser visits in the audit log (never the pages' contents). See [Admin](./admin.md#browser).
 
 A file of the project the agent opens with `open_page`, such as an HTML report it built, is listed for everyone in the chat under **Files the agent opened**, an icon in the Browser tab's header row that reads **Back to your browser** while a file or the list shows, and the newest one shows at once; an HTML file runs its scripts in an isolated frame.

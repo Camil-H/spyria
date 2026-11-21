@@ -80,6 +80,7 @@ Then read the logs of the service in question: `spyria compose logs <service>`, 
 
 - Cause: the host could not pull it; `docker logs <deployment>-host` has the registry's reason.
 - Fix: a host built from a clone (no `SPYRIA_IMAGES`) accepts only a local content ID: run `bun run agent:build` there, or load the same image.
+- From a clone before the first build, the prompt reads "Spyria's runtime image is not built: run bun run agent:build". Build it, then restart the server ([runtime image](./operations.md#runtime-image)).
 
 ### The host profile cannot reach Docker
 
@@ -89,7 +90,7 @@ Then read the logs of the service in question: `spyria compose logs <service>`, 
 ### Runtimes stop starting after many chats
 
 - Cause: the host ran out of Docker address pools.
-- Fix: see [Many runtimes on one host](../features/machines.md#many-runtimes-on-one-host).
+- Fix: see [Many runtimes on one host](./operations.md#many-runtimes-on-one-host).
 
 ### A runtime host shows "Update needed" and stays offline
 

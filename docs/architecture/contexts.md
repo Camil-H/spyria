@@ -71,7 +71,7 @@ A context reaches another only from its `integrations/`, through that context's 
 
 | Package | Holds | Who may import it |
 |---|---|---|
-| `@spyria/kernel` | Ids, typed errors, permissions, logging and other small pure helpers. It imports nothing. | Every layer |
+| `@spyria/kernel` | Ids, typed errors, permissions (`workspace-access.ts`, `chat-access.ts`), the model and AI provider catalogue with its tiers (`models.ts`), logging and other small pure helpers. It imports nothing. | Every layer |
 | `@spyria/db` | The database and Zero schemas, synced queries and the Postgres client. | `queries/`, `integrations/`, `entrypoints/` |
 | `@spyria/ui` | Shared React components, no business rules. | `entrypoints/` |
 | `@spyria/session` | The signed-in member, as the UI reads it. | `entrypoints/` |
