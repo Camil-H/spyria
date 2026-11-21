@@ -1,6 +1,6 @@
 # Administration
 
-What workspace admins manage: members, roles, sign-in, GitHub, tools, spend, budgets, the audit log and deleting the workspace. The account providers people sign in with are set by your operator for the whole Spyria ([Operations](../guides/operations.md#account-providers)); everything else is here.
+What workspace admins manage: members, roles, sign-in, GitHub, tools, spend, budgets, the audit log and deleting the workspace. The account providers people sign in with are set by your operator for everyone on this Spyria ([Operations](../guides/operations.md#account-providers)); everything else is here.
 
 Everything is in **Workspace settings** (the workspace menu), as cards showing their state. Each page lists items as rows with a **⋯** menu and keeps risky actions at the bottom; Escape goes back to the cards. A member sees only the cards their role allows, and the server checks the same permission on every request.
 

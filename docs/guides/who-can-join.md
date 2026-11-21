@@ -7,7 +7,7 @@ Spyria has no passwords and sends no sign-in codes: everyone signs in through a 
 
 ## Signing in with an account
 
-Account providers are set by your operator for the whole Spyria ([Operations](./operations.md#account-providers)):
+Account providers are set by your operator for everyone on this Spyria ([Operations](./operations.md#account-providers)):
 
 | Provider | Who signs in |
 |---|---|
