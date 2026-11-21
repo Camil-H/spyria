@@ -5,7 +5,7 @@ Agent chats run on the workspace's runtime hosts, or on a member's own machine f
 ## Runtime hosts and runtimes
 
 - A **runtime** is a sandboxed container, one per runtime chat, where the agent works. It comes with Pi, Node.js and npm, git, ripgrep and tools to read PDFs.
-- A **runtime host** is any machine with Docker running Spyria's host program. It connects out to Spyria and only creates, starts, stops and removes runtimes and reports their status. It needs no open port, and Spyria holds no key to the machine.
+- A **runtime host** is any machine with Docker running Spyria's host program. It connects out to Spyria, creates, starts, stops and removes runtimes and reports their status; on a member's machine it also installs Claude Code and Codex. It needs no open port, and Spyria holds no key to the machine.
 
 | | Workspace runtime host | A member's machine |
 |---|---|---|
@@ -14,7 +14,7 @@ Agent chats run on the workspace's runtime hosts, or on a member's own machine f
 | Model calls | the prompter's API key through Spyria's gateway | the owner's subscription, directly from the machine |
 | Started with | `spyria-host <claim URL>` | `spyria-host --personal <claim URL>` |
 
-A host runs only Spyria's own runtime image, of the same version as Spyria, and downloads it when its first runtime starts.
+A host runs only Spyria's own runtime image, of the same version as Spyria.
 
 ## Adding a workspace runtime host
 
