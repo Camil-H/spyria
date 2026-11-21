@@ -117,7 +117,7 @@ The server applies these rules on every request:
 - **Public chats are open to all.** In a public chat every member already reads and posts, so a role below that (Reader) cannot be given there: make the chat private to restrict someone.
 - **Members outside the workspace cannot be invited.**
 
-The `tools.manage` chat permission is defined and shown in the roles editor, but no chat action checks it yet.
+**Manage the chat's tools** lets a member switch tool servers off for the chat, in the **Connected tools** tab (see [Side panel](#side-panel)).
 
 ### Prompts from someone other than the owner
 
