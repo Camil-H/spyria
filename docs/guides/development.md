@@ -42,7 +42,7 @@ In development the app signs in through Dex in a popup, so allow popups for `loc
 | `bob@example.com` | Member of Acme |
 | `nina@example.com` | No membership: the screen that offers to create a workspace |
 
-Dex remembers the sign-in for a day of inactivity, up to a week, so the next popups close without asking. To sign in as another user, untick **Remember me** at sign-in, or use a private window.
+Dex remembers the sign-in for a day of inactivity, up to a week, so the next popups close without asking. In **Workspace settings › Single sign-on**, the card says sign-in uses the deployment's Dex instead. To sign in as another user, untick **Remember me** at sign-in, or use a private window.
 
 The seed adds no model API key. To prompt an agent, add a real provider key (OpenAI, Anthropic, Mistral or another provider the gateway supports) in Profile. The fake LLM in `apps/server/src/testing/fake-llm.ts` is mounted by the test servers only.
 
