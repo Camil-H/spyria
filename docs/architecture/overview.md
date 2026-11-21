@@ -91,6 +91,14 @@ sequenceDiagram
 
 Every prompt is marked picked up (`message.picked_up`) when its turn starts, and put back (`message.requeued`) if the turn is released before the agent got it. When the turn's prompter sends another message while a turn runs, its `agent.prompt` job finds the turn held and enqueues `agent.join`, one at a time per chat, which marks the message picked up and hands it to the running turn (`/joins`: Pi's steer, or the ACP `_session/steering` extension on Claude Code and Codex when the harness advertises it at `initialize`); a hand-off the runtime refuses puts it back in the queue. Once the agent reads it (a `prompt_joined` event, reported when Pi takes the message in, or as soon as an ACP harness injects it), the turn keeps its prompt but stores its later output under the message (`chats.agent_turn_reply_to_id`). When a turn delegates work, `spyria-agent` runs sub-conversations in the same runtime, and the same path applies to each. When the member presses **Stop**, an `agent.interrupt` job cancels the turn in the runtime.
 
+## How the agent finds tools
+
+Spyria's own tools (`open_page`, the `browser_` tools, `take_screenshot`, `web_search`, the public chat tools, delegation, the dev chat's GitHub tools, and Pi's `ask_member`) are declared to the agent from its first call. The servers of the workspace's tools catalogue come through a separate server, and their tools are found rather than declared ([decision 0034](../decisions/0034-catalogue-tools-found-not-declared.md)):
+
+- Pi never declares them: it reaches them from `codemode` scripts, which find tools with `searchTools()`, call them and keep only what they need from the answers, so a large server (GitHub's has over a hundred tools, about 38,000 tokens of descriptions) does not weigh on every model call. Each call in a script is one call through the gateway; a call waiting for approval holds the script until it is decided.
+- Claude Code searches tool servers' tools on its own by default.
+- The runtime's `spyria` command reaches the same catalogue from the shell. Nothing about it is loaded up front: Claude Code and Codex read one line about it from Spyria's tool server, and Pi from a one-line skill.
+
 ## The host relay
 
 A runtime host dials out to the server and needs no open port ([decision 0005](../decisions/0005-runtime-hosts-dial-out.md)). The host joins each runtime's own Docker bridge network to relay its model and tool calls to Spyria, and carries everything between the server and its runtimes over its one WebSocket:
