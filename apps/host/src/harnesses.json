@@ -1,8 +1,8 @@
 {
   "claude-code": {
     "packages": {
-      "@anthropic-ai/claude-code": "2.1.296",
-      "@agentclientprotocol/claude-agent-acp": "0.90.0"
+      "@anthropic-ai/claude-code": "2.1.330",
+      "@agentclientprotocol/claude-agent-acp": "0.110.0"
     },
     "executables": {
       "CLAUDE_CODE_EXECUTABLE": "claude"
