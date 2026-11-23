@@ -10,8 +10,8 @@
   },
   "codex": {
     "packages": {
-      "@openai/codex": "0.162.1",
-      "@agentclientprotocol/codex-acp": "2.2.2"
+      "@openai/codex": "0.171.0",
+      "@agentclientprotocol/codex-acp": "2.10.0"
     },
     "executables": {
       "CODEX_PATH": "codex"
